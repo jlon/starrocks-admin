@@ -93,6 +93,7 @@ pub struct AppState {
         handlers::overview::get_data_statistics,
         handlers::overview::get_slow_queries,
         handlers::overview::get_capacity_prediction,
+        handlers::overview::get_extended_cluster_overview,
     ),
     components(
         schemas(
@@ -129,8 +130,23 @@ pub struct AppState {
             models::UpdateOrderRequest,
             models::FunctionOrder,
             services::ClusterOverview,
+            services::ExtendedClusterOverview,
             services::HealthCard,
             services::HealthStatus,
+            services::ClusterHealth,
+            services::KeyPerformanceIndicators,
+            services::ResourceMetrics,
+            services::MaterializedViewStats,
+            services::LoadJobStats,
+            services::TransactionStats,
+            services::SchemaChangeStats,
+            services::CompactionStats,
+            services::BECompactionScore,
+            services::SessionStats,
+            services::RunningQuery,
+            services::NetworkIOStats,
+            services::Alert,
+            services::AlertLevel,
             services::PerformanceTrends,
             services::ResourceTrends,
             services::MetricsSnapshot,
@@ -335,6 +351,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/clusters/:id/metrics/summary", get(handlers::monitor::get_metrics_summary))
         // Overview
         .route("/api/clusters/:id/overview", get(handlers::overview::get_cluster_overview))
+        .route("/api/clusters/:id/overview/extended", get(handlers::overview::get_extended_cluster_overview))
         .route("/api/clusters/:id/overview/health", get(handlers::overview::get_health_cards))
         .route("/api/clusters/:id/overview/performance", get(handlers::overview::get_performance_trends))
         .route("/api/clusters/:id/overview/resources", get(handlers::overview::get_resource_trends))

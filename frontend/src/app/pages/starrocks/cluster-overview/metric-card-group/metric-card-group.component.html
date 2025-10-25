@@ -1,0 +1,24 @@
+<nb-card [nbSpinner]="loading" class="metric-card-group">
+  <nb-card-header (click)="toggleCollapse()" class="group-header-clickable">
+    <div class="group-header">
+      <div class="group-title">
+        <nb-icon [icon]="icon" status="primary" class="group-icon"></nb-icon>
+        <h6>{{ title }}</h6>
+        <nb-badge 
+          *ngIf="badgeCount > 0" 
+          [text]="badgeCount.toString()" 
+          [status]="badgeStatus"
+          class="badge-count">
+        </nb-badge>
+      </div>
+      <nb-icon 
+        [icon]="collapsed ? 'chevron-down-outline' : 'chevron-up-outline'"
+        class="toggle-icon">
+      </nb-icon>
+    </div>
+  </nb-card-header>
+  <nb-card-body *ngIf="!collapsed" [@slideDown] class="group-body">
+    <ng-content></ng-content>
+  </nb-card-body>
+</nb-card>
+

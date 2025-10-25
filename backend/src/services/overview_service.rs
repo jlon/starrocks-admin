@@ -3,7 +3,7 @@
 // Design Ref: ARCHITECTURE_ANALYSIS_AND_INTEGRATION.md
 
 use crate::services::{ClusterService, DataStatistics, DataStatisticsService, MetricsSnapshot};
-use crate::utils::{ApiError, ApiResult, ErrorCode};
+use crate::utils::{ApiError, ApiResult};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -123,6 +123,200 @@ pub enum HealthStatus {
     Healthy,
     Warning,
     Critical,
+}
+
+/// Cluster health overview (Hero Card)
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ClusterHealth {
+    pub status: HealthStatus,
+    pub score: f64, // 0-100
+    pub be_nodes_online: i32,
+    pub be_nodes_total: i32,
+    pub fe_nodes_online: i32,
+    pub fe_nodes_total: i32,
+    pub compaction_score: f64,
+    pub alerts: Vec<String>,
+}
+
+/// Key performance indicators
+#[derive(Debug, Serialize, ToSchema)]
+pub struct KeyPerformanceIndicators {
+    pub qps: f64,
+    pub qps_trend: f64, // percentage change
+    pub p99_latency_ms: f64,
+    pub p99_latency_trend: f64,
+    pub success_rate: f64,
+    pub success_rate_trend: f64,
+    pub error_rate: f64,
+}
+
+/// Resource metrics
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ResourceMetrics {
+    pub cpu_usage_pct: f64,
+    pub cpu_trend: f64,
+    pub memory_usage_pct: f64,
+    pub memory_trend: f64,
+    pub disk_usage_pct: f64,
+    pub disk_trend: f64,
+    pub compaction_score: f64,
+    pub compaction_status: String, // "normal", "warning", "critical"
+}
+
+/// Materialized view statistics
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MaterializedViewStats {
+    pub total: i32,
+    pub running: i32,
+    pub success: i32,
+    pub failed: i32,
+    pub pending: i32,
+}
+
+/// Load job statistics
+#[derive(Debug, Serialize, ToSchema)]
+pub struct LoadJobStats {
+    pub running: i32,
+    pub pending: i32,
+    pub finished: i32,
+    pub failed: i32,
+    pub cancelled: i32,
+}
+
+/// Transaction statistics
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TransactionStats {
+    pub running: i32,
+    pub committed: i32,
+    pub aborted: i32,
+}
+
+/// Schema change statistics
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SchemaChangeStats {
+    pub running: i32,
+    pub pending: i32,
+    pub finished: i32,
+    pub failed: i32,
+    pub cancelled: i32,
+}
+
+/// Compaction statistics
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CompactionStats {
+    pub base_compaction_running: i32,
+    pub cumulative_compaction_running: i32,
+    pub max_score: f64,
+    pub avg_score: f64,
+    pub be_scores: Vec<BECompactionScore>,
+}
+
+/// BE compaction score
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BECompactionScore {
+    pub be_id: i64,
+    pub be_host: String,
+    pub score: f64,
+}
+
+/// Session statistics
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SessionStats {
+    pub active_users_1h: i32,
+    pub active_users_24h: i32,
+    pub current_connections: i32,
+    pub running_queries: Vec<RunningQuery>,
+}
+
+/// Running query info
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RunningQuery {
+    pub query_id: String,
+    pub user: String,
+    pub database: String,
+    pub start_time: String,
+    pub duration_ms: i64,
+    pub state: String,
+    pub query_preview: String, // First 200 chars
+}
+
+/// Network and IO statistics
+#[derive(Debug, Serialize, ToSchema)]
+pub struct NetworkIOStats {
+    pub network_tx_bytes_per_sec: f64,
+    pub network_rx_bytes_per_sec: f64,
+    pub disk_read_bytes_per_sec: f64,
+    pub disk_write_bytes_per_sec: f64,
+}
+
+/// Alert information
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Alert {
+    pub level: AlertLevel,
+    pub category: String,
+    pub message: String,
+    pub timestamp: DateTime<Utc>,
+    pub action: Option<String>, // Suggested action
+}
+
+/// Alert level
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum AlertLevel {
+    Critical,
+    Warning,
+    Info,
+}
+
+/// Extended cluster overview with all modules
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ExtendedClusterOverview {
+    pub cluster_id: i64,
+    pub cluster_name: String,
+    pub timestamp: DateTime<Utc>,
+    
+    // Module 1: Cluster Health (P0)
+    pub health: ClusterHealth,
+    
+    // Module 2: Key Performance Indicators (P0)
+    pub kpi: KeyPerformanceIndicators,
+    
+    // Module 3: Resource Metrics (P0)
+    pub resources: ResourceMetrics,
+    
+    // Module 4-5: Performance & Resource Trends (P0)
+    pub performance_trends: PerformanceTrends,
+    pub resource_trends: ResourceTrends,
+    
+    // Module 6: Data Statistics (P1)
+    pub data_stats: Option<DataStatistics>,
+    
+    // Module 7: Materialized Views (P1)
+    pub mv_stats: MaterializedViewStats,
+    
+    // Module 8: Load Jobs (P1)
+    pub load_jobs: LoadJobStats,
+    
+    // Module 9: Transactions (P1)
+    pub transactions: TransactionStats,
+    
+    // Module 10: Schema Changes (P1)
+    pub schema_changes: SchemaChangeStats,
+    
+    // Module 11: Compaction (P1)
+    pub compaction: CompactionStats,
+    
+    // Module 12: Sessions (P1)
+    pub sessions: SessionStats,
+    
+    // Module 13: Network & IO (P1)
+    pub network_io: NetworkIOStats,
+    
+    // Module 17: Capacity Prediction (P2)
+    pub capacity: Option<CapacityPrediction>,
+    
+    // Module 18: Alerts (P2)
+    pub alerts: Vec<Alert>,
 }
 
 #[derive(Clone)]
@@ -306,10 +500,7 @@ impl OverviewService {
             tracing::debug!("Updating data statistics for cluster {}", cluster_id);
             service.update_statistics(cluster_id).await
         } else {
-            Err(ApiError::new(
-                ErrorCode::InternalError,
-                "Data statistics service not configured"
-            ))
+            Err(ApiError::internal_error("Data statistics service not configured"))
         }
     }
 
@@ -338,10 +529,7 @@ impl OverviewService {
         .await?;
         
         if snapshots.is_empty() {
-            return Err(ApiError::new(
-                ErrorCode::InternalError,
-                "No historical data available for capacity prediction"
-            ));
+            return Err(ApiError::internal_error("No historical data available for capacity prediction"));
         }
         
         // Get latest values
@@ -739,6 +927,585 @@ impl OverviewService {
             avg_memory_usage,
             avg_disk_usage,
         }
+    }
+
+    /// Get extended cluster overview with all 18 modules
+    pub async fn get_extended_overview(
+        &self,
+        cluster_id: i64,
+        time_range: TimeRange,
+    ) -> ApiResult<ExtendedClusterOverview> {
+        // Get cluster info
+        let cluster = self.cluster_service.get_cluster(cluster_id).await?;
+        
+        // Get latest snapshot
+        let latest = self.get_latest_snapshot(cluster_id).await?;
+        
+        // Get historical snapshots for trends
+        let snapshots = self.get_history_snapshots(cluster_id, &time_range).await?;
+        
+        // Module 1: Cluster Health
+        let health = self.calculate_cluster_health(&latest).await?;
+        
+        // Module 2: Key Performance Indicators
+        let kpi = self.calculate_kpi(&latest, &snapshots);
+        
+        // Module 3: Resource Metrics
+        let resources = self.calculate_resource_metrics(&latest, &snapshots);
+        
+        // Module 4-5: Performance & Resource Trends
+        let performance_trends = self.calculate_performance_trends(&snapshots);
+        let resource_trends = self.calculate_resource_trends(&snapshots);
+        
+        // Module 6: Data Statistics (optional, P1)
+        let data_stats = match &self.data_statistics_service {
+            Some(service) => service.get_statistics(cluster_id).await.ok(),
+            None => None,
+        };
+        
+        // Module 7: Materialized Views (P1)
+        let mv_stats = self.get_mv_stats(cluster_id).await?;
+        
+        // Module 8: Load Jobs (P1)
+        let load_jobs = self.get_load_job_stats(cluster_id).await?;
+        
+        // Module 9: Transactions (P1)
+        let transactions = self.get_transaction_stats(&latest);
+        
+        // Module 10: Schema Changes (P1)
+        let schema_changes = self.get_schema_change_stats(cluster_id).await?;
+        
+        // Module 11: Compaction (P1)
+        let compaction = self.get_compaction_stats(cluster_id).await?;
+        
+        // Module 12: Sessions (P1)
+        let sessions = self.get_session_stats(cluster_id).await?;
+        
+        // Module 13: Network & IO (P1)
+        let network_io = self.calculate_network_io_stats(&latest);
+        
+        // Module 17: Capacity Prediction (P2)
+        let capacity = self.predict_capacity(cluster_id).await.ok();
+        
+        // Module 18: Alerts (P2)
+        let alerts = self.generate_alerts(&health, &resources, &compaction);
+        
+        Ok(ExtendedClusterOverview {
+            cluster_id,
+            cluster_name: cluster.name,
+            timestamp: Utc::now(),
+            health,
+            kpi,
+            resources,
+            performance_trends,
+            resource_trends,
+            data_stats: data_stats.flatten(),
+            mv_stats,
+            load_jobs,
+            transactions,
+            schema_changes,
+            compaction,
+            sessions,
+            network_io,
+            capacity,
+            alerts,
+        })
+    }
+
+    /// Module 1: Calculate cluster health
+    async fn calculate_cluster_health(&self, snapshot: &Option<MetricsSnapshot>) -> ApiResult<ClusterHealth> {
+        let snapshot = snapshot.as_ref().ok_or_else(|| {
+            ApiError::internal_error("No metrics snapshot available")
+        })?;
+        
+        let be_nodes_online = snapshot.backend_alive;
+        let be_nodes_total = snapshot.backend_total;
+        let fe_nodes_online = snapshot.frontend_alive;
+        let fe_nodes_total = snapshot.frontend_total;
+        let compaction_score = snapshot.max_compaction_score;
+        
+        // Calculate health status
+        let mut alerts = Vec::new();
+        let status = if be_nodes_online < be_nodes_total {
+            alerts.push(format!("{} BE节点离线", be_nodes_total - be_nodes_online));
+            HealthStatus::Critical
+        } else if compaction_score > 100.0 {
+            alerts.push(format!("Compaction Score过高: {:.1}", compaction_score));
+            HealthStatus::Critical
+        } else if compaction_score > 50.0 || snapshot.disk_usage_pct > 80.0 {
+            if compaction_score > 50.0 {
+                alerts.push(format!("Compaction Score偏高: {:.1}", compaction_score));
+            }
+            if snapshot.disk_usage_pct > 80.0 {
+                alerts.push(format!("磁盘使用率偏高: {:.1}%", snapshot.disk_usage_pct));
+            }
+            HealthStatus::Warning
+        } else {
+            HealthStatus::Healthy
+        };
+        
+        // Calculate health score (0-100)
+        let score: f64 = 100.0
+            - (if be_nodes_online < be_nodes_total { 30.0 } else { 0.0 })
+            - (if compaction_score > 100.0 { 20.0 } else if compaction_score > 50.0 { 10.0 } else { 0.0 })
+            - (if snapshot.disk_usage_pct > 90.0 { 20.0 } else if snapshot.disk_usage_pct > 80.0 { 10.0 } else { 0.0 })
+            - (if snapshot.avg_cpu_usage > 90.0 { 10.0 } else { 0.0 });
+        
+        Ok(ClusterHealth {
+            status,
+            score: score.max(0.0),
+            be_nodes_online,
+            be_nodes_total,
+            fe_nodes_online,
+            fe_nodes_total,
+            compaction_score,
+            alerts,
+        })
+    }
+
+    /// Module 2: Calculate KPI
+    fn calculate_kpi(&self, snapshot: &Option<MetricsSnapshot>, snapshots: &[MetricsSnapshot]) -> KeyPerformanceIndicators {
+        let current = snapshot.as_ref();
+        
+        // Calculate trends (compare with average of previous snapshots)
+        let prev_avg_qps = if snapshots.len() > 1 {
+            let prev = &snapshots[0..snapshots.len()-1];
+            prev.iter().map(|s| s.qps).sum::<f64>() / prev.len() as f64
+        } else {
+            0.0
+        };
+        
+        let prev_avg_latency = if snapshots.len() > 1 {
+            let prev = &snapshots[0..snapshots.len()-1];
+            prev.iter().map(|s| s.query_latency_p99).sum::<f64>() / prev.len() as f64
+        } else {
+            0.0
+        };
+        
+        let qps = current.map(|s| s.qps).unwrap_or(0.0);
+        let p99_latency_ms = current.map(|s| s.query_latency_p99).unwrap_or(0.0);
+        let qps_trend = if prev_avg_qps > 0.0 {
+            ((qps - prev_avg_qps) / prev_avg_qps) * 100.0
+        } else {
+            0.0
+        };
+        let p99_latency_trend = if prev_avg_latency > 0.0 {
+            ((p99_latency_ms - prev_avg_latency) / prev_avg_latency) * 100.0
+        } else {
+            0.0
+        };
+        
+        let (success_rate, error_rate) = if let Some(s) = current {
+            let total = s.query_total as f64;
+            let success = s.query_success as f64;
+            let errors = s.query_error as f64;
+            if total > 0.0 {
+                ((success / total) * 100.0, (errors / total) * 100.0)
+            } else {
+                (100.0, 0.0)
+            }
+        } else {
+            (100.0, 0.0)
+        };
+        
+        KeyPerformanceIndicators {
+            qps,
+            qps_trend,
+            p99_latency_ms,
+            p99_latency_trend,
+            success_rate,
+            success_rate_trend: 0.0, // TODO: Calculate from history
+            error_rate,
+        }
+    }
+
+    /// Module 3: Calculate resource metrics
+    fn calculate_resource_metrics(&self, snapshot: &Option<MetricsSnapshot>, snapshots: &[MetricsSnapshot]) -> ResourceMetrics {
+        let current = snapshot.as_ref();
+        
+        // Calculate trends
+        let prev_avg_cpu = if snapshots.len() > 1 {
+            let prev = &snapshots[0..snapshots.len()-1];
+            prev.iter().map(|s| s.avg_cpu_usage).sum::<f64>() / prev.len() as f64
+        } else {
+            0.0
+        };
+        
+        let cpu_usage_pct = current.map(|s| s.avg_cpu_usage).unwrap_or(0.0);
+        let memory_usage_pct = current.map(|s| s.avg_memory_usage).unwrap_or(0.0);
+        let disk_usage_pct = current.map(|s| s.disk_usage_pct).unwrap_or(0.0);
+        let compaction_score = current.map(|s| s.max_compaction_score).unwrap_or(0.0);
+        
+        let cpu_trend = if prev_avg_cpu > 0.0 {
+            ((cpu_usage_pct - prev_avg_cpu) / prev_avg_cpu) * 100.0
+        } else {
+            0.0
+        };
+        
+        let compaction_status = if compaction_score > 100.0 {
+            "critical".to_string()
+        } else if compaction_score > 50.0 {
+            "warning".to_string()
+        } else {
+            "normal".to_string()
+        };
+        
+        ResourceMetrics {
+            cpu_usage_pct,
+            cpu_trend,
+            memory_usage_pct,
+            memory_trend: 0.0, // TODO: Calculate
+            disk_usage_pct,
+            disk_trend: 0.0, // TODO: Calculate
+            compaction_score,
+            compaction_status,
+        }
+    }
+
+    /// Module 7: Get MV stats from information_schema
+    async fn get_mv_stats(&self, cluster_id: i64) -> ApiResult<MaterializedViewStats> {
+        use crate::services::MySQLPoolManager;
+        use mysql_async::prelude::Queryable;
+        
+        // Get cluster info
+        let cluster = self.cluster_service.get_cluster(cluster_id).await?;
+        
+        // Get MySQL connection pool
+        let pool_manager = Arc::new(MySQLPoolManager::new());
+        let pool = pool_manager.get_pool(&cluster).await?;
+        let mut conn = pool.get_conn().await.map_err(|e| {
+            ApiError::internal_error(format!("Failed to get connection: {}", e))
+        })?;
+        
+        // Query materialized view statistics
+        let query = r#"
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
+                SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as inactive
+            FROM information_schema.materialized_views
+        "#;
+        
+        let result: Vec<(i64, Option<i64>, Option<i64>)> = conn
+            .exec(query, ())
+            .await
+            .map_err(|e| ApiError::internal_error(format!("Failed to query MV stats: {}", e)))?;
+        
+        if let Some((total, active, _inactive)) = result.first() {
+            // Note: StarRocks MV doesn't have explicit "running/success/failed" states in information_schema
+            // We use is_active as a proxy for success
+            Ok(MaterializedViewStats {
+                total: *total as i32,
+                running: 0, // Not available from information_schema
+                success: active.unwrap_or(0) as i32,
+                failed: 0, // Not available from information_schema
+                pending: 0, // Not available from information_schema
+            })
+        } else {
+            Ok(MaterializedViewStats {
+                total: 0,
+                running: 0,
+                success: 0,
+                failed: 0,
+                pending: 0,
+            })
+        }
+    }
+
+    /// Module 8: Get load job stats from SHOW LOAD
+    async fn get_load_job_stats(&self, cluster_id: i64) -> ApiResult<LoadJobStats> {
+        use crate::services::MySQLPoolManager;
+        use mysql_async::prelude::Queryable;
+        
+        // Get cluster info
+        let cluster = self.cluster_service.get_cluster(cluster_id).await?;
+        
+        // Get MySQL connection pool
+        let pool_manager = Arc::new(MySQLPoolManager::new());
+        let pool = pool_manager.get_pool(&cluster).await?;
+        let mut conn = pool.get_conn().await.map_err(|e| {
+            ApiError::internal_error(format!("Failed to get connection: {}", e))
+        })?;
+        
+        // Query load job statistics from information_schema.loads
+        // Note: SHOW LOAD returns current database only, so we query information_schema
+        let query = r#"
+            SELECT 
+                State,
+                COUNT(*) as count
+            FROM information_schema.loads
+            WHERE CreateTime >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+            GROUP BY State
+        "#;
+        
+        let result: Vec<(String, i64)> = conn
+            .exec(query, ())
+            .await
+            .map_err(|e| ApiError::internal_error(format!("Failed to query load stats: {}", e)))?;
+        
+        let mut stats = LoadJobStats {
+            running: 0,
+            pending: 0,
+            finished: 0,
+            failed: 0,
+            cancelled: 0,
+        };
+        
+        for (state, count) in result {
+            match state.to_uppercase().as_str() {
+                "LOADING" => stats.running = count as i32,
+                "PENDING" | "QUEUEING" => stats.pending += count as i32,
+                "FINISHED" => stats.finished = count as i32,
+                "CANCELLED" => stats.cancelled = count as i32,
+                _ => stats.failed += count as i32, // Treat unknown states as failed
+            }
+        }
+        
+        Ok(stats)
+    }
+
+    /// Module 9: Get transaction stats
+    fn get_transaction_stats(&self, snapshot: &Option<MetricsSnapshot>) -> TransactionStats {
+        let snapshot = snapshot.as_ref();
+        TransactionStats {
+            running: snapshot.map(|s| s.txn_running as i32).unwrap_or(0),
+            committed: snapshot.map(|s| s.txn_success_total as i32).unwrap_or(0),
+            aborted: snapshot.map(|s| s.txn_failed_total as i32).unwrap_or(0),
+        }
+    }
+
+    /// Module 10: Get schema change stats using MySQL client
+    async fn get_schema_change_stats(&self, cluster_id: i64) -> ApiResult<SchemaChangeStats> {
+        use crate::services::{MySQLClient, MySQLPoolManager};
+        
+        // Get cluster info
+        let cluster = self.cluster_service.get_cluster(cluster_id).await?;
+        
+        // Get MySQL connection pool
+        let pool_manager = Arc::new(MySQLPoolManager::new());
+        let pool = pool_manager.get_pool(&cluster).await?;
+        let client = MySQLClient::from_pool(pool);
+        
+        // Query schema change statistics using SHOW PROC '/statistic'
+        // Note: StarRocks doesn't have a direct table for schema changes in information_schema
+        // We use the backend's metrics or a simplified approach
+        
+        // Try to query from system tables or use HTTP API
+        // For now, return estimated stats from running queries
+        let query = r#"
+            SELECT 
+                COUNT(*) as total
+            FROM information_schema.processlist
+            WHERE Command = 'Query' AND Info LIKE '%ALTER%TABLE%'
+        "#;
+        
+        let (_headers, rows) = client.query_raw(query).await?;
+        
+        let running = if let Some(first_row) = rows.first() {
+            if let Some(total_str) = first_row.first() {
+                total_str.parse::<i32>().unwrap_or(0)
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+        
+        // Fallback: Use simplified stats
+        // Real implementation should query FE's metadata or use HTTP API
+        Ok(SchemaChangeStats {
+            running,
+            pending: 0, // Not available without FE metadata access
+            finished: 0, // Historical data not easily accessible
+            failed: 0,
+            cancelled: 0,
+        })
+    }
+
+    /// Module 11: Get compaction stats from FE's SHOW PROC '/compactions'
+    /// 
+    /// Note: Compaction Score is calculated at FE level per Partition, not per BE.
+    /// Reference: https://forum.mirrorship.cn/t/topic/13256
+    async fn get_compaction_stats(&self, cluster_id: i64) -> ApiResult<CompactionStats> {
+        use crate::services::{MySQLClient, MySQLPoolManager};
+        
+        // Get cluster info
+        let cluster = self.cluster_service.get_cluster(cluster_id).await?;
+        
+        // Get MySQL connection pool
+        let pool_manager = Arc::new(MySQLPoolManager::new());
+        let pool = pool_manager.get_pool(&cluster).await?;
+        let client = MySQLClient::from_pool(pool);
+        
+        // Query compaction tasks from FE
+        // SHOW PROC '/compactions' shows current running compaction tasks
+        let query = "SHOW PROC '/compactions'";
+        let (_headers, rows) = client.query_raw(query).await.unwrap_or((vec![], vec![]));
+        
+        // Count running compaction tasks
+        // Note: In StarRocks shared-data mode, there are no separate 
+        // base_compaction and cumulative_compaction, just unified compaction tasks
+        let total_running = rows.len() as i32;
+        
+        // Get max compaction score from metrics snapshot
+        // Compaction score is stored in our metrics_snapshots table
+        let latest_snapshot = self.get_latest_snapshot(cluster_id).await?;
+        let max_score = latest_snapshot
+            .as_ref()
+            .map(|s| s.max_compaction_score)
+            .unwrap_or(0.0);
+        
+        // For storage-compute separation mode, we don't track per-BE compaction scores
+        // because compaction is scheduled at Partition level by FE
+        // We can provide a simplified view based on latest snapshot
+        Ok(CompactionStats {
+            base_compaction_running: 0, // Not applicable in shared-data mode
+            cumulative_compaction_running: total_running, // Total compaction tasks
+            max_score,
+            avg_score: max_score, // In shared-data, score is per-partition, not per-BE
+            be_scores: Vec::new(), // Not applicable - compaction score is per-partition in FE
+        })
+    }
+
+    /// Module 12: Get session stats from SHOW PROCESSLIST
+    async fn get_session_stats(&self, cluster_id: i64) -> ApiResult<SessionStats> {
+        use crate::services::{MySQLClient, MySQLPoolManager};
+        use chrono::Utc;
+        
+        // Get cluster info
+        let cluster = self.cluster_service.get_cluster(cluster_id).await?;
+        
+        // Get MySQL connection pool
+        let pool_manager = Arc::new(MySQLPoolManager::new());
+        let pool = pool_manager.get_pool(&cluster).await?;
+        let client = MySQLClient::from_pool(pool);
+        
+        // Query SHOW PROCESSLIST to get current connections
+        let query = "SHOW FULL PROCESSLIST";
+        let (_headers, rows) = client.query_raw(query).await?;
+        
+        let current_connections = rows.len() as i32;
+        
+        // Parse running queries (State = 'Query' and Time > 0)
+        let mut running_queries = Vec::new();
+        
+        for row in &rows {
+            if row.len() >= 8 {
+                let state = row.get(4).map(|s| s.as_str()).unwrap_or("");
+                let time_str = row.get(5).map(|s| s.as_str()).unwrap_or("0");
+                let info = row.get(7).map(|s| s.as_str()).unwrap_or("");
+                
+                // Only include queries that are actively running
+                if state == "Query" && !info.is_empty() {
+                    let time_secs = time_str.parse::<i64>().unwrap_or(0);
+                    
+                    // Skip internal queries and very short queries
+                    if time_secs > 1 && !info.starts_with("SHOW") {
+                        let query_id = row.get(0).map(|s| s.to_string()).unwrap_or_default();
+                        let user = row.get(1).map(|s| s.to_string()).unwrap_or_default();
+                        let db = row.get(3).map(|s| s.to_string()).unwrap_or_default();
+                        
+                        running_queries.push(RunningQuery {
+                            query_id,
+                            user,
+                            database: db,
+                            start_time: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                            duration_ms: time_secs * 1000,
+                            state: state.to_string(),
+                            query_preview: info.chars().take(200).collect(),
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Sort by duration (longest first) and limit to top 10
+        running_queries.sort_by(|a, b| b.duration_ms.cmp(&a.duration_ms));
+        running_queries.truncate(10);
+        
+        // Get active users from audit logs if available (simplified - use data statistics service)
+        let (active_users_1h, active_users_24h) = if let Some(service) = &self.data_statistics_service {
+            match service.get_statistics(cluster_id).await {
+                Ok(Some(stats)) => (stats.active_users_1h, stats.active_users_24h),
+                _ => (0, 0),
+            }
+        } else {
+            (0, 0)
+        };
+        
+        Ok(SessionStats {
+            active_users_1h,
+            active_users_24h,
+            current_connections,
+            running_queries,
+        })
+    }
+
+    /// Module 13: Calculate network & IO stats
+    fn calculate_network_io_stats(&self, snapshot: &Option<MetricsSnapshot>) -> NetworkIOStats {
+        let snapshot = snapshot.as_ref();
+        NetworkIOStats {
+            network_tx_bytes_per_sec: snapshot.map(|s| s.network_send_rate).unwrap_or(0.0),
+            network_rx_bytes_per_sec: snapshot.map(|s| s.network_receive_rate).unwrap_or(0.0),
+            disk_read_bytes_per_sec: snapshot.map(|s| s.io_read_rate).unwrap_or(0.0),
+            disk_write_bytes_per_sec: snapshot.map(|s| s.io_write_rate).unwrap_or(0.0),
+        }
+    }
+
+    /// Module 18: Generate alerts based on current state
+    fn generate_alerts(&self, health: &ClusterHealth, resources: &ResourceMetrics, _compaction: &CompactionStats) -> Vec<Alert> {
+        let mut alerts = Vec::new();
+        
+        // Critical: Node offline
+        if health.be_nodes_online < health.be_nodes_total {
+            alerts.push(Alert {
+                level: AlertLevel::Critical,
+                category: "节点状态".to_string(),
+                message: format!("{} BE节点离线", health.be_nodes_total - health.be_nodes_online),
+                timestamp: Utc::now(),
+                action: Some("检查BE节点状态并重启".to_string()),
+            });
+        }
+        
+        // Critical: Compaction score too high
+        if health.compaction_score > 100.0 {
+            alerts.push(Alert {
+                level: AlertLevel::Critical,
+                category: "Compaction".to_string(),
+                message: format!("Compaction Score过高: {:.1}", health.compaction_score),
+                timestamp: Utc::now(),
+                action: Some("检查磁盘IO性能，考虑增加BE节点".to_string()),
+            });
+        }
+        
+        // Warning: High disk usage
+        if resources.disk_usage_pct > 80.0 {
+            let level = if resources.disk_usage_pct > 90.0 {
+                AlertLevel::Critical
+            } else {
+                AlertLevel::Warning
+            };
+            alerts.push(Alert {
+                level,
+                category: "容量".to_string(),
+                message: format!("磁盘使用率过高: {:.1}%", resources.disk_usage_pct),
+                timestamp: Utc::now(),
+                action: Some("清理过期数据或扩容磁盘".to_string()),
+            });
+        }
+        
+        // Warning: High CPU usage
+        if resources.cpu_usage_pct > 80.0 {
+            alerts.push(Alert {
+                level: AlertLevel::Warning,
+                category: "资源".to_string(),
+                message: format!("CPU使用率偏高: {:.1}%", resources.cpu_usage_pct),
+                timestamp: Utc::now(),
+                action: Some("检查慢查询，优化查询性能".to_string()),
+            });
+        }
+        
+        alerts
     }
 }
 

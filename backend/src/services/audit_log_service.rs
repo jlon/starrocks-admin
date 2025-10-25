@@ -6,6 +6,7 @@ use crate::models::Cluster;
 use crate::services::{MySQLClient, MySQLPoolManager};
 use crate::utils::ApiResult;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use utoipa::ToSchema;
 
 /// Top table by access count (from audit logs)
@@ -36,11 +37,11 @@ pub struct SlowQuery {
 }
 
 pub struct AuditLogService {
-    mysql_pool_manager: MySQLPoolManager,
+    mysql_pool_manager: Arc<MySQLPoolManager>,
 }
 
 impl AuditLogService {
-    pub fn new(mysql_pool_manager: MySQLPoolManager) -> Self {
+    pub fn new(mysql_pool_manager: Arc<MySQLPoolManager>) -> Self {
         Self {
             mysql_pool_manager,
         }

@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use crate::AppState;
 use crate::services::{
-    AuditLogService, CapacityPrediction, ClusterOverview, DataStatistics, HealthCard, PerformanceTrends, ResourceTrends, SlowQuery, TimeRange,
+    AuditLogService, CapacityPrediction, ClusterOverview, DataStatistics, ExtendedClusterOverview,
+    HealthCard, PerformanceTrends, ResourceTrends, SlowQuery, TimeRange,
 };
 use crate::utils::ApiResult;
 
@@ -147,7 +148,7 @@ pub async fn get_performance_trends(
         params.time_range
     );
 
-    let trends = overview_service
+    let trends = state.overview_service
         .get_performance_trends(cluster_id, params.time_range)
         .await?;
 
@@ -188,7 +189,7 @@ pub async fn get_resource_trends(
         params.time_range
     );
 
-    let trends = overview_service
+    let trends = state.overview_service
         .get_resource_trends(cluster_id, params.time_range)
         .await?;
 
@@ -310,5 +311,51 @@ pub async fn get_capacity_prediction(
     let prediction = state.overview_service.predict_capacity(cluster_id).await?;
 
     Ok(Json(prediction))
+}
+
+/// Get extended cluster overview (All 18 modules)
+/// 
+/// Returns comprehensive cluster overview with all modules including:
+/// - Module 1: Cluster Health
+/// - Module 2: Key Performance Indicators
+/// - Module 3: Resource Metrics
+/// - Module 4-5: Performance & Resource Trends
+/// - Module 6: Data Statistics
+/// - Module 7-13: Task and session monitoring
+/// - Module 17: Capacity Prediction
+/// - Module 18: Alerts
+#[utoipa::path(
+    get,
+    path = "/api/clusters/{id}/overview/extended",
+    params(
+        ("id" = i64, Path, description = "Cluster ID"),
+        ("time_range" = Option<String>, Query, description = "Time range: 1h, 6h, 24h, 3d (default: 24h)")
+    ),
+    responses(
+        (status = 200, description = "Extended cluster overview with all modules", body = ExtendedClusterOverview),
+        (status = 404, description = "Cluster not found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Cluster Overview"
+)]
+pub async fn get_extended_cluster_overview(
+    State(state): State<Arc<AppState>>,
+    Path(cluster_id): Path<i64>,
+    Query(params): Query<OverviewQueryParams>,
+) -> ApiResult<Json<ExtendedClusterOverview>> {
+    tracing::debug!(
+        "GET /api/clusters/{}/overview/extended?time_range={:?}",
+        cluster_id,
+        params.time_range
+    );
+
+    let overview = state.overview_service
+        .get_extended_overview(cluster_id, params.time_range)
+        .await?;
+
+    Ok(Json(overview))
 }
 

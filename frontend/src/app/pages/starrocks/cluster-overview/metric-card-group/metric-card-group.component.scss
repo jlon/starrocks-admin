@@ -1,0 +1,67 @@
+@use '@nebular/theme/styles/theming' as *;
+
+.metric-card-group {
+  margin-bottom: 1.5rem;
+
+  .group-header-clickable {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background-color: nb-theme(background-basic-color-2);
+    }
+  }
+
+  .group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+
+    .group-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+
+      .group-icon {
+        font-size: 1.5rem;
+      }
+
+      h6 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: nb-theme(text-basic-color);
+      }
+
+      .badge-count {
+        margin-left: 0.5rem;
+      }
+    }
+
+    .toggle-icon {
+      font-size: 1.25rem;
+      color: nb-theme(text-hint-color);
+      transition: transform 0.3s ease;
+    }
+  }
+
+  .group-body {
+    padding: 1rem;
+  }
+}
+
+// 分组分隔线
+.metric-card-group + .metric-card-group {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  margin-top: -1px;
+}
+
+// 暗色主题适配
+:host-context(.nb-theme-dark) {
+  .metric-card-group + .metric-card-group {
+    border-top-color: rgba(255, 255, 255, 0.08);
+  }
+}
+

@@ -19,8 +19,11 @@ pub use metrics_collector_service::{MetricsCollectorService, MetricsSnapshot};
 pub use mysql_client::MySQLClient;
 pub use mysql_pool_manager::MySQLPoolManager;
 pub use overview_service::{
-    CapacityPrediction, ClusterOverview, HealthCard, HealthStatus, OverviewService, 
-    PerformanceTrends, ResourceTrends, TimeRange,
+    Alert, AlertLevel, BECompactionScore, CapacityPrediction, ClusterHealth, ClusterOverview,
+    CompactionStats, ExtendedClusterOverview, HealthCard, HealthStatus, KeyPerformanceIndicators,
+    LoadJobStats, MaterializedViewStats, NetworkIOStats, OverviewService, PerformanceTrends,
+    ResourceMetrics, ResourceTrends, RunningQuery, SchemaChangeStats, SessionStats, TimeRange,
+    TransactionStats,
 };
 pub use starrocks_client::StarRocksClient;
 pub use system_function_service::SystemFunctionService;

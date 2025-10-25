@@ -103,6 +103,136 @@ export interface CapacityPrediction {
   growthTrend: string; // "increasing", "stable", "decreasing"
 }
 
+// Extended Cluster Overview (All 18 modules)
+export interface ExtendedClusterOverview {
+  clusterId: number;
+  clusterName: string;
+  timestamp: string;
+  health: ClusterHealth;
+  kpi: KeyPerformanceIndicators;
+  resources: ResourceMetrics;
+  performanceTrends: PerformanceTrends;
+  resourceTrends: ResourceTrends;
+  dataStats?: DataStatistics;
+  mvStats: MaterializedViewStats;
+  loadJobs: LoadJobStats;
+  transactions: TransactionStats;
+  schemaChanges: SchemaChangeStats;
+  compaction: CompactionStats;
+  sessions: SessionStats;
+  networkIo: NetworkIOStats;
+  capacity?: CapacityPrediction;
+  alerts: Alert[];
+}
+
+export interface ClusterHealth {
+  status: 'healthy' | 'warning' | 'critical';
+  score: number; // 0-100
+  beNodesOnline: number;
+  beNodesTotal: number;
+  feNodesOnline: number;
+  feNodesTotal: number;
+  compactionScore: number;
+  alerts: string[];
+}
+
+export interface KeyPerformanceIndicators {
+  qps: number;
+  qpsTrend: number;
+  p99LatencyMs: number;
+  p99LatencyTrend: number;
+  successRate: number;
+  successRateTrend: number;
+  errorRate: number;
+}
+
+export interface ResourceMetrics {
+  cpuUsagePct: number;
+  cpuTrend: number;
+  memoryUsagePct: number;
+  memoryTrend: number;
+  diskUsagePct: number;
+  diskTrend: number;
+  compactionScore: number;
+  compactionStatus: string; // "normal", "warning", "critical"
+}
+
+export interface MaterializedViewStats {
+  total: number;
+  running: number;
+  success: number;
+  failed: number;
+  pending: number;
+}
+
+export interface LoadJobStats {
+  running: number;
+  pending: number;
+  finished: number;
+  failed: number;
+  cancelled: number;
+}
+
+export interface TransactionStats {
+  running: number;
+  committed: number;
+  aborted: number;
+}
+
+export interface SchemaChangeStats {
+  running: number;
+  pending: number;
+  finished: number;
+  failed: number;
+  cancelled: number;
+}
+
+export interface CompactionStats {
+  baseCompactionRunning: number;
+  cumulativeCompactionRunning: number;
+  maxScore: number;
+  avgScore: number;
+  beScores: BECompactionScore[];
+}
+
+export interface BECompactionScore {
+  beId: number;
+  beHost: string;
+  score: number;
+}
+
+export interface SessionStats {
+  activeUsers1h: number;
+  activeUsers24h: number;
+  currentConnections: number;
+  runningQueries: RunningQuery[];
+}
+
+export interface RunningQuery {
+  queryId: string;
+  user: string;
+  database: string;
+  startTime: string;
+  durationMs: number;
+  state: string;
+  queryPreview: string;
+}
+
+export interface NetworkIOStats {
+  networkTxBytesPerSec: number;
+  networkRxBytesPerSec: number;
+  diskReadBytesPerSec: number;
+  diskWriteBytesPerSec: number;
+}
+
+export interface Alert {
+  level: 'critical' | 'warning' | 'info';
+  category: string;
+  message: string;
+  timestamp: string;
+  action?: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -144,6 +274,10 @@ export class OverviewService {
       min_duration_ms: minDurationMs,
       limit,
     });
+  }
+
+  getExtendedClusterOverview(clusterId: number, timeRange: string = '24h'): Observable<ExtendedClusterOverview> {
+    return this.api.get(`/api/clusters/${clusterId}/overview/extended`, { time_range: timeRange });
   }
 }
 

@@ -1,10 +1,8 @@
-// Cluster Overview Component Styles
-// Following ngx-admin conventions
+@use '@nebular/theme/styles/theming' as *;
 
 .cluster-overview {
-  padding: 0;
+  padding: 1rem;
 
-  // Header Section
   .header-section {
     display: flex;
     justify-content: space-between;
@@ -14,462 +12,349 @@
 
     .page-title {
       margin: 0;
-      font-weight: 600;
+      color: nb-theme(text-basic-color);
       font-size: 1.75rem;
+      font-weight: 600;
     }
 
     .controls {
       display: flex;
-      gap: 0.75rem;
+      gap: 0.5rem;
       align-items: center;
+      flex-wrap: wrap;
 
       nb-select {
         min-width: 120px;
       }
 
-      button {
-        white-space: nowrap;
+      nb-toggle {
+        margin-left: 0.5rem;
       }
     }
   }
 
-  // Loading State
   .loading-container {
     display: flex;
-    flex-direction: column;
-    align-items: center;
     justify-content: center;
-    min-height: 400px;
-
-    nb-spinner {
-      margin-bottom: 1rem;
-    }
-
-    p {
-      margin-top: 1rem;
-      opacity: 0.7;
-    }
+    align-items: center;
+    min-height: 300px;
   }
 
-  // Health Cards Grid
-  .health-cards-grid {
+  // ==================== 数字卡片样式 ====================
+
+  .metric-cards-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1rem;
-    margin-bottom: 2rem;
+    margin-bottom: 0;
 
-    .health-card {
+    @media (min-width: 768px) {
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    @media (min-width: 1200px) {
+      grid-template-columns: repeat(5, 1fr);
+    }
+  }
+
+  .metric-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    &.clickable {
       cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      border-radius: 0.5rem;
 
       &:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        transform: translateY(-3px);
+        box-shadow: nb-theme(shadow);
       }
+    }
+
+    nb-card {
+      margin-bottom: 0;
+      height: 100%;
 
       nb-card-body {
-        padding: 1.25rem;
-      }
-
-      .card-header {
         display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 0.75rem;
+        align-items: center;
+        padding: 1rem;
+        min-height: 100px; // 从 150px 降低
+      }
+    }
 
-        .card-title {
-          font-size: 0.875rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          opacity: 0.7;
-          margin: 0;
-        }
+    .card-icon {
+      margin-right: 1rem;
+      flex-shrink: 0;
 
-        .card-icon {
-          opacity: 0.5;
-        }
+      nb-icon {
+        font-size: 2rem; // 从 2.5rem 降低
+      }
+    }
+
+    .card-content {
+      flex-grow: 1;
+      overflow: hidden;
+
+      .card-title {
+        font-size: 0.75rem; // 12px
+        color: nb-theme(text-hint-color);
+        margin-bottom: 0.25rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
       }
 
       .card-value {
-        font-size: 2rem;
-        font-weight: 700;
-        line-height: 1;
-        margin-bottom: 0.5rem;
+        font-size: 1.625rem; // 26px (从 48px 降低)
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        color: nb-theme(text-basic-color);
+        display: flex;
+        align-items: baseline;
+        line-height: 1.2;
 
-        small {
-          font-size: 0.875rem;
-          font-weight: 400;
-          opacity: 0.6;
+        .card-unit {
+          font-size: 0.875rem; // 14px
+          font-weight: normal;
           margin-left: 0.25rem;
+          color: nb-theme(text-hint-color);
         }
       }
 
       .card-trend {
         display: flex;
         align-items: center;
-        gap: 0.25rem;
-        font-size: 0.75rem;
+        font-size: 0.75rem; // 12px
 
         nb-icon {
-          font-size: 1rem;
+          font-size: 0.875rem; // 14px
+          margin-right: 0.25rem;
         }
 
-        &.positive {
-          color: #00d68f;
+        .trend-success {
+          color: nb-theme(color-success-default);
         }
 
-        &.negative {
-          color: #ff3d71;
+        .trend-danger {
+          color: nb-theme(color-danger-default);
         }
 
-        &.neutral {
-          opacity: 0.5;
-        }
-      }
-
-      .card-status {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-
-        nb-badge {
-          font-size: 0.75rem;
+        .trend-info {
+          color: nb-theme(color-info-default);
         }
       }
     }
   }
 
-  // Dashboard Layout
-  .dashboard-content {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 1.5rem;
+  // ==================== 图表区域样式 ====================
 
-    .main-column,
-    .side-column {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
+  .chart-row {
+    margin-bottom: 1.5rem;
   }
 
-  // Chart Cards
-  .chart-card {
-    nb-card-header {
-      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-      padding-bottom: 0.75rem;
+  .chart-container {
+    margin-bottom: 1rem;
 
-      h6 {
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-
-        nb-icon {
-          font-size: 1.25rem;
-        }
-      }
-
-      small {
-        opacity: 0.6;
-        font-size: 0.875rem;
-      }
+    &:last-child {
+      margin-bottom: 0;
     }
 
-    nb-card-body {
-      padding: 1.5rem;
+    .chart-subtitle {
+      font-size: 0.875rem;
+      color: nb-theme(text-hint-color);
+      margin-bottom: 0.5rem;
+      font-weight: 500;
     }
 
-    .chart-container {
+    .echart {
+      height: 300px;
       width: 100%;
-      height: 280px;
+    }
+
+    .echart-small {
+      height: 200px;
+      width: 100%;
     }
   }
 
-  // Statistics Cards
-  .stat-card {
-    nb-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+  .section-title {
+    font-size: 0.875rem;
+    color: nb-theme(text-hint-color);
+    margin: 1rem 0 0.5rem 0;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid nb-theme(border-basic-color-3);
+    padding-bottom: 0.25rem;
 
-      h6 {
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 600;
-      }
-
-      nb-icon {
-        opacity: 0.5;
-      }
+    &:first-child {
+      margin-top: 0;
     }
+  }
 
-    nb-card-body {
-      padding: 1.25rem;
-    }
+  .no-data {
+    text-align: center;
+    color: nb-theme(text-hint-color);
+    padding: 2rem 0;
+    font-size: 0.875rem;
+  }
+
+  // ==================== 数据统计样式 ====================
+
+  .stats-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background-color: nb-theme(background-basic-color-2);
+    border-radius: 0.5rem;
 
     .stat-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      padding: 0.5rem;
 
-      &:last-child {
-        border-bottom: none;
+      .label {
+        color: nb-theme(text-hint-color);
+        font-size: 0.75rem;
+        font-weight: 500;
       }
 
-      .stat-label {
-        font-size: 0.875rem;
-        opacity: 0.7;
-      }
-
-      .stat-value {
+      .value {
         font-weight: 600;
         font-size: 0.875rem;
-      }
-    }
-
-    .progress-item {
-      margin-bottom: 1rem;
-
-      &:last-child {
-        margin-bottom: 0;
-      }
-
-      .progress-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.5rem;
-
-        .progress-label {
-          font-size: 0.875rem;
-          font-weight: 500;
-        }
-
-        .progress-value {
-          font-size: 0.875rem;
-          font-weight: 600;
-        }
+        color: nb-theme(text-basic-color);
       }
     }
   }
 
-  // MV Status Items
-  .mv-status-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  .task-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1rem;
 
-    &:last-child {
-      border-bottom: none;
-    }
-
-    .mv-label {
-      font-size: 0.875rem;
-      opacity: 0.7;
-    }
-
-    .mv-value {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-
-      nb-badge {
-        font-weight: 600;
-      }
-    }
-  }
-
-  // Schema Change Items
-  .schema-change-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-
-    &:last-child {
-      border-bottom: none;
-    }
-
-    span {
-      font-size: 0.875rem;
-      opacity: 0.7;
-    }
-
-    strong {
-      font-weight: 600;
-      font-size: 0.875rem;
-    }
-  }
-
-  // Capacity Prediction
-  .capacity-section {
-    .capacity-info {
-      margin-bottom: 1.5rem;
-
-      .capacity-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem 0;
-
-        .capacity-label {
-          font-size: 0.875rem;
-          opacity: 0.7;
-        }
-
-        .capacity-value {
-          font-weight: 600;
-          font-size: 0.875rem;
-        }
-      }
-    }
-
-    .capacity-chart {
-      height: 200px;
-    }
-
-    .prediction-alert {
-      margin-top: 1rem;
-    }
-  }
-
-  // Top Tables List
-  .top-tables-list {
-    .table-item {
+    .task-stat-item {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      padding: 0.875rem;
-      margin-bottom: 0.75rem;
-      border-radius: 0.375rem;
-      background-color: rgba(0, 0, 0, 0.02);
-      transition: background-color 0.2s ease;
+      padding: 0.5rem;
+      background-color: nb-theme(background-basic-color-2);
+      border-radius: 0.25rem;
 
-      &:hover {
-        background-color: rgba(0, 0, 0, 0.04);
-      }
-
-      .table-info {
-        flex: 1;
-
-        .table-name {
-          font-weight: 600;
-          font-size: 0.875rem;
-          margin-bottom: 0.25rem;
-        }
-
-        .table-meta {
-          font-size: 0.75rem;
-          opacity: 0.6;
-        }
-      }
-
-      .table-stat {
-        text-align: right;
-
-        .stat-value {
-          font-weight: 700;
-          font-size: 1rem;
-        }
-
-        .stat-label {
-          font-size: 0.75rem;
-          opacity: 0.6;
-        }
-      }
-    }
-  }
-
-  // Slow Queries List
-  .slow-queries-list {
-    .query-item {
-      padding: 1rem;
-      margin-bottom: 1rem;
-      border-radius: 0.375rem;
-      background-color: rgba(0, 0, 0, 0.02);
-      border-left: 3px solid #ff3d71;
-
-      .query-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.75rem;
-
-        .query-time {
-          font-weight: 700;
-          color: #ff3d71;
-          font-size: 0.875rem;
-        }
-
-        .query-meta {
-          display: flex;
-          gap: 1rem;
-          font-size: 0.75rem;
-          opacity: 0.6;
-        }
-      }
-
-      .query-text {
-        font-family: 'Courier New', monospace;
+      .label {
+        color: nb-theme(text-hint-color);
         font-size: 0.75rem;
-        padding: 0.75rem;
-        background-color: rgba(0, 0, 0, 0.03);
-        border-radius: 0.25rem;
-        overflow-x: auto;
-        white-space: pre-wrap;
-        word-break: break-all;
+      }
+
+      .value {
+        font-weight: 600;
+        font-size: 0.875rem;
+
+        &.text-success {
+          color: nb-theme(color-success-default);
+        }
+
+        &.text-warning {
+          color: nb-theme(color-warning-default);
+        }
+
+        &.text-danger {
+          color: nb-theme(color-danger-default);
+        }
+
+        &.text-info {
+          color: nb-theme(color-info-default);
+        }
       }
     }
   }
 
-  // Empty State
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 1rem;
-    text-align: center;
+  // ==================== 表格样式 ====================
 
-    nb-icon {
-      font-size: 4rem;
-      opacity: 0.3;
+  .top-tables-table,
+  .slow-queries-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+
+    thead {
+      tr {
+        border-bottom: 2px solid nb-theme(border-basic-color-3);
+
+        th {
+          padding: 0.75rem 0.5rem;
+          text-align: left;
+          color: nb-theme(text-hint-color);
+          font-weight: 600;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+      }
+    }
+
+    tbody {
+      tr {
+        border-bottom: 1px solid nb-theme(border-basic-color-3);
+        transition: background-color 0.2s ease;
+
+        &:hover {
+          background-color: nb-theme(background-basic-color-2);
+        }
+
+        &:last-child {
+          border-bottom: none;
+        }
+
+        td {
+          padding: 0.75rem 0.5rem;
+          color: nb-theme(text-basic-color);
+
+          &.query-preview {
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+          }
+        }
+      }
+    }
+  }
+
+  // ==================== 容量预测样式 ====================
+
+  .capacity-info {
+    .capacity-progress {
+      position: relative;
       margin-bottom: 1rem;
-    }
 
-    p {
-      opacity: 0.6;
-      margin: 0;
-    }
-  }
-}
+      nb-progress-bar {
+        height: 2rem;
+      }
 
-// Responsive Design
-@media (max-width: 1200px) {
-  .cluster-overview {
-    .dashboard-content {
-      grid-template-columns: 1fr;
-    }
-
-    .health-cards-grid {
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      .progress-label {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        color: nb-theme(text-control-color);
+        font-weight: 600;
+        font-size: 0.875rem;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      }
     }
   }
-}
 
-@media (max-width: 768px) {
-  .cluster-overview {
+  // ==================== 响应式调整 ====================
+
+  @media (max-width: 767px) {
+    .metric-cards-row {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
     .header-section {
       flex-direction: column;
       align-items: flex-start;
@@ -477,51 +362,46 @@
 
       .controls {
         width: 100%;
-        flex-wrap: wrap;
       }
     }
 
-    .health-cards-grid {
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 0.75rem;
+    .chart-container .echart {
+      height: 250px;
+    }
+  }
 
-      .health-card {
-        .card-value {
-          font-size: 1.5rem;
-        }
-      }
+  @media (max-width: 575px) {
+    .metric-cards-row {
+      grid-template-columns: 1fr;
     }
 
-    .chart-card {
-      .chart-container {
-        height: 220px;
-      }
-    }
-
-    .capacity-section {
-      .capacity-chart {
-        height: 180px;
-      }
+    .stats-summary,
+    .task-stats-grid {
+      grid-template-columns: 1fr;
     }
   }
 }
 
-@media (max-width: 576px) {
-  .cluster-overview {
-    .health-cards-grid {
-      grid-template-columns: 1fr;
+// ==================== 全局文本工具类 ====================
 
-      .health-card {
-        .card-value {
-          font-size: 1.75rem;
-        }
-      }
-    }
+.text-hint {
+  color: nb-theme(text-hint-color);
+  font-size: 0.875rem;
+  font-style: italic;
+}
 
-    .chart-card {
-      .chart-container {
-        height: 200px;
-      }
-    }
-  }
+.text-success {
+  color: nb-theme(color-success-default);
+}
+
+.text-warning {
+  color: nb-theme(color-warning-default);
+}
+
+.text-danger {
+  color: nb-theme(color-danger-default);
+}
+
+.text-info {
+  color: nb-theme(color-info-default);
 }

@@ -27,6 +27,22 @@ pub trait ScheduledTask: Send + Sync + 'static {
     fn name(&self) -> &str;
 }
 
+/// Blanket implementation for Arc<T> where T: ScheduledTask
+/// This allows passing Arc-wrapped tasks directly to the executor
+impl<T: ScheduledTask> ScheduledTask for Arc<T> {
+    fn run(&self) -> Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send + '_>> {
+        (**self).run()
+    }
+
+    fn should_terminate(&self) -> bool {
+        (**self).should_terminate()
+    }
+
+    fn name(&self) -> &str {
+        (**self).name()
+    }
+}
+
 /// Scheduled executor for running periodic tasks
 pub struct ScheduledExecutor {
     interval: Duration,

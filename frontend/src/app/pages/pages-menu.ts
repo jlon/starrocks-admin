@@ -2,10 +2,15 @@ import { NbMenuItem } from '@nebular/theme';
 
 export const MENU_ITEMS: NbMenuItem[] = [
   {
-    title: '集群概览',
-    icon: 'home-outline',
+    title: '集群列表',
+    icon: 'list-outline',
     link: '/pages/starrocks/dashboard',
     home: true,
+  },
+  {
+    title: '集群概览',
+    icon: 'activity-outline',
+    link: '/pages/starrocks/overview',
   },
   {
     title: '集群管理',
@@ -53,7 +58,7 @@ export const MENU_ITEMS: NbMenuItem[] = [
   },
   {
     title: '监控指标',
-    icon: 'activity-outline',
+    icon: 'bar-chart-outline',
     link: '/pages/starrocks/monitor',
   },
 ];

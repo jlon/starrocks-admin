@@ -2,15 +2,16 @@ use crate::models::{CreateUserRequest, LoginRequest, User};
 use crate::utils::{ApiError, ApiResult, JwtUtil};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use sqlx::SqlitePool;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AuthService {
     pool: SqlitePool,
-    jwt_util: JwtUtil,
+    jwt_util: Arc<JwtUtil>,
 }
 
 impl AuthService {
-    pub fn new(pool: SqlitePool, jwt_util: JwtUtil) -> Self {
+    pub fn new(pool: SqlitePool, jwt_util: Arc<JwtUtil>) -> Self {
         Self { pool, jwt_util }
     }
 
@@ -27,10 +28,7 @@ impl AuthService {
 
         if existing_user.is_some() {
             tracing::warn!("Registration failed: username '{}' already exists", req.username);
-            return Err(ApiError::new(
-                crate::utils::ErrorCode::ValidationError,
-                "Username already exists",
-            ));
+            return Err(ApiError::validation_error("Username already exists"));
         }
 
         tracing::debug!("Hashing password for user: {}", req.username);
@@ -113,12 +111,7 @@ impl AuthService {
             .fetch_optional(&self.pool)
             .await?;
 
-        user.ok_or_else(|| {
-            ApiError::new(
-                crate::utils::ErrorCode::Unauthorized,
-                "User not found",
-            )
-        })
+        user.ok_or_else(|| ApiError::unauthorized("User not found"))
     }
 }
 

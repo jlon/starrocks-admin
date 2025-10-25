@@ -1,11 +1,10 @@
 use axum::{extract::{Path, State}, Json};
 use std::sync::Arc;
 
+use crate::AppState;
 use crate::models::Backend;
-use crate::services::{ClusterService, StarRocksClient};
+use crate::services::StarRocksClient;
 use crate::utils::ApiResult;
-
-pub type ClusterServiceState = Arc<ClusterService>;
 
 // Get all backends for a cluster
 #[utoipa::path(
@@ -24,10 +23,10 @@ pub type ClusterServiceState = Arc<ClusterService>;
     tag = "Backends"
 )]
 pub async fn list_backends(
-    State(cluster_service): State<ClusterServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
 ) -> ApiResult<Json<Vec<Backend>>> {
-    let cluster = cluster_service.get_cluster(cluster_id).await?;
+    let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     let client = StarRocksClient::new(cluster);
     let backends = client.get_backends().await?;
     Ok(Json(backends))
@@ -53,12 +52,12 @@ pub async fn list_backends(
     tag = "Backends"
 )]
 pub async fn delete_backend(
-    State(cluster_service): State<ClusterServiceState>,
+    State(state): State<Arc<AppState>>,
     Path((cluster_id, host, port)): Path<(i64, String, String)>,
 ) -> ApiResult<Json<serde_json::Value>> {
     tracing::info!("Deleting backend {}:{} from cluster {}", host, port, cluster_id);
     
-    let cluster = cluster_service.get_cluster(cluster_id).await?;
+    let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     let client = StarRocksClient::new(cluster);
     client.drop_backend(&host, &port).await?;
     

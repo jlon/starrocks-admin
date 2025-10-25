@@ -67,7 +67,7 @@ pub struct DataStatistics {
 pub struct DataStatisticsService {
     db: SqlitePool,
     cluster_service: Arc<ClusterService>,
-    mysql_pool_manager: MySQLPoolManager,
+    mysql_pool_manager: Arc<MySQLPoolManager>,
 }
 
 impl DataStatisticsService {
@@ -75,7 +75,7 @@ impl DataStatisticsService {
     pub fn new(
         db: SqlitePool,
         cluster_service: Arc<ClusterService>,
-        mysql_pool_manager: MySQLPoolManager,
+        mysql_pool_manager: Arc<MySQLPoolManager>,
     ) -> Self {
         Self {
             db,

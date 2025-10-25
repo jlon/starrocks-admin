@@ -31,22 +31,13 @@ impl ClusterService {
         
         // Validate cleaned data
         if req.name.is_empty() {
-            return Err(ApiError::new(
-                crate::utils::ErrorCode::ValidationError,
-                "Cluster name cannot be empty",
-            ));
+            return Err(ApiError::validation_error("Cluster name cannot be empty"));
         }
         if req.fe_host.is_empty() {
-            return Err(ApiError::new(
-                crate::utils::ErrorCode::ValidationError,
-                "FE host cannot be empty",
-            ));
+            return Err(ApiError::validation_error("FE host cannot be empty"));
         }
         if req.username.is_empty() {
-            return Err(ApiError::new(
-                crate::utils::ErrorCode::ValidationError,
-                "Username cannot be empty",
-            ));
+            return Err(ApiError::validation_error("Username cannot be empty"));
         }
 
         // Check if cluster name already exists
@@ -56,10 +47,7 @@ impl ClusterService {
             .await?;
 
         if existing.is_some() {
-            return Err(ApiError::new(
-                crate::utils::ErrorCode::ValidationError,
-                "Cluster name already exists",
-            ));
+            return Err(ApiError::validation_error("Cluster name already exists"));
         }
 
         // Convert tags to JSON string
@@ -239,7 +227,7 @@ impl ClusterService {
                 checks.push(HealthCheck {
                     name: "FE Availability".to_string(),
                     status: "critical".to_string(),
-                    message: format!("FE is not reachable: {}", e.message),
+                    message: format!("FE is not reachable: {}", e),
                 });
                 overall_status = HealthStatus::Critical;
             }
@@ -282,7 +270,7 @@ impl ClusterService {
                 checks.push(HealthCheck {
                     name: "Backend Nodes".to_string(),
                     status: "warning".to_string(),
-                    message: format!("Failed to check BE nodes: {}", e.message),
+                    message: format!("Failed to check BE nodes: {}", e),
                 });
                 if overall_status == HealthStatus::Healthy {
                     overall_status = HealthStatus::Warning;
@@ -336,7 +324,7 @@ impl ClusterService {
                                 checks.push(HealthCheck {
                                     name: "FE Availability".to_string(),
                                     status: "warning".to_string(),
-                                    message: format!("FE HTTP check failed: {}", e.message),
+                                    message: format!("FE HTTP check failed: {}", e),
                                 });
                                 if overall_status == HealthStatus::Healthy {
                                     overall_status = HealthStatus::Warning;
@@ -390,7 +378,7 @@ impl ClusterService {
                                 checks.push(HealthCheck {
                                     name: "Backend Nodes".to_string(),
                                     status: "warning".to_string(),
-                                    message: format!("Failed to check BE nodes: {}", e.message),
+                                    message: format!("Failed to check BE nodes: {}", e),
                                 });
                                 if overall_status == HealthStatus::Healthy {
                                     overall_status = HealthStatus::Warning;
@@ -402,7 +390,7 @@ impl ClusterService {
                         checks.push(HealthCheck {
                             name: "Database Connection".to_string(),
                             status: "critical".to_string(),
-                            message: format!("Connection failed: {}", e.message),
+                            message: format!("Connection failed: {}", e),
                         });
                         overall_status = HealthStatus::Critical;
                     }
@@ -412,7 +400,7 @@ impl ClusterService {
                 checks.push(HealthCheck {
                     name: "Connection Pool".to_string(),
                     status: "critical".to_string(),
-                    message: format!("Failed to create connection pool: {}", e.message),
+                    message: format!("Failed to create connection pool: {}", e),
                 });
                 overall_status = HealthStatus::Critical;
             }

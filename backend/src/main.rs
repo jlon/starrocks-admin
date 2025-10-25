@@ -23,21 +23,30 @@ use services::{
     AuthService, ClusterService, DataStatisticsService, MetricsCollectorService, MySQLPoolManager, 
     OverviewService, SystemFunctionService,
 };
-use utils::ScheduledExecutor;
 use sqlx::SqlitePool;
-use utils::JwtUtil;
+use utils::{JwtUtil, ScheduledExecutor};
 
-// Application state
+/// Application shared state
+/// 
+/// Design Philosophy: Keep it simple - Rust's type system IS our DI container.
+/// No need for Service Container pattern with dyn Any.
+/// All services are wrapped in Arc for cheap cloning and thread safety.
 #[derive(Clone)]
 pub struct AppState {
+    // Core dependencies
     pub db: SqlitePool,
-    pub mysql_pool_manager: MySQLPoolManager,
-    pub auth_service: AuthService,
-    pub cluster_service: ClusterService,
-    pub system_function_service: SystemFunctionService,
-    pub metrics_collector_service: MetricsCollectorService,
-    pub data_statistics_service: DataStatisticsService,
-    pub overview_service: OverviewService,
+    
+    // Managers
+    pub mysql_pool_manager: Arc<MySQLPoolManager>,
+    pub jwt_util: Arc<JwtUtil>,
+    
+    // Services (grouped by domain)
+    pub auth_service: Arc<AuthService>,
+    pub cluster_service: Arc<ClusterService>,
+    pub system_function_service: Arc<SystemFunctionService>,
+    pub metrics_collector_service: Arc<MetricsCollectorService>,
+    pub data_statistics_service: Arc<DataStatisticsService>,
+    pub overview_service: Arc<OverviewService>,
 }
 
 #[derive(OpenApi)]
@@ -197,40 +206,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = db::create_pool(&config.database.url).await?;
     tracing::info!("Database pool created successfully");
 
+    // Initialize core components
     let jwt_util = Arc::new(JwtUtil::new(&config.auth.jwt_secret, &config.auth.jwt_expires_in));
-    let auth_service = Arc::new(AuthService::new(pool.clone(), (*jwt_util).clone()));
-    let cluster_service = Arc::new(ClusterService::new(pool.clone()));
     let mysql_pool_manager = Arc::new(MySQLPoolManager::new());
+    
+    let auth_service = Arc::new(AuthService::new(
+        pool.clone(),
+        Arc::clone(&jwt_util),
+    ));
+    
+    let cluster_service = Arc::new(ClusterService::new(pool.clone()));
+    
     let system_function_service = Arc::new(SystemFunctionService::new(
         Arc::new(pool.clone()),
-        (*mysql_pool_manager).clone(),
-        (*cluster_service).clone(),
+        Arc::clone(&mysql_pool_manager),
+        Arc::clone(&cluster_service),
     ));
     
     // Create new services for cluster overview
     let metrics_collector_service = Arc::new(MetricsCollectorService::new(
         pool.clone(),
-        cluster_service.clone(),
+        Arc::clone(&cluster_service),
     ));
+    
     let data_statistics_service = Arc::new(DataStatisticsService::new(
         pool.clone(),
-        cluster_service.clone(),
-        (*mysql_pool_manager).clone(),
+        Arc::clone(&cluster_service),
+        Arc::clone(&mysql_pool_manager),
     ));
+    
     let overview_service = Arc::new(
-        OverviewService::new(pool.clone(), cluster_service.clone())
-            .with_data_statistics(data_statistics_service.clone())
+        OverviewService::new(pool.clone(), Arc::clone(&cluster_service))
+            .with_data_statistics(Arc::clone(&data_statistics_service))
     );
 
+    // Build AppState with all services
     let app_state = AppState {
         db: pool.clone(),
-        mysql_pool_manager: (*mysql_pool_manager).clone(),
-        auth_service: (*auth_service).clone(),
-        cluster_service: (*cluster_service).clone(),
-        system_function_service: (*system_function_service).clone(),
-        metrics_collector_service: (*metrics_collector_service).clone(),
-        data_statistics_service: (*data_statistics_service).clone(),
-        overview_service: (*overview_service).clone(),
+        mysql_pool_manager: Arc::clone(&mysql_pool_manager),
+        jwt_util: Arc::clone(&jwt_util),
+        auth_service: Arc::clone(&auth_service),
+        cluster_service: Arc::clone(&cluster_service),
+        system_function_service: Arc::clone(&system_function_service),
+        metrics_collector_service: Arc::clone(&metrics_collector_service),
+        data_statistics_service: Arc::clone(&data_statistics_service),
+        overview_service: Arc::clone(&overview_service),
     };
     
     // Start metrics collector using ScheduledExecutor (30 seconds interval)
@@ -238,7 +258,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "metrics-collector",
         std::time::Duration::from_secs(30),
     );
-    executor.spawn((*metrics_collector_service).clone());
+    executor.spawn(Arc::clone(&metrics_collector_service));
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -246,66 +266,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .allow_headers(Any)
         .allow_credentials(false);
 
+    // Wrap AppState in Arc for shared ownership across routes
+    let app_state_arc = Arc::new(app_state);
+
+    // Auth state for middleware
     let auth_state = middleware::AuthState {
-        jwt_util: jwt_util.clone(),
+        jwt_util: Arc::clone(&jwt_util),
     };
 
+    // Public routes (no authentication required)
     let public_routes = Router::new()
         .route("/api/auth/register", post(handlers::auth::register))
         .route("/api/auth/login", post(handlers::auth::login))
-        .with_state(auth_service.clone());
+        .with_state(Arc::clone(&app_state_arc));
 
-    // Routes using ClusterService
-    let cluster_routes = Router::new()
+    // Protected routes (require authentication)
+    let protected_routes = Router::new()
+        // Auth
+        .route("/api/auth/me", get(handlers::auth::get_me))
+        // Clusters
         .route("/api/clusters", post(handlers::cluster::create_cluster))
         .route("/api/clusters", get(handlers::cluster::list_clusters))
         .route("/api/clusters/:id", get(handlers::cluster::get_cluster))
         .route("/api/clusters/:id", put(handlers::cluster::update_cluster))
         .route("/api/clusters/:id", delete(handlers::cluster::delete_cluster))
+        .route("/api/clusters/:id/health", get(handlers::cluster::get_cluster_health).post(handlers::cluster::get_cluster_health))
+        // Backends
         .route("/api/clusters/:id/backends", get(handlers::backend::list_backends))
         .route("/api/clusters/:id/backends/:host/:port", delete(handlers::backend::delete_backend))
+        // Frontends
         .route("/api/clusters/:id/frontends", get(handlers::frontend::list_frontends))
+        // Queries
         .route("/api/clusters/:id/queries", get(handlers::query::list_queries))
-        .route("/api/clusters/:id/system/runtime_info", get(handlers::system::get_runtime_info))
-        .route("/api/clusters/:id/metrics/summary", get(handlers::monitor::get_metrics_summary))
-        .with_state(cluster_service.clone());
-    
-    // Routes using OverviewService
-    let overview_routes = Router::new()
-        .route("/api/clusters/:id/overview", get(handlers::overview::get_cluster_overview))
-        .route("/api/clusters/:id/overview/health", get(handlers::overview::get_health_cards))
-        .route("/api/clusters/:id/overview/performance", get(handlers::overview::get_performance_trends))
-        .route("/api/clusters/:id/overview/resources", get(handlers::overview::get_resource_trends))
-        .route("/api/clusters/:id/overview/data-stats", get(handlers::overview::get_data_statistics))
-        .route("/api/clusters/:id/overview/capacity-prediction", get(handlers::overview::get_capacity_prediction))
-        .with_state(overview_service.clone());
-    
-    // Routes using AppState  
-    let app_state_arc = Arc::new(app_state.clone());
-    
-    // Routes using AppState (for audit log queries)
-    let overview_audit_routes = Router::new()
-        .route("/api/clusters/:id/overview/slow-queries", get(handlers::overview::get_slow_queries))
-        .with_state(app_state_arc.clone());
-    let app_routes = Router::new()
-        .route("/api/clusters/:id/health", get(handlers::cluster::get_cluster_health).post(handlers::cluster::get_cluster_health))
+        .route("/api/clusters/:cluster_id/queries/execute", post(handlers::query::execute_sql))
+        .route("/api/clusters/:cluster_id/queries/:query_id", delete(handlers::query::kill_query))
+        .route("/api/clusters/:cluster_id/queries/history", get(handlers::query_history::list_query_history))
+        .route("/api/clusters/:cluster_id/queries/:query_id/profile", get(handlers::query_profile::get_query_profile))
+        // Materialized Views
         .route("/api/clusters/:id/materialized_views", get(handlers::materialized_view::list_materialized_views).post(handlers::materialized_view::create_materialized_view))
         .route("/api/clusters/:id/materialized_views/:mv_name", get(handlers::materialized_view::get_materialized_view).delete(handlers::materialized_view::delete_materialized_view).put(handlers::materialized_view::alter_materialized_view))
         .route("/api/clusters/:id/materialized_views/:mv_name/ddl", get(handlers::materialized_view::get_materialized_view_ddl))
         .route("/api/clusters/:id/materialized_views/:mv_name/refresh", post(handlers::materialized_view::refresh_materialized_view))
         .route("/api/clusters/:id/materialized_views/:mv_name/cancel", post(handlers::materialized_view::cancel_refresh_materialized_view))
-        .route("/api/clusters/:cluster_id/queries/execute", post(handlers::query::execute_sql))
-        .route("/api/clusters/:cluster_id/queries/:query_id", delete(handlers::query::kill_query))
-        .route("/api/clusters/:cluster_id/queries/history", get(handlers::query_history::list_query_history))
+        // Profiles
         .route("/api/clusters/:cluster_id/profiles", get(handlers::profile::list_profiles))
         .route("/api/clusters/:cluster_id/profiles/:query_id", get(handlers::profile::get_profile))
+        // Sessions
         .route("/api/clusters/:cluster_id/sessions", get(handlers::sessions::get_sessions))
         .route("/api/clusters/:cluster_id/sessions/:session_id", delete(handlers::sessions::kill_session))
+        // Variables
         .route("/api/clusters/:cluster_id/variables", get(handlers::variables::get_variables))
         .route("/api/clusters/:cluster_id/variables/:variable_name", put(handlers::variables::update_variable))
-        .route("/api/clusters/:cluster_id/queries/:query_id/profile", get(handlers::query_profile::get_query_profile))
+        // System
+        .route("/api/clusters/:id/system/runtime_info", get(handlers::system::get_runtime_info))
         .route("/api/clusters/:cluster_id/system", get(handlers::system_management::get_system_functions))
         .route("/api/clusters/:cluster_id/system/:function_name", get(handlers::system_management::get_system_function_detail))
+        // System Functions
         .route("/api/clusters/:id/system-functions", get(handlers::system_function::get_system_functions).post(handlers::system_function::create_system_function))
         .route("/api/clusters/:id/system-functions/orders", put(handlers::system_function::update_function_orders))
         .route("/api/clusters/:id/system-functions/:function_id/execute", post(handlers::system_function::execute_system_function))
@@ -313,19 +329,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/clusters/:id/system-functions/:function_id", put(handlers::system_function::update_function).delete(handlers::system_function::delete_system_function))
         .route("/api/system-functions/:function_name/access-time", put(handlers::system_function::update_system_function_access_time))
         .route("/api/system-functions/category/:category_name", delete(handlers::system_function::delete_category))
-        .with_state(app_state_arc);
-
-    // Auth route
-    let auth_routes = Router::new()
-        .route("/api/auth/me", get(handlers::auth::get_me))
-        .with_state(auth_service.clone());
-
-    let protected_routes = Router::new()
-        .merge(auth_routes)
-        .merge(cluster_routes)
-        .merge(overview_routes)
-        .merge(overview_audit_routes)
-        .merge(app_routes)
+        // System
+        .route("/api/clusters/:id/system/runtime_info", get(handlers::system::get_runtime_info))
+        // Monitor
+        .route("/api/clusters/:id/metrics/summary", get(handlers::monitor::get_metrics_summary))
+        // Overview
+        .route("/api/clusters/:id/overview", get(handlers::overview::get_cluster_overview))
+        .route("/api/clusters/:id/overview/health", get(handlers::overview::get_health_cards))
+        .route("/api/clusters/:id/overview/performance", get(handlers::overview::get_performance_trends))
+        .route("/api/clusters/:id/overview/resources", get(handlers::overview::get_resource_trends))
+        .route("/api/clusters/:id/overview/data-stats", get(handlers::overview::get_data_statistics))
+        .route("/api/clusters/:id/overview/capacity-prediction", get(handlers::overview::get_capacity_prediction))
+        .route("/api/clusters/:id/overview/slow-queries", get(handlers::overview::get_slow_queries))
+        .with_state(Arc::clone(&app_state_arc))
         .layer(axum_middleware::from_fn_with_state(
             auth_state,
             middleware::auth_middleware,

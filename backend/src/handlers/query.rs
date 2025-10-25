@@ -8,11 +8,10 @@ use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::AppState;
 use crate::models::{Query, QueryExecuteRequest, QueryExecuteResponse};
-use crate::services::{ClusterService, MySQLClient, StarRocksClient};
+use crate::services::{MySQLClient, StarRocksClient};
 use crate::utils::ApiResult;
-
-pub type ClusterServiceState = Arc<ClusterService>;
 
 // Get all running queries for a cluster
 #[utoipa::path(
@@ -31,10 +30,10 @@ pub type ClusterServiceState = Arc<ClusterService>;
     tag = "Queries"
 )]
 pub async fn list_queries(
-    State(cluster_service): State<ClusterServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
 ) -> ApiResult<Json<Vec<Query>>> {
-    let cluster = cluster_service.get_cluster(cluster_id).await?;
+    let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     let client = StarRocksClient::new(cluster);
     let queries = client.get_queries().await?;
     Ok(Json(queries))
@@ -62,8 +61,7 @@ pub async fn kill_query(
     State(state): State<Arc<crate::AppState>>,
     Path((cluster_id, query_id)): Path<(i64, String)>,
 ) -> ApiResult<impl IntoResponse> {
-    let cluster_service = ClusterService::new(state.db.clone());
-    let cluster = cluster_service.get_cluster(cluster_id).await?;
+    let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
@@ -102,8 +100,7 @@ pub async fn execute_sql(
     Path(cluster_id): Path<i64>,
     Json(request): Json<QueryExecuteRequest>,
 ) -> ApiResult<Json<QueryExecuteResponse>> {
-    let cluster_service = ClusterService::new(state.db.clone());
-    let cluster = cluster_service.get_cluster(cluster_id).await?;
+    let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     
     // DEBUG: Print cluster info
     tracing::info!("🔍 Starting SQL execution - Cluster: ID={}, Host={}, Port={}, User={}", 

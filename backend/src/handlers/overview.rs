@@ -9,12 +9,11 @@ use axum::{
 use serde::Deserialize;
 use std::sync::Arc;
 
+use crate::AppState;
 use crate::services::{
-    AuditLogService, CapacityPrediction, ClusterOverview, DataStatistics, HealthCard, OverviewService, PerformanceTrends, ResourceTrends, SlowQuery, TimeRange,
+    AuditLogService, CapacityPrediction, ClusterOverview, DataStatistics, HealthCard, PerformanceTrends, ResourceTrends, SlowQuery, TimeRange,
 };
 use crate::utils::ApiResult;
-
-pub type OverviewServiceState = Arc<OverviewService>;
 
 /// Query parameters for overview endpoints
 #[derive(Debug, Deserialize)]
@@ -63,7 +62,7 @@ pub struct TrendQueryParams {
     tag = "Cluster Overview"
 )]
 pub async fn get_cluster_overview(
-    State(overview_service): State<OverviewServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
     Query(params): Query<OverviewQueryParams>,
 ) -> ApiResult<Json<ClusterOverview>> {
@@ -73,7 +72,7 @@ pub async fn get_cluster_overview(
         params.time_range
     );
 
-    let overview = overview_service
+    let overview = state.overview_service
         .get_cluster_overview(cluster_id, params.time_range)
         .await?;
 
@@ -104,12 +103,12 @@ pub async fn get_cluster_overview(
     tag = "Cluster Overview"
 )]
 pub async fn get_health_cards(
-    State(overview_service): State<OverviewServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
 ) -> ApiResult<Json<Vec<HealthCard>>> {
     tracing::debug!("GET /api/clusters/{}/overview/health", cluster_id);
 
-    let cards = overview_service.get_health_cards(cluster_id).await?;
+    let cards = state.overview_service.get_health_cards(cluster_id).await?;
 
     Ok(Json(cards))
 }
@@ -138,7 +137,7 @@ pub async fn get_health_cards(
     tag = "Cluster Overview"
 )]
 pub async fn get_performance_trends(
-    State(overview_service): State<OverviewServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
     Query(params): Query<TrendQueryParams>,
 ) -> ApiResult<Json<PerformanceTrends>> {
@@ -179,7 +178,7 @@ pub async fn get_performance_trends(
     tag = "Cluster Overview"
 )]
 pub async fn get_resource_trends(
-    State(overview_service): State<OverviewServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
     Query(params): Query<TrendQueryParams>,
 ) -> ApiResult<Json<ResourceTrends>> {
@@ -222,12 +221,12 @@ pub async fn get_resource_trends(
     tag = "Cluster Overview"
 )]
 pub async fn get_data_statistics(
-    State(overview_service): State<OverviewServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
 ) -> ApiResult<Json<DataStatistics>> {
     tracing::debug!("GET /api/clusters/{}/overview/data-stats", cluster_id);
 
-    let stats = overview_service.get_data_statistics(cluster_id).await?;
+    let stats = state.overview_service.get_data_statistics(cluster_id).await?;
 
     Ok(Json(stats))
 }
@@ -263,7 +262,7 @@ pub async fn get_slow_queries(
 
     let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     
-    let audit_service = AuditLogService::new(state.mysql_pool_manager.clone());
+    let audit_service = AuditLogService::new(Arc::clone(&state.mysql_pool_manager));
     let slow_queries = audit_service
         .get_slow_queries(
             &cluster,
@@ -303,12 +302,12 @@ pub struct SlowQueryParams {
     tag = "Cluster Overview"
 )]
 pub async fn get_capacity_prediction(
-    State(overview_service): State<OverviewServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
 ) -> ApiResult<Json<CapacityPrediction>> {
     tracing::debug!("GET /api/clusters/{}/overview/capacity-prediction", cluster_id);
 
-    let prediction = overview_service.predict_capacity(cluster_id).await?;
+    let prediction = state.overview_service.predict_capacity(cluster_id).await?;
 
     Ok(Json(prediction))
 }

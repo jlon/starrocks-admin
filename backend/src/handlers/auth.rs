@@ -1,11 +1,9 @@
 use axum::{extract::State, Json};
 use std::sync::Arc;
 
+use crate::AppState;
 use crate::models::{CreateUserRequest, LoginRequest, LoginResponse, UserResponse};
-use crate::services::AuthService;
 use crate::utils::ApiResult;
-
-pub type AuthServiceState = Arc<AuthService>;
 
 // Register a new user
 #[utoipa::path(
@@ -19,13 +17,13 @@ pub type AuthServiceState = Arc<AuthService>;
     tag = "Authentication"
 )]
 pub async fn register(
-    State(auth_service): State<AuthServiceState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<CreateUserRequest>,
 ) -> ApiResult<Json<UserResponse>> {
     tracing::info!("User registration attempt for username: {}", req.username);
     tracing::debug!("Registration request: username={}, email={:?}", req.username, req.email);
     
-    let user = auth_service.register(req).await?;
+    let user = state.auth_service.register(req).await?;
     
     tracing::info!("User registered successfully: {} (ID: {})", user.username, user.id);
     Ok(Json(user.into()))
@@ -43,13 +41,13 @@ pub async fn register(
     tag = "Authentication"
 )]
 pub async fn login(
-    State(auth_service): State<AuthServiceState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<LoginRequest>,
 ) -> ApiResult<Json<LoginResponse>> {
     tracing::info!("User login attempt for username: {}", req.username);
     tracing::debug!("Login request: username={}", req.username);
     
-    let (user, token) = auth_service.login(req).await?;
+    let (user, token) = state.auth_service.login(req).await?;
 
     tracing::info!("User logged in successfully: {} (ID: {})", user.username, user.id);
     tracing::debug!("JWT token generated for user: {}", user.username);
@@ -74,12 +72,12 @@ pub async fn login(
     tag = "Authentication"
 )]
 pub async fn get_me(
-    State(auth_service): State<AuthServiceState>,
+    State(state): State<Arc<AppState>>,
     axum::extract::Extension(user_id): axum::extract::Extension<i64>,
 ) -> ApiResult<Json<UserResponse>> {
     tracing::debug!("Getting user info for user_id: {}", user_id);
     
-    let user = auth_service.get_user_by_id(user_id).await?;
+    let user = state.auth_service.get_user_by_id(user_id).await?;
     
     tracing::debug!("User info retrieved successfully: {} (ID: {})", user.username, user.id);
     Ok(Json(user.into()))

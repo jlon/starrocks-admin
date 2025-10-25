@@ -1,11 +1,10 @@
 use axum::{extract::{Path, State}, Json};
 use std::sync::Arc;
 
+use crate::AppState;
 use crate::models::RuntimeInfo;
-use crate::services::{ClusterService, StarRocksClient};
+use crate::services::StarRocksClient;
 use crate::utils::ApiResult;
-
-pub type ClusterServiceState = Arc<ClusterService>;
 
 // Get runtime info for a cluster
 #[utoipa::path(
@@ -24,10 +23,10 @@ pub type ClusterServiceState = Arc<ClusterService>;
     tag = "System"
 )]
 pub async fn get_runtime_info(
-    State(cluster_service): State<ClusterServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
 ) -> ApiResult<Json<RuntimeInfo>> {
-    let cluster = cluster_service.get_cluster(cluster_id).await?;
+    let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     let client = StarRocksClient::new(cluster);
     let runtime_info = client.get_runtime_info().await?;
     Ok(Json(runtime_info))

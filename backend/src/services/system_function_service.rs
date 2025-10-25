@@ -10,12 +10,12 @@ use crate::utils::{ApiResult, ApiError};
 #[derive(Clone)]
 pub struct SystemFunctionService {
     db: Arc<SqlitePool>,
-    mysql_pool_manager: MySQLPoolManager,
-    cluster_service: ClusterService,
+    mysql_pool_manager: Arc<MySQLPoolManager>,
+    cluster_service: Arc<ClusterService>,
 }
 
 impl SystemFunctionService {
-    pub fn new(db: Arc<SqlitePool>, mysql_pool_manager: MySQLPoolManager, cluster_service: ClusterService) -> Self {
+    pub fn new(db: Arc<SqlitePool>, mysql_pool_manager: Arc<MySQLPoolManager>, cluster_service: Arc<ClusterService>) -> Self {
         Self {
             db,
             mysql_pool_manager,

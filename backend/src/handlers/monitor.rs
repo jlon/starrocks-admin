@@ -1,11 +1,10 @@
 use axum::{extract::{Path, State}, Json};
 use std::sync::Arc;
 
+use crate::AppState;
 use crate::models::MetricsSummary;
-use crate::services::{ClusterService, StarRocksClient};
+use crate::services::StarRocksClient;
 use crate::utils::ApiResult;
-
-pub type ClusterServiceState = Arc<ClusterService>;
 
 // Get metrics summary for a cluster
 #[utoipa::path(
@@ -24,10 +23,10 @@ pub type ClusterServiceState = Arc<ClusterService>;
     tag = "Monitoring"
 )]
 pub async fn get_metrics_summary(
-    State(cluster_service): State<ClusterServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
 ) -> ApiResult<Json<MetricsSummary>> {
-    let cluster = cluster_service.get_cluster(cluster_id).await?;
+    let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     let client = StarRocksClient::new(cluster);
 
     // Fetch all required data

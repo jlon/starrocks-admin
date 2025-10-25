@@ -1,11 +1,10 @@
 use axum::{extract::{Path, State}, Json};
 use std::sync::Arc;
 
+use crate::AppState;
 use crate::models::Frontend;
-use crate::services::{ClusterService, StarRocksClient};
+use crate::services::StarRocksClient;
 use crate::utils::ApiResult;
-
-pub type ClusterServiceState = Arc<ClusterService>;
 
 // Get all frontends for a cluster
 #[utoipa::path(
@@ -24,10 +23,10 @@ pub type ClusterServiceState = Arc<ClusterService>;
     tag = "Frontends"
 )]
 pub async fn list_frontends(
-    State(cluster_service): State<ClusterServiceState>,
+    State(state): State<Arc<AppState>>,
     Path(cluster_id): Path<i64>,
 ) -> ApiResult<Json<Vec<Frontend>>> {
-    let cluster = cluster_service.get_cluster(cluster_id).await?;
+    let cluster = state.cluster_service.get_cluster(cluster_id).await?;
     let client = StarRocksClient::new(cluster);
     let frontends = client.get_frontends().await?;
     Ok(Json(frontends))

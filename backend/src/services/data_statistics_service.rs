@@ -611,7 +611,7 @@ impl DataStatisticsService {
     /// Get total data size from all tables using MySQL query
     async fn get_total_data_size_mysql(&self, mysql_client: &MySQLClient) -> ApiResult<i64> {
         let sql = "SELECT SUM(COALESCE(DATA_LENGTH, 0)) as total_size FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', '_statistics_')";
-        let (columns, rows) = mysql_client.query_raw(sql, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(sql).await?;
 
         if let Some(total_idx) = columns
             .iter()
@@ -630,7 +630,7 @@ impl DataStatisticsService {
         mysql_client: &MySQLClient,
     ) -> ApiResult<(i32, i32, i32, i32)> {
         let sql = "SHOW ALTER TABLE";
-        let (_columns, rows) = mysql_client.query_raw(sql, None, None).await.unwrap_or_default();
+        let (_columns, rows) = mysql_client.query_raw(sql).await.unwrap_or_default();
 
         let mut running = 0;
         let mut pending = 0;
@@ -657,7 +657,7 @@ impl DataStatisticsService {
     /// Get active users using SHOW PROCESSLIST
     async fn get_active_users_mysql(&self, mysql_client: &MySQLClient) -> ApiResult<Vec<String>> {
         let sql = "SHOW PROCESSLIST";
-        let (columns, rows) = mysql_client.query_raw(sql, None, None).await.unwrap_or_default();
+        let (columns, rows) = mysql_client.query_raw(sql).await.unwrap_or_default();
 
         let mut unique_users: std::collections::HashSet<String> = std::collections::HashSet::new();
 

@@ -129,11 +129,19 @@ export interface QueryExecuteRequest {
   database?: string;
 }
 
-export interface QueryExecuteResult {
+export interface SingleQueryResult {
+  sql: string;
   columns: string[];
   rows: string[][];
   row_count: number;
   execution_time_ms: number;
+  success: boolean;
+  error?: string;
+}
+
+export interface QueryExecuteResult {
+  results: SingleQueryResult[];
+  total_execution_time_ms: number;
 }
 
 export interface ProfileListItem {

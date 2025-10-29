@@ -41,6 +41,10 @@
       }
     }
     
+    .editor-wrapper {
+      position: relative;
+    }
+    
     .codemirror-container {
       border: 1px solid nb-theme(border-basic-color-4);
       border-radius: nb-theme(border-radius);
@@ -73,6 +77,28 @@
         .cm-line {
           font-size: 1.2em;
         }
+      }
+    }
+    
+    // Loading overlay with native Nebular styling
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      pointer-events: none; // Allow interaction with editor while showing spinner
+      
+      // Use Nebular's native spinner component styles
+      ::ng-deep nb-spinner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
       }
     }
     
@@ -114,7 +140,6 @@
       display: flex;
       align-items: center;
       gap: 0.25rem;
-      margin-top: 0.5rem;
       color: var(--text-hint-color);
       font-size: 12px;
     }
@@ -178,5 +203,138 @@
       margin: 0;
       font-size: 1.1rem;
     }
+  }
+  
+  .result-card {
+    margin-bottom: 1rem;
+  }
+  
+  .error-message {
+    padding: 1rem;
+  }
+  
+  .tabset-with-export {
+    position: relative;
+    
+    .result-tabset {
+      width: 100%;
+      
+      // Access tabset's tab bar to add padding for button space
+      :deep(.tabset) {
+        .tabs {
+          padding-right: 120px;
+        }
+      }
+      
+      // Ensure tab content aligns with card edges
+      :deep(.tab-content) {
+        padding: 0;
+      }
+    }
+    
+    .export-button-wrapper {
+      position: absolute;
+      top: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      // Match tab bar height exactly (48px is standard for Nebular tabs)
+      height: 48px;
+      z-index: 10;
+      
+      .export-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        white-space: nowrap;
+        
+        nb-icon {
+          font-size: 0.875rem !important;
+          line-height: 1;
+          margin: 0;
+        }
+      }
+    }
+  }
+  
+  .tab-content-wrapper {
+    padding: 0;
+    position: relative;
+  }
+  
+  // Result statistics at bottom right of each result tab
+  .result-stats-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    margin-top: 0.5rem;
+    background: nb-theme(background-basic-color-2);
+    border-top: 1px solid nb-theme(border-basic-color-3);
+    border-radius: 0 0 nb-theme(border-radius) nb-theme(border-radius);
+    
+    .stats-text {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: nb-theme(text-hint-color);
+      font-weight: 500;
+      
+      .stats-icon {
+        font-size: 1rem;
+        color: nb-theme(text-hint-color);
+      }
+      
+      .stats-separator {
+        margin: 0 0.25rem;
+        color: nb-theme(border-basic-color-4);
+      }
+    }
+  }
+  
+  .result-stats-header {
+    padding: 0.5rem 0;
+    
+    nb-badge {
+      font-size: 0.75rem;
+    }
+  }
+  
+  // Style for tab titles and badges
+  :deep(.result-tabset) {
+    .tabset {
+      .tabs {
+        .tab {
+          a {
+            font-weight: 500;
+            font-size: 0.875rem;
+            letter-spacing: 0.01em;
+          }
+        }
+        
+        .tab.active {
+          a {
+            font-weight: 600;
+            color: nb-theme(color-primary-default);
+          }
+        }
+        
+        // Inactive tab styling
+        .tab:not(.active) {
+          a {
+            color: nb-theme(text-hint-color);
+            font-weight: 400;
+            
+            &:hover {
+              color: nb-theme(text-basic-color);
+              font-weight: 500;
+            }
+          }
+        }
+      }
+    }
+    
   }
 }

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::AppState;
-use crate::models::{CatalogWithDatabases, CatalogsWithDatabasesResponse, Query, QueryExecuteRequest, QueryExecuteResponse};
+use crate::models::{CatalogWithDatabases, CatalogsWithDatabasesResponse, Query, QueryExecuteRequest, QueryExecuteResponse, SingleQueryResult};
 use crate::services::mysql_client::MySQLClient;
 use crate::services::StarRocksClient;
 use crate::utils::ApiResult;
@@ -34,7 +34,7 @@ pub async fn list_catalogs(State(state): State<Arc<AppState>>) -> ApiResult<Json
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
     
-    let (_, rows) = mysql_client.query_raw("SHOW CATALOGS", None, None).await?;
+    let (_, rows) = mysql_client.query_raw("SHOW CATALOGS").await?;
     
     let mut catalogs = Vec::new();
     for row in rows {
@@ -88,7 +88,7 @@ pub async fn list_databases(
     }
     
     // Execute SHOW DATABASES
-    let (_, rows) = mysql_client.query_raw("SHOW DATABASES", None, None).await?;
+    let (_, rows) = mysql_client.query_raw("SHOW DATABASES").await?;
     
     let mut databases = Vec::new();
     for row in rows {
@@ -130,7 +130,7 @@ pub async fn list_catalogs_with_databases(
     let mysql_client = MySQLClient::from_pool(pool);
     
     // Step 1: Get all catalogs
-    let (_, catalog_rows) = mysql_client.query_raw("SHOW CATALOGS", None, None).await?;
+    let (_, catalog_rows) = mysql_client.query_raw("SHOW CATALOGS").await?;
     
     let mut catalogs = Vec::new();
     
@@ -161,7 +161,7 @@ pub async fn list_catalogs_with_databases(
         }
         
         // Get databases for this catalog
-        let (_, db_rows) = match mysql_client.query_raw("SHOW DATABASES", None, None).await {
+        let (_, db_rows) = match mysql_client.query_raw("SHOW DATABASES").await {
             Ok(result) => result,
             Err(e) => {
                 tracing::warn!("Failed to get databases for catalog {}: {}", catalog_name, e);
@@ -276,77 +276,149 @@ pub async fn execute_sql(
     // Use pool manager to get cached pool (avoid intermittent failures from creating new pools)
     let pool: mysql_async::Pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
+    
+    // Parse SQL statements first (split by semicolon, handling simple cases)
+    let sql_statements = parse_sql_statements(&request.sql);
+    
+    // Limit to maximum 5 statements
+    let sql_statements: Vec<String> = sql_statements.into_iter().take(5).collect();
+    
+    // If no statements to execute, return early
+    if sql_statements.is_empty() {
+        return Ok(Json(QueryExecuteResponse {
+            results: Vec::new(),
+            total_execution_time_ms: 0,
+        }));
+    }
 
-    // If catalog is specified, switch to it first
-    if let Some(ref cat) = request.catalog {
-        if !cat.is_empty() {
-            let use_catalog_sql = format!("USE CATALOG `{}`", cat);
-            tracing::debug!("Executing USE CATALOG: {}", use_catalog_sql);
-            if let Err(e) = mysql_client.execute(&use_catalog_sql).await {
-                tracing::warn!("Failed to execute USE CATALOG {}: {}", cat, e);
-                // Continue execution anyway - catalog might already be active
-            }
+    // CRITICAL: Create a session with a dedicated connection
+    // This ensures USE CATALOG/DATABASE state persists across all queries
+    let mut session = mysql_client.create_session().await?;
+
+    // Execute USE CATALOG only once on the session's connection
+    if let Some(cat) = request.catalog.as_ref().filter(|c| !c.is_empty()) {
+        session.use_catalog(cat).await?;
+    }
+
+    // Execute USE DATABASE only once on the session's connection
+    if let Some(db) = request.database.as_ref().filter(|d| !d.is_empty()) {
+        session.use_database(db).await?;
+    }
+    
+    let total_start = Instant::now();
+    let mut results = Vec::new();
+    
+    // Execute each SQL statement sequentially on the SAME connection
+    for sql in sql_statements {
+        if sql.is_empty() {
+            continue;
+        }
+        
+        let sql_with_limit = apply_query_limit(&sql, request.limit.unwrap_or(1000));
+        
+        // Execute query on the session's connection that has persistent database context
+        // Use execute to get accurate SQL execution time (excluding data processing)
+        let query_result = session.execute(&sql_with_limit).await;
+        
+        match query_result {
+            Ok((columns, data_rows, execution_time_ms)) => {
+                let row_count = data_rows.len();
+                results.push(SingleQueryResult {
+                    sql,
+                    columns,
+                    rows: data_rows,
+                    row_count,
+                    execution_time_ms,
+                    success: true,
+                    error: None,
+                });
+            },
+            Err(e) => {
+                results.push(SingleQueryResult {
+                    sql,
+                    columns: Vec::new(),
+                    rows: Vec::new(),
+                    row_count: 0,
+                    execution_time_ms: 0, // No timing available for errors
+                    success: false,
+                    error: Some(e.to_string()),
+                });
+            },
         }
     }
+    
+    let total_execution_time_ms = total_start.elapsed().as_millis();
+    
+    // Session's connection will be automatically returned to pool when session is dropped
+    
+    Ok(Json(QueryExecuteResponse {
+        results,
+        total_execution_time_ms,
+    }))
+}
 
-    // If database is specified, execute USE database
-    if let Some(ref db) = request.database {
-        if !db.is_empty() {
-            let use_db_sql = format!("USE `{}`", db);
-            tracing::debug!("Executing USE DATABASE: {}", use_db_sql);
-            if let Err(e) = mysql_client.execute(&use_db_sql).await {
-                tracing::warn!("Failed to execute USE database {}: {}", db, e);
-                // Continue execution anyway - database might not exist
-            }
+// Simple SQL statement parser - splits by semicolon, ignoring those in single/double quotes
+fn parse_sql_statements(sql: &str) -> Vec<String> {
+    let mut statements = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut chars = sql.chars().peekable();
+    
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+                current.push(ch);
+            },
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+                current.push(ch);
+            },
+            ';' if !in_single_quote && !in_double_quote => {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    statements.push(trimmed.to_string());
+                }
+                current.clear();
+            },
+            _ => {
+                current.push(ch);
+            },
         }
     }
-
-    let original_sql = &request.sql;
-    let sql = apply_query_limit(original_sql, request.limit.unwrap_or(1000));
-
-    let start = Instant::now();
-
-    // Execute query with catalog and database context
-    let query_result = mysql_client.query_raw(
-        &sql,
-        request.catalog.as_deref(),
-        request.database.as_deref(),
-    ).await;
-
-    let execution_time_ms = start.elapsed().as_millis();
-
-    match query_result {
-        Ok((columns, data_rows)) => {
-            let row_count = data_rows.len();
-
-            Ok(Json(QueryExecuteResponse {
-                columns,
-                rows: data_rows,
-                row_count,
-                execution_time_ms,
-            }))
-        },
-        Err(e) => Err(e),
+    
+    // Add the last statement if exists
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        statements.push(trimmed.to_string());
     }
+    
+    statements
 }
 
 fn apply_query_limit(sql: &str, limit: i32) -> String {
-    let sql_upper = sql.trim().to_uppercase();
+    let trimmed = sql.trim();
+    let sql_upper = trimmed.to_uppercase();
 
+    // Return original SQL if it already has LIMIT
     if sql_upper.contains("LIMIT") {
-        return sql.to_string();
+        return trimmed.to_string();
     }
 
+    // Only add LIMIT to SELECT queries that don't contain special keywords
     if sql_upper.starts_with("SELECT") {
         if sql_upper.contains("GET_QUERY_PROFILE")
             || sql_upper.contains("SHOW_PROFILE")
             || sql_upper.contains("EXPLAIN")
         {
-            return sql.to_string();
+            return trimmed.to_string();
         }
 
-        format!("{} LIMIT {}", sql.trim().trim_end_matches(';'), limit)
+        // Add LIMIT to SELECT query
+        let sql_without_semicolon = trimmed.trim_end_matches(';');
+        format!("{} LIMIT {}", sql_without_semicolon, limit)
     } else {
-        sql.to_string()
+        trimmed.to_string()
     }
 }

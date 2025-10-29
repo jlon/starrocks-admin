@@ -4,7 +4,7 @@ import { NbToastrService, NbDialogService, NbThemeService } from '@nebular/theme
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { NodeService, QueryExecuteResult } from '../../../../@core/data/node.service';
+import { NodeService, QueryExecuteResult, SingleQueryResult } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
@@ -21,10 +21,10 @@ import { format } from 'sql-formatter';
 })
 export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('editorContainer', { static: false }) editorContainer!: ElementRef;
+  @ViewChild('tabsetRef', { static: false }) tabsetRef!: any;
 
   // Data sources
   runningSource: LocalDataSource = new LocalDataSource();
-  realtimeResultSource: LocalDataSource = new LocalDataSource();
   
   // Expose Math to template
   Math = Math;
@@ -62,11 +62,16 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   // Real-time query state
   sqlInput: string = '';
   queryResult: QueryExecuteResult | null = null;
-  resultSettings: any = null;
+  resultSettings: any[] = []; // Array of settings for multiple results
   executing: boolean = false;
   executionTime: number = 0;
   rowCount: number = 0;
   queryLimit: number = 1000; // Default limit for query results
+  
+  // Multiple query results
+  queryResults: SingleQueryResult[] = [];
+  resultSources: LocalDataSource[] = []; // Array of data sources for multiple results
+  currentResultIndex: number = 0; // Track current selected tab index
   limitOptions = [
     { value: 100, label: '100 行' },
     { value: 500, label: '500 行' },
@@ -415,9 +420,33 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       return;
     }
 
+    // Check if catalog is selected
+    if (!this.selectedCatalog) {
+      this.toastrService.warning('请先选择 Catalog', '提示');
+      return;
+    }
+
+    // Check if databases are still loading
+    if (this.loadingDatabases) {
+      this.toastrService.warning('数据库列表加载中，请稍候...', '提示');
+      return;
+    }
+
+    if (!this.selectedDatabase || this.selectedDatabase === '') {
+      // Check if there are available databases to select
+      if (this.databases.length > 0) {
+        this.toastrService.warning('请选择数据库（如需不使用数据库，请选择"不使用数据库"选项）', '提示');
+        return;
+      }
+      // If no databases available, allow execution with empty database (不使用数据库)
+    }
+
     this.executing = true;
     this.queryResult = null;
-    this.resultSettings = null;
+    this.resultSettings = [];
+    this.queryResults = [];
+    this.resultSources = [];
+    this.currentResultIndex = 0;
 
     this.nodeService.executeSQL(
       this.sqlInput.trim(), 
@@ -427,24 +456,62 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     ).subscribe({
       next: (result) => {
         this.queryResult = result;
-        this.executionTime = result.execution_time_ms;
-        this.rowCount = result.row_count;
-
-        // Build dynamic table settings
-        this.buildResultSettings(result);
-
-        // Convert rows to objects for ng2-smart-table
-        const dataRows = result.rows.map(row => {
-          const obj: any = {};
-          result.columns.forEach((col, idx) => {
-            obj[col] = row[idx];
-          });
-          return obj;
+        this.queryResults = result.results;
+        this.executionTime = result.total_execution_time_ms;
+        
+        // Build settings and data sources for each result
+        this.resultSettings = [];
+        this.resultSources = [];
+        
+        let totalRowCount = 0;
+        let successCount = 0;
+        
+        result.results.forEach((singleResult, index) => {
+          if (singleResult.success) {
+            successCount++;
+            totalRowCount += singleResult.row_count;
+            
+            // Build dynamic table settings for this result
+            const settings = this.buildResultSettings(singleResult);
+            this.resultSettings.push(settings);
+            
+            // Convert rows to objects for ng2-smart-table
+            const dataRows = singleResult.rows.map(row => {
+              const obj: any = {};
+              singleResult.columns.forEach((col, idx) => {
+                obj[col] = row[idx];
+              });
+              return obj;
+            });
+            
+            const source = new LocalDataSource();
+            source.load(dataRows);
+            this.resultSources.push(source);
+          } else {
+            // For failed queries, still add placeholder settings and empty source
+            this.resultSettings.push(null);
+            const source = new LocalDataSource();
+            source.load([]);
+            this.resultSources.push(source);
+          }
         });
-
-        this.realtimeResultSource.load(dataRows);
+        
+        this.rowCount = totalRowCount;
         this.executing = false;
-        this.toastrService.success(`查询成功，返回 ${result.row_count} 行`, '成功');
+        
+        if (result.results.length > 1) {
+          this.toastrService.success(
+            `执行 ${result.results.length} 个SQL，成功 ${successCount} 个，共返回 ${totalRowCount} 行`,
+            '成功'
+          );
+        } else {
+          const singleResult = result.results[0];
+          if (singleResult.success) {
+            this.toastrService.success(`查询成功，返回 ${singleResult.row_count} 行`, '成功');
+          } else {
+            this.toastrService.danger(singleResult.error || '执行失败', '执行失败');
+          }
+        }
       },
       error: (error) => {
         this.executing = false;
@@ -453,13 +520,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     });
   }
 
-  buildResultSettings(result: QueryExecuteResult): void {
+  buildResultSettings(result: SingleQueryResult): any {
     const columns: any = {};
     result.columns.forEach(col => {
       columns[col] = { title: col, type: 'string' };
     });
 
-    this.resultSettings = {
+    return {
       mode: 'external',
       hideSubHeader: false, // Enable search
       noDataMessage: '无数据',
@@ -470,6 +537,11 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       },
       columns: columns,
     };
+  }
+
+  // Generate tab title
+  getResultTabTitle(result: SingleQueryResult, index: number): string {
+    return `结果${index + 1}`;
   }
 
   clearSQL(): void {
@@ -485,7 +557,9 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       this.editorView.dispatch(transaction);
     }
     this.queryResult = null;
-    this.resultSettings = null;
+    this.resultSettings = [];
+    this.queryResults = [];
+    this.resultSources = [];
     this.executionTime = 0;
     this.rowCount = 0;
   }
@@ -522,16 +596,29 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   // Export results to CSV
-  exportResults(): void {
-    if (!this.queryResult || !this.queryResult.rows || this.queryResult.rows.length === 0) {
+  exportResults(resultIndex?: number): void {
+    let resultToExport: SingleQueryResult | null = null;
+    
+    if (resultIndex !== undefined && this.queryResults[resultIndex]) {
+      // Export specific result from multiple results
+      resultToExport = this.queryResults[resultIndex];
+    } else if (this.queryResults.length === 1) {
+      // Export single result
+      resultToExport = this.queryResults[0];
+    } else {
+      this.toastrService.warning('请选择要导出的结果', '提示');
+      return;
+    }
+    
+    if (!resultToExport || !resultToExport.success || !resultToExport.rows || resultToExport.rows.length === 0) {
       this.toastrService.warning('没有数据可导出', '提示');
       return;
     }
 
     try {
       // Build CSV content
-      const columns = this.queryResult.columns;
-      const rows = this.queryResult.rows;
+      const columns = resultToExport.columns;
+      const rows = resultToExport.rows;
 
       // CSV header
       let csvContent = columns.map(col => this.escapeCSV(col)).join(',') + '\n';
@@ -546,8 +633,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       
+      const filename = resultIndex !== undefined 
+        ? `query_result_${resultIndex + 1}_${new Date().getTime()}.csv`
+        : `query_result_${new Date().getTime()}.csv`;
+      
       link.setAttribute('href', url);
-      link.setAttribute('download', `query_result_${new Date().getTime()}.csv`);
+      link.setAttribute('download', filename);
       link.style.visibility = 'hidden';
       
       document.body.appendChild(link);

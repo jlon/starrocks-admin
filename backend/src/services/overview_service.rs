@@ -725,7 +725,7 @@ impl OverviewService {
             GROUP BY TABLE_SCHEMA
         "#;
 
-        let (columns, rows) = mysql_client.query_raw(sql, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(sql).await?;
         let mut total_size: i64 = 0;
 
         // Find column indices
@@ -1344,14 +1344,11 @@ impl OverviewService {
 
     /// Module 7: Get MV stats from information_schema
     async fn get_mv_stats(&self, cluster_id: i64) -> ApiResult<MaterializedViewStats> {
-        use crate::services::MySQLPoolManager;
-
         // Get cluster info
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
 
         // Get MySQL connection pool and create client
-        let pool_manager = Arc::new(MySQLPoolManager::new());
-        let pool = pool_manager.get_pool(&cluster).await?;
+        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
 
         // Query materialized view statistics
@@ -1363,7 +1360,7 @@ impl OverviewService {
             FROM information_schema.materialized_views
         "#;
 
-        let (columns, rows) = mysql_client.query_raw(query, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(query).await?;
 
         // Build column index map
         let mut col_idx = std::collections::HashMap::new();
@@ -1398,14 +1395,11 @@ impl OverviewService {
 
     /// Module 8: Get load job stats from SHOW LOAD
     async fn get_load_job_stats(&self, cluster_id: i64) -> ApiResult<LoadJobStats> {
-        use crate::services::MySQLPoolManager;
-
         // Get cluster info
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
 
         // Get MySQL connection pool and create client
-        let pool_manager = Arc::new(MySQLPoolManager::new());
-        let pool = pool_manager.get_pool(&cluster).await?;
+        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
 
         // Query load job statistics from information_schema.loads
@@ -1419,7 +1413,7 @@ impl OverviewService {
             GROUP BY State
         "#;
 
-        let (columns, rows) = mysql_client.query_raw(query, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(query).await?;
 
         // Build column index map
         let mut col_idx = std::collections::HashMap::new();
@@ -1469,11 +1463,10 @@ impl OverviewService {
     /// Module 10: Get schema change stats by querying audit logs
     /// Tracks ALTER TABLE operations and their status from StarRocks audit logs
     async fn get_schema_change_stats(&self, cluster_id: i64) -> ApiResult<SchemaChangeStats> {
-        use crate::services::{MySQLClient, MySQLPoolManager};
+        use crate::services::MySQLClient;
 
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
-        let pool_manager = Arc::new(MySQLPoolManager::new());
-        let pool = pool_manager.get_pool(&cluster).await?;
+        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
 
         // Query ALTER TABLE operations from audit logs
@@ -1491,7 +1484,7 @@ impl OverviewService {
             GROUP BY queryType, state
         "#;
 
-        let (columns, rows) = mysql_client.query_raw(query, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(query).await?;
 
         // Build column index map
         let mut col_idx = std::collections::HashMap::new();
@@ -1534,20 +1527,19 @@ impl OverviewService {
     /// Note: Compaction Score is calculated at FE level per Partition, not per BE.
     /// Reference: https://forum.mirrorship.cn/t/topic/13256
     async fn get_compaction_stats(&self, cluster_id: i64) -> ApiResult<CompactionStats> {
-        use crate::services::{MySQLClient, MySQLPoolManager};
+        use crate::services::MySQLClient;
 
         // Get cluster info
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
 
         // Get MySQL connection pool
-        let pool_manager = Arc::new(MySQLPoolManager::new());
-        let pool = pool_manager.get_pool(&cluster).await?;
+        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let client = MySQLClient::from_pool(pool);
 
         // Query compaction tasks from FE
         // SHOW PROC '/compactions' shows current running compaction tasks
         let query = "SHOW PROC '/compactions'";
-        let (_headers, rows) = client.query_raw(query, None, None).await.unwrap_or((vec![], vec![]));
+        let (_headers, rows) = client.query_raw(query).await.unwrap_or((vec![], vec![]));
 
         // Count running compaction tasks
         // Note: In StarRocks shared-data mode, there are no separate
@@ -1585,14 +1577,13 @@ impl OverviewService {
         cluster_id: i64,
         time_range: &str,
     ) -> ApiResult<CompactionDetailStats> {
-        use crate::services::{MySQLClient, MySQLPoolManager};
+        use crate::services::MySQLClient;
 
         // Get cluster info
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
 
         // Get MySQL connection pool
-        let pool_manager = Arc::new(MySQLPoolManager::new());
-        let pool = pool_manager.get_pool(&cluster).await?;
+        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let client = MySQLClient::from_pool(pool);
 
         // Calculate time filter based on time_range parameter
@@ -1621,7 +1612,7 @@ impl OverviewService {
         "#;
 
         let (_headers, rows) = client
-            .query_raw(top_partitions_query, None, None)
+            .query_raw(top_partitions_query)
             .await
             .unwrap_or((vec![], vec![]));
 
@@ -1648,7 +1639,7 @@ impl OverviewService {
         let task_stats_query = r#"SHOW PROC '/compactions'"#;
 
         let (_headers, rows) = client
-            .query_raw(&task_stats_query, None, None)
+            .query_raw(&task_stats_query)
             .await
             .unwrap_or((vec![], vec![]));
 
@@ -1744,20 +1735,19 @@ impl OverviewService {
 
     /// Module 12: Get session stats from SHOW PROCESSLIST
     async fn get_session_stats(&self, cluster_id: i64) -> ApiResult<SessionStats> {
-        use crate::services::{MySQLClient, MySQLPoolManager};
+        use crate::services::MySQLClient;
         use chrono::Utc;
 
         // Get cluster info
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
 
         // Get MySQL connection pool
-        let pool_manager = Arc::new(MySQLPoolManager::new());
-        let pool = pool_manager.get_pool(&cluster).await?;
+        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let client = MySQLClient::from_pool(pool);
 
         // Query SHOW PROCESSLIST to get current connections
         let query = "SHOW FULL PROCESSLIST";
-        let (_headers, rows) = client.query_raw(query, None, None).await?;
+        let (_headers, rows) = client.query_raw(query).await?;
 
         let current_connections = rows.len() as i32;
 
@@ -1886,16 +1876,15 @@ impl OverviewService {
 
     /// Get StarRocks version
     async fn get_starrocks_version(&self, cluster_id: i64) -> ApiResult<String> {
-        use crate::services::{MySQLClient, MySQLPoolManager};
+        use crate::services::MySQLClient;
 
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
-        let pool_manager = Arc::new(MySQLPoolManager::new());
-        let pool = pool_manager.get_pool(&cluster).await?;
+        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
 
         // Query StarRocks version using SELECT VERSION()
         let sql = "SELECT VERSION() as version";
-        let (columns, rows) = mysql_client.query_raw(sql, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(sql).await?;
 
         // Find the version column index
         if let Some(version_idx) = columns

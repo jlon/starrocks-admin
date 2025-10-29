@@ -103,7 +103,7 @@ impl AuditLogService {
         
         tracing::debug!("Querying top tables by access: hours={}, limit={}", hours, limit);
         
-        let (columns, rows) = mysql_client.query_raw(&query, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(&query).await?;
         
         // Build column index map
         let mut col_idx = std::collections::HashMap::new();
@@ -213,7 +213,7 @@ impl AuditLogService {
             limit
         );
         
-        let (columns, rows) = mysql_client.query_raw(&query, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(&query).await?;
         
         // Build column index map
         let mut col_idx = std::collections::HashMap::new();

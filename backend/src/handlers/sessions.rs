@@ -83,7 +83,7 @@ async fn get_sessions_from_starrocks(mysql_client: &MySQLClient) -> ApiResult<Ve
 
     // Execute SHOW PROCESSLIST to get all active sessions
     let sql = "SHOW PROCESSLIST";
-    let (_, rows) = mysql_client.query_raw(sql, None, None).await.map_err(|e| {
+    let (_, rows) = mysql_client.query_raw(sql).await.map_err(|e| {
         tracing::error!("Failed to execute SHOW PROCESSLIST: {:?}", e);
         ApiError::cluster_connection_failed(format!("Failed to fetch sessions: {:?}", e))
     })?;

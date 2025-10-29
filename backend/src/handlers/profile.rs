@@ -32,7 +32,7 @@ pub async fn list_profiles(
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
 
-    let (columns, rows) = mysql_client.query_raw("SHOW PROFILELIST", None, None).await?;
+    let (columns, rows) = mysql_client.query_raw("SHOW PROFILELIST").await?;
 
     tracing::info!(
         "Profile list query returned {} rows with {} columns",
@@ -88,7 +88,7 @@ pub async fn get_profile(
     let mysql_client = MySQLClient::from_pool(pool);
 
     let sql = format!("SELECT get_query_profile('{}')", query_id);
-    let (_, rows) = mysql_client.query_raw(&sql, None, None).await?;
+    let (_, rows) = mysql_client.query_raw(&sql).await?;
 
     // Extract profile content from result
     let profile_content = rows

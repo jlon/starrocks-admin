@@ -212,7 +212,7 @@ impl SystemFunctionService {
         let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
 
-        let (columns, rows) = mysql_client.query_raw(&function.sql_query, None, None).await?;
+        let (columns, rows) = mysql_client.query_raw(&function.sql_query).await?;
 
         // Convert to HashMap format
         let result: Vec<HashMap<String, Value>> = rows

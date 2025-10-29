@@ -66,7 +66,7 @@ pub async fn get_variables(
     };
 
     // Execute query
-    let (_, rows) = mysql_client.query_raw(&sql_with_filter, None, None).await?;
+    let (_, rows) = mysql_client.query_raw(&sql_with_filter).await?;
 
     // Parse results
     let variables: Vec<Variable> = rows

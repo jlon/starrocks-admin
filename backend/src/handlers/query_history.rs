@@ -52,7 +52,7 @@ pub async fn list_query_history(
     "#;
 
     tracing::info!("Fetching total count for cluster {}", cluster.id);
-    let (_, count_rows) = mysql.query_raw(count_sql, None, None).await.map_err(|e| {
+    let (_, count_rows) = mysql.query_raw(count_sql).await.map_err(|e| {
         tracing::error!("Failed to query count: {:?}", e);
         e
     })?;
@@ -100,7 +100,7 @@ pub async fn list_query_history(
         limit,
         offset
     );
-    let (columns, rows) = mysql.query_raw(&sql, None, None).await.map_err(|e| {
+    let (columns, rows) = mysql.query_raw(&sql).await.map_err(|e| {
         tracing::error!("Failed to query audit table: {:?}", e);
         e
     })?;

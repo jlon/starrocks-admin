@@ -327,13 +327,24 @@ fn default_limit() -> Option<i32> {
     Some(1000)
 }
 
-// Query execute response
+// Single query execution result
 #[derive(Debug, Serialize, ToSchema)]
-pub struct QueryExecuteResponse {
+pub struct SingleQueryResult {
+    pub sql: String,
     pub columns: Vec<String>,
     pub rows: Vec<Vec<String>>,
     pub row_count: usize,
     pub execution_time_ms: u128,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+// Query execute response (unified structure for single or multiple SQL)
+#[derive(Debug, Serialize, ToSchema)]
+pub struct QueryExecuteResponse {
+    pub results: Vec<SingleQueryResult>,
+    pub total_execution_time_ms: u128,
 }
 
 // Profile list item from SHOW PROFILELIST

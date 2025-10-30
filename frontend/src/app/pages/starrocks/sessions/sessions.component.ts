@@ -123,6 +123,13 @@ export class SessionsComponent implements OnInit, OnDestroy {
             this.clusterId = newClusterId;
             this.loadSessions();
           }
+        } else {
+          // No active cluster - show error and stop loading
+          this.loading = false;
+          this.toastrService.danger(
+            '请先激活一个集群',
+            '未选择集群'
+          );
         }
       });
 
@@ -132,6 +139,13 @@ export class SessionsComponent implements OnInit, OnDestroy {
       if (this.autoRefresh) {
         this.startAutoRefresh();
       }
+    } else {
+      // No clusterId set - show error
+      this.loading = false;
+      this.toastrService.danger(
+        '请先激活一个集群',
+        '未选择集群'
+      );
     }
   }
 

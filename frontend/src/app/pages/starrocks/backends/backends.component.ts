@@ -160,6 +160,13 @@ export class BackendsComponent implements OnInit, OnDestroy {
             this.loadClusterInfo();
             this.loadBackends();
           }
+        } else {
+          // No active cluster - show error and stop loading
+          this.loading = false;
+          this.toastrService.danger(
+            '请先激活一个集群',
+            '未选择集群'
+          );
         }
       });
 
@@ -167,6 +174,13 @@ export class BackendsComponent implements OnInit, OnDestroy {
     if (this.clusterId && this.clusterId > 0) {
       this.loadClusterInfo();
       this.loadBackends();
+    } else {
+      // No clusterId set - show error
+      this.loading = false;
+      this.toastrService.danger(
+        '请先激活一个集群',
+        '未选择集群'
+      );
     }
     
     // Auto refresh every 10 seconds

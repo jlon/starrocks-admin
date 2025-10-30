@@ -108,12 +108,26 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
             this.historyCurrentPage = 1;
             this.loadHistoryQueries();
           }
+        } else {
+          // No active cluster - show error and stop loading
+          this.loading = false;
+          this.toastrService.danger(
+            '请先激活一个集群',
+            '未选择集群'
+          );
         }
       });
 
     // Load queries if clusterId is already set from route
     if (this.clusterId && this.clusterId > 0) {
       this.loadHistoryQueries();
+    } else {
+      // No clusterId set - show error
+      this.loading = false;
+      this.toastrService.danger(
+        '请先激活一个集群',
+        '未选择集群'
+      );
     }
   }
 

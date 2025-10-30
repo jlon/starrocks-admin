@@ -253,6 +253,13 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
             this.loadClusterInfo();
             this.loadMaterializedViews();
           }
+        } else {
+          // No active cluster - show error and stop loading
+          this.loading = false;
+          this.toastrService.danger(
+            '请先激活一个集群',
+            '未选择集群'
+          );
         }
       });
 
@@ -260,6 +267,13 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
     if (this.clusterId && this.clusterId > 0) {
       this.loadClusterInfo();
       this.loadMaterializedViews();
+    } else {
+      // No clusterId set - show error
+      this.loading = false;
+      this.toastrService.danger(
+        '请先激活一个集群',
+        '未选择集群'
+      );
     }
   }
 

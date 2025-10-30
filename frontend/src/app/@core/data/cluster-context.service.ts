@@ -7,6 +7,21 @@ import { Cluster, ClusterService } from './cluster.service';
  * Global cluster context service
  * Manages the currently active cluster across the application
  * Gets active cluster from backend instead of localStorage
+ * 
+ * ✅ Performance Best Practice:
+ * - Frontend should check hasActiveCluster() BEFORE sending API requests
+ * - This prevents unnecessary API calls to backend when no cluster is active
+ * - Backend still validates cluster activation for security (fail-fast on 404)
+ * 
+ * ✅ Usage Pattern:
+ * ```typescript
+ * // In page components or services:
+ * if (this.clusterContext.hasActiveCluster()) {
+ *   this.loadData();  // Only send request if cluster is active
+ * } else {
+ *   this.toastrService.danger('请先激活一个集群');
+ * }
+ * ```
  */
 @Injectable({
   providedIn: 'root',
@@ -80,7 +95,8 @@ export class ClusterContextService {
   }
   
   /**
-   * Check if a cluster is active
+   * Check if a cluster is active (RECOMMENDED: Check before API calls)
+   * This helps optimize performance by not sending requests when no cluster is active
    */
   hasActiveCluster(): boolean {
     return this.activeClusterSubject.value !== null;

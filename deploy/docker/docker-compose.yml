@@ -6,12 +6,6 @@ services:
     container_name: starrocks-admin
     ports:
       - "8080:8080"
-    volumes:
-      - starrocks_data:/app/data
-      - starrocks_logs:/app/logs
-      - ./config.toml:/app/conf/config.toml:ro
-    environment:
-      - RUST_LOG=info,starrocks_admin_backend=debug
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -19,7 +13,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-volumes:
-  starrocks_data:
-  starrocks_logs:

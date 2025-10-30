@@ -10,6 +10,7 @@ pub struct Config {
     pub auth: AuthConfig,
     pub logging: LoggingConfig,
     pub static_config: StaticConfig,
+    pub metrics: MetricsCollectorConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -46,6 +47,20 @@ pub struct StaticConfig {
     pub web_root: String,
 }
 
+// New: metrics collector configuration section (loaded from conf/config.toml)
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct MetricsCollectorConfig {
+    /// Metrics collection interval in seconds (default: 30)
+    #[serde(deserialize_with = "deserialize_duration_secs")] 
+    pub interval_secs: u64,
+    /// Historical metrics retention days (default: 7)
+    #[serde(deserialize_with = "deserialize_days_i64")] 
+    pub retention_days: i64,
+    /// Whether to enable the metrics collector at startup (default: true)
+    pub enabled: bool,
+}
+
 impl Config {
     /// Load configuration with environment variable override support
     ///
@@ -80,6 +95,9 @@ impl Config {
     /// - APP_JWT_SECRET: JWT secret key
     /// - APP_JWT_EXPIRES_IN: JWT expiration time (e.g., "24h")
     /// - APP_LOG_LEVEL: Logging level (e.g., "info,starrocks_admin_backend=debug")
+    /// - APP_METRICS_INTERVAL_SECS: Metrics collection interval in seconds (accepts "30s", "5m", "1h")
+    /// - APP_METRICS_RETENTION_DAYS: Retention days for metrics (accepts "7d")
+    /// - APP_METRICS_ENABLED: Enable/disable metrics collector (true/false)
     fn apply_env_overrides(&mut self) {
         if let Ok(host) = std::env::var("APP_SERVER_HOST") {
             self.server.host = host;
@@ -112,6 +130,34 @@ impl Config {
             self.logging.level = level;
             tracing::info!("Override logging.level from env: {}", self.logging.level);
         }
+
+        // Metrics collector overrides
+        if let Ok(interval) = std::env::var("APP_METRICS_INTERVAL_SECS") {
+            match parse_duration_to_secs(&interval) {
+                Ok(val) => {
+                    self.metrics.interval_secs = val;
+                    tracing::info!("Override metrics.interval_secs from env: {}", self.metrics.interval_secs);
+                }
+                Err(e) => tracing::warn!("Invalid APP_METRICS_INTERVAL_SECS '{}': {} (keep {})", interval, e, self.metrics.interval_secs),
+            }
+        }
+
+        if let Ok(retention) = std::env::var("APP_METRICS_RETENTION_DAYS") {
+            match parse_days_to_i64(&retention) {
+                Ok(val) => {
+                    self.metrics.retention_days = val;
+                    tracing::info!("Override metrics.retention_days from env: {}", self.metrics.retention_days);
+                }
+                Err(e) => tracing::warn!("Invalid APP_METRICS_RETENTION_DAYS '{}': {} (keep {})", retention, e, self.metrics.retention_days),
+            }
+        }
+
+        if let Ok(enabled) = std::env::var("APP_METRICS_ENABLED")
+            && let Ok(val) = enabled.parse()
+        {
+            self.metrics.enabled = val;
+            tracing::info!("Override metrics.enabled from env: {}", self.metrics.enabled);
+        }
     }
 
     /// Validate configuration
@@ -133,6 +179,14 @@ impl Config {
         // Validate database URL
         if self.database.url.is_empty() {
             anyhow::bail!("Database URL cannot be empty");
+        }
+
+        // Validate metrics collector
+        if self.metrics.interval_secs == 0 {
+            anyhow::bail!("metrics.interval_secs must be > 0");
+        }
+        if self.metrics.retention_days <= 0 {
+            anyhow::bail!("metrics.retention_days must be > 0");
         }
 
         Ok(())
@@ -191,4 +245,92 @@ impl Default for StaticConfig {
     fn default() -> Self {
         Self { enabled: true, web_root: "web".to_string() }
     }
+}
+
+impl Default for MetricsCollectorConfig {
+    fn default() -> Self {
+        Self { interval_secs: 30, retention_days: 7, enabled: true }
+    }
+}
+
+// =========================
+// Helpers for parsing values
+// =========================
+
+fn parse_duration_to_secs(input: &str) -> Result<u64, String> {
+    // Accept plain numbers (treated as seconds)
+    if let Ok(val) = input.parse::<u64>() {
+        return Ok(val);
+    }
+
+    let s = input.trim().to_lowercase();
+    let (num_str, unit) = s.split_at(s.chars().take_while(|c| c.is_ascii_digit()).count());
+    if num_str.is_empty() || unit.is_empty() { return Err("missing number or unit".into()); }
+    let n: u64 = num_str.parse().map_err(|_| "invalid number".to_string())?;
+    match unit {
+        "s" | "sec" | "secs" | "second" | "seconds" => Ok(n),
+        "m" | "min" | "mins" | "minute" | "minutes" => Ok(n * 60),
+        "h" | "hr" | "hour" | "hours" => Ok(n * 60 * 60),
+        "d" | "day" | "days" => Ok(n * 60 * 60 * 24),
+        _ => Err(format!("unsupported unit: {}", unit)),
+    }
+}
+
+fn parse_days_to_i64(input: &str) -> Result<i64, String> {
+    // Accept plain numbers (treated as days)
+    if let Ok(val) = input.parse::<i64>() {
+        return Ok(val);
+    }
+
+    let s = input.trim().to_lowercase();
+    let (num_str, unit) = s.split_at(s.chars().take_while(|c| c.is_ascii_digit()).count());
+    if num_str.is_empty() || unit.is_empty() { return Err("missing number or unit".into()); }
+    let n: i64 = num_str.parse().map_err(|_| "invalid number".to_string())?;
+    match unit {
+        "d" | "day" | "days" => Ok(n),
+        "w" | "week" | "weeks" => Ok(n * 7),
+        _ => Err(format!("unsupported unit: {}", unit)),
+    }
+}
+
+// Custom serde deserializers to support numeric or human-friendly string values
+fn deserialize_duration_secs<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct Visitor;
+    impl<'de> serde::de::Visitor<'de> for Visitor {
+        type Value = u64;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "a number of seconds or a string like '30s', '5m', '1h'")
+        }
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> { Ok(v) }
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+        where E: serde::de::Error { if v >= 0 { Ok(v as u64) } else { Err(E::custom("negative not allowed")) } }
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where E: serde::de::Error { parse_duration_to_secs(v).map_err(E::custom) }
+        fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where E: serde::de::Error { parse_duration_to_secs(&v).map_err(E::custom) }
+    }
+    deserializer.deserialize_any(Visitor)
+}
+
+fn deserialize_days_i64<'de, D>(deserializer: D) -> Result<i64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct Visitor;
+    impl<'de> serde::de::Visitor<'de> for Visitor {
+        type Value = i64;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "a number of days or a string like '7d' or '2w'")
+        }
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E> { Ok(v) }
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> { Ok(v as i64) }
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where E: serde::de::Error { parse_days_to_i64(v).map_err(E::custom) }
+        fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where E: serde::de::Error { parse_days_to_i64(&v).map_err(E::custom) }
+    }
+    deserializer.deserialize_any(Visitor)
 }

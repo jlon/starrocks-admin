@@ -42,20 +42,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
 
     this.loadClusters();
-    
-    // Auto refresh every 30 seconds
-    interval(30000)
-      .pipe(
-        takeUntil(this.destroy$),
-        switchMap(() => this.clusterService.listClusters()),
-      )
-      .subscribe({
-        next: (clusters) => {
-          this.updateClusters(clusters);
-          this.loadHealthStatus(); // 重新加载健康状态
-        },
-        error: (error) => this.handleError(error),
-      });
   }
 
   ngOnDestroy(): void {

@@ -20,7 +20,6 @@ export class BackendsComponent implements OnInit, OnDestroy {
   activeCluster: Cluster | null = null;
   clusterName: string = '';
   loading = true;
-  autoRefresh = true;
   private destroy$ = new Subject<void>();
 
   settings = {
@@ -170,27 +169,11 @@ export class BackendsComponent implements OnInit, OnDestroy {
         }
       });
 
-    // Load data if clusterId is already set and cluster$ hasn't emitted yet
-    // (This is needed because activeCluster$ might emit null, which will show the error)
+    // Load data if clusterId is already set
     if (this.clusterId && this.clusterId > 0) {
       this.loadClusterInfo();
       this.loadBackends();
     }
-    
-    // Auto refresh every 10 seconds
-    interval(10000)
-      .pipe(
-        takeUntil(this.destroy$),
-        switchMap(() => this.nodeService.listBackends()),
-      )
-      .subscribe({
-        next: (backends) => {
-          if (this.autoRefresh) {
-            this.source.load(backends);
-          }
-        },
-        error: (error) => console.error('Auto refresh error:', error),
-      });
   }
 
   ngOnDestroy(): void {
@@ -224,15 +207,5 @@ export class BackendsComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
     });
-  }
-
-  toggleAutoRefresh(): void {
-    this.autoRefresh = !this.autoRefresh;
-    if (this.autoRefresh) {
-      this.toastrService.info('已启用自动刷新', '提示');
-      this.loadBackends();
-    } else {
-      this.toastrService.info('已禁用自动刷新', '提示');
-    }
   }
 }

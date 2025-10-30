@@ -65,6 +65,12 @@ file = "logs/starrocks-admin.log"
 [static_config]
 enabled = true
 web_root = "web"
+
+# Metrics collector configuration
+[metrics]
+interval_secs = "30s"    
+retention_days = "7d"    
+enabled = true
 EOF
 echo "Created production config.toml"
 

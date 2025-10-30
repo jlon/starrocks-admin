@@ -123,6 +123,12 @@ file = "logs/starrocks-admin.log"
 [static_config]
 enabled = true
 web_root = "web"
+
+# Metrics collector configuration
+[metrics]
+interval_secs = "30s"   
+retention_days = "7d"  
+enabled = true          
 ```
 
 ## Contributing
@@ -268,6 +274,20 @@ file = "logs/starrocks-admin.log"
 [static_config]
 enabled = true
 web_root = "web"
+
+# Metrics collector configuration
+# 支持人类可读格式："30s"、"5m"、"1h"；保留期支持："7d"、"2w"
+[metrics]
+interval_secs = "30s"    # 采集间隔，默认30秒
+retention_days = "7d"    # 数据保留时长，默认7天
+enabled = true            # 是否启用采集
+```
+
+- 环境变量覆盖示例：
+```
+APP_METRICS_INTERVAL_SECS=1m \
+APP_METRICS_RETENTION_DAYS=14d \
+APP_METRICS_ENABLED=true \
 ```
 
 ## 贡献

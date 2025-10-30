@@ -20,12 +20,6 @@
                     (click)="loadFrontends()">
               <nb-icon icon="refresh-outline"></nb-icon>
             </button>
-            <button nbButton 
-                    [status]="autoRefresh ? 'success' : 'basic'" 
-                    size="small" 
-                    (click)="toggleAutoRefresh()">
-              <nb-icon [icon]="autoRefresh ? 'checkmark-circle-2-outline' : 'pause-circle-outline'"></nb-icon>
-            </button>
           </div>
         </div>
       </nb-card-header>

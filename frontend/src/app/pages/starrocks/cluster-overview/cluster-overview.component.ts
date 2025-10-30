@@ -39,8 +39,8 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
   timeRange: string = '1h';
   loading = false;
   autoRefresh = true;
-  refreshInterval = 30; // seconds
-  
+  refreshInterval = 30; // seconds - will be loaded from config or use default
+
   // Latency percentile selection
   selectedLatencyPercentile: 'P50' | 'P95' | 'P99' = 'P99';
   latencyPercentileOptions = [
@@ -68,7 +68,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
     { label: '3 Days', value: '3d' },
   ];
 
-  // Refresh interval options
+  // Refresh interval options (can be customized in config)
   refreshIntervalOptions = [
     { label: '15s', value: 15 },
     { label: '30s', value: 30 },
@@ -76,6 +76,16 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
     { label: 'Manual', value: 0 },
   ];
 
+  /**
+   * ✅ AUTO-REFRESH IMPLEMENTATION:
+   * - When user selects a refresh interval (15s, 30s, 1m), the component calls setupAutoRefresh()
+   * - setupAutoRefresh() creates an interval Observable that fires at the selected interval
+   * - Each interval trigger calls loadOverview(false) for silent refresh (no loading spinner)
+   * - User can toggle auto-refresh on/off or change interval anytime
+   * - When cluster changes, auto-refresh is restarted
+   * - Refresh intervals can be configured in the refreshIntervalOptions array above
+   */
+  
   constructor(
     private overviewService: OverviewService,
     private clusterContext: ClusterContextService,

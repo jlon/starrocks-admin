@@ -115,12 +115,13 @@ impl MetricsCollectorService {
         db: SqlitePool,
         cluster_service: Arc<ClusterService>,
         mysql_pool_manager: Arc<MySQLPoolManager>,
+        retention_days: i64,
     ) -> Self {
         Self {
             db,
             cluster_service,
             mysql_pool_manager,
-            retention_days: 7, // 7 days retention
+            retention_days,
         }
     }
 

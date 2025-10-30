@@ -19,7 +19,6 @@ export class FrontendsComponent implements OnInit, OnDestroy {
   activeCluster: Cluster | null = null;
   clusterName: string = '';
   loading = true;
-  autoRefresh = true;
   private destroy$ = new Subject<void>();
 
   settings = {
@@ -138,23 +137,6 @@ export class FrontendsComponent implements OnInit, OnDestroy {
       this.loadClusterInfo();
       this.loadFrontends();
     }
-    
-    interval(10000)
-      .pipe(
-        takeUntil(this.destroy$),
-        switchMap(() => this.nodeService.listFrontends()),
-      )
-      .subscribe({
-        next: (frontends) => {
-          if (this.autoRefresh) {
-            this.source.load(frontends);
-          }
-        },
-        error: (error) => {
-          console.error('Auto refresh error:', error);
-          // Don't show error for auto-refresh, just log it
-        }
-      });
   }
 
   ngOnDestroy(): void {
@@ -180,9 +162,5 @@ export class FrontendsComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
     });
-  }
-
-  toggleAutoRefresh(): void {
-    this.autoRefresh = !this.autoRefresh;
   }
 }

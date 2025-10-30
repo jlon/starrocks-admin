@@ -244,6 +244,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool.clone(),
         Arc::clone(&cluster_service),
         Arc::clone(&mysql_pool_manager),
+        config.metrics.retention_days,
     ));
 
     let data_statistics_service = Arc::new(DataStatisticsService::new(
@@ -274,9 +275,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         overview_service: Arc::clone(&overview_service),
     };
 
-    // Start metrics collector using ScheduledExecutor (30 seconds interval)
-    let executor = ScheduledExecutor::new("metrics-collector", std::time::Duration::from_secs(30));
-    executor.spawn(Arc::clone(&metrics_collector_service));
+    // Start metrics collector using ScheduledExecutor (configurable interval)
+    if config.metrics.enabled {
+        let interval = std::time::Duration::from_secs(config.metrics.interval_secs);
+        tracing::info!(
+            "Starting metrics collector with interval: {}s (retention_days={})",
+            config.metrics.interval_secs,
+            config.metrics.retention_days
+        );
+        let executor = ScheduledExecutor::new("metrics-collector", interval);
+        executor.spawn(Arc::clone(&metrics_collector_service));
+    } else {
+        tracing::warn!("Metrics collector disabled by configuration");
+    }
 
     // Wrap AppState in Arc for shared ownership across routes
     let app_state_arc = Arc::new(app_state);

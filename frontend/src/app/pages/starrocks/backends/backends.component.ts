@@ -170,17 +170,11 @@ export class BackendsComponent implements OnInit, OnDestroy {
         }
       });
 
-    // Load data if clusterId is already set
+    // Load data if clusterId is already set and cluster$ hasn't emitted yet
+    // (This is needed because activeCluster$ might emit null, which will show the error)
     if (this.clusterId && this.clusterId > 0) {
       this.loadClusterInfo();
       this.loadBackends();
-    } else {
-      // No clusterId set - show error
-      this.loading = false;
-      this.toastrService.danger(
-        '请先激活一个集群',
-        '未选择集群'
-      );
     }
     
     // Auto refresh every 10 seconds
@@ -224,7 +218,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.toastrService.danger(
-          ErrorHandler.extractErrorMessage(error),
+          ErrorHandler.handleClusterError(error),
           '错误',
         );
         this.loading = false;

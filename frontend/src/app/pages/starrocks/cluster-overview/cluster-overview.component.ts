@@ -183,14 +183,19 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
           });
           
           let errorMsg = '加载集群概览失败';
-          if (err.error?.message) {
-            errorMsg += ': ' + err.error.message;
+          
+          // Check if error is about no active cluster
+          if (err.error?.message?.includes('No active cluster') || 
+              err.error?.message?.includes('没有激活')) {
+            errorMsg = '请先激活一个集群';
+          } else if (err.error?.message) {
+            errorMsg = err.error.message;
           } else if (err.status === 0) {
-            errorMsg += ': 无法连接到服务器';
+            errorMsg = '无法连接到服务器';
           } else if (err.status === 404) {
-            errorMsg += ': 集群不存在';
+            errorMsg = '请先激活一个集群';
           } else if (err.status === 401) {
-            errorMsg += ': 未授权，请重新登录';
+            errorMsg = '未授权，请重新登录';
           }
           
           this.toastr.danger(errorMsg, '错误');

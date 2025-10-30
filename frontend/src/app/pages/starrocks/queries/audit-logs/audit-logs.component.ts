@@ -121,13 +121,6 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     // Load queries if clusterId is already set from route
     if (this.clusterId && this.clusterId > 0) {
       this.loadHistoryQueries();
-    } else {
-      // No clusterId set - show error
-      this.loading = false;
-      this.toastrService.danger(
-        '请先激活一个集群',
-        '未选择集群'
-      );
     }
   }
 
@@ -170,33 +163,32 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Load history queries with server-side pagination
+  // Load query history with pagination
   loadHistoryQueries(): void {
-    const offset = (this.historyCurrentPage - 1) * this.historyPageSize;
-    
+    if (!this.clusterId || this.clusterId === 0) {
+      this.loading = false;
+      return;
+    }
+
     this.loading = true;
-    
-    this.nodeService.listQueryHistory(this.historyPageSize, offset).subscribe({
-      next: (response) => {
-        
-        // Update total count for pagination
-        this.historyTotalCount = response.total;
-        
-        // Load data into table
-        this.historySource.load(response.data);
-        this.loading = false;
-      },
-      error: (error) => {
-        this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
-        this.historySource.load([]);
-        this.historyTotalCount = 0;
-        this.loading = false;
-      },
-      complete: () => {
-        // Ensure loading is always set to false
-        this.loading = false;
-      }
-    });
+    this.nodeService
+      .listQueryHistory(this.historyPageSize, (this.historyCurrentPage - 1) * this.historyPageSize)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (data) => {
+          this.historySource.load(data.data);
+          this.historyTotalCount = data.total;
+          this.loading = false;
+        },
+        error: (error) => {
+          this.toastrService.danger(
+            ErrorHandler.handleClusterError(error),
+            '加载失败'
+          );
+          this.historySource.load([]);
+          this.loading = false;
+        },
+      });
   }
 
   // Calculate total pages

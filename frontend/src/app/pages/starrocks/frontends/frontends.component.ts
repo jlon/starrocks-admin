@@ -137,13 +137,6 @@ export class FrontendsComponent implements OnInit, OnDestroy {
     if (this.clusterId && this.clusterId > 0) {
       this.loadClusterInfo();
       this.loadFrontends();
-    } else {
-      // No clusterId set - show error
-      this.loading = false;
-      this.toastrService.danger(
-        '请先激活一个集群',
-        '未选择集群'
-      );
     }
     
     interval(10000)
@@ -183,7 +176,7 @@ export class FrontendsComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
       error: (error) => {
-        this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
+        this.toastrService.danger(ErrorHandler.handleClusterError(error), '加载失败');
         this.loading = false;
       },
     });

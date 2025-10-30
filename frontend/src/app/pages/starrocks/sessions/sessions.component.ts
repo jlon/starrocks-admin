@@ -7,6 +7,7 @@ import { takeUntil } from 'rxjs/operators';
 import { ClusterContextService } from '../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../@core/data/cluster.service';
 import { NodeService, Session } from '../../../@core/data/node.service';
+import { ErrorHandler } from '../../../@core/utils/error-handler';
 
 @Component({
   selector: 'ngx-sessions',
@@ -139,13 +140,6 @@ export class SessionsComponent implements OnInit, OnDestroy {
       if (this.autoRefresh) {
         this.startAutoRefresh();
       }
-    } else {
-      // No clusterId set - show error
-      this.loading = false;
-      this.toastrService.danger(
-        '请先激活一个集群',
-        '未选择集群'
-      );
     }
   }
 
@@ -171,7 +165,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
       error: (error) => {
         console.error('[Sessions] Error loading sessions:', error);
         this.toastrService.danger(
-          error.error?.message || '加载会话失败',
+          ErrorHandler.handleClusterError(error),
           '错误'
         );
         this.sessions = [];

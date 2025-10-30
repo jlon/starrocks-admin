@@ -157,13 +157,6 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
     // Load data if clusterId is already set
     if (this.clusterId > 0) {
       this.loadSystemFunctions();
-    } else {
-      // No clusterId set - show error
-      this.loading = false;
-      this.toastrService.danger(
-        '请先激活一个集群',
-        '未选择集群'
-      );
     }
   }
 

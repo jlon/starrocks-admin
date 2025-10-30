@@ -112,13 +112,6 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     // Load profiles if clusterId is already set from route
     if (this.clusterId && this.clusterId > 0) {
       this.loadProfiles();
-    } else {
-      // No clusterId set - show error
-      this.loading = false;
-      this.toastrService.danger(
-        '请先激活一个集群',
-        '未选择集群'
-      );
     }
   }
 
@@ -170,7 +163,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
       error => {
-        this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
+        this.toastrService.danger(ErrorHandler.handleClusterError(error), '加载失败');
         this.loading = false;
       }
     );

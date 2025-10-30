@@ -45,6 +45,28 @@ export class ErrorHandler {
     return '操作失败，请稍后重试';
   }
   
+  /**
+   * Handle cluster-related errors and return user-friendly message
+   * 处理集群相关错误，统一返回用户友好的错误提示
+   */
+  static handleClusterError(error: any): string {
+    const errorMsg = this.extractErrorMessage(error);
+    
+    // If error message mentions "No active cluster" or similar, return unified message
+    if (errorMsg.includes('No active cluster') || 
+        errorMsg.includes('没有激活') ||
+        (error.status === 404 && errorMsg.includes('System function'))) {
+      return '请先激活一个集群';
+    }
+    
+    // If it's a 404, likely a cluster issue
+    if (error.status === 404) {
+      return '请先激活一个集群';
+    }
+    
+    return errorMsg;
+  }
+  
   private static getDefaultMessageByStatus(status: number): string {
     const statusMessages: { [key: number]: string } = {
       400: '请求参数有误',

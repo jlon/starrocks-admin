@@ -49,6 +49,13 @@
 
   .group-body {
     padding: 1rem;
+    position: relative;
+    z-index: 1;
+    
+    // 确保子元素可以接收点击事件
+    ::ng-deep * {
+      pointer-events: auto !important;
+    }
   }
 }
 

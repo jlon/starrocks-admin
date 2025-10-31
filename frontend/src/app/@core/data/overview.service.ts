@@ -389,7 +389,9 @@ export class OverviewService {
                 overview.resources.compaction_score > 100 ? 'warning' :   // 🟡 警告
                 'success',
         icon: 'layers-outline',
-        description: 'Partition压缩评分 (>1000紧急 >500严重 >100警告)'
+        navigateTo: '/pages/starrocks/system',
+        description: 'Partition压缩评分 (>1000紧急 >500严重 >100警告)（点击查看详情）',
+        cardId: 'compaction_score'
       },
       // 4. P99 延迟
       {
@@ -422,7 +424,9 @@ export class OverviewService {
         trend: 0,
         status: 'info',
         icon: 'people-outline',
-        description: '当前活跃的Session连接数'
+        navigateTo: '/pages/starrocks/sessions',
+        description: '当前活跃的Session连接数（点击查看详情）',
+        cardId: 'sessions'
       },
       // 7. 数据库/表数量
       {
@@ -471,7 +475,19 @@ export class OverviewService {
         description: '正在运行的数据导入任务（点击查看详情）',
         cardId: 'load_jobs'
       },
-      // 11. 物化视图
+      // 11. Compaction 任务
+      {
+        title: 'Compaction 任务',
+        value: (overview.compaction?.cumulativeCompactionRunning || 0).toString(),
+        unit: '个',
+        trend: 0,
+        status: 'info',
+        icon: 'sync-outline',
+        navigateTo: '/pages/starrocks/system',
+        description: '正在运行的 Compaction 任务（点击查看详情）',
+        cardId: 'compactions'
+      },
+      // 12. 物化视图
       {
         title: '物化视图',
         value: (overview.mv_stats?.total || 0).toString(),

@@ -45,7 +45,7 @@
       [loading]="false">
       <div class="metric-cards-row">
         <div class="metric-card" *ngFor="let card of healthCards" 
-            (click)="card.cardId === 'latency_percentile' ? cycleLatencyPercentile() : (card.cardId === 'disk_cache_metric' ? cycleDiskMetric() : (card.cardId === 'load_jobs' ? navigateToLoadJobs() : navigateToCard(card)))"
+            (click)="handleCardClick(card)"
             [title]="card.cardId === 'latency_percentile' ? '点击切换 P50/P95/P99' : (card.cardId === 'disk_cache_metric' ? '点击切换 本地磁盘%/缓存使用' : card.description)">
          <nb-card [status]="card.cardId === 'latency_percentile' ? getSelectedLatencyStatus() : (card.cardId === 'disk_cache_metric' ? getDiskCardStatus() : card.status)">
             <nb-card-body>
@@ -350,19 +350,19 @@
           icon="people-outline"
           [collapsed]="false">
           <div class="session-stats-grid">
-            <div class="session-stat-item">
+            <div class="session-stat-item clickable" (click)="navigateToSessions()">
               <span class="label">活跃连接:</span>
               <span class="value text-info">{{ activeSessions }}</span>
             </div>
-            <div class="session-stat-item">
+            <div class="session-stat-item clickable" (click)="navigateToSessions()">
               <span class="label">运行中查询:</span>
               <span class="value text-warning">{{ runningQueries }}</span>
             </div>
-            <div class="session-stat-item">
+            <div class="session-stat-item clickable" (click)="navigateToSessions()">
               <span class="label">1小时活跃用户:</span>
               <span class="value text-success">{{ activeUsers1h }}</span>
             </div>
-            <div class="session-stat-item">
+            <div class="session-stat-item clickable" (click)="navigateToSessions()">
               <span class="label">24小时活跃用户:</span>
               <span class="value text-success">{{ activeUsers24h }}</span>
             </div>

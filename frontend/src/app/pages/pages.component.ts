@@ -46,11 +46,16 @@ export class PagesComponent implements OnInit {
       .pipe(filter(event => event instanceof NavigationEnd))
       .subscribe((event: NavigationEnd) => {
         // Skip if this is triggered by tab switching
-        // Check if the URL matches any existing active tab
+        // Check if the URL matches any existing active tab (使用规范化比较)
         const activeTab = this.tabService.getActiveTab();
-        if (activeTab && activeTab.url === event.url) {
-          // This navigation is from tab switching, skip adding new tab
-          return;
+        if (activeTab) {
+          // 规范化比较 URL（处理编码问题）
+          const normalizedEventUrl = this.normalizeUrl(event.url);
+          const normalizedActiveTabUrl = this.normalizeUrl(activeTab.url);
+          if (normalizedActiveTabUrl === normalizedEventUrl) {
+            // This navigation is from tab switching, skip adding new tab
+            return;
+          }
         }
         this.handleRouteChange(event.url);
       });
@@ -99,9 +104,54 @@ export class PagesComponent implements OnInit {
   }
 
   /**
+   * 规范化 URL，用于比较（处理编码问题）
+   */
+  private normalizeUrl(url: string): string {
+    try {
+      let decoded = url;
+      try {
+        decoded = decodeURIComponent(url);
+      } catch (e) {
+        decoded = url;
+      }
+      
+      const [path, queryString] = decoded.split('?');
+      
+      let normalizedPath = path.replace(/\/+$/, '');
+      if (!normalizedPath.startsWith('/')) {
+        normalizedPath = '/' + normalizedPath;
+      }
+      
+      if (queryString) {
+        try {
+          const params = new URLSearchParams(queryString);
+          const sortedParams = Array.from(params.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]));
+          const normalizedParams = new URLSearchParams(sortedParams);
+          return normalizedPath + '?' + normalizedParams.toString();
+        } catch (e) {
+          return normalizedPath + '?' + queryString;
+        }
+      }
+      
+      return normalizedPath;
+    } catch (e) {
+      // 如果所有处理都失败，返回原始 URL
+      return url;
+    }
+  }
+
+  /**
    * 从URL推断标题
    */
   private inferTitleFromUrl(url: string): string | null {
+    // 先解码 URL（处理可能的编码情况）
+    try {
+      url = decodeURIComponent(url);
+    } catch (e) {
+      // 如果解码失败，使用原始 URL
+    }
+    
     // 先分离路径和查询参数
     const [path, queryString] = url.split('?');
     const urlSegments = path.split('/').filter(segment => segment);
@@ -112,10 +162,17 @@ export class PagesComponent implements OnInit {
       
       // 特殊处理 system 路由，从查询参数中提取功能名称
       if (lastSegment === 'system' && queryString) {
-        const params = new URLSearchParams(queryString);
+        // 处理可能的编码查询参数
+        let decodedQueryString = queryString;
+        try {
+          decodedQueryString = decodeURIComponent(queryString);
+        } catch (e) {
+          // 如果解码失败，使用原始查询字符串
+        }
+        const params = new URLSearchParams(decodedQueryString);
         const functionName = params.get('function');
         if (functionName) {
-          // 映射功能名称到中文标题
+          // 映射功能名称到中文标题（确保与 system-management.component.ts 中的定义一致）
           const functionTitleMap: { [key: string]: string } = {
             'backends': 'Backend节点信息',
             'frontends': 'Frontend节点信息',

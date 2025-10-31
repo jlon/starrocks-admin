@@ -1,14 +1,8 @@
 <div class="system-management-container">
-  <!-- Loading Spinner -->
-  <div *ngIf="loading" class="loading-container">
-    <nb-spinner size="large"></nb-spinner>
-    <p>Loading system functions...</p>
-  </div>
-
   <!-- Main View: Categories and Functions List -->
-  <div *ngIf="!selectedFunction && !loading" class="main-view">
+  <div *ngIf="!selectedFunction" class="main-view">
     <div class="page-header mb-3">
-      <nb-card>
+      <nb-card [nbSpinner]="loading" nbSpinnerStatus="primary" nbSpinnerSize="large">
         <nb-card-header>
           <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
@@ -139,10 +133,10 @@
   </div>
 
   <!-- Detail View: Function Data -->
-  <div *ngIf="selectedFunction && !loading" class="detail-view">
+  <div *ngIf="selectedFunction" class="detail-view">
     <div class="row">
       <div class="col-12">
-        <nb-card>
+        <nb-card [nbSpinner]="loading" nbSpinnerStatus="primary" nbSpinnerSize="large">
           <nb-card-header>
             <div class="d-flex justify-content-between align-items-center w-100">
               <div class="d-flex align-items-center gap-2">
@@ -150,10 +144,9 @@
                   <nb-icon icon="arrow-back-outline"></nb-icon>
                 </button>
                 <span class="header-separator">|</span>
-                <div>
-                  <h5 class="mb-0">{{ selectedFunction.name }}</h5>
-                  <small class="text-muted">{{ selectedFunction.description }}</small>
-                </div>
+                <h5 class="mb-0">{{ selectedFunction.name }}</h5>
+                <span class="header-separator">|</span>
+                <small class="text-muted">{{ selectedFunction.description }}</small>
               </div>
               <button nbButton status="info" size="small" (click)="refreshCurrentFunction()" [disabled]="loading">
                 <nb-icon icon="refresh-outline"></nb-icon>
@@ -163,27 +156,7 @@
           </nb-card-header>
           
           <nb-card-body>
-            <!-- 搜索过滤器紧凑布局 -->
-            <div class="search-section mb-3">
-              <div class="row g-2 align-items-center">
-                <div class="col-md-9 col-lg-10">
-                  <input nbInput fullWidth placeholder="搜索表格数据..." 
-                         [(ngModel)]="searchKeyword" (keyup.enter)="onSearch()">
-                </div>
-                <div class="col-md-3 col-lg-2">
-                  <button nbButton status="primary" fullWidth (click)="onSearch()" [disabled]="loading">
-                    <nb-icon icon="search-outline"></nb-icon>
-                    搜索
-                  </button>
-                </div>
-              </div>
-            </div>
-
             <!-- 数据表格 -->
-            <div *ngIf="loading" class="text-center py-4">
-              <nb-spinner size="large" status="primary"></nb-spinner>
-            </div>
-
             <ng2-smart-table *ngIf="!loading && functionData.length > 0"
               [settings]="tableSettings" [source]="functionDataSource">
             </ng2-smart-table>

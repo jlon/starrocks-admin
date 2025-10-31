@@ -25,7 +25,10 @@ export class MetricCardGroupComponent {
   @Input() badgeCount: number = 0;
   @Input() badgeStatus: string = 'danger'; // danger, warning, info
   
-  toggleCollapse() {
+  toggleCollapse(event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
     this.collapsed = !this.collapsed;
     // Save collapse state to localStorage
     this.saveCollapseState();

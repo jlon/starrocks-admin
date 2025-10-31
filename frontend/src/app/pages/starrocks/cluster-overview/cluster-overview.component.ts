@@ -31,6 +31,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
   dataStatistics: DataStatistics | null = null;
   capacityPrediction: CapacityPrediction | null = null;
   compactionDetails: CompactionDetailStats | null = null;
+  
   activeSessions: number = 0;
   runningQueries: number = 0;
   activeUsers1h: number = 0;
@@ -252,6 +253,22 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
   }
 
   // Navigation methods
+  handleCardClick(card: HealthCard) {
+    if (card.cardId === 'latency_percentile') {
+      this.cycleLatencyPercentile();
+    } else if (card.cardId === 'disk_cache_metric') {
+      this.cycleDiskMetric();
+    } else if (card.cardId === 'load_jobs') {
+      this.navigateToLoadJobs();
+    } else if (card.cardId === 'sessions') {
+      this.navigateToSessions();
+    } else if (card.cardId === 'compactions' || card.cardId === 'compaction_score') {
+      this.navigateToCompactions();
+    } else {
+      this.navigateToCard(card);
+    }
+  }
+
   navigateToCard(card: HealthCard) {
     if (card.navigateTo) {
       this.router.navigate([card.navigateTo]);
@@ -1331,12 +1348,19 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
     });
   }
 
-  navigateToLoadJobs() {
+  navigateToLoadJobs(event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
     this.router.navigate(['/pages/starrocks/system'], { 
       queryParams: { 
         function: 'loads',
         from: 'overview'  // 标记来源，用于返回功能
       } 
     });
+  }
+
+  navigateToSessions() {
+    this.router.navigate(['/pages/starrocks/sessions']);
   }
 }

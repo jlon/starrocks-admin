@@ -92,12 +92,6 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
   loading = false;
   tableSettings: any = {};
   
-  // 搜索相关
-  searchKeyword = '';
-  
-  // 标记是否已处理查询参数（避免重复处理）
-  private queryParamsProcessed = false;
-  
   // 导航状态管理
   navigationState: NavigationState = {
     path: '',
@@ -151,15 +145,18 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
       this.loadSystemFunctions();
     }
 
-    // 处理查询参数 - 只在功能加载完成后处理一次
+    // 处理查询参数 - 每次查询参数变化时都处理
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(params => {
-      if (params['function'] && !this.queryParamsProcessed) {
+      if (params['function']) {
         const functionName = params['function'];
-        // 等待功能加载完成后再处理
-        setTimeout(() => {
-          this.handleQueryParams(functionName);
-          this.queryParamsProcessed = true;
-        }, 300);
+        // 检查是否需要处理（避免重复处理相同参数）
+        const currentFunction = this.selectedFunction?.name;
+        if (currentFunction !== functionName) {
+          // 等待功能加载完成后再处理
+          setTimeout(() => {
+            this.handleQueryParams(functionName);
+          }, 300);
+        }
       }
     });
   }
@@ -857,17 +854,4 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
     return availableIcons[hash % availableIcons.length];
   }
 
-  // 搜索功能
-  onSearch() {
-    if (this.searchKeyword.trim()) {
-      this.functionDataSource.setFilter([
-        {
-          field: 'name',
-          search: this.searchKeyword
-        }
-      ], false);
-    } else {
-      this.functionDataSource.setFilter([], false);
-    }
-  }
 }

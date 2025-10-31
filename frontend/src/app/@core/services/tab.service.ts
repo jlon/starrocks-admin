@@ -25,16 +25,56 @@ export class TabService {
   }
 
   /**
+   * 规范化 URL，用于比较（处理编码问题）
+   */
+  private normalizeUrl(url: string): string {
+    try {
+      let decoded = url;
+      try {
+        decoded = decodeURIComponent(url);
+      } catch (e) {
+        decoded = url;
+      }
+      
+      const [path, queryString] = decoded.split('?');
+      
+      let normalizedPath = path.replace(/\/+$/, '');
+      if (!normalizedPath.startsWith('/')) {
+        normalizedPath = '/' + normalizedPath;
+      }
+      
+      if (queryString) {
+        try {
+          const params = new URLSearchParams(queryString);
+          const sortedParams = Array.from(params.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]));
+          const normalizedParams = new URLSearchParams(sortedParams);
+          return normalizedPath + '?' + normalizedParams.toString();
+        } catch (e) {
+          return normalizedPath + '?' + queryString;
+        }
+      }
+      
+      return normalizedPath;
+    } catch (e) {
+      return url;
+    }
+  }
+
+  /**
    * 添加新Tab，如果已存在则激活，不存在则创建
    * @param tab Tab信息
    * @param navigate 是否需要触发路由导航（默认true）
    */
   addTab(tab: Omit<TabItem, 'active'>, navigate: boolean = true): void {
     const currentTabs = this.tabsSubject.value;
-    const existingTab = currentTabs.find(t => t.url === tab.url);
+    const normalizedNewUrl = this.normalizeUrl(tab.url);
+    const existingTab = currentTabs.find(t => {
+      const normalizedExistingUrl = this.normalizeUrl(t.url);
+      return normalizedExistingUrl === normalizedNewUrl;
+    });
 
     if (existingTab) {
-      // 如果Tab已存在，更新标题（如果不同）并激活
       const updatedTabs = currentTabs.map(t => {
         if (t.id === existingTab.id) {
           return {
@@ -49,30 +89,27 @@ export class TabService {
       this.tabsSubject.next(updatedTabs);
       this.saveTabs();
       
-      // 只在需要时导航
       if (navigate && this.router.url !== tab.url) {
-        this.router.navigate([tab.url]);
+        const { path, queryParams } = this.parseUrl(tab.url);
+        this.router.navigate(path, { queryParams });
       }
     } else {
-      // 如果Tab不存在，创建新Tab
       const newTab: TabItem = {
         ...tab,
         active: true
       };
 
-      // 先取消所有Tab的激活状态
       const updatedTabs = currentTabs.map(t => ({ ...t, active: false }));
       
-      // 添加新Tab
       updatedTabs.push(newTab);
       
       this.tabsSubject.next(updatedTabs);
       this.saveTabs();
       
-      // 只在需要时导航到新Tab
-      if (navigate) {
-        this.router.navigate([tab.url]);
-      }
+        if (navigate) {
+          const { path, queryParams } = this.parseUrl(tab.url);
+          this.router.navigate(path, { queryParams });
+        }
     }
   }
 
@@ -154,6 +191,34 @@ export class TabService {
   }
 
   /**
+   * 解析 URL 字符串，返回路径和查询参数对象
+   */
+  private parseUrl(url: string): { path: string[], queryParams: any } {
+    try {
+      // 解码 URL
+      const decoded = decodeURIComponent(url);
+      const [path, queryString] = decoded.split('?');
+      
+      // 解析路径
+      const pathSegments = path.split('/').filter(segment => segment);
+      
+      // 解析查询参数
+      const queryParams: any = {};
+      if (queryString) {
+        const params = new URLSearchParams(queryString);
+        params.forEach((value, key) => {
+          queryParams[key] = value;
+        });
+      }
+      
+      return { path: ['/' + pathSegments.join('/')], queryParams };
+    } catch (e) {
+      // 如果解析失败，尝试作为路径直接使用
+      return { path: [url], queryParams: {} };
+    }
+  }
+
+  /**
    * 激活指定Tab
    * @param tabId Tab ID
    * @param navigate 是否需要触发路由导航（默认true）
@@ -167,8 +232,10 @@ export class TabService {
     // Check if the target tab is already active
     const isAlreadyActive = targetTab.active;
     
-    // Check if we're already on the target URL
-    const isOnTargetUrl = this.router.url === targetTab.url;
+    // Check if we're already on the target URL (使用规范化比较)
+    const normalizedRouterUrl = this.normalizeUrl(this.router.url);
+    const normalizedTargetUrl = this.normalizeUrl(targetTab.url);
+    const isOnTargetUrl = normalizedRouterUrl === normalizedTargetUrl;
 
     // If already active and on target URL, do nothing
     if (isAlreadyActive && isOnTargetUrl) {
@@ -184,9 +251,10 @@ export class TabService {
     this.saveTabs();
     
     // Only navigate if needed and navigate flag is true
-    // This prevents unnecessary page reloads when switching between tabs
+    // 正确解析 URL 并传递查询参数
     if (navigate && !isOnTargetUrl) {
-      this.router.navigate([targetTab.url]);
+      const { path, queryParams } = this.parseUrl(targetTab.url);
+      this.router.navigate(path, { queryParams });
     }
   }
 

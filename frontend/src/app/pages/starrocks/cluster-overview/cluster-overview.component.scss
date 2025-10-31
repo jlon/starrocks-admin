@@ -282,6 +282,23 @@
           color: nb-theme(color-info-default);
         }
       }
+
+      &.clickable {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+        
+        &:hover {
+          background-color: rgba(0, 0, 0, 0.05);
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        &:active {
+          transform: translateY(0);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        }
+      }
     }
   }
 
@@ -324,10 +341,25 @@
           color: nb-theme(color-info-default);
         }
       }
+
+      &.clickable {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+        
+        &:hover {
+          background-color: rgba(0, 0, 0, 0.05);
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        &:active {
+          transform: translateY(0);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        }
+      }
     }
   }
-
-  // ==================== 表格样式 ====================
 
   .top-tables-table,
   .slow-queries-table {

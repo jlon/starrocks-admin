@@ -92,13 +92,15 @@ export class PagesComponent implements OnInit {
     // 如果获得了标题，添加 Tab
     if (title) {
       const tabId = this.generateTabId(title);
+      const icon = this.getIconForUrl(url);
       // 路由变化时不再触发导航（因为已经在目标路由了）
       this.tabService.addTab({
         id: tabId,
         title: title,
         url: url,
         closable: true,
-        pinned: false
+        pinned: false,
+        icon: icon  // Add icon to tab
       }, false);
     }
   }
@@ -228,16 +230,16 @@ export class PagesComponent implements OnInit {
   }
 
   /**
-   * 根据URL查找菜单项
+   * 根据URL查找菜单项（包括父级菜单）
    */
   private findMenuItemByUrl(url: string): any {
-    const findInMenu = (items: any[]): any => {
+    const findInMenu = (items: any[], parent: any = null): any => {
       for (const item of items) {
         if (item.link === url) {
           return item;
         }
         if (item.children) {
-          const found = findInMenu(item.children);
+          const found = findInMenu(item.children, item);
           if (found) return found;
         }
       }
@@ -245,6 +247,33 @@ export class PagesComponent implements OnInit {
     };
 
     return findInMenu(MENU_ITEMS);
+  }
+
+  /**
+   * 根据URL获取菜单项图标
+   */
+  private getIconForUrl(url: string): string | undefined {
+    const menuItem = this.findMenuItemByUrl(url);
+    if (menuItem && menuItem.icon) {
+      return menuItem.icon;
+    }
+
+    // For child routes, try to find parent icon
+    const findParentIcon = (items: any[]): string | undefined => {
+      for (const item of items) {
+        if (item.children) {
+          const childMatch = item.children.some((child: any) => child.link === url);
+          if (childMatch && item.icon) {
+            return item.icon;
+          }
+          const childResult = findParentIcon(item.children);
+          if (childResult) return childResult;
+        }
+      }
+      return undefined;
+    };
+
+    return findParentIcon(MENU_ITEMS);
   }
 
   /**

@@ -14,6 +14,13 @@
         class="pin-icon">
       </nb-icon>
       
+      <!-- Tab图标 -->
+      <nb-icon 
+        *ngIf="tab.icon && !tab.pinned" 
+        [icon]="tab.icon" 
+        class="tab-icon">
+      </nb-icon>
+      
       <!-- Tab标题 -->
       <span class="tab-title">{{ tab.title }}</span>
       

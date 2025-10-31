@@ -9,6 +9,7 @@ export interface TabItem {
   active: boolean;
   closable: boolean;
   pinned: boolean;
+  icon?: string; // Optional icon for the tab
 }
 
 @Injectable({
@@ -270,7 +271,8 @@ export class TabService {
       url: tab.url,
       pinned: tab.pinned,
       closable: tab.closable,
-      active: tab.active  // Save active state
+      active: tab.active,  // Save active state
+      icon: tab.icon  // Save icon
     }));
     
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tabsToSave));
@@ -285,7 +287,8 @@ export class TabService {
       if (savedTabs) {
         const tabs: TabItem[] = JSON.parse(savedTabs).map((tab: any) => ({
           ...tab,
-          active: tab.active || false  // Restore active state from localStorage
+          active: tab.active || false,  // Restore active state from localStorage
+          icon: tab.icon  // Restore icon
         }));
         this.tabsSubject.next(tabs);
       }
@@ -310,7 +313,8 @@ export class TabService {
         url: '/pages/starrocks/dashboard',
         active: true,
         closable: false,
-        pinned: true
+        pinned: true,
+        icon: 'list-outline'  // Home tab icon
       };
       
       const updatedTabs = currentTabs.map(tab => ({ ...tab, active: false }));

@@ -27,4 +27,43 @@
       min-width: fit-content;
     }
   }
+
+  // Menu icon color enhancements - using ngx-admin native style
+  nb-menu {
+    .menu-item {
+      // Menu icon with subtle color
+      nb-icon {
+        color: nb-theme(color-primary-default);
+        opacity: 0.65;
+        transition: all 0.3s ease;
+      }
+
+      // Active menu item icon
+      &.active nb-icon {
+        color: nb-theme(color-primary-default);
+        opacity: 1;
+      }
+
+      // Hover effect
+      &:hover nb-icon {
+        opacity: 0.85;
+        transform: scale(1.05);
+      }
+
+      // Expanded menu item icon
+      &.expanded > a nb-icon {
+        opacity: 0.8;
+      }
+    }
+
+    // Different colors for different menu items to enhance visual distinction
+    .menu-item:nth-child(1) nb-icon { color: nb-theme(color-primary-default); }
+    .menu-item:nth-child(2) nb-icon { color: nb-theme(color-info-default); }
+    .menu-item:nth-child(3) nb-icon { color: nb-theme(color-success-default); }
+    .menu-item:nth-child(4) nb-icon { color: nb-theme(color-warning-default); }
+    .menu-item:nth-child(5) nb-icon { color: nb-theme(color-primary-500); }
+    .menu-item:nth-child(6) nb-icon { color: nb-theme(color-info-500); }
+    .menu-item:nth-child(7) nb-icon { color: nb-theme(color-success-500); }
+    .menu-item:nth-child(8) nb-icon { color: nb-theme(color-danger-500); }
+  }
 }

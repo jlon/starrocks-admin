@@ -76,6 +76,24 @@
           flex-shrink: 0;
         }
 
+        .tab-icon {
+          font-size: 14px;
+          margin-right: 6px;
+          flex-shrink: 0;
+          color: nb-theme(color-primary-default);
+          opacity: 0.7;
+          transition: all 0.2s ease;
+        }
+
+        &.active .tab-icon {
+          opacity: 1;
+          color: nb-theme(color-primary-default);
+        }
+
+        &:hover .tab-icon {
+          opacity: 0.9;
+        }
+
         .tab-title {
           flex: 1;
           overflow: hidden;

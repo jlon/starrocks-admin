@@ -83,7 +83,11 @@ impl DataStatisticsService {
     }
 
     /// Collect and update data statistics for a cluster
-    pub async fn update_statistics(&self, cluster_id: i64) -> ApiResult<DataStatistics> {
+    pub async fn update_statistics(
+        &self,
+        cluster_id: i64,
+        time_range_start: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> ApiResult<DataStatistics> {
         tracing::info!("Updating data statistics for cluster {}", cluster_id);
 
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
@@ -100,7 +104,11 @@ impl DataStatisticsService {
         let top_tables_by_size = self.get_top_tables_by_size(&cluster, 20).await?;
 
         // Get top tables by access (from query history or audit logs)
-        let top_tables_by_access = self.get_top_tables_by_access(&cluster, 20).await?;
+        // Use time_range_start if provided, otherwise default to 3 days ago
+        let time_range_start = time_range_start.unwrap_or_else(|| {
+            chrono::Utc::now() - chrono::Duration::days(3)
+        });
+        let top_tables_by_access = self.get_top_tables_by_access(&cluster, 20, time_range_start).await?;
 
         // Calculate total data size from all tables (not just top 20)
         let total_data_size = self.get_total_data_size_mysql(&mysql_client).await?;
@@ -321,9 +329,13 @@ impl DataStatisticsService {
         &self,
         cluster: &Cluster,
         limit: usize,
+        time_range_start: chrono::DateTime<chrono::Utc>,
     ) -> ApiResult<Vec<TopTableByAccess>> {
         let pool = self.mysql_pool_manager.get_pool(cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
+
+        // Format time range start time for MySQL query
+        let start_time_str = time_range_start.format("%Y-%m-%d %H:%M:%S").to_string();
 
         // First try: Query with table name extraction from stmt
         // Extract table name after "FROM" keyword, clean and lowercase
@@ -354,7 +366,7 @@ impl DataStatisticsService {
                 ) as table_name,
                 COUNT(*) as access_count
             FROM starrocks_audit_db__.starrocks_audit_tbl__
-            WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 3 DAY)
+            WHERE timestamp >= '{}'
                 AND db NOT IN ('information_schema', '_statistics_', '', 'sys', 'starrocks_audit_db__', 'recycle_dw')
                 AND UPPER(stmt) LIKE '%FROM %'
             GROUP BY db, table_name
@@ -365,7 +377,7 @@ impl DataStatisticsService {
             ORDER BY access_count DESC
             LIMIT {}
             "#,
-            limit
+            start_time_str, limit
         );
 
         tracing::debug!("Querying top tables by access with table name extraction");
@@ -413,13 +425,13 @@ impl DataStatisticsService {
                         db as database_name,
                         COUNT(*) as access_count
                     FROM starrocks_audit_db__.starrocks_audit_tbl__
-                    WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 3 DAY)
+                    WHERE timestamp >= '{}'
                         AND db NOT IN ('information_schema', '_statistics_', '', 'sys', 'starrocks_audit_db__', 'recycle_dw')
                     GROUP BY db
                     ORDER BY access_count DESC
                     LIMIT {}
                     "#,
-                    limit
+                    start_time_str, limit
                 );
 
                 match mysql_client.query(&query_db_only).await {

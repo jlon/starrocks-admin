@@ -196,6 +196,9 @@ pub async fn get_resource_trends(
 #[utoipa::path(
     get,
     path = "/api/clusters/overview/data-stats",
+    params(
+        ("time_range" = Option<String>, Query, description = "Time range for top tables by access: 1h, 6h, 24h, 3d (default: 3d)")
+    ),
     responses(
         (status = 200, description = "Data statistics", body = DataStatistics),
         (status = 404, description = "No active cluster found"),
@@ -208,13 +211,12 @@ pub async fn get_resource_trends(
 )]
 pub async fn get_data_statistics(
     State(state): State<Arc<AppState>>,
+    Query(params): Query<TrendQueryParams>,
 ) -> ApiResult<Json<DataStatistics>> {
     let cluster = state.cluster_service.get_active_cluster().await?;
-    tracing::debug!("GET /api/clusters/overview/data-stats");
-
     let stats = state
         .overview_service
-        .get_data_statistics(cluster.id)
+        .get_data_statistics(cluster.id, Some(&params.time_range))
         .await?;
 
     Ok(Json(stats))
@@ -279,8 +281,6 @@ pub async fn get_extended_cluster_overview(
     Query(params): Query<OverviewQueryParams>,
 ) -> ApiResult<Json<ExtendedClusterOverview>> {
     let cluster = state.cluster_service.get_active_cluster().await?;
-    tracing::debug!("GET /api/clusters/overview/extended?time_range={:?}", params.time_range);
-
     let overview = state
         .overview_service
         .get_extended_overview(cluster.id, params.time_range)
@@ -317,18 +317,12 @@ pub async fn get_compaction_detail_stats(
 ) -> ApiResult<Json<CompactionDetailStats>> {
     let cluster = state.cluster_service.get_active_cluster().await?;
     
-    // Convert TimeRange enum to string for the service method
     let time_range_str = match params.time_range {
         TimeRange::Hours1 => "1h",
         TimeRange::Hours6 => "6h",
         TimeRange::Hours24 => "24h",
         TimeRange::Days3 => "3d",
     };
-    
-    tracing::debug!(
-        "GET /api/clusters/overview/compaction-details?time_range={}", 
-        time_range_str
-    );
 
     let stats = state
         .overview_service

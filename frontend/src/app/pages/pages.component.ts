@@ -65,32 +65,36 @@ export class PagesComponent implements OnInit {
       return;
     }
 
-    // 查找对应的菜单项
-    const menuItem = this.findMenuItemByUrl(url);
-    if (menuItem) {
-      const tabId = this.generateTabId(menuItem.title);
+    // 对于带查询参数的 system 路由，优先使用 inferTitleFromUrl 获取更具体的标题
+    let title: string | null = null;
+    if (url.includes('/starrocks/system') && url.includes('?')) {
+      title = this.inferTitleFromUrl(url);
+    }
+
+    // 如果没有通过 URL 推断获得标题，尝试查找菜单项
+    if (!title) {
+      const menuItem = this.findMenuItemByUrl(url);
+      if (menuItem) {
+        title = menuItem.title;
+      }
+    }
+
+    // 如果还是没有标题，尝试从 URL 推断
+    if (!title) {
+      title = this.inferTitleFromUrl(url);
+    }
+
+    // 如果获得了标题，添加 Tab
+    if (title) {
+      const tabId = this.generateTabId(title);
       // 路由变化时不再触发导航（因为已经在目标路由了）
       this.tabService.addTab({
         id: tabId,
-        title: menuItem.title,
+        title: title,
         url: url,
         closable: true,
         pinned: false
       }, false);
-    } else {
-      // 如果没有找到对应的菜单项，尝试从URL推断标题
-      const title = this.inferTitleFromUrl(url);
-      if (title) {
-        const tabId = this.generateTabId(title);
-        // 路由变化时不再触发导航（因为已经在目标路由了）
-        this.tabService.addTab({
-          id: tabId,
-          title: title,
-          url: url,
-          closable: true,
-          pinned: false
-        }, false);
-      }
     }
   }
 
@@ -98,11 +102,49 @@ export class PagesComponent implements OnInit {
    * 从URL推断标题
    */
   private inferTitleFromUrl(url: string): string | null {
-    const urlSegments = url.split('/').filter(segment => segment);
+    // 先分离路径和查询参数
+    const [path, queryString] = url.split('?');
+    const urlSegments = path.split('/').filter(segment => segment);
     
     // 处理StarRocks相关路由
     if (urlSegments.includes('starrocks')) {
       const lastSegment = urlSegments[urlSegments.length - 1];
+      
+      // 特殊处理 system 路由，从查询参数中提取功能名称
+      if (lastSegment === 'system' && queryString) {
+        const params = new URLSearchParams(queryString);
+        const functionName = params.get('function');
+        if (functionName) {
+          // 映射功能名称到中文标题
+          const functionTitleMap: { [key: string]: string } = {
+            'backends': 'Backend节点信息',
+            'frontends': 'Frontend节点信息',
+            'brokers': 'Broker节点信息',
+            'statistic': '统计信息',
+            'dbs': '数据库信息',
+            'tables': '表信息',
+            'tablet_schema': 'Tablet Schema',
+            'partitions': '分区信息',
+            'transactions': '事务信息',
+            'routine_loads': 'Routine Load任务',
+            'stream_loads': 'Stream Load任务',
+            'loads': 'Load任务',
+            'load_error_hub': 'Load错误信息',
+            'catalog': 'Catalog信息',
+            'resources': '资源信息',
+            'workload_groups': '工作负载组',
+            'workload_sched_policy': '工作负载调度策略',
+            'compactions': '压缩任务',
+            'colocate_group': 'Colocate Group',
+            'bdbje': 'BDBJE信息',
+            'small_files': '小文件信息',
+            'trash': '回收站',
+            'jobs': '作业信息',
+            'repositories': '仓库信息'
+          };
+          return functionTitleMap[functionName] || `功能卡片: ${functionName}`;
+        }
+      }
       
       // 映射URL段到中文标题
       const titleMap: { [key: string]: string } = {

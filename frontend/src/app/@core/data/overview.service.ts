@@ -467,8 +467,9 @@ export class OverviewService {
         trend: 0,
         status: 'info',
         icon: 'upload-outline',
-        navigateTo: '/pages/starrocks/load-jobs',
-        description: '正在运行的数据导入任务（点击查看详情）'
+        navigateTo: '/pages/starrocks/system',
+        description: '正在运行的数据导入任务（点击查看详情）',
+        cardId: 'load_jobs'
       },
       // 11. 物化视图
       {

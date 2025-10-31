@@ -34,8 +34,25 @@ export class TabService {
     const existingTab = currentTabs.find(t => t.url === tab.url);
 
     if (existingTab) {
-      // 如果Tab已存在，激活它
-      this.activateTab(existingTab.id, navigate);
+      // 如果Tab已存在，更新标题（如果不同）并激活
+      const updatedTabs = currentTabs.map(t => {
+        if (t.id === existingTab.id) {
+          return {
+            ...t,
+            title: tab.title, // 更新标题
+            active: true
+          };
+        }
+        return { ...t, active: false };
+      });
+      
+      this.tabsSubject.next(updatedTabs);
+      this.saveTabs();
+      
+      // 只在需要时导航
+      if (navigate && this.router.url !== tab.url) {
+        this.router.navigate([tab.url]);
+      }
     } else {
       // 如果Tab不存在，创建新Tab
       const newTab: TabItem = {

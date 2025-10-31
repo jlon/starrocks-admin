@@ -95,6 +95,9 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
   // 搜索相关
   searchKeyword = '';
   
+  // 标记是否已处理查询参数（避免重复处理）
+  private queryParamsProcessed = false;
+  
   // 导航状态管理
   navigationState: NavigationState = {
     path: '',
@@ -121,17 +124,6 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    // 处理查询参数
-    this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(params => {
-      if (params['function'] === 'compactions') {
-        // 找到compactions功能并直接跳转
-        const compactionsFunction = this.systemFunctions.find(f => f.name === 'compactions');
-        if (compactionsFunction) {
-          this.selectFunction(compactionsFunction);
-        }
-      }
-    });
-
     // Subscribe to active cluster changes
     this.clusterContext.activeCluster$
       .pipe(takeUntil(this.destroy$))
@@ -157,6 +149,43 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
     // Load data if clusterId is already set
     if (this.clusterId > 0) {
       this.loadSystemFunctions();
+    }
+
+    // 处理查询参数 - 只在功能加载完成后处理一次
+    this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(params => {
+      if (params['function'] && !this.queryParamsProcessed) {
+        const functionName = params['function'];
+        // 等待功能加载完成后再处理
+        setTimeout(() => {
+          this.handleQueryParams(functionName);
+          this.queryParamsProcessed = true;
+        }, 300);
+      }
+    });
+  }
+
+  /**
+   * 处理查询参数，选择对应的功能
+   */
+  private handleQueryParams(functionName: string): void {
+    // 先从 systemFunctions 中查找
+    let targetFunction = this.systemFunctions.find(f => f.name === functionName);
+    // 如果没找到，从已加载的功能中查找
+    if (!targetFunction && this.customFunctions.length > 0) {
+      const foundFunc = this.customFunctions.find(f => f.functionName === functionName);
+      if (foundFunc) {
+        // 转换为 SystemFunctionOld 格式
+        targetFunction = {
+          name: foundFunc.functionName,
+          description: foundFunc.description,
+          category: foundFunc.categoryName,
+          status: 'active',
+          last_updated: foundFunc.updatedAt
+        };
+      }
+    }
+    if (targetFunction) {
+      this.selectFunction(targetFunction);
     }
   }
 
@@ -224,7 +253,6 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
       functions: functions.slice(0, 4), // 限制每个分类最多4个功能
       order: functions[0]?.categoryOrder || 0
     })).sort((a, b) => a.order - b.order);
-    
   }
 
   // 打开添加功能对话框

@@ -540,24 +540,21 @@ impl OverviewService {
     }
 
     /// Get data statistics (database/table counts, top tables, etc.)
-    pub async fn get_data_statistics(&self, cluster_id: i64) -> ApiResult<DataStatistics> {
+    pub async fn get_data_statistics(
+        &self,
+        cluster_id: i64,
+        time_range: Option<&TimeRange>,
+    ) -> ApiResult<DataStatistics> {
         if let Some(ref service) = self.data_statistics_service {
-            // Try to get cached statistics first
             if let Some(stats) = service.get_statistics(cluster_id).await? {
-                // Check if cache is recent (< 10 minutes old)
                 let age = Utc::now() - stats.updated_at;
                 if age.num_minutes() < 10 {
-                    tracing::debug!(
-                        "Using cached data statistics (age: {} minutes)",
-                        age.num_minutes()
-                    );
                     return Ok(stats);
                 }
             }
 
-            // Cache is stale or doesn't exist, update it
-            tracing::debug!("Updating data statistics for cluster {}", cluster_id);
-            service.update_statistics(cluster_id).await
+            let time_range_start = time_range.map(|tr| tr.start_time());
+            service.update_statistics(cluster_id, time_range_start).await
         } else {
             Err(ApiError::internal_error("Data statistics service not configured"))
         }
@@ -1079,69 +1076,79 @@ impl OverviewService {
         cluster_id: i64,
         time_range: TimeRange,
     ) -> ApiResult<ExtendedClusterOverview> {
-        // Get cluster info
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
 
-        // Get latest snapshot
-        let latest = self.get_latest_snapshot(cluster_id).await?;
+        let (latest, snapshots) = tokio::try_join!(
+            self.get_latest_snapshot(cluster_id),
+            self.get_history_snapshots(cluster_id, &time_range)
+        )?;
 
-        // Get historical snapshots for trends
-        let snapshots = self.get_history_snapshots(cluster_id, &time_range).await?;
+        let (
+            data_stats_result,
+            mv_stats_result,
+            load_jobs_result,
+            schema_changes_result,
+            compaction_result,
+            sessions_result,
+            capacity_result,
+            starrocks_version_result,
+        ) = tokio::join!(
+            async {
+                self.get_data_statistics(cluster_id, Some(&time_range)).await.ok()
+            },
+            self.get_mv_stats(cluster_id),
+            self.get_load_job_stats(cluster_id, &time_range),
+            self.get_schema_change_stats(cluster_id, &time_range),
+            self.get_compaction_stats(cluster_id),
+            self.get_session_stats(cluster_id),
+            async {
+                match self.predict_capacity(cluster_id).await {
+                    Ok(cap) => Some(cap),
+                    Err(e) => {
+                        tracing::warn!("Failed to predict capacity for cluster {}: {}", cluster_id, e);
+                        None
+                    },
+                }
+            },
+            async {
+                self.get_starrocks_version(cluster_id)
+                    .await
+                    .unwrap_or_else(|_| "Unknown".to_string())
+            },
+        );
 
-        // Module 1: Cluster Health
-        let health = self.calculate_cluster_health(cluster_id, &latest).await?;
+        let data_stats = data_stats_result;
+        let mv_stats = mv_stats_result?;
+        let load_jobs = load_jobs_result?;
+        let schema_changes = schema_changes_result?;
+        let compaction = compaction_result?;
+        let sessions = sessions_result?;
+        let mut capacity = capacity_result;
+        let starrocks_version = starrocks_version_result;
 
-        // Module 2: Key Performance Indicators
+        let health = if let Some(ref latest_snapshot) = latest {
+            self.calculate_cluster_health(cluster_id, latest_snapshot, &starrocks_version).await?
+        } else {
+            return Err(ApiError::internal_error("No metrics snapshot available"));
+        };
+
         let kpi = self.calculate_kpi(&latest, &snapshots);
 
-        // Module 3: Resource Metrics
         let resources = self.calculate_resource_metrics(&latest, &snapshots);
 
-        // Module 4-5: Performance & Resource Trends
         let performance_trends = self.calculate_performance_trends(&snapshots);
         let resource_trends = self.calculate_resource_trends(&snapshots);
 
-        // Module 6: Data Statistics (P1)
-        // Use get_data_statistics() to auto-refresh stale cache
-        let data_stats = self.get_data_statistics(cluster_id).await.ok();
-
-        // Module 7: Materialized Views (P1)
-        let mv_stats = self.get_mv_stats(cluster_id).await?;
-
-        // Module 8: Load Jobs (P1)
-        let load_jobs = self.get_load_job_stats(cluster_id).await?;
-
-        // Module 9: Transactions (P1)
         let transactions = self.get_transaction_stats(&latest);
 
-        // Module 10: Schema Changes (P1)
-        let schema_changes = self.get_schema_change_stats(cluster_id).await?;
-
-        // Module 11: Compaction (P1)
-        let compaction = self.get_compaction_stats(cluster_id).await?;
-
-        // Module 12: Sessions (P1)
-        let sessions = self.get_session_stats(cluster_id).await?;
-
-        // Module 13: Network & IO (P1)
         let network_io = self.calculate_network_io_stats(&latest);
 
-        // Module 17: Capacity Prediction (P2)
-        let mut capacity = match self.predict_capacity(cluster_id).await {
-            Ok(cap) => Some(cap),
-            Err(e) => {
-                tracing::warn!("Failed to predict capacity for cluster {}: {}", cluster_id, e);
-                None
-            },
-        };
-
-        // Use data_stats.total_data_size as real_data_size_bytes (from information_schema)
         if let (Some(cap), Some(stats)) = (&mut capacity, &data_stats) {
             cap.real_data_size_bytes = stats.total_data_size;
         }
+
         let alerts = self.generate_alerts(&health, &resources, &compaction);
 
-        // Module 18: Alerts (P2)
         Ok(ExtendedClusterOverview {
             cluster_id,
             cluster_name: cluster.name,
@@ -1164,29 +1171,18 @@ impl OverviewService {
         })
     }
 
-    /// Module 1: Calculate cluster health
     async fn calculate_cluster_health(
         &self,
-        cluster_id: i64,
-        snapshot: &Option<MetricsSnapshot>,
+        _cluster_id: i64,
+        snapshot: &MetricsSnapshot,
+        starrocks_version: &str,
     ) -> ApiResult<ClusterHealth> {
-        let snapshot = snapshot
-            .as_ref()
-            .ok_or_else(|| ApiError::internal_error("No metrics snapshot available"))?;
-
         let be_nodes_online = snapshot.backend_alive;
         let be_nodes_total = snapshot.backend_total;
         let fe_nodes_online = snapshot.frontend_alive;
         let fe_nodes_total = snapshot.frontend_total;
         let compaction_score = snapshot.max_compaction_score;
 
-        // Get StarRocks version
-        let starrocks_version = self
-            .get_starrocks_version(cluster_id)
-            .await
-            .unwrap_or_else(|_| "Unknown".to_string());
-
-        // Calculate health status
         let mut alerts = Vec::new();
         let status = if be_nodes_online < be_nodes_total {
             alerts.push(format!("{} BE节点离线", be_nodes_total - be_nodes_online));
@@ -1206,7 +1202,6 @@ impl OverviewService {
             HealthStatus::Healthy
         };
 
-        // Calculate health score (0-100)
         let score: f64 = 100.0
             - (if be_nodes_online < be_nodes_total { 30.0 } else { 0.0 })
             - (if compaction_score > 100.0 {
@@ -1228,7 +1223,7 @@ impl OverviewService {
         Ok(ClusterHealth {
             status,
             score: score.max(0.0),
-            starrocks_version,
+            starrocks_version: starrocks_version.to_string(),
             be_nodes_online,
             be_nodes_total,
             fe_nodes_online,
@@ -1238,7 +1233,6 @@ impl OverviewService {
         })
     }
 
-    /// Module 2: Calculate KPI
     fn calculate_kpi(
         &self,
         snapshot: &Option<MetricsSnapshot>,
@@ -1246,7 +1240,6 @@ impl OverviewService {
     ) -> KeyPerformanceIndicators {
         let current = snapshot.as_ref();
 
-        // Calculate trends (compare with average of previous snapshots)
         let prev_avg_qps = if snapshots.len() > 1 {
             let prev = &snapshots[0..snapshots.len() - 1];
             prev.iter().map(|s| s.qps).sum::<f64>() / prev.len() as f64
@@ -1394,7 +1387,11 @@ impl OverviewService {
     }
 
     /// Module 8: Get load job stats from SHOW LOAD
-    async fn get_load_job_stats(&self, cluster_id: i64) -> ApiResult<LoadJobStats> {
+    async fn get_load_job_stats(
+        &self,
+        cluster_id: i64,
+        time_range: &TimeRange,
+    ) -> ApiResult<LoadJobStats> {
         // Get cluster info
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
 
@@ -1402,18 +1399,24 @@ impl OverviewService {
         let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
 
+        // Calculate time range start time
+        let start_time = time_range.start_time();
+        
         // Query load job statistics from information_schema.loads
         // Note: SHOW LOAD returns current database only, so we query information_schema
-        let query = r#"
+        let query = format!(
+            r#"
             SELECT 
                 State,
                 COUNT(*) as count
             FROM information_schema.loads
-            WHERE CREATE_TIME >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+            WHERE CREATE_TIME >= '{}'
             GROUP BY State
-        "#;
+            "#,
+            start_time.format("%Y-%m-%d %H:%M:%S")
+        );
 
-        let (columns, rows) = mysql_client.query_raw(query).await?;
+        let (columns, rows) = mysql_client.query_raw(&query).await?;
 
         // Build column index map
         let mut col_idx = std::collections::HashMap::new();
@@ -1462,29 +1465,39 @@ impl OverviewService {
 
     /// Module 10: Get schema change stats by querying audit logs
     /// Tracks ALTER TABLE operations and their status from StarRocks audit logs
-    async fn get_schema_change_stats(&self, cluster_id: i64) -> ApiResult<SchemaChangeStats> {
+    async fn get_schema_change_stats(
+        &self,
+        cluster_id: i64,
+        time_range: &TimeRange,
+    ) -> ApiResult<SchemaChangeStats> {
         use crate::services::MySQLClient;
 
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
         let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
 
+        // Calculate time range start time
+        let start_time = time_range.start_time();
+
         // Query ALTER TABLE operations from audit logs
         // Track schema changes by analyzing DDL statements in the audit log
-        let query = r#"
+        let query = format!(
+            r#"
             SELECT 
                 queryType,
                 state,
                 COUNT(*) as count
             FROM starrocks_audit_db__.starrocks_audit_tbl__
             WHERE 
-                `timestamp` >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                `timestamp` >= '{}'
                 AND queryType LIKE '%ALTER%'
                 AND isQuery = 0  -- DDL operations have isQuery = 0
             GROUP BY queryType, state
-        "#;
+            "#,
+            start_time.format("%Y-%m-%d %H:%M:%S")
+        );
 
-        let (columns, rows) = mysql_client.query_raw(query).await?;
+        let (columns, rows) = mysql_client.query_raw(&query).await?;
 
         // Build column index map
         let mut col_idx = std::collections::HashMap::new();

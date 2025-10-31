@@ -1330,4 +1330,13 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
       } 
     });
   }
+
+  navigateToLoadJobs() {
+    this.router.navigate(['/pages/starrocks/system'], { 
+      queryParams: { 
+        function: 'loads',
+        from: 'overview'  // 标记来源，用于返回功能
+      } 
+    });
+  }
 }

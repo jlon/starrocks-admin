@@ -1,9 +1,52 @@
-# Cargo configuration for StarRocks Admin Backend
+# Cargo 配置文件 - 开发环境优化
+# 优化编译性能和增量编译
 
-# Default clippy flags for local development
-# To enforce strict checks (like in CI), use:
-# cargo clippy --all-targets -- --deny warnings --allow clippy::uninlined-format-args
-[alias]
-clippy-strict = "clippy --all-targets -- --deny warnings --allow clippy::uninlined-format-args"
-clippy-fix = "clippy --fix --all-targets --allow-dirty --allow-staged --allow-no-vcs -- --deny warnings --allow clippy::uninlined-format-args"
+[build]
+# 使用增量编译
+incremental = true
 
+# 并行编译 - 根据 CPU 核心数自动调整（在启动脚本中设置）
+# jobs = 4  # 注释掉，使用环境变量 CARGO_BUILD_JOBS
+
+# 目标目录
+target-dir = "target"
+
+[target.x86_64-unknown-linux-gnu]
+# 链接器优化
+linker = "clang"
+
+[profile.dev]
+# 开发模式优化
+opt-level = 0
+debug = true
+split-debuginfo = "unpacked"
+incremental = true
+
+# 增加代码生成单元以加快编译速度（默认是 256，这里设置为 16 作为平衡）
+# codegen-units = 1  # 会显著减慢编译，改用更大的值
+codegen-units = 16
+
+[profile.dev.package."*"]
+# 第三方库使用更高级别的优化
+opt-level = 1
+
+[profile.release]
+# 发布模式优化
+opt-level = 3
+debug = false
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+[profile.release.package."*"]
+# 所有依赖都使用最高优化
+opt-level = 3
+
+# 网络配置
+[net]
+retry = 2
+git-fetch-with-cli = true
+
+# 注册表配置
+[registries.crates-io]
+protocol = "sparse"

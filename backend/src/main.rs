@@ -4,7 +4,8 @@ use axum::{
 };
 use std::sync::Arc;
 use tower_http::services::ServeDir;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{fmt, EnvFilter, prelude::*};
+use std::env;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -193,32 +194,29 @@ impl utoipa::Modify for SecurityAddon {
     }
 }
 
+fn setup_logging() {
+    // 获取日志风格: "json" 或 "pretty"
+    let log_format = env::var("LOG_FORMAT").unwrap_or_else(|_| "pretty".into());
+    // 加载日志级别和过滤
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("starrocks_admin=info"));
+
+    let fmt_layer = match log_format.as_str() {
+        "json" => fmt::layer().json().with_target(true).with_current_span(false).boxed(),
+        _ => fmt::layer().pretty().with_target(true).with_ansi(true).boxed(),
+    };
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer)
+        .init();
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenvy::dotenv().ok();
+    setup_logging();
     // Load configuration first
     let config = Config::load()?;
 
-    // Initialize logging
-    let log_filter = tracing_subscriber::EnvFilter::new(&config.logging.level);
-
-    let registry = tracing_subscriber::registry().with(log_filter);
-
-    // Add file logging if configured
-    if let Some(log_file) = &config.logging.file {
-        // Ensure log directory exists
-        if let Some(parent) = std::path::Path::new(log_file).parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-
-        let file_appender = tracing_appender::rolling::daily("logs", "starrocks-admin.log");
-        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-        registry
-            .with(tracing_subscriber::fmt::layer().with_writer(non_blocking))
-            .with(tracing_subscriber::fmt::layer())
-            .init();
-    } else {
-        registry.with(tracing_subscriber::fmt::layer()).init();
-    }
     tracing::info!("StarRocks Admin starting up");
     tracing::info!("Configuration loaded successfully");
 

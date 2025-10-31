@@ -55,7 +55,9 @@
               "echarts",
               "lodash",
               "zrender/lib/svg/svg",
-              "zrender/lib/vml/vml"
+              "zrender/lib/vml/vml",
+              "nearley",
+              "sql-formatter"
             ],
             "vendorChunk": true,
             "extractLicenses": false,
@@ -91,7 +93,8 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "starrocks-admin:build"
+            "browserTarget": "starrocks-admin:build",
+            "poll": 2000
           },
           "configurations": {
             "production": {

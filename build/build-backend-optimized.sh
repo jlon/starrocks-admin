@@ -1,33 +1,49 @@
 #!/usr/bin/env bash
 
 #
-# StarRocks Admin - Backend Build Script
-# Builds the Rust backend and outputs to build/dist/
+# StarRocks Admin - Optimized Backend Build Script
+# 优化的后端构建脚本（支持增量构建）
 #
 
 set -e
 
-# Get project root
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 导入构建工具函数
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/build-utils.sh"
+
+# 获取项目路径
+PROJECT_ROOT=$(get_project_root)
 BACKEND_DIR="$PROJECT_ROOT/backend"
 BUILD_DIR="$PROJECT_ROOT/build"
 DIST_DIR="$BUILD_DIR/dist"
+LAST_BUILD_FILE="$BUILD_DIR/.last_backend_build"
 
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# 检查是否需要构建
+NEEDS_BUILD=$(check_backend_changed "$PROJECT_ROOT")
+
+if [ "$NEEDS_BUILD" = "false" ]; then
+    show_build_status "后端" "false" "文件无修改"
+    exit 0
+fi
+
+show_build_status "后端" "true" "检测到文件修改"
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Building StarRocks Admin Backend${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Clean up old dist directory
-echo -e "${YELLOW}[0/4]${NC} Cleaning old build artifacts..."
+# 检查构建依赖
+if ! check_build_dependencies; then
+    exit 1
+fi
+
+# 清理旧的构建目录
+echo -e "${YELLOW}[1/5]${NC} 清理旧的构建产物..."
 rm -rf "$DIST_DIR"
 
-# Create dist directories
+# 创建输出目录
+echo -e "${YELLOW}[2/5]${NC} 创建输出目录..."
 mkdir -p "$DIST_DIR/bin"
 mkdir -p "$DIST_DIR/conf"
 mkdir -p "$DIST_DIR/lib"
@@ -35,17 +51,24 @@ mkdir -p "$DIST_DIR/data"
 mkdir -p "$DIST_DIR/logs"
 mkdir -p "$DIST_DIR/migrations"
 
-# Build backend
-echo -e "${YELLOW}[1/4]${NC} Compiling Rust backend (release mode)..."
+# 构建后端
+echo -e "${YELLOW}[3/5]${NC} 编译 Rust 后端 (release 模式)..."
 cd "$BACKEND_DIR"
+
+# 确保 Rust 环境已加载
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
+
+# 构建
 cargo build --release
 
-# Copy binary
-echo -e "${YELLOW}[2/4]${NC} Copying backend binary..."
+# 复制二进制文件
+echo -e "${YELLOW}[4/5]${NC} 复制后端二进制文件..."
 cp target/release/starrocks-admin "$DIST_DIR/bin/"
 
-# Create production configuration file
-echo -e "${YELLOW}[3/4]${NC} Creating production configuration file..."
+# 创建生产配置文件
+echo -e "${YELLOW}[5/5]${NC} 创建生产配置文件..."
 cat > "$DIST_DIR/conf/config.toml" << 'EOF'
 [server]
 host = "0.0.0.0"
@@ -66,18 +89,14 @@ file = "logs/starrocks-admin.log"
 enabled = true
 web_root = "web"
 EOF
-echo "Created production config.toml"
 
-# Copy migrations
-echo -e "${YELLOW}[4/4]${NC} Copying database migrations..."
+# 复制数据库迁移文件
 if [ -d "$BACKEND_DIR/migrations" ]; then
     cp -r "$BACKEND_DIR/migrations"/* "$DIST_DIR/migrations/"
-    echo "Copied $(ls "$DIST_DIR/migrations" | wc -l) migration files"
-else
-    echo "Warning: No migrations directory found in backend"
+    echo "复制了 $(ls "$DIST_DIR/migrations" | wc -l) 个迁移文件"
 fi
 
-# Create enhanced start script for backend
+# 创建启动脚本
 cat > "$DIST_DIR/bin/starrocks-admin.sh" << 'EOF'
 #!/bin/bash
 
@@ -256,7 +275,7 @@ start_service() {
         echo "  - PID: $BACKEND_PID"
         echo "  - 健康检查: http://$HOST:$PORT/health"
         echo "  - Web UI: http://$HOST:$PORT"
-echo ""
+        echo ""
 
         # 测试健康检查
         if curl -s "http://$HOST:$PORT/health" > /dev/null 2>&1; then
@@ -389,8 +408,11 @@ EOF
 
 chmod +x "$DIST_DIR/bin/starrocks-admin.sh"
 
+# 更新构建时间戳
+update_build_timestamp "$LAST_BUILD_FILE"
+
 echo ""
-echo -e "${GREEN}✓ Backend build complete!${NC}"
-echo -e "  Binary: $DIST_DIR/bin/starrocks-admin"
-echo -e "  Startup script: $DIST_DIR/bin/starrocks-admin.sh"
-echo -e "  Config file: $DIST_DIR/conf/config.toml"
+echo -e "${GREEN}✓ 后端构建完成!${NC}"
+echo -e "  二进制文件: $DIST_DIR/bin/starrocks-admin"
+echo -e "  启动脚本: $DIST_DIR/bin/starrocks-admin.sh"
+echo -e "  配置文件: $DIST_DIR/conf/config.toml"

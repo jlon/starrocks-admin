@@ -78,12 +78,15 @@ pub async fn list_databases(
     
     // Get catalog parameter if provided
     if let Some(catalog_name) = params.get("catalog") {
-        // First switch to the catalog, then show databases
-        // Try without backticks - StarRocks may not support them for catalog names
-        let use_catalog_sql = format!("USE CATALOG {}", catalog_name);
-        if let Err(e) = mysql_client.execute(&use_catalog_sql).await {
-            tracing::warn!("Failed to switch to catalog {}: {}", catalog_name, e);
-            // Continue anyway, might be using default catalog
+        // Skip switching to default_catalog - it's already active by default
+        if !catalog_name.is_empty() && catalog_name != "default_catalog" {
+            // First switch to the catalog, then show databases
+            // Try without backticks - StarRocks may not support them for catalog names
+            let use_catalog_sql = format!("USE CATALOG {}", catalog_name);
+            if let Err(e) = mysql_client.execute(&use_catalog_sql).await {
+                tracing::warn!("Failed to switch to catalog {}: {}", catalog_name, e);
+                // Continue anyway, might be using default catalog
+            }
         }
     }
     
@@ -149,15 +152,18 @@ pub async fn list_catalogs_with_databases(
     
     // Step 2: For each catalog, switch to it and get databases
     for catalog_name in &catalog_names {
-        // Switch to catalog (without backticks - StarRocks may not support them for catalog names)
-        let use_catalog_sql = format!("USE CATALOG {}", catalog_name);
-        if let Err(e) = mysql_client.execute(&use_catalog_sql).await {
-            tracing::warn!("Failed to switch to catalog {}: {}", catalog_name, e);
-            catalogs.push(CatalogWithDatabases {
-                catalog: catalog_name.clone(),
-                databases: Vec::new(),
-            });
-            continue;
+        // Skip switching to default_catalog - it's already active by default
+        if catalog_name != "default_catalog" {
+            // Switch to catalog (without backticks - StarRocks may not support them for catalog names)
+            let use_catalog_sql = format!("USE CATALOG {}", catalog_name);
+            if let Err(e) = mysql_client.execute(&use_catalog_sql).await {
+                tracing::warn!("Failed to switch to catalog {}: {}", catalog_name, e);
+                catalogs.push(CatalogWithDatabases {
+                    catalog: catalog_name.clone(),
+                    databases: Vec::new(),
+                });
+                continue;
+            }
         }
         
         // Get databases for this catalog
@@ -212,9 +218,118 @@ pub async fn list_catalogs_with_databases(
 )]
 pub async fn list_queries(State(state): State<Arc<AppState>>) -> ApiResult<Json<Vec<Query>>> {
     let cluster = state.cluster_service.get_active_cluster().await?;
-    let client = StarRocksClient::new(cluster);
-    let queries = client.get_queries().await?;
-    Ok(Json(queries))
+    
+    tracing::info!("[list_queries] Fetching running queries for cluster: {} (ID: {})", cluster.name, cluster.id);
+    
+    // Try HTTP API first
+    let client = StarRocksClient::new(cluster.clone());
+    match client.get_queries().await {
+        Ok(queries) if !queries.is_empty() => {
+            tracing::info!("[list_queries] Successfully retrieved {} running queries via HTTP API", queries.len());
+            return Ok(Json(queries));
+        },
+        Ok(queries) => {
+            tracing::info!("[list_queries] HTTP API returned empty list ({} queries), will try MySQL client as fallback", queries.len());
+        },
+        Err(e) => {
+            tracing::warn!("[list_queries] HTTP API failed to fetch queries: {}. Will try MySQL client as fallback", e);
+        },
+    }
+    
+    // Fallback: Try using MySQL client to query via SHOW PROC '/current_queries'
+    // Note: StarRocks supports SHOW PROC via MySQL protocol in some versions
+    tracing::info!("[list_queries] Attempting to fetch queries via MySQL client as fallback");
+    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
+    let mysql_client = MySQLClient::from_pool(pool);
+    
+    // Try SHOW PROC '/current_queries' via MySQL
+    match mysql_client.query_raw("SHOW PROC '/current_queries'", None, None).await {
+        Ok((columns, rows)) => {
+            tracing::info!("[list_queries] MySQL SHOW PROC returned {} rows with {} columns: {:?}", 
+                rows.len(), columns.len(), columns);
+            
+            if rows.is_empty() {
+                tracing::info!("[list_queries] No running queries found via MySQL SHOW PROC");
+                return Ok(Json(Vec::new()));
+            }
+            
+            // Parse rows into Query objects
+            // Actual columns from SHOW PROC '/current_queries':
+            // StartTime, feIp, QueryId, ConnectionId, Database, User, ScanBytes, ScanRows, 
+            // MemoryUsage, DiskSpillSize, CPUTime, ExecTime, ExecProgress, Warehouse, CustomQueryId, ResourceGroup
+            let mut queries = Vec::new();
+            
+            // Find column indices (case-insensitive matching for robustness)
+            let find_col = |name: &str| -> Option<usize> {
+                columns.iter().position(|c| c.eq_ignore_ascii_case(name))
+            };
+            
+            let query_id_idx = find_col("QueryId");
+            let connection_id_idx = find_col("ConnectionId");
+            let database_idx = find_col("Database");
+            let user_idx = find_col("User");
+            let scan_bytes_idx = find_col("ScanBytes");
+            let scan_rows_idx = find_col("ScanRows");  // Changed from ProcessRows
+            let cpu_time_idx = find_col("CPUTime");
+            let exec_time_idx = find_col("ExecTime");
+            // Sql column may not exist in PROC output, try ExecProgress or use empty string
+            let sql_idx = find_col("Sql").or_else(|| find_col("ExecProgress")).or_else(|| find_col("Statement"));
+            
+            tracing::debug!("[list_queries] Column indices - QueryId: {:?}, ConnectionId: {:?}, Database: {:?}, User: {:?}, ScanRows: {:?}, Sql: {:?}", 
+                query_id_idx, connection_id_idx, database_idx, user_idx, scan_rows_idx, sql_idx);
+            tracing::debug!("[list_queries] All available columns: {:?}", columns);
+            
+            for (row_idx, row) in rows.iter().enumerate() {
+                // Required columns for Query struct
+                if let (Some(query_id_idx), Some(connection_id_idx), Some(database_idx), 
+                        Some(user_idx), Some(scan_bytes_idx), Some(scan_rows_idx),
+                        Some(cpu_time_idx), Some(exec_time_idx)) = 
+                    (query_id_idx, connection_id_idx, database_idx, user_idx,
+                     scan_bytes_idx, scan_rows_idx, cpu_time_idx, exec_time_idx) {
+                    
+                    // Sql is optional - use ExecProgress if Sql doesn't exist, or empty string
+                    let sql_value = sql_idx.and_then(|idx| row.get(idx).cloned()).unwrap_or_else(|| {
+                        // Try to get ExecProgress as fallback
+                        find_col("ExecProgress").and_then(|idx| row.get(idx).cloned()).unwrap_or_default()
+                    });
+                    
+                    let query = Query {
+                        query_id: row.get(query_id_idx).cloned().unwrap_or_default(),
+                        connection_id: row.get(connection_id_idx).cloned().unwrap_or_default(),
+                        database: row.get(database_idx).cloned().unwrap_or_default(),
+                        user: row.get(user_idx).cloned().unwrap_or_default(),
+                        scan_bytes: row.get(scan_bytes_idx).cloned().unwrap_or_default(),
+                        process_rows: row.get(scan_rows_idx).cloned().unwrap_or_default(), // Maps to ScanRows
+                        cpu_time: row.get(cpu_time_idx).cloned().unwrap_or_default(),
+                        exec_time: row.get(exec_time_idx).cloned().unwrap_or_default(),
+                        sql: sql_value,
+                    };
+                    tracing::debug!("[list_queries] Parsed query {}: QueryId={}, User={}, Database={}, ExecTime={}", 
+                        row_idx, query.query_id, query.user, query.database, query.exec_time);
+                    queries.push(query);
+                } else {
+                    tracing::warn!("[list_queries] Missing required columns in row {}. Available columns: {:?}", row_idx, columns);
+                    tracing::warn!("[list_queries] Found indices - QueryId: {:?}, ConnectionId: {:?}, Database: {:?}, User: {:?}, ScanRows: {:?}, Sql: {:?}", 
+                        query_id_idx, connection_id_idx, database_idx, user_idx, scan_rows_idx, sql_idx);
+                    // Continue processing other rows instead of breaking
+                }
+            }
+            
+            if !queries.is_empty() {
+                tracing::info!("[list_queries] Successfully parsed {} queries from MySQL SHOW PROC", queries.len());
+                return Ok(Json(queries));
+            } else {
+                tracing::warn!("[list_queries] MySQL SHOW PROC returned {} rows but failed to parse any queries", rows.len());
+            }
+        },
+        Err(e) => {
+            tracing::warn!("[list_queries] MySQL SHOW PROC '/current_queries' failed: {}", e);
+        },
+    }
+    
+    // If both methods failed or returned empty, return empty list
+    tracing::info!("[list_queries] No running queries found (both HTTP API and MySQL methods tried)");
+    Ok(Json(Vec::new()))
 }
 
 // Kill a query
@@ -279,7 +394,8 @@ pub async fn execute_sql(
 
     // If catalog is specified, switch to it first
     if let Some(ref cat) = request.catalog {
-        if !cat.is_empty() {
+        // Skip switching to default_catalog - it's already active by default
+        if !cat.is_empty() && cat != "default_catalog" {
             let use_catalog_sql = format!("USE CATALOG `{}`", cat);
             tracing::debug!("Executing USE CATALOG: {}", use_catalog_sql);
             if let Err(e) = mysql_client.execute(&use_catalog_sql).await {

@@ -125,6 +125,53 @@ enabled = true
 web_root = "web"
 ```
 
+## Development
+
+### Hot Reload Development
+
+For rapid development iteration, the project supports hot reload:
+
+```bash
+# Development environment with separate terminal windows
+make dev
+
+# Or start in background mode
+make dev-start
+
+# View service status
+make dev-status
+
+# View real-time logs
+make dev-logs
+
+# Stop services
+make dev-stop
+
+# Restart services
+make dev-restart
+```
+
+### Development Features
+
+- **Optimized Build**: Incremental compilation with dependency caching
+- **Hot Reload**: Code changes automatically reload without manual restart
+- **Backend**: Uses `cargo-watch` for automatic Rust code recompilation
+- **Frontend**: Angular development server with built-in hot reload
+- **Fast Iteration**: Modify code → Save → Instant preview
+- **Smart Caching**: Third-party libraries are pre-compiled and cached
+
+### Quick Commands
+
+```bash
+# One command to start everything with hot reload
+make dev
+
+# The development environment will be available at:
+# - Frontend: http://localhost:4200
+# - Backend:  http://localhost:8081
+# - API Docs: http://localhost:8081/api-docs
+```
+
 ## Contributing
 
 We welcome all forms of contributions! Please follow these steps:
@@ -270,6 +317,79 @@ enabled = true
 web_root = "web"
 ```
 
+## 日志配置说明（后端）
+
+> 为了安全和环境灵活性，后端 `.env.development`、`.env.production` 日志配置文件未纳入仓库，请**按需在 backend 目录下自行创建**。
+
+- **开发环境**：彩色格式化日志，利于本地调试
+- **生产环境**：结构化 JSON 日志，方便聚合收集
+
+**范例：backend/.env.development**
+```env
+LOG_FORMAT=pretty
+RUST_LOG=starrocks_admin=debug,tower_http=debug
+RUST_LOG_STYLE=always
+```
+**范例：backend/.env.production**
+```env
+LOG_FORMAT=json
+RUST_LOG=starrocks_admin=info,tower_http=warn
+RUST_LOG_STYLE=never
+```
+
+**切换方法：**
+- 开发调试：`cp .env.development .env`
+- 生产上线：`cp .env.production .env`
+
+本项目已自动识别并加载 `.env` 文件，无需手动 export 环境变量。
+
+## 开发指南
+
+### 热重载开发
+
+为了支持快速开发迭代，项目支持热重载：
+
+```bash
+# 启动开发环境（前后端分离终端窗口）
+make dev
+
+# 或以后台模式启动
+make dev-start
+
+# 查看服务状态
+make dev-status
+
+# 查看实时日志
+make dev-logs
+
+# 停止服务
+make dev-stop
+
+# 重启服务
+make dev-restart
+```
+
+### 开发特性
+
+- **优化构建**：增量编译与依赖缓存，大幅提升编译速度
+- **热重载**：代码修改自动重新加载，无需手动重启
+- **后端**：使用 `cargo-watch` 实现 Rust 代码自动重新编译
+- **前端**：Angular 开发服务器自带热重载
+- **快速迭代**：修改代码 → 保存 → 即时预览
+- **智能缓存**：第三方库预编译缓存，避免重复编译
+
+### 快速命令
+
+```bash
+# 一个命令启动所有服务（前后端分离终端窗口，方便查看日志）
+make dev
+
+# 开发环境将运行在：
+# - 前端: http://localhost:4200
+# - 后端:  http://localhost:8081
+# - API文档: http://localhost:8081/api-docs
+```
+
 ## 贡献
 
 我们欢迎所有形式的贡献！请遵循以下步骤：
@@ -290,6 +410,134 @@ web_root = "web"
 - [Nebular](https://John.github.io/nebular/) - 漂亮的 UI 组件库
 - [Axum](https://github.com/tokio-rs/axum) - 强大的 Rust Web 框架
 - [StarRocks](https://www.starrocks.io/) - 高性能分析数据库
+
+## 修改记录
+
+### 2025-10-31: 功能分支合并 - 日志优化、查询修复、构建优化
+
+#### 会话主要目的
+- 将三个功能分支合并到主分支
+- 日志格式优化功能
+- 运行中查询功能修复
+- Rust 编译速度优化
+
+#### 完成的主要任务
+1. **日志格式优化** (`feature/log-format-improvement`)
+   - 支持开发/生产环境日志格式切换（LOG_FORMAT 环境变量）
+   - 集成 dotenvy 自动加载 .env 文件
+   - 实现美化彩色日志（开发）与结构化 JSON 日志（生产）
+   - 添加日志配置指南文档
+
+2. **查询功能修复** (`feature/fix-running-queries`)
+   - 修复运行中的查询功能列名匹配问题（ScanRows vs ProcessRows）
+   - 使用大小写不敏感匹配查找列名
+   - 将 Sql 列设为可选，使用 ExecProgress 作为备用
+   - 添加 HTTP API 和 MySQL 客户端双重备用方案
+   - 修复 Angular CommonJS 警告（添加 nearley 和 sql-formatter）
+
+3. **构建优化** (`feature/build-optimization`)
+   - 自动检测 CPU 核心数并设置并行任务数（使用 75% 核心，最多 14 个）
+   - 优化 codegen-units 从 1 改为 16，平衡编译速度和代码质量
+   - 改进启动脚本，自动设置 CARGO_BUILD_JOBS 环境变量
+   - 添加详细的编译速度优化指南文档
+
+4. **分支管理实践**
+   - 创建 Git 分支管理实战指南文档
+   - 记录提交拆分与分支重组的完整流程
+
+#### 关键决策和解决方案
+- **分支分离**：确保每个功能分支主题单一，避免功能混杂
+- **合并策略**：使用 Fast-forward 和 Merge commit 相结合的策略
+- **文档完善**：为分支管理操作创建实战指南，便于团队参考
+
+#### 使用的技术栈
+- Rust: cargo build, cargo watch, 编译优化配置
+- Angular: CommonJS 依赖配置
+- Git: 分支管理、提交拆分、合并策略
+- StarRocks: SHOW PROC 命令解析
+
+#### 修改的文件
+
+**日志优化相关：**
+- `backend/src/main.rs` - 集成 dotenvy 和日志初始化
+- `backend/Cargo.toml` - 更新 tracing 依赖
+- `backend/.env.development` - 开发环境日志配置（新建）
+- `backend/.env.production` - 生产环境日志配置（新建）
+- `README.md` - 添加日志配置指南
+
+**查询功能修复：**
+- `backend/src/handlers/query.rs` - 修复列名匹配和解析逻辑
+- `backend/src/services/starrocks_client.rs` - 改进查询解析和错误处理
+- `frontend/angular.json` - 修复 CommonJS 警告
+
+**构建优化：**
+- `backend/.cargo/config.toml` - 优化编译配置
+- `scripts/dev/start_backend_dev_optimized.sh` - 编译优化脚本
+- `dev-doc/编译速度优化.md` - 优化指南文档（新建）
+
+**文档：**
+- `dev-doc/Git分支管理实战指南-提交拆分与分支重组.md` - 分支管理实战指南（新建）
+
+### 2025-01-25: 优化构建系统和修复代码质量问题
+
+#### 会话主要目的
+- 修复 cargo 文件锁检测逻辑问题
+- 优化构建系统代码结构
+- 修复业务代码质量问题
+- 分批提交构建代码和业务代码
+
+#### 完成的主要任务
+1. **修复 cargo 进程检测逻辑**
+   - 移除了不准确的 `pgrep` 进程检测
+   - 改为直接编译 + 超时保护机制
+   - 让 cargo 自动处理文件锁等待
+
+2. **代码质量检查与修复**
+   - 修复 Rust Clippy 警告（collapsible if, needless borrow, get(0)）
+   - 修复 Angular Lint 警告（OnInit 接口实现）
+   - 优化 Rust 代码格式
+
+3. **分批代码提交**
+   - 第一批：构建系统代码（Makefile、脚本、配置文件等）
+   - 第二批：业务代码（backend/src、frontend/src）
+
+#### 关键决策和解决方案
+- **文件锁处理**：信任 cargo 内置的文件锁机制，不再手动检测进程，避免误判
+- **超时保护**：添加 5 分钟编译超时保护，防止无限等待
+- **代码分离提交**：将构建代码和业务代码分开提交，便于代码审查和维护
+
+#### 使用的技术栈
+- Rust: cargo build, cargo watch, cargo clippy, cargo fmt
+- Angular: ng lint, prettier
+- Git: 分批提交策略
+
+#### 修改的文件
+
+**构建系统文件（第一批提交）：**
+- `Makefile` - 优化构建命令复用
+- `.gitignore` - 更新忽略规则
+- `backend/.cargo/config.toml` - Cargo 配置优化
+- `scripts/dev/start_backend.sh` - 修复文件锁检测逻辑
+- `scripts/dev/check_status.sh` - 服务状态检测脚本
+- `scripts/dev/common.sh` - WSL 环境检测公共函数
+- `scripts/dev/start_separate_terminals.sh` - 分离终端启动脚本
+- `scripts/dev/stop.sh` - 服务停止脚本优化
+- `scripts/dev/incremental_build.sh` - 增量构建脚本
+- `scripts/dev/install_nodejs.sh` - Node.js 安装脚本
+- `scripts/config/generate-frontend-environments.js` - 前端环境配置生成
+- `scripts/quality-check.sh` - 代码质量检查脚本
+- `dev-doc/开发环境优化说明.md` - 开发环境优化文档
+- `dev-doc/热重载优化说明.md` - 热重载优化文档
+- `README.md` - 更新文档说明
+
+**业务代码文件（第二批提交）：**
+- `backend/src/config.rs` - 修复 Clippy 警告
+- `backend/src/handlers/overview.rs` - 代码优化
+- `backend/src/services/mod.rs` - 代码优化
+- `backend/src/services/overview_service.rs` - 修复 Clippy 警告和代码格式
+- `frontend/src/app/pages/starrocks/cluster-overview/metric-card-group/metric-card-group.component.ts` - 修复 Angular Lint 警告
+- `frontend/src/environments/environment.ts` - 环境配置更新
+- `frontend/src/environments/environment.prod.ts` - 生产环境配置更新
 
 ## 捐赠支持
 

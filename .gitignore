@@ -12,6 +12,30 @@ backend/tmp/
 backend/logs/
 backend/sqlite*
 
+# Rust build artifacts and logs
+**/target/
+**/*.rlib
+**/*.rmeta
+**/*.d
+**/*.pdb
+**/*.ilk
+**/*.exp
+**/*.lib
+**/*.a
+**/*.so
+**/*.dylib
+**/*.dll
+**/*.exe
+**/*.pdb
+**/*.map
+**/*.log
+**/*.pid
+**/*.tmp
+**/*.swp
+**/*.swo
+**/*.orig
+**/*.rej
+
 
 
 # Frontend (from frontend)
@@ -34,6 +58,16 @@ frontend/e2e/*.js
 frontend/e2e/*.map
 frontend/package-lock.json
 
+# Angular build artifacts
+**/dist/
+**/build/
+**/.angular/
+**/coverage/
+**/e2e/
+**/*.spec.ts
+**/*.spec.js
+**/*.spec.js.map
+
 # Backend runtime (from testing)
 backend/conf/
 backend/logs/
@@ -50,6 +84,7 @@ backend/logs/
 # Build artifacts
 /build/dist/
 /build/dist/web
+/build/data/
 /web/
 *.tar.gz
 

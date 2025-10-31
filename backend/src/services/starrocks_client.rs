@@ -151,6 +151,7 @@ impl StarRocksClient {
     // Get current queries
     pub async fn get_queries(&self) -> ApiResult<Vec<Query>> {
         let url = format!("{}/api/show_proc?path=/current_queries", self.get_base_url());
+        tracing::debug!("Fetching current queries from: {}", url);
 
         let response = self
             .http_client
@@ -158,7 +159,10 @@ impl StarRocksClient {
             .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
             .send()
             .await
-            .map_err(|e| ApiError::cluster_connection_failed(format!("Request failed: {}", e)))?;
+            .map_err(|e| {
+                tracing::error!("Failed to send request to StarRocks: {}", e);
+                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             tracing::warn!("Failed to fetch current_queries, HTTP status: {}", response.status());
@@ -166,39 +170,48 @@ impl StarRocksClient {
         }
 
         let data: Value = response.json().await.map_err(|e| {
-            tracing::warn!("Failed to parse current_queries response: {}", e);
+            tracing::error!("Failed to parse current_queries JSON response: {}", e);
             ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
         })?;
 
-        tracing::debug!("StarRocks /current_queries response: {}", data);
+        tracing::info!("StarRocks /current_queries raw response type: {:?}, content: {}", 
+            if data.is_array() { "array" } else if data.is_object() { "object" } else { "other" },
+            serde_json::to_string_pretty(&data).unwrap_or_else(|_| "Failed to serialize".to_string())
+        );
 
         // Handle empty array response (no running queries)
         if data.is_array() {
+            tracing::debug!("Response is an array, attempting direct deserialization");
             match serde_json::from_value::<Vec<Query>>(data.clone()) {
                 Ok(queries) => {
-                    tracing::debug!("Parsed {} running queries from direct array", queries.len());
+                    tracing::info!("Successfully parsed {} running queries from direct array format", queries.len());
                     return Ok(queries);
                 },
-                Err(e) => tracing::debug!("Failed to parse array format: {}", e),
+                Err(e) => {
+                    tracing::warn!("Failed to parse array format: {}. Will try PROC format parsing.", e);
+                    tracing::debug!("Array content: {}", serde_json::to_string(&data).unwrap_or_else(|_| "Failed to serialize".to_string()));
+                },
             }
         }
 
         // Handle empty object {} response
         if data.is_object() && data.as_object().map(|o| o.is_empty()).unwrap_or(false) {
-            tracing::debug!("StarRocks returned empty object, no running queries");
+            tracing::info!("StarRocks returned empty object, no running queries");
             return Ok(Vec::new());
         }
 
-        // Try fallback format parsing, but tolerate errors
+        // Try fallback format parsing (PROC format: {"columnNames": [...], "rows": [[...]]})
+        tracing::debug!("Attempting PROC format parsing");
         match Self::parse_proc_result::<Query>(&data) {
             Ok(queries) => {
-                tracing::debug!("Parsed {} running queries from PROC format", queries.len());
+                tracing::info!("Successfully parsed {} running queries from PROC format", queries.len());
                 Ok(queries)
             },
             Err(e) => {
-                tracing::warn!(
-                    "Failed to parse PROC format for current_queries: {}. Returning empty list.",
-                    e
+                tracing::error!(
+                    "Failed to parse PROC format for current_queries: {}. Response structure: {}",
+                    e,
+                    serde_json::to_string_pretty(&data).unwrap_or_else(|_| "Failed to serialize".to_string())
                 );
                 Ok(Vec::new()) // Return empty list instead of failing
             },
@@ -261,52 +274,88 @@ impl StarRocksClient {
     fn parse_proc_result<T: serde::de::DeserializeOwned>(data: &Value) -> ApiResult<Vec<T>> {
         // StarRocks PROC result format: {"columnNames": [...], "rows": [[...]]} or {"columns": [...], "rows": [...]}
 
+        tracing::debug!("Parsing PROC result, data keys: {:?}", 
+            data.as_object().map(|o| o.keys().collect::<Vec<_>>())
+        );
+
         // Try to extract column names (support both "columnNames" and "columns" keys)
         let column_names = if let Some(cols) = data["columnNames"].as_array() {
+            tracing::debug!("Found 'columnNames' field with {} columns", cols.len());
             cols
         } else if let Some(cols) = data["columns"].as_array() {
+            tracing::debug!("Found 'columns' field with {} columns", cols.len());
             cols
         } else {
             // Log the actual data structure for debugging
-            tracing::warn!(
-                "Invalid PROC result format. Keys: {:?}, Data: {}",
-                data.as_object().map(|o| o.keys().collect::<Vec<_>>()),
-                data
+            let keys: Vec<String> = data.as_object()
+                .map(|o| o.keys().map(|k| k.as_str().to_string()).collect())
+                .unwrap_or_default();
+            tracing::error!(
+                "Invalid PROC result format. Available keys: {:?}, Full data: {}",
+                keys,
+                serde_json::to_string_pretty(data).unwrap_or_else(|_| "Failed to serialize".to_string())
             );
             return Err(ApiError::internal_error(format!(
                 "Invalid PROC result format. Expected 'columnNames' or 'columns' field. Got: {}",
-                data.as_object()
-                    .map(|o| o.keys().map(|k| k.as_str()).collect::<Vec<_>>())
-                    .unwrap_or_default()
-                    .join(", ")
+                keys.join(", ")
             )));
         };
 
         let rows = data["rows"].as_array().ok_or_else(|| {
+            tracing::error!("Missing 'rows' field in PROC result. Available keys: {:?}", 
+                data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
             ApiError::internal_error("Invalid PROC result format: missing 'rows' field")
         })?;
 
-        let mut results = Vec::new();
+        tracing::debug!("Found {} rows to parse", rows.len());
 
-        for row in rows {
-            let row_array = row
-                .as_array()
-                .ok_or_else(|| ApiError::internal_error("Invalid row format"))?;
+        let mut results = Vec::new();
+        let mut parse_errors = Vec::new();
+
+        for (row_idx, row) in rows.iter().enumerate() {
+            let row_array = row.as_array().ok_or_else(|| {
+                let error = format!("Row {} is not an array", row_idx);
+                tracing::warn!("{}", error);
+                ApiError::internal_error(error)
+            })?;
 
             // Create a JSON object from column names and row values
             let mut obj = serde_json::Map::new();
             for (i, col_name) in column_names.iter().enumerate() {
-                if let Some(col_name_str) = col_name.as_str()
-                    && let Some(value) = row_array.get(i)
-                {
-                    obj.insert(col_name_str.to_string(), value.clone());
+                if let Some(col_name_str) = col_name.as_str() {
+                    let value = row_array.get(i).cloned().unwrap_or(Value::Null);
+                    obj.insert(col_name_str.to_string(), value);
                 }
             }
 
-            let item: T = serde_json::from_value(Value::Object(obj))
-                .map_err(|e| ApiError::internal_error(format!("Failed to parse item: {}", e)))?;
+            tracing::debug!("Row {}: Created object with {} fields", row_idx, obj.len());
 
-            results.push(item);
+            match serde_json::from_value::<T>(Value::Object(obj)) {
+                Ok(item) => {
+                    results.push(item);
+                },
+                Err(e) => {
+                    let error_msg = format!("Failed to parse row {}: {}", row_idx, e);
+                    tracing::warn!("{}", error_msg);
+                    parse_errors.push(error_msg);
+                    // Continue parsing other rows even if one fails
+                },
+            }
+        }
+
+        if !parse_errors.is_empty() && results.is_empty() {
+            // If all rows failed to parse, return error
+            return Err(ApiError::internal_error(format!(
+                "Failed to parse all rows. First error: {}",
+                parse_errors.first().unwrap()
+            )));
+        }
+
+        if !parse_errors.is_empty() {
+            tracing::warn!("Parsed {}/{} rows successfully. {} rows failed to parse.", 
+                results.len(), rows.len(), parse_errors.len());
+        } else {
+            tracing::debug!("Successfully parsed all {} rows", results.len());
         }
 
         Ok(results)

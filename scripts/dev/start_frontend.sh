@@ -8,10 +8,17 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
+SHARED_CONFIG="$PROJECT_ROOT/conf/shared.json"
 HOST="0.0.0.0"
-PORT="4200"
 LOG_FILE="$PROJECT_ROOT/frontend/frontend.log"
 PID_FILE="$PROJECT_ROOT/frontend/frontend.pid"
+
+# 从共享配置读取端口（如果可用）
+if command -v jq > /dev/null 2>&1 && [ -f "$SHARED_CONFIG" ]; then
+    PORT=$(jq -r '.dev.frontend.port' "$SHARED_CONFIG" 2>/dev/null || echo "4200")
+else
+    PORT="4200"
+fi
 
 # 颜色输出
 GREEN='\033[0;32m'
@@ -71,14 +78,62 @@ start_service() {
     echo -e "${GREEN}========================================${NC}"
     echo ""
 
-    # 检查Node.js和npm
+    # 检查Node.js和npm（确保在 WSL 环境中）
+    echo -e "${YELLOW}[INFO]${NC} 检查 WSL 环境中的 Node.js..."
     if ! command -v node >/dev/null 2>&1; then
-        echo -e "${RED}[ERROR]${NC} Node.js 未安装，请先安装 Node.js"
-        exit 1
+        echo -e "${RED}[ERROR]${NC} Node.js 未在 WSL 中安装"
+        echo ""
+        
+        # 检查是否在交互式终端中
+        if [ -t 0 ]; then
+            echo -e "${YELLOW}[INFO]${NC} 是否要现在安装 Node.js? (y/N)"
+            read -p "> " -n 1 -r
+            echo ""
+            
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                echo -e "${BLUE}[INFO]${NC} 正在安装 Node.js..."
+                bash "$PROJECT_ROOT/scripts/dev/install_nodejs.sh"
+                # 重新加载 PATH
+                export PATH="$PATH"
+            else
+                echo -e "${YELLOW}[INFO]${NC} 已跳过安装"
+                echo ""
+                echo -e "您可以稍后手动安装 Node.js："
+                echo -e "  bash scripts/dev/install_nodejs.sh"
+                echo ""
+                echo -e "或使用命令："
+                echo -e "  curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -"
+                echo -e "  sudo apt-get install -y nodejs"
+                exit 1
+            fi
+        else
+            # 非交互式模式，提示用户手动安装
+            echo -e "${YELLOW}[INFO]${NC} 非交互式模式，无法自动安装"
+            echo ""
+            echo -e "请手动安装 Node.js："
+            echo -e "  bash scripts/dev/install_nodejs.sh"
+            echo ""
+            echo -e "或使用命令："
+            echo -e "  curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -"
+            echo -e "  sudo apt-get install -y nodejs"
+            exit 1
+        fi
     fi
 
     if ! command -v npm >/dev/null 2>&1; then
-        echo -e "${RED}[ERROR]${NC} npm 未安装，请先安装 npm"
+        echo -e "${RED}[ERROR]${NC} npm 未在 WSL 中安装，请先安装 npm"
+        exit 1
+    fi
+    
+    # 加载公共函数
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "$SCRIPT_DIR/common.sh"
+    
+    # 验证 Node.js 是否在 WSL 中
+    if ! verify_wsl_tool "node" "Node.js"; then
+        echo -e "${YELLOW}[INFO]${NC} 前端必须在 WSL 中运行，请安装 WSL 版本的 Node.js："
+        echo -e "  bash scripts/dev/install_nodejs.sh"
+        echo ""
         exit 1
     fi
 
@@ -92,6 +147,15 @@ start_service() {
     if [ ! -f "$FRONTEND_DIR/package.json" ]; then
         echo -e "${RED}[ERROR]${NC} package.json 不存在: $FRONTEND_DIR/package.json"
         exit 1
+    fi
+
+    # 生成前端环境配置文件
+    echo -e "${YELLOW}[INFO]${NC} 生成前端环境配置文件..."
+    cd "$FRONTEND_DIR"
+    if npm run config:generate > /dev/null 2>&1; then
+        echo -e "${GREEN}[INFO]${NC} 前端环境配置已生成"
+    else
+        echo -e "${YELLOW}[WARNING]${NC} 无法自动生成前端环境配置，将使用现有配置"
     fi
 
     # 安装依赖
@@ -122,8 +186,16 @@ start_service() {
         sleep 2
     fi
 
-    # 启动Angular开发服务器
-    nohup npm start -- --host $HOST --port $PORT > "$LOG_FILE" 2>&1 &
+    # 启动Angular开发服务器（在 WSL 中）
+    # 注意: package.json 中已经包含了 --host 0.0.0.0 --disable-host-check --poll 2000
+    # 如果需要指定端口，可以通过环境变量或修改 package.json
+    echo -e "${GREEN}[START]${NC} 在 WSL 中启动前端服务..."
+    # 如果端口不是默认的4200，需要通过参数覆盖
+    if [ "$PORT" != "4200" ]; then
+        nohup npm start -- --port $PORT > "$LOG_FILE" 2>&1 &
+    else
+        nohup npm start > "$LOG_FILE" 2>&1 &
+    fi
     FRONTEND_PID=$!
     echo $FRONTEND_PID > "$PID_FILE"
 

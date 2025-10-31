@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { trigger, transition, style, animate } from '@angular/animations';
 
 @Component({
@@ -17,7 +17,7 @@ import { trigger, transition, style, animate } from '@angular/animations';
     ]),
   ],
 })
-export class MetricCardGroupComponent {
+export class MetricCardGroupComponent implements OnInit {
   @Input() title: string;
   @Input() icon: string;
   @Input() collapsed: boolean = false;

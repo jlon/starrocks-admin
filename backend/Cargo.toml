@@ -18,7 +18,7 @@ tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 tokio = { version = "1", features = ["full"] }
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "migrate", "chrono"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "migrate", "chrono"] }
 mysql_async = "0.34"
 
 # Serialization
@@ -26,11 +26,15 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Authentication
-jsonwebtoken = "9.2"
+jsonwebtoken = "9.3"
 bcrypt = "0.15"
 
 # HTTP client for StarRocks
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Security fixes - force update vulnerable dependencies
+idna = "0.5"
+rsa = "0.9.7"
 
 # Configuration
 dotenvy = "0.15"
@@ -45,7 +49,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
 
 # API documentation

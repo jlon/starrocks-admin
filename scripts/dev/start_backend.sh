@@ -9,6 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 CONFIG_DIR="$PROJECT_ROOT/backend/conf"
+SHARED_CONFIG="$PROJECT_ROOT/conf/shared.json"
+DEV_CONFIG_DIR="$PROJECT_ROOT/conf/dev"
 DB_DIR="${DB_DIR:-$PROJECT_ROOT/backend/data}"
 LOG_DIR="${LOG_DIR:-$PROJECT_ROOT/backend/logs}"
 PID_FILE="$PROJECT_ROOT/backend/starrocks-admin.pid"
@@ -71,45 +73,96 @@ start_service() {
     echo -e "${GREEN}========================================${NC}"
     echo ""
 
+    # 加载 Rust 环境（如果存在）
+    if [ -f "$HOME/.cargo/env" ]; then
+        source "$HOME/.cargo/env"
+    fi
+    
+    # 加载公共函数
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "$SCRIPT_DIR/common.sh"
+    
+    # 验证当前在 WSL 环境中
+    echo -e "${YELLOW}[INFO]${NC} 验证运行环境..."
+    print_wsl_status || echo -e "${YELLOW}[WARNING]${NC} 继续尝试启动..."
+
+    # 验证 Rust 工具链在 WSL 中
+    echo -e "${YELLOW}[INFO]${NC} 验证 Rust 工具链..."
+    if ! verify_wsl_tool "cargo" "Cargo"; then
+        echo -e "${YELLOW}[INFO]${NC} 请确保 Rust 工具链已安装在 WSL 中"
+        exit 1
+    fi
+
     # 创建必要的目录
     echo -e "${YELLOW}[INFO]${NC} 创建必要的目录..."
     mkdir -p "$DB_DIR"
     mkdir -p "$LOG_DIR"
     mkdir -p "$CONFIG_DIR"
 
-    # 创建开发环境配置文件
-    echo -e "${YELLOW}[INFO]${NC} 重新创建开发环境配置文件..."
-    rm -f "$CONFIG_DIR/config.toml"
-    cat > "$CONFIG_DIR/config.toml" << 'EOF'
-[server]
-host = "0.0.0.0"
-port = 8081
+    # 使用统一的配置文件
+    echo -e "${YELLOW}[INFO]${NC} 使用统一配置文件..."
+    
+    # 检查共享配置文件是否存在
+    if [ ! -f "$SHARED_CONFIG" ]; then
+        echo -e "${RED}[ERROR]${NC} 共享配置文件不存在: $SHARED_CONFIG"
+        exit 1
+    fi
+    
+    # 检查开发环境配置文件是否存在
+    if [ ! -f "$DEV_CONFIG_DIR/config.toml" ]; then
+        echo -e "${RED}[ERROR]${NC} 开发环境配置文件不存在: $DEV_CONFIG_DIR/config.toml"
+        echo -e "${YELLOW}[INFO]${NC} 请确保 conf/dev/config.toml 文件存在"
+        exit 1
+    fi
+    
+    # 复制开发环境配置文件到后端配置目录
+    cp "$DEV_CONFIG_DIR/config.toml" "$CONFIG_DIR/config.toml"
+    echo -e "${GREEN}[INFO]${NC} 配置文件已复制: $CONFIG_DIR/config.toml"
+    
+    # 从共享配置读取端口信息（用于显示）
+    if command -v jq > /dev/null 2>&1; then
+        BACKEND_PORT=$(jq -r '.dev.backend.port' "$SHARED_CONFIG" 2>/dev/null || echo "8081")
+    else
+        BACKEND_PORT="8081"
+    fi
 
-[database]
-url = "sqlite:///tmp/starrocks-admin.db"
-
-[auth]
-jwt_secret = "dev-secret-key-change-in-production"
-jwt_expires_in = "24h"
-
-[cors]
-allow_origin = "http://0.0.0.0:4200"
-
-[logging]
-level = "debug"
-file = "logs/starrocks-admin.log"
-
-[static_config]
-enabled = false
-web_root = "../build/dist/web"
-EOF
-    echo -e "${GREEN}[INFO]${NC} 配置文件已创建: $CONFIG_DIR/config.toml"
-
-    # 强制重新编译以确保使用最新代码
-    echo -e "${YELLOW}[BUILD]${NC} 编译最新代码..."
+    # 检查是否需要编译（避免文件锁冲突）
+    echo -e "${YELLOW}[BUILD]${NC} 检查编译状态..."
     cd "$BACKEND_DIR"
-    cargo build --release
-    echo -e "${GREEN}[BUILD]${NC} 编译完成"
+    
+    # 检查可执行文件是否存在且是最新的
+    local needs_build=false
+    if [ ! -f "target/release/starrocks-admin" ]; then
+        needs_build=true
+        echo -e "${YELLOW}可执行文件不存在，需要编译...${NC}"
+    elif [ "src" -nt "target/release/starrocks-admin" ] 2>/dev/null || \
+         [ "Cargo.toml" -nt "target/release/starrocks-admin" ] 2>/dev/null; then
+        needs_build=true
+        echo -e "${YELLOW}检测到代码更新，需要重新编译...${NC}"
+    else
+        echo -e "${GREEN}✓ 可执行文件已存在且为最新，跳过编译${NC}"
+    fi
+    
+    # 如果需要编译，尝试编译（如果遇到锁会自动等待）
+    if [ "$needs_build" = "true" ]; then
+        echo -e "${YELLOW}开始编译...${NC}"
+        # 设置超时，如果30秒内无法获得锁则报错
+        # cargo 自己会处理文件锁等待，但我们可以添加超时保护
+        timeout 300 cargo build --release || {
+            local exit_code=$?
+            if [ $exit_code -eq 124 ]; then
+                echo -e "${RED}[ERROR]${NC} 编译超时（5分钟），可能因文件锁问题"
+                echo -e "${YELLOW}[提示]${NC} 请检查是否有其他 cargo 进程正在运行："
+                echo -e "  ps aux | grep cargo"
+                echo -e "  或运行: make dev-stop"
+                exit 1
+            else
+                echo -e "${RED}[ERROR]${NC} 编译失败，退出码: $exit_code"
+                exit $exit_code
+            fi
+        }
+        echo -e "${GREEN}[BUILD]${NC} 编译完成"
+    fi
     echo ""
 
     # 显示配置信息
@@ -120,9 +173,10 @@ EOF
     echo "  - 工作目录: $BACKEND_DIR"
     echo ""
 
-    # 启动后端
+    # 启动后端（设置环境变量）
     echo -e "${GREEN}[START]${NC} 启动后端服务..."
     cd "$BACKEND_DIR"
+    export APP_ENV=dev
     nohup ./target/release/starrocks-admin > "$LOG_DIR/starrocks-admin.log" 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > "$PID_FILE"
@@ -134,12 +188,12 @@ EOF
     if ps -p $BACKEND_PID > /dev/null; then
         echo -e "${GREEN}[SUCCESS]${NC} 后端启动成功!"
         echo "  - PID: $BACKEND_PID"
-        echo "  - 健康检查: http://localhost:8081/health"
-        echo "  - Web UI: http://localhost:8081"
+        echo "  - 健康检查: http://localhost:${BACKEND_PORT}/health"
+        echo "  - Web UI: http://localhost:${BACKEND_PORT}"
         echo ""
         
         # 测试健康检查
-        if curl -s "http://localhost:8081/health" > /dev/null 2>&1; then
+        if curl -s "http://localhost:${BACKEND_PORT}/health" > /dev/null 2>&1; then
             echo -e "${GREEN}[健康检查]${NC} ✅ Backend运行正常"
         else
             echo -e "${YELLOW}[警告]${NC} Backend已启动但健康检查失败，请查看日志"
@@ -206,11 +260,19 @@ show_status() {
         echo "  - PID: $pid"
         echo "  - 配置文件: $CONFIG_DIR/config.toml"
         echo "  - 日志文件: $LOG_DIR/starrocks-admin.log"
-        echo "  - 健康检查: http://localhost:8081/health"
-        echo "  - Web UI: http://localhost:8081"
+        
+        # 从共享配置读取端口
+        if command -v jq > /dev/null 2>&1 && [ -f "$SHARED_CONFIG" ]; then
+            BACKEND_PORT=$(jq -r '.dev.backend.port' "$SHARED_CONFIG" 2>/dev/null || echo "8081")
+        else
+            BACKEND_PORT="8081"
+        fi
+        
+        echo "  - 健康检查: http://localhost:${BACKEND_PORT}/health"
+        echo "  - Web UI: http://localhost:${BACKEND_PORT}"
         
         # 测试健康检查
-        if curl -s "http://localhost:8081/health" > /dev/null 2>&1; then
+        if curl -s "http://localhost:${BACKEND_PORT}/health" > /dev/null 2>&1; then
             echo -e "  - 健康状态: ${GREEN}✅ 正常${NC}"
         else
             echo -e "  - 健康状态: ${RED}❌ 异常${NC}"

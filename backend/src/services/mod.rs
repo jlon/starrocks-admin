@@ -21,10 +21,10 @@ pub use mysql_pool_manager::MySQLPoolManager;
 pub use overview_service::{
     Alert, AlertLevel, BECompactionScore, CapacityPrediction, ClusterHealth, ClusterOverview,
     CompactionDetailStats, CompactionDurationStats, CompactionStats, CompactionTaskStats,
-    ExtendedClusterOverview, HealthCard, HealthStatus, KeyPerformanceIndicators,
-    LoadJobStats, MaterializedViewStats, NetworkIOStats, OverviewService, PerformanceTrends,
-    ResourceMetrics, ResourceTrends, RunningQuery, SchemaChangeStats, SessionStats, TimeRange,
-    TopPartitionByScore, TransactionStats,
+    ExtendedClusterOverview, HealthCard, HealthStatus, KeyPerformanceIndicators, LoadJobStats,
+    MaterializedViewStats, NetworkIOStats, OverviewService, PerformanceTrends, ResourceMetrics,
+    ResourceTrends, RunningQuery, SchemaChangeStats, SessionStats, TimeRange, TopPartitionByScore,
+    TransactionStats,
 };
 pub use starrocks_client::StarRocksClient;
 pub use system_function_service::SystemFunctionService;

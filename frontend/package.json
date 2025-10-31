@@ -12,8 +12,12 @@
   "scripts": {
     "ng": "ng",
     "conventional-changelog": "conventional-changelog",
-    "start": "ng serve --host 0.0.0.0 --disable-host-check",
+    "config:generate": "node ../scripts/config/generate-frontend-environments.js",
+    "prestart": "npm run config:generate",
+    "start": "ng serve --host 0.0.0.0 --disable-host-check --poll 2000",
+    "prebuild": "npm run config:generate",
     "build": "ng build",
+    "prebuild:prod": "npm run config:generate",
     "build:prod": "npm run build -- --configuration production --aot",
     "test": "ng test",
     "test:coverage": "rimraf coverage && npm run test -- --code-coverage",

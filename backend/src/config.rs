@@ -86,8 +86,8 @@ impl Config {
             tracing::info!("Override server.host from env: {}", self.server.host);
         }
 
-        if let Ok(port) = std::env::var("APP_SERVER_PORT")
-            && let Ok(port) = port.parse()
+        if let Ok(port_str) = std::env::var("APP_SERVER_PORT")
+            && let Ok(port) = port_str.parse::<u16>()
         {
             self.server.port = port;
             tracing::info!("Override server.port from env: {}", self.server.port);
@@ -139,11 +139,38 @@ impl Config {
     }
 
     fn find_config_file() -> Option<String> {
-        let possible_paths =
-            ["conf/config.toml", "config.toml", "./conf/config.toml", "./config.toml"];
+        // Get environment (dev, prod, etc.)
+        let env = std::env::var("APP_ENV")
+            .or_else(|_| std::env::var("ENVIRONMENT"))
+            .unwrap_or_else(|_| "dev".to_string());
+
+        // Try environment-specific config first
+        let env_specific_paths = [
+            format!("conf/{}/config.toml", env),
+            format!("./conf/{}/config.toml", env),
+            format!("backend/conf/{}/config.toml", env),
+            format!("../conf/{}/config.toml", env),
+        ];
+
+        for path in &env_specific_paths {
+            if Path::new(path).exists() {
+                tracing::info!("Using environment-specific config: {}", path);
+                return Some(path.to_string());
+            }
+        }
+
+        // Fall back to generic config paths
+        let possible_paths = [
+            "conf/config.toml",
+            "config.toml",
+            "./conf/config.toml",
+            "./config.toml",
+            "backend/conf/config.toml",
+        ];
 
         for path in &possible_paths {
             if Path::new(path).exists() {
+                tracing::info!("Using generic config: {}", path);
                 return Some(path.to_string());
             }
         }

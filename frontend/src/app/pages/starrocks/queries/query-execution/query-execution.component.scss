@@ -1,33 +1,181 @@
 // Copy styles from the original queries component
+@use '@nebular/theme/styles/theming' as *;
 
 // Adjust card body padding to align content with edges
 :host ::ng-deep nb-card-body {
   padding: 0 !important;
 }
 
+// Tab header wrapper with toggle button
+.tab-header-wrapper {
+  position: relative;
+  width: 100%;
+  
+  .sql-editor-toggle-btn {
+    position: absolute;
+    right: 15px; // Match Bootstrap col-12 padding to align with content
+    top: 8px;
+    z-index: 100;
+    padding: 0.25rem 0.5rem;
+    min-width: auto;
+    
+    // Nebular ghost button native styles
+    background: transparent;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    
+    &:hover {
+      background-color: nb-theme(background-basic-color-2);
+      border-color: nb-theme(border-basic-color-3);
+    }
+    
+    &:active {
+      background-color: nb-theme(background-basic-color-3);
+    }
+    
+    nb-icon {
+      font-size: 1.25rem;
+      color: nb-theme(text-hint-color);
+    }
+  }
+}
+
+// Tab header with toggle button layout
+.tab-header-with-toggle {
+  display: block;
+  width: 100%;
+  padding-right: 0; // No extra padding; handled within tabset styles
+}
+
+// Collapsed SQL bar (inspired by metric-card-group)
+.collapsed-sql-bar {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  width: 100%; // Full width
+  background-color: nb-theme(background-basic-color-2);
+  border: 1px solid nb-theme(border-basic-color-3);
+  border-radius: nb-theme(border-radius);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 1rem;
+  user-select: none;
+  gap: 0.75rem;
+  
+  &:hover {
+    background-color: nb-theme(background-basic-color-3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .collapsed-sql-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    overflow: hidden;
+    
+    nb-icon {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    
+    .sql-text {
+      color: nb-theme(text-hint-color);
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      
+      &.sql-placeholder {
+        font-family: inherit;
+        font-style: italic;
+      }
+    }
+  }
+}
+
 :host ::ng-deep nb-tabset {
+  width: 100% !important;
+  
   .tabset {
     padding: 0;
     margin-bottom: 0;
+    width: 100% !important;
+
+    .tabs {
+      padding-right: 55px; // Reserve space in the tab header for the toggle button
+    }
   }
   
   // Reduce tab content padding
   .tab-content {
     padding: 0 !important;
+    width: 100% !important;
+    
+    // Each tab pane should be full width when active
+    .tab-pane {
+      width: 100% !important;
+      
+      &.active {
+        display: block !important;
+      }
+    }
   }
   
   // Reduce spacing between tabs and content
   nb-tab {
     padding: 0 !important;
+    width: 100% !important;
+    // Don't force display: block, let Nebular handle visibility
   }
 }
 
 .realtime-query-container {
-  padding: 0.3rem; // Minimal padding on all sides
+  padding: 0.3rem; // Uniform padding on all sides
+  width: 100%; // Ensure full width
+  
   .sql-editor-section {
     margin-bottom: 1.5rem;
+    width: 100%; // Ensure SQL editor section takes full width
+    overflow: hidden;
+    transition: padding 200ms ease, margin 200ms ease;
     
     .catalog-database-selector {
+      width: 100%; // Ensure full width
+      gap: 0.75rem;
+      
+      nb-select {
+        min-width: 180px;
+        ::ng-deep button.select-button {
+          border-radius: 10px;
+          border: 1px solid nb-theme(border-basic-color-3);
+          background-color: nb-theme(background-basic-color-2);
+          padding: 0.375rem 0.75rem;
+          font-weight: 500;
+          color: nb-theme(text-basic-color);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+          transition: all 0.16s ease;
+
+          &:hover {
+            background-color: nb-theme(background-basic-color-3);
+            border-color: nb-theme(border-basic-color-4);
+          }
+
+          nb-icon {
+            color: nb-theme(text-hint-color);
+          }
+        }
+
+        &.placeholder-select {
+          ::ng-deep button.select-button {
+            color: nb-theme(text-disabled-color);
+            font-weight: 400;
+          }
+        }
+      }
+      
       // Ensure buttons stay on the right and don't wrap
       @media (max-width: 768px) {
         flex-direction: column;
@@ -43,14 +191,17 @@
     
     .editor-wrapper {
       position: relative;
+      width: 100%; // Ensure full width
     }
     
     .codemirror-container {
+      width: 100%; // Ensure full width
       border: 1px solid nb-theme(border-basic-color-4);
       border-radius: nb-theme(border-radius);
       overflow: hidden;
       background-color: nb-theme(background-basic-color-1);
       padding: 1px; // Add minimal padding to ensure grid lines are visible at edges
+      box-sizing: border-box; // Include border in width calculation
       
       // Add subtle grid background
       background-image: 
@@ -59,23 +210,39 @@
       background-size: 20px 20px;
       background-position: 0 0;
       
-      // Increase font size by 20% (from 14px to 16.8px)
-      font-size: 1.2em;
+      // Editor font size
+      font-size: 20px;
       
       :host-context(.dark-theme) & {
         border-color: nb-theme(border-basic-color-3);
       }
       
       // CodeMirror editor content font size
-      :deep(.cm-editor) {
-        font-size: 1.2em;
+      ::ng-deep .cm-editor {
+        font-size: 20px;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
         
         .cm-content {
-          font-size: 1.2em;
+          font-size: 20px;
+          width: 100% !important; // Ensure full width
+          max-width: 100% !important;
+          box-sizing: border-box !important;
         }
         
         .cm-line {
-          font-size: 1.2em;
+          font-size: 20px;
+          word-wrap: break-word !important;
+          white-space: pre-wrap !important;
+        }
+        
+        .cm-scroller {
+          width: 100% !important; // Ensure full width
+          max-width: 100% !important;
+          overflow-x: hidden !important; // Hide horizontal scrollbar
+          overflow-y: auto !important; // Keep vertical scrollbar
+          box-sizing: border-box !important;
         }
       }
     }
@@ -118,6 +285,8 @@
       justify-content: space-between;
       align-items: center;
       margin-top: 0.5rem;
+      width: 100%; // Ensure full width
+      padding: 0; // Remove extra padding
       
       .left-actions {
         display: flex;
@@ -127,11 +296,24 @@
       .right-actions {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.25rem; // Reduce gap for tighter alignment
+        margin-right: 0; // Ensure no extra margin
+        padding-right: 0; // Remove any extra padding
         
         .limit-label {
           font-size: 12px;
           color: var(--text-hint-color);
+          margin-right: 0.25rem;
+        }
+        
+        nb-select {
+          margin-right: 0; // Remove any default margin
+          
+          // Ensure select dropdown aligns perfectly
+          ::ng-deep nb-option {
+            margin: 0;
+            padding-right: 0;
+          }
         }
       }
     }
@@ -207,6 +389,7 @@
   
   .result-card {
     margin-bottom: 1rem;
+    width: 100%; // Full width
   }
   
   .error-message {

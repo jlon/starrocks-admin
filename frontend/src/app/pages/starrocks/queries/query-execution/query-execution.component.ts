@@ -1,6 +1,6 @@
-import { Component, OnInit, OnDestroy, TemplateRef, ViewChild, AfterViewInit, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, HostListener } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { NbToastrService, NbDialogService, NbThemeService } from '@nebular/theme';
+import { NbToastrService, NbThemeService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -13,15 +13,23 @@ import { sql } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { autocompletion } from '@codemirror/autocomplete';
 import { format } from 'sql-formatter';
+import { trigger, transition, style, animate, state } from '@angular/animations';
 
 @Component({
   selector: 'ngx-query-execution',
   templateUrl: './query-execution.component.html',
   styleUrls: ['./query-execution.component.scss'],
+  animations: [
+    trigger('editorCollapse', [
+      state('expanded', style({ height: '*', opacity: 1, overflow: 'hidden' })),
+      state('collapsed', style({ height: '0px', opacity: 0, paddingTop: 0, paddingBottom: 0, marginBottom: 0, overflow: 'hidden' })),
+      transition('expanded <=> collapsed', animate('200ms ease')),
+    ]),
+  ],
 })
 export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('editorContainer', { static: false }) editorContainer!: ElementRef;
-  @ViewChild('tabsetRef', { static: false }) tabsetRef!: any;
+  // Template tabset reference removed as it's no longer required
 
   // Data sources
   runningSource: LocalDataSource = new LocalDataSource();
@@ -56,7 +64,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   loadingCatalogs: boolean = false;
   
   databases: string[] = [];
-  selectedDatabase: string = '';
+  selectedDatabase: string | null = null;
   loadingDatabases: boolean = false;
 
   // Real-time query state
@@ -79,6 +87,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     { value: 5000, label: '5000 行' },
     { value: 10000, label: '10000 行' },
   ];
+  
+  // SQL Editor collapse state (default to expanded)
+  sqlEditorCollapsed: boolean = false; // Default: expanded
+  editorHeight: number = 400; // Default height
   
   // Running queries settings
   runningSettings = {
@@ -104,7 +116,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     private route: ActivatedRoute,
     private toastrService: NbToastrService,
     private clusterContext: ClusterContextService,
-    private dialogService: NbDialogService,
     private themeService: NbThemeService,
   ) {
     // Try to get clusterId from route first (for direct navigation)
@@ -117,6 +128,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     setTimeout(() => {
       this.initEditor();
       this.loadCatalogs();
+      this.calculateEditorHeight();
     }, 100);
 
     // Subscribe to theme changes
@@ -134,6 +146,38 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         this.currentTheme = theme?.name || 'default';
         this.updateEditorTheme();
       });
+    
+  }
+  
+  @HostListener('window:resize', ['$event'])
+  onResize(event: any) {
+    this.calculateEditorHeight();
+  }
+  
+  // Calculate dynamic editor height based on viewport
+  calculateEditorHeight(): void {
+    const windowHeight = window.innerHeight;
+    const navbarHeight = 64; // Approximate navbar height
+    const tabBarHeight = 48; // Tab bar height
+    const editorToolbarHeight = 100; // Catalog selector + buttons + toolbar
+    const bottomMargin = 16; // Small margin at bottom
+    
+    // Calculate available height
+    let availableHeight = windowHeight - navbarHeight - tabBarHeight - editorToolbarHeight - bottomMargin;
+    
+    // If there are results, reserve space for them
+    if (this.queryResult && !this.sqlEditorCollapsed) {
+      availableHeight = Math.max(300, availableHeight * 0.4); // Editor takes 40% when results shown
+    } else if (this.queryResult && this.sqlEditorCollapsed) {
+      availableHeight = 60; // Collapsed bar height
+    }
+    
+    this.editorHeight = Math.max(200, Math.min(600, availableHeight));
+    
+    // Update editor DOM height without re-creating instance
+    if (this.editorView) {
+      this.editorView.dom.style.height = `${this.editorHeight}px`;
+    }
   }
 
   private initEditor(): void {
@@ -153,17 +197,28 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       }),
       EditorView.theme({
         '&': {
-          height: '400px',
-          fontSize: '16.8px', // Increase font size by 20% (from 14px)
+          height: `${this.editorHeight}px`,
+          width: '100%', // Ensure full width
+          fontSize: '20px',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         },
         '.cm-content': {
-          fontSize: '16.8px', // Increase font size by 20%
+          fontSize: '20px',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         },
         '.cm-line': {
-          fontSize: '16.8px', // Increase font size by 20%
+          fontSize: '20px',
+          wordWrap: 'break-word',
+          whiteSpace: 'pre-wrap',
         },
         '.cm-scroller': {
-          overflow: 'auto',
+          overflowX: 'hidden', // Hide horizontal scrollbar
+          overflowY: 'auto',
+          width: '100%', // Ensure full width
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         },
       }),
     ];
@@ -172,53 +227,21 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       extensions.push(oneDark);
     }
 
-    // SQL keyword autocomplete
-    extensions.push(
-      autocompletion({
-        override: [
-          (context) => {
-            const word = context.matchBefore(/\w*/);
-            if (!word) return null;
-            if (word.from === word.to && !context.explicit) return null;
-            
-            const sqlKeywords = [
-              'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT',
-              'JOIN', 'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'FULL JOIN',
-              'ON', 'AS', 'AND', 'OR', 'NOT', 'IN', 'EXISTS',
-              'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER',
-              'USE', 'SHOW', 'DESCRIBE', 'EXPLAIN'
-            ];
-            
-            const options = sqlKeywords
-              .filter(keyword => keyword.toLowerCase().startsWith(word.text.toLowerCase()))
-              .map(keyword => ({ label: keyword, type: 'keyword' }));
-            
-            return {
-              from: word.from,
-              options: options.length > 0 ? options : sqlKeywords.map(k => ({ label: k, type: 'keyword' }))
-            };
-          }
-        ]
-      })
-    );
+    if (this.editorView) {
+      this.editorView.destroy();
+    }
 
     this.editorView = new EditorView({
-      doc: this.sqlInput,
+      doc: this.sqlInput || '',
       extensions,
       parent: this.editorContainer.nativeElement,
     });
   }
 
   private updateEditorTheme(): void {
-    if (!this.editorView) return;
-
     const isDark = this.currentTheme === 'dark' || this.currentTheme === 'cosmic';
     
-    // Reinitialize editor with new theme
-    this.destroyEditor();
-    setTimeout(() => {
-      this.initEditor();
-    }, 50);
+    setTimeout(() => this.calculateEditorHeight(), 0);
   }
 
   private destroyEditor(): void {
@@ -238,13 +261,11 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       next: (catalogs) => {
         this.catalogs = catalogs;
         this.loadingCatalogs = false;
-        console.log(`Loaded ${catalogs?.length || 0} catalogs:`, catalogs);
         // Auto-select first catalog if available (always select if only one or first available)
         if (catalogs.length > 0) {
           // If no catalog selected or selected catalog not in list, select first one
           if (!this.selectedCatalog || !catalogs.includes(this.selectedCatalog)) {
             this.selectedCatalog = catalogs[0];
-            console.log(`Auto-selected catalog: ${this.selectedCatalog}`);
             // Load databases for selected catalog
             this.loadDatabases();
           } else if (this.selectedCatalog && catalogs.includes(this.selectedCatalog)) {
@@ -266,10 +287,9 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   onCatalogChange(catalog?: string): void {
     // When catalog changes, reload databases for that catalog
     const newCatalog = catalog !== undefined ? catalog : this.selectedCatalog;
-    console.log('Catalog changed to:', newCatalog);
     
     // Clear database selection and list
-    this.selectedDatabase = '';
+    this.selectedDatabase = null;
     this.databases = [];
     
     if (newCatalog) {
@@ -291,7 +311,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       next: (databases) => {
         this.databases = databases || [];
         this.loadingDatabases = false;
-        console.log(`Loaded ${databases?.length || 0} databases for catalog: ${this.selectedCatalog}`);
+        
       },
       error: (error) => {
         this.loadingDatabases = false;
@@ -318,7 +338,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             this.clusterId = newClusterId;
             // Load catalogs when cluster changes (this will auto-select and load databases)
             this.selectedCatalog = '';
-            this.selectedDatabase = '';
+            this.selectedDatabase = null;
             this.databases = [];
             this.loadCatalogs();
             // Only load if not on realtime tab
@@ -413,6 +433,20 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     });
   }
 
+  // Toggle SQL editor collapse state
+  toggleSqlEditor(collapsed?: boolean): void {
+    if (collapsed !== undefined) {
+      this.sqlEditorCollapsed = collapsed;
+    } else {
+      this.sqlEditorCollapsed = !this.sqlEditorCollapsed;
+    }
+
+    if (!this.sqlEditorCollapsed) {
+      // Simply recalculate height to make sure layout is correct after expansion
+      setTimeout(() => this.calculateEditorHeight(), 300);
+    }
+  }
+
   // Real-time query methods
   executeSQL(): void {
     if (!this.sqlInput || this.sqlInput.trim() === '') {
@@ -432,10 +466,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       return;
     }
 
-    if (!this.selectedDatabase || this.selectedDatabase === '') {
+    if (!this.selectedDatabase) {
       // Check if there are available databases to select
       if (this.databases.length > 0) {
-        this.toastrService.warning('请选择数据库（如需不使用数据库，请选择"不使用数据库"选项）', '提示');
+        this.toastrService.warning('请选择数据库', '提示');
         return;
       }
       // If no databases available, allow execution with empty database (不使用数据库)
@@ -511,6 +545,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           } else {
             this.toastrService.danger(singleResult.error || '执行失败', '执行失败');
           }
+        }
+        
+        // Auto-collapse SQL editor after successful query
+        if (result.results.length > 0 && result.results[0].success) {
+          setTimeout(() => {
+            this.toggleSqlEditor(true);
+          }, 300); // Delay for smooth UX
         }
       },
       error: (error) => {

@@ -23,13 +23,13 @@
         <div class="row mb-3">
           <div class="col-md-6">
             <div class="form-group">
-              <label for="search" class="label">Search Variables</label>
+              <label for="search" class="label">搜索变量</label>
               <input
                 type="text"
                 nbInput
                 fullWidth
                 id="search"
-                placeholder="Search variables..."
+                placeholder="输入变量名..."
                 [(ngModel)]="searchText"
                 (keyup.enter)="onSearch()"
               />
@@ -37,10 +37,10 @@
           </div>
           <div class="col-md-3">
             <div class="form-group">
-              <label class="label">Variable Type</label>
+              <label class="label">变量类型</label>
               <nb-select fullWidth [(selected)]="variableType" (selectedChange)="onTypeChange()">
-                <nb-option value="global">Global Variables</nb-option>
-                <nb-option value="session">Session Variables</nb-option>
+                <nb-option value="global">全局变量</nb-option>
+                <nb-option value="session">会话变量</nb-option>
               </nb-select>
             </div>
           </div>

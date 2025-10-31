@@ -66,4 +66,35 @@
     .menu-item:nth-child(7) nb-icon { color: nb-theme(color-success-500); }
     .menu-item:nth-child(8) nb-icon { color: nb-theme(color-danger-500); }
   }
+
+  // Global compact layout optimizations - inspired by modern SaaS dashboards
+  nb-card {
+    // Reduce card header padding for tighter layout
+    nb-card-header {
+      padding: 0.875rem 1.25rem; // Reduced from default 1.25rem
+      
+      // Optimize header title sizes
+      h5 {
+        font-size: 1.125rem; // Reduced from 1.25rem (20px to 18px)
+        font-weight: 600;
+        margin-bottom: 0;
+      }
+      
+      h6 {
+        font-size: 1rem; // Reduced from 1.125rem (18px to 16px)
+        font-weight: 600;
+        margin-bottom: 0;
+      }
+    }
+    
+    // Reduce card body padding
+    nb-card-body {
+      padding: 1rem 1.25rem; // Reduced top/bottom from 1.25rem
+    }
+    
+    // Reduce card footer padding
+    nb-card-footer {
+      padding: 0.875rem 1.25rem; // Reduced from 1.25rem
+    }
+  }
 }

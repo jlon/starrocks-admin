@@ -89,16 +89,17 @@ impl MySQLPoolManager {
             .ssl_opts(None::<SslOpts>) // No SSL for now
             .tcp_keepalive(Some(30_000 as u32)) // 30 seconds
             .tcp_nodelay(true) // Disable Nagle's algorithm for lower latency
-            .pool_opts(mysql_async::PoolOpts::default()
-                .with_constraints(
-                    mysql_async::PoolConstraints::new(2, 20).ok_or_else(|| {
-                        crate::utils::ApiError::internal_error(
-                            "Failed to create pool constraints: invalid min/max values",
-                        )
-                    })?,
-                )
-                .with_inactive_connection_ttl(std::time::Duration::from_secs(300)) // 5 minutes
-                .with_ttl_check_interval(std::time::Duration::from_secs(60)) // 1 minute
+            .pool_opts(
+                mysql_async::PoolOpts::default()
+                    .with_constraints(mysql_async::PoolConstraints::new(2, 20).ok_or_else(
+                        || {
+                            crate::utils::ApiError::internal_error(
+                                "Failed to create pool constraints: invalid min/max values",
+                            )
+                        },
+                    )?)
+                    .with_inactive_connection_ttl(std::time::Duration::from_secs(300)) // 5 minutes
+                    .with_ttl_check_interval(std::time::Duration::from_secs(60)), // 1 minute
             );
 
         Ok(Pool::new(opts))

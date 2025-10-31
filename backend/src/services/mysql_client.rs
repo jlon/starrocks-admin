@@ -1,5 +1,5 @@
 use crate::utils::error::ApiError;
-use mysql_async::{Pool, Conn, prelude::Queryable};
+use mysql_async::{Conn, Pool, prelude::Queryable};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -94,7 +94,11 @@ impl MySQLSession {
         }
 
         let use_catalog_sql = format!("USE CATALOG `{}`", catalog);
-        if let Err(e) = self.conn.query::<mysql_async::Row, _>(&use_catalog_sql).await {
+        if let Err(e) = self
+            .conn
+            .query::<mysql_async::Row, _>(&use_catalog_sql)
+            .await
+        {
             tracing::warn!("USE CATALOG {} failed (may not be supported): {}", catalog, e);
             // Don't fail - continue anyway, catalog might already be active
         }
@@ -108,15 +112,24 @@ impl MySQLSession {
         }
 
         let use_db_sql = format!("USE `{}`", database);
-        self.conn.query::<mysql_async::Row, _>(&use_db_sql).await.map_err(|e| {
-            tracing::warn!("Failed to execute USE DATABASE {}: {}", database, e);
-            ApiError::internal_error(format!("Failed to switch to database {}: {}", database, e))
-        })?;
+        self.conn
+            .query::<mysql_async::Row, _>(&use_db_sql)
+            .await
+            .map_err(|e| {
+                tracing::warn!("Failed to execute USE DATABASE {}: {}", database, e);
+                ApiError::internal_error(format!(
+                    "Failed to switch to database {}: {}",
+                    database, e
+                ))
+            })?;
         Ok(())
     }
 
     /// Execute a query and return both results and execution time (SQL only, excluding data processing)
-    pub async fn execute(&mut self, sql: &str) -> Result<(Vec<String>, Vec<Vec<String>>, u128), ApiError> {
+    pub async fn execute(
+        &mut self,
+        sql: &str,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>, u128), ApiError> {
         let start = std::time::Instant::now();
         let rows: Vec<mysql_async::Row> = self.conn.query(sql).await.map_err(|e| {
             tracing::error!("MySQL query execution failed: {}", e);
@@ -126,13 +139,17 @@ impl MySQLSession {
 
         // Detailed performance logging for debugging
         tracing::debug!("SQL: '{}' -> {} rows in {}ms", sql, rows.len(), execution_time_ms);
-        
+
         let process_start = std::time::Instant::now();
         let (columns, data_rows) = process_query_result(rows);
         let process_time_ms = process_start.elapsed().as_millis();
-        
-        tracing::debug!("Data processing: {}ms (SQL: {}ms, Total: {}ms)", 
-            process_time_ms, execution_time_ms, execution_time_ms + process_time_ms);
+
+        tracing::debug!(
+            "Data processing: {}ms (SQL: {}ms, Total: {}ms)",
+            process_time_ms,
+            execution_time_ms,
+            execution_time_ms + process_time_ms
+        );
 
         Ok((columns, data_rows, execution_time_ms))
     }
@@ -146,7 +163,7 @@ fn process_query_result(rows: Vec<mysql_async::Row>) -> (Vec<String>, Vec<Vec<St
 
     let col_count = rows[0].columns_ref().len();
     let row_count = rows.len();
-    
+
     // Pre-allocate with known capacity to avoid reallocations
     let mut columns = Vec::with_capacity(col_count);
     let mut result_rows = Vec::with_capacity(row_count);
@@ -178,12 +195,12 @@ fn process_query_result_batch(rows: Vec<mysql_async::Row>, result_rows: &mut Vec
     for row in rows.iter() {
         let col_count = row.columns_ref().len();
         let mut row_data = Vec::with_capacity(col_count);
-        
+
         // Process all columns in this row
         for col_idx in 0..col_count {
             row_data.push(value_to_string_optimized(&row[col_idx]));
         }
-        
+
         result_rows.push(row_data);
     }
 }
@@ -227,8 +244,10 @@ fn value_to_string_optimized(value: &mysql_async::Value) -> String {
         mysql_async::Value::Date(year, month, day, hour, minute, second, _micro) => {
             // Pre-allocate string with known capacity to avoid reallocations
             let mut s = String::with_capacity(19); // "YYYY-MM-DD HH:MM:SS" = 19 chars
-            s.push_str(&format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", 
-                year, month, day, hour, minute, second));
+            s.push_str(&format!(
+                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+                year, month, day, hour, minute, second
+            ));
             s
         },
         mysql_async::Value::Time(_neg, days, hours, minutes, seconds, _micro) => {

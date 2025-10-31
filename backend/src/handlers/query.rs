@@ -9,9 +9,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::AppState;
-use crate::models::{CatalogWithDatabases, CatalogsWithDatabasesResponse, Query, QueryExecuteRequest, QueryExecuteResponse, SingleQueryResult};
-use crate::services::mysql_client::MySQLClient;
+use crate::models::{
+    CatalogWithDatabases, CatalogsWithDatabasesResponse, Query, QueryExecuteRequest,
+    QueryExecuteResponse, SingleQueryResult,
+};
 use crate::services::StarRocksClient;
+use crate::services::mysql_client::MySQLClient;
 use crate::utils::ApiResult;
 
 // Get list of catalogs using MySQL client
@@ -29,13 +32,13 @@ use crate::utils::ApiResult;
 )]
 pub async fn list_catalogs(State(state): State<Arc<AppState>>) -> ApiResult<Json<Vec<String>>> {
     let cluster = state.cluster_service.get_active_cluster().await?;
-    
+
     // Use MySQL client to execute SHOW CATALOGS
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
-    
+
     let (_, rows) = mysql_client.query_raw("SHOW CATALOGS").await?;
-    
+
     let mut catalogs = Vec::new();
     for row in rows {
         if let Some(catalog_name) = row.first() {
@@ -45,7 +48,7 @@ pub async fn list_catalogs(State(state): State<Arc<AppState>>) -> ApiResult<Json
             }
         }
     }
-    
+
     tracing::debug!("Found {} catalogs via MySQL client", catalogs.len());
     Ok(Json(catalogs))
 }
@@ -71,11 +74,11 @@ pub async fn list_databases(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<Json<Vec<String>>> {
     let cluster = state.cluster_service.get_active_cluster().await?;
-    
+
     // Use MySQL client
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
-    
+
     // Get catalog parameter if provided
     if let Some(catalog_name) = params.get("catalog") {
         // First switch to the catalog, then show databases
@@ -86,25 +89,84 @@ pub async fn list_databases(
             // Continue anyway, might be using default catalog
         }
     }
-    
+
     // Execute SHOW DATABASES
     let (_, rows) = mysql_client.query_raw("SHOW DATABASES").await?;
-    
+
     let mut databases = Vec::new();
     for row in rows {
         if let Some(db_name) = row.first() {
             let name = db_name.trim().to_string();
             // Skip system databases
-            if !name.is_empty()
-                && name != "information_schema" 
-                && name != "_statistics_" {
+            if !name.is_empty() && name != "information_schema" && name != "_statistics_" {
                 databases.push(name);
             }
         }
     }
-    
+
     tracing::debug!("Found {} databases via MySQL client", databases.len());
     Ok(Json(databases))
+}
+
+// Get list of tables within a database (optional catalog) using MySQL client
+#[utoipa::path(
+    get,
+    path = "/api/clusters/tables",
+    params(
+        ("catalog" = Option<String>, Query, description = "Catalog name (optional)"),
+        ("database" = String, Query, description = "Database name")
+    ),
+    responses(
+        (status = 200, description = "List of tables", body = Vec<String>),
+        (status = 404, description = "No active cluster found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "Queries"
+)]
+pub async fn list_tables(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> ApiResult<Json<Vec<String>>> {
+    let cluster = state.cluster_service.get_active_cluster().await?;
+
+    // Use MySQL client
+    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
+    let mysql_client = MySQLClient::from_pool(pool);
+
+    // Database is required to list tables
+    let database_name = match params.get("database") {
+        Some(name) if !name.trim().is_empty() => name.trim().to_string(),
+        _ => {
+            tracing::warn!("Database parameter missing when listing tables");
+            return Ok(Json(Vec::new()));
+        },
+    };
+
+    let mut session = mysql_client.create_session().await?;
+
+    if let Some(catalog_name) = params.get("catalog") {
+        session.use_catalog(catalog_name).await?;
+    }
+
+    session.use_database(&database_name).await?;
+
+    let (_, rows, _) = session.execute("SHOW TABLES").await?;
+
+    let mut tables = Vec::new();
+    for row in rows {
+        if let Some(table_name) = row.first() {
+            let name = table_name.trim().to_string();
+            if !name.is_empty() {
+                tables.push(name);
+            }
+        }
+    }
+
+    tracing::debug!("Database {} returned {} tables via MySQL client", database_name, tables.len());
+
+    Ok(Json(tables))
 }
 
 // Get all catalogs with their databases using MySQL client (one-time response)
@@ -124,16 +186,16 @@ pub async fn list_catalogs_with_databases(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<CatalogsWithDatabasesResponse>> {
     let cluster = state.cluster_service.get_active_cluster().await?;
-    
+
     // Use MySQL client
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
-    
+
     // Step 1: Get all catalogs
     let (_, catalog_rows) = mysql_client.query_raw("SHOW CATALOGS").await?;
-    
+
     let mut catalogs = Vec::new();
-    
+
     // Extract catalog names
     let mut catalog_names = Vec::new();
     for row in catalog_rows {
@@ -144,9 +206,9 @@ pub async fn list_catalogs_with_databases(
             }
         }
     }
-    
+
     tracing::debug!("Found {} catalogs, fetching databases for each...", catalog_names.len());
-    
+
     // Step 2: For each catalog, switch to it and get databases
     for catalog_name in &catalog_names {
         // Switch to catalog (without backticks - StarRocks may not support them for catalog names)
@@ -159,7 +221,7 @@ pub async fn list_catalogs_with_databases(
             });
             continue;
         }
-        
+
         // Get databases for this catalog
         let (_, db_rows) = match mysql_client.query_raw("SHOW DATABASES").await {
             Ok(result) => result,
@@ -170,30 +232,25 @@ pub async fn list_catalogs_with_databases(
                     databases: Vec::new(),
                 });
                 continue;
-            }
+            },
         };
-        
+
         let mut databases = Vec::new();
         for row in db_rows {
             if let Some(db_name) = row.first() {
                 let name = db_name.trim().to_string();
                 // Skip system databases
-                if !name.is_empty()
-                    && name != "information_schema" 
-                    && name != "_statistics_" {
+                if !name.is_empty() && name != "information_schema" && name != "_statistics_" {
                     databases.push(name);
                 }
             }
         }
-        
+
         tracing::debug!("Catalog {} has {} databases", catalog_name, databases.len());
-        
-        catalogs.push(CatalogWithDatabases {
-            catalog: catalog_name.clone(),
-            databases,
-        });
+
+        catalogs.push(CatalogWithDatabases { catalog: catalog_name.clone(), databases });
     }
-    
+
     Ok(Json(CatalogsWithDatabasesResponse { catalogs }))
 }
 
@@ -276,19 +333,16 @@ pub async fn execute_sql(
     // Use pool manager to get cached pool (avoid intermittent failures from creating new pools)
     let pool: mysql_async::Pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
-    
+
     // Parse SQL statements first (split by semicolon, handling simple cases)
     let sql_statements = parse_sql_statements(&request.sql);
-    
+
     // Limit to maximum 5 statements
     let sql_statements: Vec<String> = sql_statements.into_iter().take(5).collect();
-    
+
     // If no statements to execute, return early
     if sql_statements.is_empty() {
-        return Ok(Json(QueryExecuteResponse {
-            results: Vec::new(),
-            total_execution_time_ms: 0,
-        }));
+        return Ok(Json(QueryExecuteResponse { results: Vec::new(), total_execution_time_ms: 0 }));
     }
 
     // CRITICAL: Create a session with a dedicated connection
@@ -304,22 +358,22 @@ pub async fn execute_sql(
     if let Some(db) = request.database.as_ref().filter(|d| !d.is_empty()) {
         session.use_database(db).await?;
     }
-    
+
     let total_start = Instant::now();
     let mut results = Vec::new();
-    
+
     // Execute each SQL statement sequentially on the SAME connection
     for sql in sql_statements {
         if sql.is_empty() {
             continue;
         }
-        
+
         let sql_with_limit = apply_query_limit(&sql, request.limit.unwrap_or(1000));
-        
+
         // Execute query on the session's connection that has persistent database context
         // Use execute to get accurate SQL execution time (excluding data processing)
         let query_result = session.execute(&sql_with_limit).await;
-        
+
         match query_result {
             Ok((columns, data_rows, execution_time_ms)) => {
                 let row_count = data_rows.len();
@@ -346,15 +400,12 @@ pub async fn execute_sql(
             },
         }
     }
-    
+
     let total_execution_time_ms = total_start.elapsed().as_millis();
-    
+
     // Session's connection will be automatically returned to pool when session is dropped
-    
-    Ok(Json(QueryExecuteResponse {
-        results,
-        total_execution_time_ms,
-    }))
+
+    Ok(Json(QueryExecuteResponse { results, total_execution_time_ms }))
 }
 
 // Simple SQL statement parser - splits by semicolon, ignoring those in single/double quotes
@@ -364,7 +415,7 @@ fn parse_sql_statements(sql: &str) -> Vec<String> {
     let mut in_single_quote = false;
     let mut in_double_quote = false;
     let mut chars = sql.chars().peekable();
-    
+
     while let Some(ch) = chars.next() {
         match ch {
             '\'' if !in_double_quote => {
@@ -387,13 +438,13 @@ fn parse_sql_statements(sql: &str) -> Vec<String> {
             },
         }
     }
-    
+
     // Add the last statement if exists
     let trimmed = current.trim();
     if !trimmed.is_empty() {
         statements.push(trimmed.to_string());
     }
-    
+
     statements
 }
 

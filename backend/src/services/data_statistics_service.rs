@@ -105,10 +105,11 @@ impl DataStatisticsService {
 
         // Get top tables by access (from query history or audit logs)
         // Use time_range_start if provided, otherwise default to 3 days ago
-        let time_range_start = time_range_start.unwrap_or_else(|| {
-            chrono::Utc::now() - chrono::Duration::days(3)
-        });
-        let top_tables_by_access = self.get_top_tables_by_access(&cluster, 20, time_range_start).await?;
+        let time_range_start =
+            time_range_start.unwrap_or_else(|| chrono::Utc::now() - chrono::Duration::days(3));
+        let top_tables_by_access = self
+            .get_top_tables_by_access(&cluster, 20, time_range_start)
+            .await?;
 
         // Calculate total data size from all tables (not just top 20)
         let total_data_size = self.get_total_data_size_mysql(&mysql_client).await?;

@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::AppState;
 use crate::services::{
-    CapacityPrediction, ClusterOverview, CompactionDetailStats, DataStatistics, 
+    CapacityPrediction, ClusterOverview, CompactionDetailStats, DataStatistics,
     ExtendedClusterOverview, HealthCard, PerformanceTrends, ResourceTrends, TimeRange,
 };
 use crate::utils::ApiResult;
@@ -316,7 +316,7 @@ pub async fn get_compaction_detail_stats(
     Query(params): Query<TrendQueryParams>,
 ) -> ApiResult<Json<CompactionDetailStats>> {
     let cluster = state.cluster_service.get_active_cluster().await?;
-    
+
     let time_range_str = match params.time_range {
         TimeRange::Hours1 => "1h",
         TimeRange::Hours6 => "6h",

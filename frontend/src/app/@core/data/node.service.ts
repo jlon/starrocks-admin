@@ -237,6 +237,15 @@ export class NodeService {
     return this.api.get<string[]>(`/clusters/databases`, params);
   }
 
+  // Get tables list for a database within an optional catalog
+  getTables(catalog: string | undefined, database: string): Observable<string[]> {
+    const params: any = { database };
+    if (catalog) {
+      params.catalog = catalog;
+    }
+    return this.api.get<string[]>(`/clusters/tables`, params);
+  }
+
   // Execute SQL API
   executeSQL(sql: string, limit?: number, catalog?: string, database?: string): Observable<QueryExecuteResult> {
     const request: QueryExecuteRequest = { sql, limit, catalog, database };

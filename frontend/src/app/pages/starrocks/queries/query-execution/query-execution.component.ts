@@ -11,9 +11,28 @@ import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { EditorView, basicSetup } from 'codemirror';
 import { sql } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { autocompletion } from '@codemirror/autocomplete';
 import { format } from 'sql-formatter';
 import { trigger, transition, style, animate, state } from '@angular/animations';
+
+type NavNodeType = 'catalog' | 'database' | 'group' | 'table';
+
+interface NavTreeNode {
+  id: string;
+  name: string;
+  type: NavNodeType;
+  icon?: string;
+  expanded?: boolean;
+  loading?: boolean;
+  children: NavTreeNode[];
+  data?: {
+    catalog?: string;
+    database?: string;
+    table?: string;
+    originalName?: string;
+    tablesLoaded?: boolean;
+    tableCount?: number;
+  };
+}
 
 @Component({
   selector: 'ngx-query-execution',
@@ -63,9 +82,93 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   selectedCatalog: string = '';
   loadingCatalogs: boolean = false;
   
-  databases: string[] = [];
   selectedDatabase: string | null = null;
   loadingDatabases: boolean = false;
+
+  // Tree navigation state
+  databaseTree: NavTreeNode[] = [];
+  selectedNodeId: string | null = null;
+  selectedTable: string | null = null;
+  treePanelWidth = 280;
+  private readonly defaultCatalogKey = '__default__';
+  private treeMinWidth = 220;
+  private treeMaxWidth = 480;
+  private isTreeResizing = false;
+  private resizeStartX = 0;
+  private resizeStartWidth = 280;
+  private databaseCache: Record<string, string[]> = {};
+  private tableCache: Record<string, string[]> = {};
+  treePanelHeight: number = 420;
+  private readonly treeExtraHeight: number = 140;
+  treeCollapsed: boolean = false;
+  private previousTreeWidth: number = this.treePanelWidth;
+  readonly collapsedTreeWidth: number = 28;
+
+  private buildNodeId(...parts: (string | undefined)[]): string {
+    return parts
+      .filter((part) => part !== undefined && part !== null)
+      .map((part) => encodeURIComponent(part as string))
+      .join('::');
+  }
+
+  private getCatalogKey(catalog?: string): string {
+    return catalog && catalog.trim().length > 0 ? catalog : this.defaultCatalogKey;
+  }
+
+  private getDatabaseCacheKey(catalog: string, database: string): string {
+    return `${this.getCatalogKey(catalog)}|${database}`;
+  }
+
+  private createCatalogNode(catalog: string): NavTreeNode {
+    return {
+      id: this.buildNodeId('catalog', catalog),
+      name: catalog,
+      type: 'catalog',
+      icon: 'folder-outline',
+      expanded: false,
+      loading: false,
+      children: [],
+      data: {
+        catalog,
+      },
+    };
+  }
+
+  private createDatabaseNode(catalog: string, database: string): NavTreeNode {
+    return {
+      id: this.buildNodeId('database', catalog, database),
+      name: database,
+      type: 'database',
+      icon: 'cube-outline',
+      expanded: false,
+      loading: false,
+      children: [],
+      data: {
+        catalog,
+        database,
+        originalName: database,
+        tablesLoaded: false,
+        tableCount: 0,
+      },
+    };
+  }
+
+  private createTableNode(catalog: string, database: string, table: string): NavTreeNode {
+    return {
+      id: this.buildNodeId('table', catalog, database, table),
+      name: table,
+      type: 'table',
+      icon: 'grid-outline',
+      expanded: false,
+      loading: false,
+      children: [],
+      data: {
+        catalog,
+        database,
+        table,
+      },
+    };
+  }
 
   // Real-time query state
   sqlInput: string = '';
@@ -127,8 +230,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     // Initialize CodeMirror editor after view is ready
     setTimeout(() => {
       this.initEditor();
-      this.loadCatalogs();
       this.calculateEditorHeight();
+      if (this.clusterId && this.clusterId > 0) {
+        this.loadCatalogs();
+      }
     }, 100);
 
     // Subscribe to theme changes
@@ -153,13 +258,49 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   onResize(event: any) {
     this.calculateEditorHeight();
   }
+
+  @HostListener('document:mousemove', ['$event'])
+  onDocumentMouseMove(event: MouseEvent): void {
+    if (!this.isTreeResizing) {
+      return;
+    }
+
+    const delta = event.clientX - this.resizeStartX;
+    const newWidth = this.resizeStartWidth + delta;
+    this.treePanelWidth = Math.min(this.treeMaxWidth, Math.max(this.treeMinWidth, newWidth));
+    event.preventDefault();
+  }
+
+  @HostListener('document:mouseup')
+  onDocumentMouseUp(): void {
+    if (this.isTreeResizing) {
+      this.isTreeResizing = false;
+      document.body.classList.remove('resizing-tree');
+    }
+  }
+  
+  updateCollapseToggleVisibility(): void {
+    // This function is no longer needed as the button is always visible
+  }
+
+  toggleTreeCollapsed(): void {
+    this.treeCollapsed = !this.treeCollapsed;
+    if (this.treeCollapsed) {
+      this.previousTreeWidth = this.treePanelWidth;
+      this.treePanelWidth = this.collapsedTreeWidth;
+    } else {
+      const restoredWidth = Math.max(this.treeMinWidth, Math.min(this.treeMaxWidth, this.previousTreeWidth));
+      this.treePanelWidth = restoredWidth;
+    }
+    setTimeout(() => this.calculateEditorHeight(), 0);
+  }
   
   // Calculate dynamic editor height based on viewport
   calculateEditorHeight(): void {
     const windowHeight = window.innerHeight;
     const navbarHeight = 64; // Approximate navbar height
     const tabBarHeight = 48; // Tab bar height
-    const editorToolbarHeight = 100; // Catalog selector + buttons + toolbar
+    const editorToolbarHeight = 80; // Selection breadcrumbs + buttons + toolbar
     const bottomMargin = 16; // Small margin at bottom
     
     // Calculate available height
@@ -173,11 +314,224 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     }
     
     this.editorHeight = Math.max(200, Math.min(600, availableHeight));
-    
-    // Update editor DOM height without re-creating instance
-    if (this.editorView) {
-      this.editorView.dom.style.height = `${this.editorHeight}px`;
+    const calculatedTreeHeight = this.editorHeight + this.treeExtraHeight;
+    this.treePanelHeight = Math.max(420, calculatedTreeHeight);
+  }
+
+  startTreeResize(event: MouseEvent): void {
+    if (this.treeCollapsed) {
+      return;
     }
+    this.isTreeResizing = true;
+    this.resizeStartX = event.clientX;
+    this.resizeStartWidth = this.treePanelWidth;
+    event.preventDefault();
+    event.stopPropagation();
+    document.body.classList.add('resizing-tree');
+  }
+
+  toggleNode(node: NavTreeNode, event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+
+    if (node.loading) {
+      return;
+    }
+
+    node.expanded = !node.expanded;
+
+    if (!node.expanded) {
+      return;
+    }
+
+    switch (node.type) {
+      case 'catalog':
+        this.loadDatabasesForCatalog(node);
+        break;
+      case 'group':
+        // No longer used
+        break;
+      default:
+        if (node.type === 'database') {
+          this.loadTablesForDatabase(node);
+        }
+        break;
+    }
+  }
+
+  onNodeSelect(node: NavTreeNode, event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+
+    this.selectedNodeId = node.id;
+
+    switch (node.type) {
+      case 'catalog': {
+        const catalogName = node.data?.catalog || '';
+        this.setSelectedContext(catalogName, null, null);
+        if (!node.expanded) {
+          this.toggleNode(node);
+        }
+        break;
+      }
+      case 'database': {
+        const catalogName = node.data?.catalog || '';
+        const databaseName = node.data?.database || '';
+        this.setSelectedContext(catalogName, databaseName, null);
+        if (!node.expanded) {
+          this.toggleNode(node);
+        }
+        if (!node.data?.tablesLoaded) {
+          this.loadTablesForDatabase(node);
+        }
+        break;
+      }
+      case 'group': {
+        // No longer used
+        break;
+      }
+      case 'table': {
+        const catalogName = node.data?.catalog || '';
+        const databaseName = node.data?.database || '';
+        const tableName = node.data?.table || '';
+        this.setSelectedContext(catalogName, databaseName, tableName);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  private setSelectedContext(catalog: string, database: string | null, table: string | null): void {
+    this.selectedCatalog = catalog;
+    this.selectedDatabase = database;
+    this.selectedTable = table;
+
+    if (this.editorView) {
+      setTimeout(() => this.calculateEditorHeight(), 0);
+    }
+  }
+
+  private resetNavigationState(): void {
+    this.databaseTree = [];
+    this.databaseCache = {};
+    this.tableCache = {};
+    this.selectedNodeId = null;
+    this.selectedCatalog = '';
+    this.selectedDatabase = null;
+    this.selectedTable = null;
+  }
+
+  private loadDatabasesForCatalog(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const cacheKey = this.getCatalogKey(catalogName);
+
+    if (this.databaseCache[cacheKey]) {
+      node.children = this.databaseCache[cacheKey].map((db) => this.createDatabaseNode(catalogName, db));
+      return;
+    }
+
+    node.loading = true;
+    this.loadingDatabases = true;
+
+    this.nodeService.getDatabases(catalogName || undefined).subscribe({
+      next: (databases) => {
+        const dbList = databases || [];
+        this.databaseCache[cacheKey] = dbList;
+        node.children = dbList.map((db) => this.createDatabaseNode(catalogName, db));
+        node.loading = false;
+        this.loadingDatabases = false;
+
+        if (node.expanded && this.selectedNodeId === node.id && node.children.length > 0) {
+          this.onNodeSelect(node.children[0]);
+        }
+      },
+      error: (error) => {
+        node.loading = false;
+        this.loadingDatabases = false;
+        console.error('Failed to load databases:', error);
+        node.children = [];
+        this.toastrService.danger('加载数据库列表失败', '错误');
+      },
+    });
+  }
+
+  private loadTablesForDatabase(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+
+    if (!databaseName) {
+      node.children = [];
+      return;
+    }
+
+    const cacheKey = this.getDatabaseCacheKey(catalogName, databaseName);
+
+    const applyTables = (tables: string[]) => {
+      const tableList = tables || [];
+      this.tableCache[cacheKey] = tableList;
+      node.children = tableList.map((table) => this.createTableNode(catalogName, databaseName, table));
+      const baseName = node.data?.originalName || databaseName;
+      node.name = `${baseName} (${tableList.length})`;
+      if (node.data) {
+        node.data.tablesLoaded = true;
+        node.data.tableCount = tableList.length;
+      }
+      if (node.expanded && this.selectedNodeId === node.id && node.children.length > 0) {
+        this.onNodeSelect(node.children[0]);
+      }
+    };
+
+    if (this.tableCache[cacheKey]) {
+      applyTables(this.tableCache[cacheKey]);
+      return;
+    }
+
+    node.loading = true;
+
+    this.nodeService.getTables(catalogName || undefined, databaseName).subscribe({
+      next: (tables) => {
+        applyTables(tables || []);
+        node.loading = false;
+      },
+      error: (error) => {
+        node.loading = false;
+        console.error('Failed to load tables:', error);
+        node.children = [];
+        const baseName = node.data?.originalName || databaseName || node.name;
+        node.name = `${baseName}`;
+        if (node.data) {
+          node.data.tablesLoaded = false;
+          node.data.tableCount = 0;
+        }
+        this.toastrService.danger(`加载表列表失败: ${error.message || error.statusText || '未知错误'}`, '错误');
+      },
+    });
+  }
+
+  getNodeIndent(node: NavTreeNode): number {
+    switch (node.type) {
+      case 'catalog':
+        return 12;
+      case 'database':
+        return 32;
+      case 'table':
+        return 52;
+      default:
+        return 12;
+    }
+  }
+
+  isNodeExpandable(node: NavTreeNode): boolean {
+    return node.type !== 'table';
+  }
+
+  trackNodeById(index: number, node: NavTreeNode): string {
+    return node.id;
   }
 
   private initEditor(): void {
@@ -251,7 +605,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     }
   }
 
-  private loadCatalogs(): void {
+  private loadCatalogs(autoSelectFirst = true): void {
     if (!this.clusterId) {
       return;
     }
@@ -259,68 +613,21 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.loadingCatalogs = true;
     this.nodeService.getCatalogs().subscribe({
       next: (catalogs) => {
-        this.catalogs = catalogs;
+        const catalogList = (catalogs || []).filter((name) => !!name && name.trim().length > 0);
+        catalogList.sort((a, b) => a.localeCompare(b));
+        this.catalogs = catalogList;
         this.loadingCatalogs = false;
-        // Auto-select first catalog if available (always select if only one or first available)
-        if (catalogs.length > 0) {
-          // If no catalog selected or selected catalog not in list, select first one
-          if (!this.selectedCatalog || !catalogs.includes(this.selectedCatalog)) {
-            this.selectedCatalog = catalogs[0];
-            // Load databases for selected catalog
-            this.loadDatabases();
-          } else if (this.selectedCatalog && catalogs.includes(this.selectedCatalog)) {
-            // If catalog is already selected and still in list, just refresh databases
-            this.loadDatabases();
-          }
-        } else {
-          this.selectedCatalog = '';
-          this.databases = [];
+        this.databaseTree = this.catalogs.map((catalog) => this.createCatalogNode(catalog));
+
+        if (autoSelectFirst && this.databaseTree.length > 0) {
+          const firstCatalogNode = this.databaseTree[0];
+          this.onNodeSelect(firstCatalogNode);
+          this.toggleNode(firstCatalogNode);
         }
       },
       error: (error) => {
         this.loadingCatalogs = false;
         console.error('Failed to load catalogs:', error);
-      },
-    });
-  }
-
-  onCatalogChange(catalog?: string): void {
-    // When catalog changes, reload databases for that catalog
-    const newCatalog = catalog !== undefined ? catalog : this.selectedCatalog;
-    
-    // Clear database selection and list
-    this.selectedDatabase = null;
-    this.databases = [];
-    
-    if (newCatalog) {
-      // Small delay to ensure catalog selection is updated
-      setTimeout(() => {
-        this.loadDatabases();
-      }, 100);
-    }
-  }
-
-  private loadDatabases(): void {
-    if (!this.clusterId || !this.selectedCatalog) {
-      this.databases = [];
-      return;
-    }
-
-    this.loadingDatabases = true;
-    this.nodeService.getDatabases(this.selectedCatalog).subscribe({
-      next: (databases) => {
-        this.databases = databases || [];
-        this.loadingDatabases = false;
-        
-      },
-      error: (error) => {
-        this.loadingDatabases = false;
-        this.databases = [];
-        console.error('Failed to load databases:', error);
-        // Show error toast only if it's a real error (not just empty result)
-        if (error.status !== 200 && error.status !== 404) {
-          // Could optionally show a toast here, but maybe not needed for empty result
-        }
       },
     });
   }
@@ -337,9 +644,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           if (this.clusterId !== newClusterId) {
             this.clusterId = newClusterId;
             // Load catalogs when cluster changes (this will auto-select and load databases)
-            this.selectedCatalog = '';
-            this.selectedDatabase = null;
-            this.databases = [];
+            this.resetNavigationState();
             this.loadCatalogs();
             // Only load if not on realtime tab
             if (this.selectedTab !== 'realtime') {
@@ -367,6 +672,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.destroyEditor();
     this.destroy$.next();
     this.destroy$.complete();
+    document.body.classList.remove('resizing-tree');
   }
 
   // Tab switching
@@ -467,12 +773,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     }
 
     if (!this.selectedDatabase) {
-      // Check if there are available databases to select
-      if (this.databases.length > 0) {
         this.toastrService.warning('请选择数据库', '提示');
         return;
-      }
-      // If no databases available, allow execution with empty database (不使用数据库)
     }
 
     this.executing = true;

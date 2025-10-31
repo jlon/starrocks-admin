@@ -431,11 +431,12 @@ impl StarRocksClient {
                         } else {
                             continue;
                         };
-                        
+
                         // Skip system databases and empty names
                         if !db_name.is_empty()
-                            && db_name != "information_schema" 
-                            && db_name != "_statistics_" {
+                            && db_name != "information_schema"
+                            && db_name != "_statistics_"
+                        {
                             databases.push(db_name);
                         }
                     }
@@ -444,7 +445,7 @@ impl StarRocksClient {
         }
 
         tracing::debug!(
-            "Found {} databases in catalog {} (or default)", 
+            "Found {} databases in catalog {} (or default)",
             databases.len(),
             catalog_name
         );

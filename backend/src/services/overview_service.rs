@@ -554,7 +554,9 @@ impl OverviewService {
             }
 
             let time_range_start = time_range.map(|tr| tr.start_time());
-            service.update_statistics(cluster_id, time_range_start).await
+            service
+                .update_statistics(cluster_id, time_range_start)
+                .await
         } else {
             Err(ApiError::internal_error("Data statistics service not configured"))
         }
@@ -1094,7 +1096,9 @@ impl OverviewService {
             starrocks_version_result,
         ) = tokio::join!(
             async {
-                self.get_data_statistics(cluster_id, Some(&time_range)).await.ok()
+                self.get_data_statistics(cluster_id, Some(&time_range))
+                    .await
+                    .ok()
             },
             self.get_mv_stats(cluster_id),
             self.get_load_job_stats(cluster_id, &time_range),
@@ -1105,7 +1109,11 @@ impl OverviewService {
                 match self.predict_capacity(cluster_id).await {
                     Ok(cap) => Some(cap),
                     Err(e) => {
-                        tracing::warn!("Failed to predict capacity for cluster {}: {}", cluster_id, e);
+                        tracing::warn!(
+                            "Failed to predict capacity for cluster {}: {}",
+                            cluster_id,
+                            e
+                        );
                         None
                     },
                 }
@@ -1127,7 +1135,8 @@ impl OverviewService {
         let starrocks_version = starrocks_version_result;
 
         let health = if let Some(ref latest_snapshot) = latest {
-            self.calculate_cluster_health(cluster_id, latest_snapshot, &starrocks_version).await?
+            self.calculate_cluster_health(cluster_id, latest_snapshot, &starrocks_version)
+                .await?
         } else {
             return Err(ApiError::internal_error("No metrics snapshot available"));
         };
@@ -1401,7 +1410,7 @@ impl OverviewService {
 
         // Calculate time range start time
         let start_time = time_range.start_time();
-        
+
         // Query load job statistics from information_schema.loads
         // Note: SHOW LOAD returns current database only, so we query information_schema
         let query = format!(
@@ -1580,7 +1589,7 @@ impl OverviewService {
     }
 
     /// Get detailed compaction statistics for storage-compute separation architecture
-    /// 
+    ///
     /// This method queries:
     /// 1. Top 10 partitions by compaction score from information_schema.partitions_meta
     /// 2. Running and finished compaction tasks from information_schema.be_cloud_native_compactions
@@ -1657,23 +1666,26 @@ impl OverviewService {
             .unwrap_or((vec![], vec![]));
 
         tracing::debug!("Compaction PROC query returned {} rows", rows.len());
-        
+
         // Process compaction data in Rust since SHOW PROC cannot be used in subqueries
         let mut total_count = 0;
         let mut running_count = 0;
         let mut finished_count = 0;
         let mut durations: Vec<i64> = Vec::new();
-        
+
         for row in &rows {
             if row.len() >= 5 {
                 // Parse StartTime and FinishTime
                 let start_time_str = row.get(2).map(|s| s.to_string()).unwrap_or_default();
                 let finish_time_str = row.get(4).map(|s| s.to_string()).unwrap_or_default();
-                
+
                 // Check if task is within time range or still running
-                let is_within_time_range = if !start_time_str.is_empty() && start_time_str != "NULL" {
+                let is_within_time_range = if !start_time_str.is_empty() && start_time_str != "NULL"
+                {
                     // Parse start time and check if within range
-                    if let Ok(start_time) = chrono::NaiveDateTime::parse_from_str(&start_time_str, "%Y-%m-%d %H:%M:%S") {
+                    if let Ok(start_time) =
+                        chrono::NaiveDateTime::parse_from_str(&start_time_str, "%Y-%m-%d %H:%M:%S")
+                    {
                         let now = chrono::Utc::now().naive_utc();
                         let time_diff = now.signed_duration_since(start_time);
                         time_diff.num_hours() <= hours_back
@@ -1683,24 +1695,35 @@ impl OverviewService {
                 } else {
                     false
                 };
-                
+
                 let is_running = finish_time_str.is_empty() || finish_time_str == "NULL";
                 let _is_finished = !is_running;
-                
+
                 if is_within_time_range || is_running {
                     total_count += 1;
                     if is_running {
                         running_count += 1;
                     } else {
                         finished_count += 1;
-                        
+
                         // Calculate duration for finished tasks
-                        if !start_time_str.is_empty() && start_time_str != "NULL" && !finish_time_str.is_empty() && finish_time_str != "NULL" {
+                        if !start_time_str.is_empty()
+                            && start_time_str != "NULL"
+                            && !finish_time_str.is_empty()
+                            && finish_time_str != "NULL"
+                        {
                             if let (Ok(start_time), Ok(finish_time)) = (
-                                chrono::NaiveDateTime::parse_from_str(&start_time_str, "%Y-%m-%d %H:%M:%S"),
-                                chrono::NaiveDateTime::parse_from_str(&finish_time_str, "%Y-%m-%d %H:%M:%S")
+                                chrono::NaiveDateTime::parse_from_str(
+                                    &start_time_str,
+                                    "%Y-%m-%d %H:%M:%S",
+                                ),
+                                chrono::NaiveDateTime::parse_from_str(
+                                    &finish_time_str,
+                                    "%Y-%m-%d %H:%M:%S",
+                                ),
                             ) {
-                                let duration = finish_time.signed_duration_since(start_time).num_seconds();
+                                let duration =
+                                    finish_time.signed_duration_since(start_time).num_seconds();
                                 durations.push(duration);
                             }
                         }
@@ -1708,42 +1731,39 @@ impl OverviewService {
                 }
             }
         }
-        
-        let task_stats = CompactionTaskStats {
+
+        let task_stats = CompactionTaskStats { total_count, running_count, finished_count };
+
+        tracing::debug!(
+            "Processed compaction stats: total={}, running={}, finished={}",
             total_count,
             running_count,
-            finished_count,
-        };
-        
-        tracing::debug!("Processed compaction stats: total={}, running={}, finished={}", total_count, running_count, finished_count);
+            finished_count
+        );
 
         // Calculate duration statistics from the durations we collected
         let duration_stats = if durations.is_empty() {
-            CompactionDurationStats {
-                min_duration_ms: 0,
-                max_duration_ms: 0,
-                avg_duration_ms: 0,
-            }
+            CompactionDurationStats { min_duration_ms: 0, max_duration_ms: 0, avg_duration_ms: 0 }
         } else {
             let min_duration = durations.iter().min().unwrap_or(&0);
             let max_duration = durations.iter().max().unwrap_or(&0);
             let avg_duration = durations.iter().sum::<i64>() / durations.len() as i64;
-            
+
             CompactionDurationStats {
                 min_duration_ms: min_duration * 1000,
                 max_duration_ms: max_duration * 1000,
                 avg_duration_ms: avg_duration * 1000,
             }
         };
-        
-        tracing::debug!("Duration stats: min={}ms, max={}ms, avg={}ms", 
-            duration_stats.min_duration_ms, duration_stats.max_duration_ms, duration_stats.avg_duration_ms);
 
-        Ok(CompactionDetailStats {
-            top_partitions,
-            task_stats,
-            duration_stats,
-        })
+        tracing::debug!(
+            "Duration stats: min={}ms, max={}ms, avg={}ms",
+            duration_stats.min_duration_ms,
+            duration_stats.max_duration_ms,
+            duration_stats.avg_duration_ms
+        );
+
+        Ok(CompactionDetailStats { top_partitions, task_stats, duration_stats })
     }
 
     /// Module 12: Get session stats from SHOW PROCESSLIST

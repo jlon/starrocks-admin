@@ -52,10 +52,10 @@ pub struct StaticConfig {
 #[serde(default)]
 pub struct MetricsCollectorConfig {
     /// Metrics collection interval in seconds (default: 30)
-    #[serde(deserialize_with = "deserialize_duration_secs")] 
+    #[serde(deserialize_with = "deserialize_duration_secs")]
     pub interval_secs: u64,
     /// Historical metrics retention days (default: 7)
-    #[serde(deserialize_with = "deserialize_days_i64")] 
+    #[serde(deserialize_with = "deserialize_days_i64")]
     pub retention_days: i64,
     /// Whether to enable the metrics collector at startup (default: true)
     pub enabled: bool,
@@ -136,9 +136,17 @@ impl Config {
             match parse_duration_to_secs(&interval) {
                 Ok(val) => {
                     self.metrics.interval_secs = val;
-                    tracing::info!("Override metrics.interval_secs from env: {}", self.metrics.interval_secs);
-                }
-                Err(e) => tracing::warn!("Invalid APP_METRICS_INTERVAL_SECS '{}': {} (keep {})", interval, e, self.metrics.interval_secs),
+                    tracing::info!(
+                        "Override metrics.interval_secs from env: {}",
+                        self.metrics.interval_secs
+                    );
+                },
+                Err(e) => tracing::warn!(
+                    "Invalid APP_METRICS_INTERVAL_SECS '{}': {} (keep {})",
+                    interval,
+                    e,
+                    self.metrics.interval_secs
+                ),
             }
         }
 
@@ -146,9 +154,17 @@ impl Config {
             match parse_days_to_i64(&retention) {
                 Ok(val) => {
                     self.metrics.retention_days = val;
-                    tracing::info!("Override metrics.retention_days from env: {}", self.metrics.retention_days);
-                }
-                Err(e) => tracing::warn!("Invalid APP_METRICS_RETENTION_DAYS '{}': {} (keep {})", retention, e, self.metrics.retention_days),
+                    tracing::info!(
+                        "Override metrics.retention_days from env: {}",
+                        self.metrics.retention_days
+                    );
+                },
+                Err(e) => tracing::warn!(
+                    "Invalid APP_METRICS_RETENTION_DAYS '{}': {} (keep {})",
+                    retention,
+                    e,
+                    self.metrics.retention_days
+                ),
             }
         }
 
@@ -265,7 +281,9 @@ fn parse_duration_to_secs(input: &str) -> Result<u64, String> {
 
     let s = input.trim().to_lowercase();
     let (num_str, unit) = s.split_at(s.chars().take_while(|c| c.is_ascii_digit()).count());
-    if num_str.is_empty() || unit.is_empty() { return Err("missing number or unit".into()); }
+    if num_str.is_empty() || unit.is_empty() {
+        return Err("missing number or unit".into());
+    }
     let n: u64 = num_str.parse().map_err(|_| "invalid number".to_string())?;
     match unit {
         "s" | "sec" | "secs" | "second" | "seconds" => Ok(n),
@@ -284,7 +302,9 @@ fn parse_days_to_i64(input: &str) -> Result<i64, String> {
 
     let s = input.trim().to_lowercase();
     let (num_str, unit) = s.split_at(s.chars().take_while(|c| c.is_ascii_digit()).count());
-    if num_str.is_empty() || unit.is_empty() { return Err("missing number or unit".into()); }
+    if num_str.is_empty() || unit.is_empty() {
+        return Err("missing number or unit".into());
+    }
     let n: i64 = num_str.parse().map_err(|_| "invalid number".to_string())?;
     match unit {
         "d" | "day" | "days" => Ok(n),
@@ -304,13 +324,27 @@ where
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(f, "a number of seconds or a string like '30s', '5m', '1h'")
         }
-        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> { Ok(v) }
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(v)
+        }
         fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
-        where E: serde::de::Error { if v >= 0 { Ok(v as u64) } else { Err(E::custom("negative not allowed")) } }
+        where
+            E: serde::de::Error,
+        {
+            if v >= 0 { Ok(v as u64) } else { Err(E::custom("negative not allowed")) }
+        }
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where E: serde::de::Error { parse_duration_to_secs(v).map_err(E::custom) }
+        where
+            E: serde::de::Error,
+        {
+            parse_duration_to_secs(v).map_err(E::custom)
+        }
         fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-        where E: serde::de::Error { parse_duration_to_secs(&v).map_err(E::custom) }
+        where
+            E: serde::de::Error,
+        {
+            parse_duration_to_secs(&v).map_err(E::custom)
+        }
     }
     deserializer.deserialize_any(Visitor)
 }
@@ -325,12 +359,24 @@ where
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(f, "a number of days or a string like '7d' or '2w'")
         }
-        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E> { Ok(v) }
-        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> { Ok(v as i64) }
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E> {
+            Ok(v)
+        }
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(v as i64)
+        }
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where E: serde::de::Error { parse_days_to_i64(v).map_err(E::custom) }
+        where
+            E: serde::de::Error,
+        {
+            parse_days_to_i64(v).map_err(E::custom)
+        }
         fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-        where E: serde::de::Error { parse_days_to_i64(&v).map_err(E::custom) }
+        where
+            E: serde::de::Error,
+        {
+            parse_days_to_i64(&v).map_err(E::custom)
+        }
     }
     deserializer.deserialize_any(Visitor)
 }

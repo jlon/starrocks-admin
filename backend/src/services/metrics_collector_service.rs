@@ -117,12 +117,7 @@ impl MetricsCollectorService {
         mysql_pool_manager: Arc<MySQLPoolManager>,
         retention_days: i64,
     ) -> Self {
-        Self {
-            db,
-            cluster_service,
-            mysql_pool_manager,
-            retention_days,
-        }
+        Self { db, cluster_service, mysql_pool_manager, retention_days }
     }
 
     /// Execute one collection cycle

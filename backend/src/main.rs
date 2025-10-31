@@ -310,15 +310,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/clusters", post(handlers::cluster::create_cluster))
         .route("/api/clusters", get(handlers::cluster::list_clusters))
         .route("/api/clusters/active", get(handlers::cluster::get_active_cluster))
-        .route("/api/clusters/:id", get(handlers::cluster::get_cluster))
-        .route("/api/clusters/:id", put(handlers::cluster::update_cluster))
-        .route("/api/clusters/:id", delete(handlers::cluster::delete_cluster))
-        .route("/api/clusters/:id/activate", put(handlers::cluster::activate_cluster))
         .route("/api/clusters/health/test", post(handlers::cluster::test_cluster_connection))
-        .route(
-            "/api/clusters/:id/health",
-            get(handlers::cluster::get_cluster_health).post(handlers::cluster::get_cluster_health),
-        )
         // Backends
         .route("/api/clusters/backends", get(handlers::backend::list_backends))
         .route("/api/clusters/backends/:host/:port", delete(handlers::backend::delete_backend))
@@ -327,7 +319,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Queries
         .route("/api/clusters/catalogs", get(handlers::query::list_catalogs))
         .route("/api/clusters/databases", get(handlers::query::list_databases))
-        .route("/api/clusters/catalogs-databases", get(handlers::query::list_catalogs_with_databases))
+        .route("/api/clusters/tables", get(handlers::query::list_tables))
+        .route(
+            "/api/clusters/catalogs-databases",
+            get(handlers::query::list_catalogs_with_databases),
+        )
         .route("/api/clusters/queries", get(handlers::query::list_queries))
         .route("/api/clusters/queries/execute", post(handlers::query::execute_sql))
         .route("/api/clusters/queries/:query_id", delete(handlers::query::kill_query))
@@ -335,6 +331,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/clusters/queries/:query_id/profile",
             get(handlers::query_profile::get_query_profile),
+        )
+        // Cluster detail routes (placed after specific query routes to avoid path conflicts)
+        .route("/api/clusters/:id", get(handlers::cluster::get_cluster))
+        .route("/api/clusters/:id", put(handlers::cluster::update_cluster))
+        .route("/api/clusters/:id", delete(handlers::cluster::delete_cluster))
+        .route("/api/clusters/:id/activate", put(handlers::cluster::activate_cluster))
+        .route(
+            "/api/clusters/:id/health",
+            get(handlers::cluster::get_cluster_health).post(handlers::cluster::get_cluster_health),
         )
         // Materialized Views
         .route(

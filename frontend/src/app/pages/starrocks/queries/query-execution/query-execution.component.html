@@ -9,115 +9,180 @@
               <!-- Real-time Query Tab -->
               <nb-tab tabTitle="实时查询" tabId="realtime" [active]="selectedTab === 'realtime'">
             <div class="realtime-query-container">
-              <!-- Collapsed SQL Bar (shown when editor is collapsed) -->
-              <div *ngIf="sqlEditorCollapsed" class="collapsed-sql-bar" (click)="toggleSqlEditor(false)">
-                <div class="collapsed-sql-preview">
-                  <nb-icon icon="code-outline" status="primary"></nb-icon>
-                  <span class="sql-text" *ngIf="sqlInput && sqlInput.length > 0">{{ sqlInput | slice:0:100 }}{{ sqlInput.length > 100 ? '...' : '' }}</span>
-                  <span class="sql-text sql-placeholder" *ngIf="!sqlInput || sqlInput.length === 0">点击展开 SQL 编辑器</span>
-                </div>
-              </div>
-              
-              <!-- SQL Editor - CodeMirror (shown when editor is expanded) -->
-              <div class="sql-editor-section" [@editorCollapse]="sqlEditorCollapsed ? 'collapsed' : 'expanded'">
-                <!-- Catalog and Database Selection with Action Buttons on Right -->
-                <div class="catalog-database-selector mb-1 d-flex justify-content-between align-items-center gap-3">
-                  <div class="d-flex align-items-center gap-2">
-                    <nb-select 
-                      [(selected)]="selectedCatalog" 
-                      (selectedChange)="onCatalogChange($event)"
-                      placeholder="选择 Catalog"
-                      size="small"
-                      [disabled]="executing || loadingCatalogs"
-                      searchable
-                      style="min-width: 180px;"
-                      [ngClass]="{'placeholder-select': !selectedCatalog}">
-                      <nb-option *ngFor="let catalog of catalogs" [value]="catalog">
-                        {{ catalog }}
-                      </nb-option>
-                    </nb-select>
-                    
-                    <nb-select 
-                      [(selected)]="selectedDatabase" 
-                      placeholder="{{ loadingDatabases ? '加载中...' : (selectedCatalog ? '空' : '请先选择 Catalog') }}"
-                      size="small"
-                      [disabled]="executing || loadingDatabases || !selectedCatalog"
-                      searchable
-                      style="min-width: 200px;"
-                      [ngClass]="{'placeholder-select': !selectedDatabase}">
-                      <nb-option *ngFor="let db of databases" [value]="db">
-                        {{ db }}
-                      </nb-option>
-                      <nb-option *ngIf="!loadingDatabases && selectedCatalog && databases.length === 0" disabled>
-                        该 Catalog 下暂无数据库
-                      </nb-option>
-                    </nb-select>
-                  </div>
-                  
-                  <!-- Action Buttons on Top Right -->
-                  <div class="editor-action-buttons d-flex align-items-center gap-2">
+              <div class="query-split-layout">
+                <div class="nav-tree-wrapper" [class.collapsed]="treeCollapsed" [style.width.px]="treePanelWidth">
+                  <ng-container *ngIf="!treeCollapsed; else collapsedButton">
+                    <nb-card size="tiny" class="nav-tree-card" [style.height.px]="treePanelHeight">
+                      <nb-card-header>
+                        <div class="nav-tree-header">
+                          <nb-icon icon="layers-outline"></nb-icon>
+                          <span>Catalog / 数据库</span>
+                        </div>
+                        <button 
+                          nbButton 
+                          status="basic"
+                          size="tiny" 
+                          class="tree-collapse-toggle header-button"
+                          type="button"
+                          (click)="toggleTreeCollapsed()"
+                          [title]="treeCollapsed ? '展开数据库树' : '收起数据库树'">
+                          <nb-icon icon="arrow-ios-back-outline"></nb-icon>
+                        </button>
+                      </nb-card-header>
+                      <nb-card-body>
+                        <div class="tree-scroll">
+                          <div class="tree-loading" *ngIf="loadingCatalogs">
+                            <nb-spinner size="small" status="primary"></nb-spinner>
+                          </div>
+                          <ul class="nav-tree" *ngIf="!loadingCatalogs && databaseTree.length > 0; else emptyTree">
+                            <ng-container *ngFor="let node of databaseTree; trackBy: trackNodeById">
+                              <ng-container *ngTemplateOutlet="treeNodeTemplate; context: { $implicit: node }"></ng-container>
+                            </ng-container>
+                          </ul>
+                          <ng-template #emptyTree>
+                            <div class="empty-tree">
+                              <nb-icon icon="alert-circle-outline"></nb-icon>
+                              <span>暂无 Catalog</span>
+                            </div>
+                          </ng-template>
+                        </div>
+                      </nb-card-body>
+                    </nb-card>
+                  </ng-container>
+                  <ng-template #collapsedButton>
                     <button 
                       nbButton 
-                      status="primary" 
-                      size="small"
-                      [nbSpinner]="executing"
-                      nbSpinnerStatus="control"
-                      nbSpinnerSize="small"
-                      (click)="executeSQL()" 
-                      [disabled]="executing || !clusterId || !sqlInput">
-                      <nb-icon *ngIf="!executing" icon="play-circle-outline"></nb-icon>
-                      {{ executing ? '执行中...' : '执行' }}
+                      status="basic"
+                      size="tiny" 
+                      class="tree-collapse-toggle collapsed-button"
+                      type="button"
+                      (click)="toggleTreeCollapsed()"
+                      [title]="treeCollapsed ? '展开数据库树' : '收起数据库树'">
+                      <nb-icon icon="arrow-ios-forward-outline"></nb-icon>
                     </button>
-                    <button 
-                      nbButton 
-                      status="basic" 
-                      size="small"
-                      (click)="clearSQL()" 
-                      [disabled]="executing">
-                      <nb-icon icon="trash-2-outline"></nb-icon>
-                      清空
-                    </button>
-                    <button 
-                      nbButton 
-                      status="info" 
-                      size="small"
-                      (click)="formatSQL()" 
-                      [disabled]="executing || !sqlInput">
-                      <nb-icon icon="code-outline"></nb-icon>
-                      格式化
-                    </button>
-                  </div>
+                  </ng-template>
                 </div>
 
-                <!-- CodeMirror Editor Container -->
-                <div class="editor-wrapper">
-                  <div #editorContainer class="codemirror-container"></div>
-                  
-                  <!-- Loading overlay with Nebular spinner -->
-                  <div *ngIf="executing" class="loading-overlay">
-                    <nb-spinner size="large" status="primary" message="正在执行查询..."></nb-spinner>
-                  </div>
+                <div class="tree-resizer" *ngIf="!treeCollapsed" (mousedown)="startTreeResize($event)">
+                  <span class="resizer-grip"></span>
                 </div>
-                
-                <div class="editor-toolbar mt-2 d-flex justify-content-between align-items-center">
-                  <small class="hint-text">
-                    <nb-icon icon="info-outline"></nb-icon>
-                    SELECT 查询会自动添加 LIMIT 限制（如未指定）
-                  </small>
-                  
-                  <div class="right-actions">
-                    <span class="limit-label">限制:</span>
-                    <nb-select 
-                      [(selected)]="queryLimit" 
-                      size="tiny"
-                      [disabled]="executing">
-                      <nb-option *ngFor="let option of limitOptions" [value]="option.value">
-                        {{ option.label }}
-                      </nb-option>
-                    </nb-select>
+
+                <div class="editor-panel">
+                  <!-- Collapsed SQL Bar (shown when editor is collapsed) -->
+                  <div *ngIf="sqlEditorCollapsed" class="collapsed-sql-bar" (click)="toggleSqlEditor(false)">
+                    <div class="collapsed-sql-preview">
+                      <nb-icon icon="code-outline" status="primary"></nb-icon>
+                      <span class="sql-text" *ngIf="sqlInput && sqlInput.length > 0">{{ sqlInput | slice:0:100 }}{{ sqlInput.length > 100 ? '...' : '' }}</span>
+                      <span class="sql-text sql-placeholder" *ngIf="!sqlInput || sqlInput.length === 0">点击展开 SQL 编辑器</span>
+                    </div>
+                  </div>
+
+                  <!-- SQL Editor - CodeMirror (shown when editor is expanded) -->
+                  <div class="sql-editor-section" [@editorCollapse]="sqlEditorCollapsed ? 'collapsed' : 'expanded'">
+                    <div class="selection-toolbar d-flex justify-content-between align-items-center">
+                      <div class="selection-path d-flex align-items-center">
+                        <nb-icon icon="pin-outline" status="primary"></nb-icon>
+                        <span class="path-segment" [class.inactive]="!selectedCatalog">{{ selectedCatalog || '未选择 Catalog' }}</span>
+                        <nb-icon icon="arrow-ios-forward-outline"></nb-icon>
+                        <span class="path-segment" [class.inactive]="!selectedDatabase">{{ selectedDatabase || '未选择数据库' }}</span>
+                        <nb-icon icon="arrow-ios-forward-outline"></nb-icon>
+                        <span class="path-segment" [class.inactive]="!selectedTable">{{ selectedTable || '未选择表' }}</span>
+                        <nb-spinner *ngIf="loadingDatabases" size="tiny" status="info" class="loading-indicator"></nb-spinner>
+                      </div>
+
+                      <div class="editor-action-buttons d-flex align-items-center gap-2">
+                        <button 
+                          nbButton 
+                          status="primary" 
+                          size="small"
+                          [nbSpinner]="executing"
+                          nbSpinnerStatus="control"
+                          nbSpinnerSize="small"
+                          (click)="executeSQL()" 
+                          [disabled]="executing || !clusterId || !sqlInput">
+                          <nb-icon *ngIf="!executing" icon="play-circle-outline"></nb-icon>
+                          {{ executing ? '执行中...' : '执行' }}
+                        </button>
+                        <button 
+                          nbButton 
+                          status="basic" 
+                          size="small"
+                          (click)="clearSQL()" 
+                          [disabled]="executing">
+                          <nb-icon icon="trash-2-outline"></nb-icon>
+                          清空
+                        </button>
+                        <button 
+                          nbButton 
+                          status="info" 
+                          size="small"
+                          (click)="formatSQL()" 
+                          [disabled]="executing || !sqlInput">
+                          <nb-icon icon="code-outline"></nb-icon>
+                          格式化
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- CodeMirror Editor Container -->
+                    <div class="editor-wrapper">
+                      <div #editorContainer class="codemirror-container"></div>
+
+                      <!-- Loading overlay with Nebular spinner -->
+                      <div *ngIf="executing" class="loading-overlay">
+                        <nb-spinner size="large" status="primary" message="正在执行查询..."></nb-spinner>
+                      </div>
+                    </div>
+
+                    <div class="editor-toolbar mt-2 d-flex justify-content-between align-items-center">
+                      <small class="hint-text">
+                        <nb-icon icon="info-outline"></nb-icon>
+                        SELECT 查询会自动添加 LIMIT 限制（如未指定）
+                      </small>
+
+                      <div class="right-actions">
+                        <span class="limit-label">限制:</span>
+                        <nb-select 
+                          [(selected)]="queryLimit" 
+                          size="tiny"
+                          [disabled]="executing">
+                          <nb-option *ngFor="let option of limitOptions" [value]="option.value">
+                            {{ option.label }}
+                          </nb-option>
+                        </nb-select>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <ng-template #treeNodeTemplate let-node>
+                <li class="tree-node" [class.expanded]="node.expanded" [class.selected]="node.id === selectedNodeId">
+                  <div class="tree-node-row" [ngClass]="'type-' + node.type" [style.paddingLeft.px]="getNodeIndent(node)" (click)="onNodeSelect(node, $event)">
+                    <button 
+                      *ngIf="isNodeExpandable(node)"
+                      nbButton 
+                      ghost 
+                      size="tiny" 
+                      class="toggle-btn"
+                      type="button"
+                      (click)="toggleNode(node, $event)"
+                      [class.expanded]="node.expanded">
+                      <nb-icon [icon]="node.expanded ? 'chevron-down-outline' : 'chevron-right-outline'"></nb-icon>
+                    </button>
+                    <div class="node-icon">
+                      <nb-icon [icon]="node.icon || 'folder-outline'"></nb-icon>
+                    </div>
+                    <span class="node-text">{{ node.name }}</span>
+                    <nb-spinner *ngIf="node.loading" size="tiny" status="primary"></nb-spinner>
+                  </div>
+                  <ul class="tree-children" *ngIf="node.children && node.children.length && node.expanded">
+                    <ng-container *ngFor="let child of node.children; trackBy: trackNodeById">
+                      <ng-container *ngTemplateOutlet="treeNodeTemplate; context: { $implicit: child }"></ng-container>
+                    </ng-container>
+                  </ul>
+                </li>
+              </ng-template>
 
               <!-- Query Results -->
               <div *ngIf="queryResult" class="mt-3">

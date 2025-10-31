@@ -313,7 +313,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       availableHeight = 60; // Collapsed bar height
     }
     
-    this.editorHeight = Math.max(200, Math.min(600, availableHeight));
+    this.editorHeight = Math.max(200, availableHeight);
     const calculatedTreeHeight = this.editorHeight + this.treeExtraHeight;
     this.treePanelHeight = Math.max(420, calculatedTreeHeight);
   }

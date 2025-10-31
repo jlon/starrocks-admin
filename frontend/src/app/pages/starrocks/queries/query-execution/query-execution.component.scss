@@ -408,12 +408,14 @@
   }
 
   .sql-editor-section {
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.5rem;
     width: 100%;
     overflow: hidden;
     transition: padding 200ms ease, margin 200ms ease;
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
 
     .selection-toolbar {
       display: flex;
@@ -459,110 +461,130 @@
     .editor-wrapper {
       position: relative;
       width: 100%;
-    }
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      gap: 0;
 
-    .codemirror-container {
-      width: 100%;
-      border: 1px solid nb-theme(border-basic-color-4);
-      border-radius: nb-theme(border-radius);
-      overflow: hidden;
-      background-color: nb-theme(background-basic-color-1);
-      padding: 1px;
-      box-sizing: border-box;
-      background-image:
-        linear-gradient(rgba(128, 128, 128, 0.08) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(128, 128, 128, 0.08) 1px, transparent 1px);
-      background-size: 20px 20px;
-      background-position: 0 0;
-      font-size: 20px;
+      .codemirror-container {
+        width: 100%;
+        border: 1px solid nb-theme(border-basic-color-4);
+        border-radius: nb-theme(border-radius);
+        overflow: hidden;
+        background-color: nb-theme(background-basic-color-1);
+        padding: 1px;
+        box-sizing: border-box;
+        background-image:
+          linear-gradient(rgba(128, 128, 128, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(128, 128, 128, 0.08) 1px, transparent 1px);
+        background-size: 20px 20px;
+        background-position: 0 0;
+        font-size: 20px;
+        flex: 1;
+        min-height: 0;
 
-      :host-context(.dark-theme) & {
-        border-color: nb-theme(border-basic-color-3);
-      }
+        :host-context(.dark-theme) & {
+          border-color: nb-theme(border-basic-color-3);
+        }
 
       ::ng-deep .cm-editor {
         font-size: 20px;
         width: 100% !important;
         max-width: 100% !important;
         box-sizing: border-box !important;
+        height: 100% !important;
 
-        .cm-content {
-          font-size: 20px;
-          width: 100% !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-        }
+          .cm-content {
+            font-size: 20px;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+          }
 
-        .cm-line {
-          font-size: 20px;
-          word-wrap: break-word !important;
-          white-space: pre-wrap !important;
-        }
+          .cm-line {
+            font-size: 20px;
+            word-wrap: break-word !important;
+            white-space: pre-wrap !important;
+          }
 
-        .cm-scroller {
-          width: 100% !important;
-          max-width: 100% !important;
-          overflow-x: hidden !important;
-          overflow-y: auto !important;
-          box-sizing: border-box !important;
+          .cm-scroller {
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            box-sizing: border-box !important;
+            height: 100% !important;
+          }
         }
       }
-    }
 
-    .loading-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      pointer-events: none;
-
-      ::ng-deep nb-spinner {
+      .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         display: flex;
-        flex-direction: column;
         align-items: center;
-        gap: 1rem;
+        justify-content: center;
+        z-index: 100;
+        pointer-events: none;
+
+        ::ng-deep nb-spinner {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 1rem;
+        }
+      }
+
+      .editor-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.1rem 0 0;
+        border: none;
+        margin-top: auto;
+
+        .right-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+
+          .limit-label {
+            font-size: 12px;
+            color: nb-theme(text-hint-color);
+            margin-right: 0.25rem;
+          }
+
+          nb-select {
+            margin-right: 0;
+            background-color: nb-theme(background-basic-color-2);
+            border-radius: nb-theme(border-radius);
+
+            ::ng-deep .select-button {
+              background-color: nb-theme(background-basic-color-2) !important;
+              color: nb-theme(text-hint-color) !important;
+              border-color: nb-theme(border-basic-color-3) !important;
+            }
+
+            ::ng-deep nb-option {
+              margin: 0;
+              padding-right: 0;
+            }
+          }
+        }
+
+        .hint-text {
+          color: nb-theme(text-hint-color);
+          margin-left: 0.4rem;
+        }
       }
     }
 
     .editor-action-buttons {
       flex-shrink: 0;
-    }
-
-    .editor-toolbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 0.5rem;
-      width: 100%;
-      padding: 0;
-
-      .right-actions {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-        margin-right: 0;
-        padding-right: 0;
-
-        .limit-label {
-          font-size: 12px;
-          color: var(--text-hint-color);
-          margin-right: 0.25rem;
-        }
-
-        nb-select {
-          margin-right: 0;
-
-          ::ng-deep nb-option {
-            margin: 0;
-            padding-right: 0;
-          }
-        }
-      }
     }
 
     .hint-text {

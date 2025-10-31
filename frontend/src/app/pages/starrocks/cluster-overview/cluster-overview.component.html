@@ -37,45 +37,39 @@
     
     <!-- ==================== 顶部数字卡片区域 ==================== -->
     
-    <!-- 统一指标卡片组：所有核心指标（12个） -->
-    <ngx-metric-card-group 
-      title="集群指标总览" 
-      icon="activity-outline"
-      [collapsed]="false"
-      [loading]="false">
-      <div class="metric-cards-row">
-        <div class="metric-card" *ngFor="let card of healthCards" 
-            (click)="handleCardClick(card)"
-            [title]="card.cardId === 'latency_percentile' ? '点击切换 P50/P95/P99' : (card.cardId === 'disk_cache_metric' ? '点击切换 本地磁盘%/缓存使用' : card.description)">
-         <nb-card [status]="card.cardId === 'latency_percentile' ? getSelectedLatencyStatus() : (card.cardId === 'disk_cache_metric' ? getDiskCardStatus() : card.status)">
-            <nb-card-body>
-              <div class="card-icon">
-                <nb-icon 
-                  [icon]="card.icon || 'info-outline'" 
-                  [status]="card.cardId === 'latency_percentile' ? getSelectedLatencyStatus() : (card.cardId === 'disk_cache_metric' ? getDiskCardStatus() : card.status)">
-                </nb-icon>
+    <!-- 指标卡片 - 移除冗余标题，紧凑布局 -->
+    <div class="metric-cards-row">
+      <div class="metric-card" *ngFor="let card of healthCards" 
+          (click)="handleCardClick(card)"
+          [title]="card.cardId === 'latency_percentile' ? '点击切换 P50/P95/P99' : (card.cardId === 'disk_cache_metric' ? '点击切换 本地磁盘%/缓存使用' : card.description)">
+        <nb-card [status]="card.cardId === 'latency_percentile' ? getSelectedLatencyStatus() : (card.cardId === 'disk_cache_metric' ? getDiskCardStatus() : card.status)">
+          <nb-card-body>
+            <div class="card-icon">
+              <nb-icon 
+                [icon]="card.icon || 'info-outline'" 
+                [status]="card.cardId === 'latency_percentile' ? getSelectedLatencyStatus() : (card.cardId === 'disk_cache_metric' ? getDiskCardStatus() : card.status)">
+              </nb-icon>
+            </div>
+            <div class="card-content">
+              <h6 class="card-title">
+                {{ card.cardId === 'latency_percentile' ? getLatencyCardTitle() : (card.cardId === 'disk_cache_metric' ? getDiskCardTitle() : card.title) }}
+              </h6>
+              <h3 class="card-value">
+                {{ card.cardId === 'latency_percentile' ? Math.round(getSelectedLatencyValue()).toString() : (card.cardId === 'disk_cache_metric' ? getDiskCardValue() : card.value) }}
+                <span class="card-unit" *ngIf="card.cardId === 'latency_percentile' || card.cardId === 'disk_cache_metric'">{{ card.cardId === 'latency_percentile' ? 'ms' : getDiskCardUnit() }}</span>
+                <span class="card-unit" *ngIf="card.cardId !== 'latency_percentile' && card.cardId !== 'disk_cache_metric' && card.unit">{{ card.unit }}</span>
+              </h3>
+              <div class="card-trend" *ngIf="card.trend !== undefined && card.trend !== 0">
+                <nb-icon [icon]="getTrendIcon(card.trend)" [status]="getTrendColor(card.trend)"></nb-icon>
+                <span [class]="'trend-' + getTrendColor(card.trend)">
+                  {{ card.trend > 0 ? '+' : '' }}{{ card.trend.toFixed(1) }}%
+                </span>
               </div>
-              <div class="card-content">
-                <h6 class="card-title">
-                  {{ card.cardId === 'latency_percentile' ? getLatencyCardTitle() : (card.cardId === 'disk_cache_metric' ? getDiskCardTitle() : card.title) }}
-                </h6>
-                <h3 class="card-value">
-                  {{ card.cardId === 'latency_percentile' ? Math.round(getSelectedLatencyValue()).toString() : (card.cardId === 'disk_cache_metric' ? getDiskCardValue() : card.value) }}
-                  <span class="card-unit" *ngIf="card.cardId === 'latency_percentile' || card.cardId === 'disk_cache_metric'">{{ card.cardId === 'latency_percentile' ? 'ms' : getDiskCardUnit() }}</span>
-                  <span class="card-unit" *ngIf="card.cardId !== 'latency_percentile' && card.cardId !== 'disk_cache_metric' && card.unit">{{ card.unit }}</span>
-                </h3>
-                <div class="card-trend" *ngIf="card.trend !== undefined && card.trend !== 0">
-                  <nb-icon [icon]="getTrendIcon(card.trend)" [status]="getTrendColor(card.trend)"></nb-icon>
-                  <span [class]="'trend-' + getTrendColor(card.trend)">
-                    {{ card.trend > 0 ? '+' : '' }}{{ card.trend.toFixed(1) }}%
-                  </span>
-                </div>
-              </div>
-            </nb-card-body>
-          </nb-card>
-        </div>
+            </div>
+          </nb-card-body>
+        </nb-card>
       </div>
-    </ngx-metric-card-group>
+    </div>
 
     <!-- ==================== 图表区域 ==================== -->
 

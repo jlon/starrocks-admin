@@ -1,7 +1,21 @@
 @use '@nebular/theme/styles/theming' as *;
 
 .cluster-overview {
-  padding: 0 0 1rem 0; // 只保留底部padding，移除左右padding以与Tab栏对齐
+  padding: 0; // 移除所有padding，实现紧凑布局
+  
+  // Override nb-card default styles for compact layout
+  > nb-card {
+    margin-bottom: 0;
+    
+    nb-card-header {
+      padding: 0.75rem 1.25rem; // 减少垂直padding (原来可能是1.25rem)
+      border-bottom: 1px solid nb-theme(border-basic-color-3);
+    }
+    
+    nb-card-body {
+      padding: 1rem 1.25rem; // 减少顶部padding，让内容更紧凑
+    }
+  }
 
   .header-section {
     display: flex;
@@ -45,8 +59,8 @@
   .metric-cards-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-    gap: 1rem;
-    margin-bottom: 0;
+    gap: 0.75rem; // 减少卡片间距，更紧凑
+    margin-bottom: 1.25rem; // 与图表区域保持适当间距
 
     @media (min-width: 768px) {
       grid-template-columns: repeat(5, 1fr);
@@ -82,17 +96,17 @@
       nb-card-body {
         display: flex;
         align-items: center;
-        padding: 1rem;
-        min-height: 100px;
+        padding: 0.875rem; // 减少padding (从1rem到0.875rem)
+        min-height: 90px; // 减少最小高度 (从100px到90px)
       }
     }
 
     .card-icon {
-      margin-right: 1rem;
+      margin-right: 0.75rem; // 减少图标与内容的间距
       flex-shrink: 0;
 
       nb-icon {
-        font-size: 2rem; // 从 2.5rem 降低
+        font-size: 1.875rem; // 进一步减小图标 (从2rem到1.875rem = 30px)
       }
     }
 
@@ -104,11 +118,11 @@
       min-width: 0; // 防止flex子元素溢出
 
       .card-title {
-        font-size: 0.75rem; // 12px
+        font-size: 0.7rem; // 更小的标题 (从12px到11px)
         color: nb-theme(text-hint-color);
-        margin: 0 0 0.5rem 0;
+        margin: 0 0 0.375rem 0; // 减少margin
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.3px; // 减少字间距
         font-weight: 500;
         white-space: nowrap;
         overflow: hidden;
@@ -116,14 +130,14 @@
       }
 
       .card-value {
-        font-size: 1.625rem; // 26px
+        font-size: 1.5rem; // 轻微减小数值大小 (从26px到24px)
         font-weight: 600;
-        margin: 0 0 0.25rem 0;
+        margin: 0 0 0.125rem 0; // 减少margin
         color: nb-theme(text-basic-color);
         display: flex;
         align-items: baseline;
         flex-wrap: wrap;
-        line-height: 1.2;
+        line-height: 1.1; // 更紧凑的行高
 
         .card-unit {
           font-size: 0.875rem; // 14px
@@ -163,7 +177,16 @@
   // ==================== 图表区域样式 ====================
 
   .chart-row {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.25rem; // 减少图表行之间的间距
+    
+    // 减少row的负margin (Bootstrap默认)
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+    
+    > [class*="col-"] {
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
   }
 
   .chart-container {

@@ -1,7 +1,7 @@
 @use '@nebular/theme/styles/theming' as *;
 
 .metric-card-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem; // 减少组件间距 (从1.5rem到1.25rem)
 
   .group-header-clickable {
     cursor: pointer;
@@ -25,12 +25,12 @@
       gap: 0.75rem;
 
       .group-icon {
-        font-size: 1.5rem;
+        font-size: 1.375rem; // 轻微减小图标 (从1.5rem到1.375rem)
       }
 
       h6 {
         margin: 0;
-        font-size: 1rem;
+        font-size: 0.9375rem; // 轻微减小标题 (从1rem到0.9375rem = 15px)
         font-weight: 600;
         color: nb-theme(text-basic-color);
       }
@@ -48,7 +48,7 @@
   }
 
   .group-body {
-    padding: 1rem;
+    padding: 0.875rem 1rem; // 减少垂直padding，保持水平padding
     position: relative;
     z-index: 1;
     

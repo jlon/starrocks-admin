@@ -14,6 +14,7 @@ import { ClusterOverviewComponent } from './cluster-overview/cluster-overview.co
 import { SessionsComponent } from './sessions/sessions.component';
 import { VariablesComponent } from './variables/variables.component';
 import { SystemManagementComponent } from './system-management/system-management.component';
+import { PermissionGuard } from '../../@core/guards/permission.guard';
 
 const routes: Routes = [
   {
@@ -24,7 +25,8 @@ const routes: Routes = [
   {
     path: 'dashboard',
     component: DashboardComponent,
-    data: { reuse: true },
+    canActivate: [PermissionGuard],
+    data: { permission: 'menu:dashboard', reuse: true },
   },
   {
     path: 'clusters',
@@ -32,39 +34,46 @@ const routes: Routes = [
       {
         path: '',
         component: ClusterListComponent,
-        data: { reuse: true },
+        canActivate: [PermissionGuard],
+        data: { permission: 'api:clusters:list', reuse: true },
       },
       {
         path: 'new',
         component: ClusterFormComponent,
-        data: { reuse: true },
+        canActivate: [PermissionGuard],
+        data: { permission: 'api:clusters:create', reuse: true },
       },
       {
         path: ':id',
         component: ClusterDetailComponent,
-        data: { reuse: true },
+        canActivate: [PermissionGuard],
+        data: { permission: 'api:clusters:get', reuse: true },
       },
       {
         path: ':id/edit',
         component: ClusterFormComponent,
-        data: { reuse: true },
+        canActivate: [PermissionGuard],
+        data: { permission: 'api:clusters:update', reuse: true },
       },
     ],
   },
   {
     path: 'backends',
     component: BackendsComponent,
-    data: { reuse: true },
+    canActivate: [PermissionGuard],
+    data: { permission: 'api:clusters:backends', reuse: true },
   },
   {
     path: 'frontends',
     component: FrontendsComponent,
-    data: { reuse: true },
+    canActivate: [PermissionGuard],
+    data: { permission: 'api:clusters:frontends', reuse: true },
   },
   {
     path: 'materialized-views',
     component: MaterializedViewsComponent,
-    data: { reuse: true },
+    canActivate: [PermissionGuard],
+    data: { permission: 'api:clusters:materialized_views', reuse: true },
   },
   {
     path: 'queries',
@@ -77,39 +86,46 @@ const routes: Routes = [
       {
         path: 'execution',
         component: QueryExecutionComponent,
-        data: { reuse: true },
+        canActivate: [PermissionGuard],
+        data: { permission: 'api:clusters:queries', reuse: true },
       },
       {
         path: 'profiles',
         component: ProfileQueriesComponent,
-        data: { reuse: true },
+        canActivate: [PermissionGuard],
+        data: { permission: 'menu:queries:profiles', reuse: true },
       },
       {
         path: 'audit-logs',
         component: AuditLogsComponent,
-        data: { reuse: true },
+        canActivate: [PermissionGuard],
+        data: { permission: 'menu:queries:audit-logs', reuse: true },
       },
     ],
   },
   {
     path: 'sessions',
     component: SessionsComponent,
-    data: { reuse: true },
+    canActivate: [PermissionGuard],
+    data: { permission: 'api:clusters:sessions', reuse: true },
   },
   {
     path: 'variables',
     component: VariablesComponent,
-    data: { reuse: true },
+    canActivate: [PermissionGuard],
+    data: { permission: 'api:clusters:variables', reuse: true },
   },
   {
     path: 'system',
     component: SystemManagementComponent,
-    data: { reuse: true },
+    canActivate: [PermissionGuard],
+    data: { permission: 'menu:system', reuse: true },
   },
   {
     path: 'overview',
     component: ClusterOverviewComponent,
-    data: { reuse: true },
+    canActivate: [PermissionGuard],
+    data: { permission: 'menu:overview', reuse: true },
   },
 ];
 

@@ -1,0 +1,43 @@
+<ng-template #nodeTemplate let-node>
+  <div
+    class="tree-node"
+    [class.tree-node--group]="node.children?.length"
+    [class.tree-node--root]="node.depth === 0"
+    [style.--level]="node.depth"
+  >
+    <div class="tree-node__content">
+      <ng-container *ngIf="!readonly && node.selectable; else readonlyMarker">
+        <nb-checkbox
+          [checked]="node.selected"
+          [indeterminate]="node.indeterminate"
+          (checkedChange)="onToggle(node.key, $event)"
+        ></nb-checkbox>
+      </ng-container>
+      <ng-template #readonlyMarker>
+        <nb-icon
+          *ngIf="readonly && node.selectable"
+          class="tree-node__marker"
+          icon="radio-button-on-outline"
+        ></nb-icon>
+      </ng-template>
+      <div class="tree-node__body" [class.tree-node__body--selected]="node.selected">
+        <div class="tree-node__title">
+          <span class="tree-node__name">{{ node.name }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="tree-node__children" *ngIf="node.children?.length">
+      <ng-container *ngFor="let child of node.children">
+        <ng-container
+          *ngTemplateOutlet="nodeTemplate; context: { $implicit: child }"
+        ></ng-container>
+      </ng-container>
+    </div>
+  </div>
+</ng-template>
+
+<div class="permission-tree">
+  <ng-container *ngFor="let node of nodes">
+    <ng-container *ngTemplateOutlet="nodeTemplate; context: { $implicit: node }"></ng-container>
+  </ng-container>
+</div>

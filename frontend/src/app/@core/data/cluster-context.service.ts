@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { Cluster, ClusterService } from './cluster.service';
+import { PermissionService } from './permission.service';
 
 /**
  * Global cluster context service
@@ -31,18 +32,28 @@ export class ClusterContextService {
   private activeClusterSubject: BehaviorSubject<Cluster | null>;
   public activeCluster$: Observable<Cluster | null>;
   
-  constructor(private clusterService: ClusterService) {
+  constructor(
+    private clusterService: ClusterService,
+    private permissionService: PermissionService,
+  ) {
     this.activeClusterSubject = new BehaviorSubject<Cluster | null>(null);
     this.activeCluster$ = this.activeClusterSubject.asObservable();
     
     // Try to load active cluster from backend on initialization
     this.refreshActiveCluster();
+
+    this.permissionService.permissions$.subscribe(() => {
+      this.refreshActiveCluster();
+    });
   }
   
   /**
    * Set the active cluster by calling backend API
    */
   setActiveCluster(cluster: Cluster): void {
+    if (!this.permissionService.hasPermission('api:clusters:activate')) {
+      return;
+    }
     // Call backend API to activate the cluster
     this.clusterService.activateCluster(cluster.id).pipe(
       tap((activatedCluster) => {
@@ -60,6 +71,10 @@ export class ClusterContextService {
    * Refresh active cluster from backend
    */
   refreshActiveCluster(): void {
+    if (!this.permissionService.hasPermission('api:clusters:active')) {
+      this.activeClusterSubject.next(null);
+      return;
+    }
     
     this.clusterService.getActiveCluster().pipe(
       tap((cluster) => {

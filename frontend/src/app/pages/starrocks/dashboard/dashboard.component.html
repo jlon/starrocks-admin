@@ -4,7 +4,7 @@
       <nb-card-header>
         <div class="d-flex justify-content-between align-items-center">
           <h5>StarRocks 集群概览</h5>
-          <button nbButton ghost size="small" status="primary" (click)="addCluster()">
+          <button nbButton ghost size="small" status="primary" (click)="addCluster()" [disabled]="!canCreateCluster">
             <nb-icon icon="plus-outline"></nb-icon>
             添加集群
           </button>
@@ -15,12 +15,18 @@
           <nb-spinner status="primary"></nb-spinner>
         </div>
 
-        <div *ngIf="!loading && clusters.length === 0" class="text-center p-5">
+        <div *ngIf="!loading && !hasClusterAccess" class="text-center p-5">
+          <nb-icon icon="shield-off-outline" status="warning" style="font-size: 4rem"></nb-icon>
+          <p class="mt-3 mb-1">您暂无查看集群的权限</p>
+          <p class="text-hint">请联系管理员授予集群相关权限后再访问此页面。</p>
+        </div>
+
+        <div *ngIf="!loading && hasClusterAccess && clusters.length === 0" class="text-center p-5">
           <nb-icon icon="cloud-outline" status="basic" style="font-size: 4rem"></nb-icon>
           <p class="mt-3">还没有集群，点击上方按钮添加</p>
         </div>
 
-        <div *ngIf="!loading && clusters.length > 0" class="row">
+        <div *ngIf="!loading && hasClusterAccess && clusters.length > 0" class="row">
           <div *ngFor="let clusterCard of clusters" class="col-md-6 col-lg-4 mb-3">
             <nb-card 
               [status]="getStatusColor(clusterCard.health?.status)"
@@ -44,6 +50,7 @@
                       size="tiny"
                       status="basic"
                       (click)="editCluster(clusterCard.cluster)"
+                      [disabled]="!canUpdateCluster"
                       nbTooltip="编辑集群"
                       nbTooltipPlacement="top"
                     >
@@ -57,6 +64,7 @@
                       size="tiny"
                       status="danger"
                       (click)="deleteCluster(clusterCard.cluster)"
+                      [disabled]="!canDeleteCluster"
                       nbTooltip="删除集群"
                       nbTooltipPlacement="top"
                     >
@@ -71,6 +79,7 @@
                       [status]="clusterCard.isActive ? 'warning' : 'basic'"
                       [class.active-star]="clusterCard.isActive"
                       (click)="toggleActiveCluster(clusterCard)"
+                      [disabled]="!canActivateCluster"
                       [nbTooltip]="clusterCard.isActive ? '点击取消激活' : '点击设为当前集群'"
                       nbTooltipPlacement="top"
                     >
@@ -129,18 +138,24 @@
               </nb-card-body>
               <nb-card-footer>
                 <div class="d-flex justify-content-between">
-                  <button nbButton outline size="small" status="info" (click)="navigateToCluster(clusterCard.cluster.id)">
-                    详情
-                  </button>
-                  <button nbButton outline size="small" status="success" (click)="navigateToBackends(clusterCard.cluster.id)">
-                    节点
-                  </button>
-                  <button nbButton outline size="small" status="warning" (click)="navigateToQueries(clusterCard.cluster.id)">
-                    查询
-                  </button>
-                </div>
-              </nb-card-footer>
-            </nb-card>
+                  <button nbButton outline size="small" status="info" (click)="navigateToCluster(clusterCard.cluster.id)"
+                    [disabled]="!canViewClusterDetails"
+                  >
+                     详情
+                   </button>
+                   <button nbButton outline size="small" status="success" (click)="navigateToBackends(clusterCard.cluster.id)"
+                    [disabled]="!canViewBackends"
+                   >
+                     节点
+                   </button>
+                   <button nbButton outline size="small" status="warning" (click)="navigateToQueries(clusterCard.cluster.id)"
+                    [disabled]="!canViewQueries"
+                   >
+                     查询
+                   </button>
+                 </div>
+               </nb-card-footer>
+             </nb-card>
           </div>
         </div>
       </nb-card-body>

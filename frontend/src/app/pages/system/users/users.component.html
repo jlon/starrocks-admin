@@ -1,0 +1,38 @@
+<nb-card>
+  <nb-card-header>
+    <div class="header">
+      <div class="header__info">
+        <h5 class="header__title">用户管理</h5>
+        <p class="header__subtitle">集中管理系统用户及其角色权限</p>
+      </div>
+      <button
+        nbButton
+        status="primary"
+        size="small"
+        (click)="openCreateUser()"
+        [disabled]="!canCreateUser"
+        ngxHasPermission="api:users:create"
+      >
+        <nb-icon icon="person-add-outline"></nb-icon>
+        新增用户
+      </button>
+    </div>
+  </nb-card-header>
+  <nb-card-body>
+    <div *ngIf="loading" class="loading">
+      <nb-spinner size="large" status="primary"></nb-spinner>
+    </div>
+
+    <nb-alert *ngIf="!loading && !hasListPermission" status="warning">
+      您暂无查看用户的权限，请联系管理员进行授权。
+    </nb-alert>
+
+    <ng2-smart-table
+      *ngIf="!loading && hasListPermission"
+      [settings]="settings"
+      [source]="source"
+    >
+    </ng2-smart-table>
+  </nb-card-body>
+</nb-card>
+

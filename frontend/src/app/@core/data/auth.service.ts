@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { tap, switchMap } from 'rxjs/operators';
 import { ApiService } from './api.service';
+import { PermissionService } from './permission.service';
 
 export interface User {
   id: number;
@@ -40,6 +41,7 @@ export class AuthService {
   constructor(
     private api: ApiService,
     private router: Router,
+    private permissionService: PermissionService,
   ) {
     const storedUser = localStorage.getItem('current_user');
     this.currentUserSubject = new BehaviorSubject<User | null>(
@@ -63,6 +65,11 @@ export class AuthService {
         localStorage.setItem('current_user', JSON.stringify(response.user));
         this.currentUserSubject.next(response.user);
       }),
+      // Initialize permissions after login
+      switchMap((response) => {
+        this.permissionService.initPermissions().subscribe();
+        return [response];
+      }),
     );
   }
 
@@ -74,6 +81,8 @@ export class AuthService {
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem('current_user');
     this.currentUserSubject.next(null);
+    // Clear permissions on logout
+    this.permissionService.clearPermissions();
     this.router.navigate(['/auth/login']);
   }
 

@@ -122,8 +122,8 @@ start_service() {
         sleep 2
     fi
 
-    # 启动Angular开发服务器
-    nohup npm start -- --host $HOST --port $PORT > "$LOG_FILE" 2>&1 &
+    # 启动Angular开发服务器（host 已在 package.json 中配置）
+    nohup npm start -- --port $PORT > "$LOG_FILE" 2>&1 &
     FRONTEND_PID=$!
     echo $FRONTEND_PID > "$PID_FILE"
 

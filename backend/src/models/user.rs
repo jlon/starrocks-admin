@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use utoipa::ToSchema;
 
+use super::role::RoleResponse;
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: i64,
@@ -21,6 +23,15 @@ pub struct CreateUserRequest {
     pub password: String,
     pub email: Option<String>,
     pub avatar: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AdminCreateUserRequest {
+    pub username: String,
+    pub password: String,
+    pub email: Option<String>,
+    pub avatar: Option<String>,
+    pub role_ids: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -44,6 +55,15 @@ pub struct UpdateUserRequest {
     pub new_password: Option<String>,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AdminUpdateUserRequest {
+    pub username: Option<String>,
+    pub email: Option<String>,
+    pub avatar: Option<String>,
+    pub password: Option<String>,
+    pub role_ids: Option<Vec<i64>>,
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UserResponse {
     pub id: i64,
@@ -51,6 +71,13 @@ pub struct UserResponse {
     pub email: Option<String>,
     pub avatar: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UserWithRolesResponse {
+    #[serde(flatten)]
+    pub user: UserResponse,
+    pub roles: Vec<RoleResponse>,
 }
 
 impl From<User> for UserResponse {

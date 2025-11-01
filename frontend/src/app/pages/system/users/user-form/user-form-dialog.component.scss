@@ -1,0 +1,154 @@
+:host {
+  display: block;
+  width: 34rem;
+  max-width: calc(100vw - 3rem);
+  min-width: 30rem;
+}
+
+.user-dialog {
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-md);
+  padding-bottom: var(--nb-space-md);
+  // Removed border-bottom as per user request
+
+  h5 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.125rem;
+  }
+}
+
+.dialog-subtitle {
+  margin: 0;
+  margin-top: var(--nb-space-xs);
+  color: var(--text-hint-color);
+  font-size: 0.875rem;
+}
+
+.user-form {
+  padding: var(--nb-space-md) var(--nb-space-xs) var(--nb-space-md) 0;
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.form-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 0; // Vertical gap between rows, no horizontal gap
+  margin-bottom: 0;
+  margin-top: 1.5rem; // Equivalent to var(--nb-space-xl)
+
+  &:first-child {
+    margin-top: 0;
+  }
+
+  .label {
+    flex: 0 0 6rem; // Fixed width for labels (96px) to accommodate "邮箱地址", "确认密码"
+    padding-top: 0.625rem; // Align with input field (input height is 2.5rem, label line-height aligns to center)
+    padding-right: 0.75rem; // Horizontal gap between label and input
+    text-align: right;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--text-basic-color);
+    line-height: 1.25; // Match input field height
+
+    .label-hint {
+      color: var(--text-hint-color);
+      font-weight: normal;
+      font-size: 0.813rem;
+      margin-left: var(--nb-space-xs);
+    }
+  }
+
+  nb-form-field {
+    flex: 1 1 calc(100% - 6.75rem); // Take remaining space (100% - label width 6rem - padding 0.75rem)
+    min-width: 0; // Allow flex item to shrink below its content size
+    margin-bottom: 0;
+
+    // Fix nb-select prefix icon spacing to match nbInput (ngx-admin native spacing)
+    // nb-form-field automatically handles prefix spacing for input (2.5rem icon + 0.25rem gap)
+    // but select button needs explicit padding-left adjustment
+    nb-select {
+      ::ng-deep {
+        // Ensure select button has same padding as input with prefix icon
+        // nbInput with prefix: padding-left is 2.75rem (2.5rem icon + 0.25rem gap)
+        button.select-button,
+        button[class*="button"],
+        button {
+          padding-left: 2.75rem !important;
+        }
+        
+        // Ensure select text container has no extra padding
+        .select-placeholder,
+        .select-text {
+          padding-left: 0 !important;
+        }
+      }
+    }
+  }
+
+  // Captions - align with input field (ng-container wraps them but doesn't render, so we style captions directly)
+  .caption {
+    display: block;
+    margin-top: var(--nb-space-xs);
+    margin-left: 6.75rem; // Align with input field (label width 6rem + padding 0.75rem)
+    font-size: 0.75rem;
+    line-height: 1.4;
+    min-height: 1.2rem;
+    
+    // First caption in a group doesn't need extra margin-top if container already has it
+    &:first-of-type {
+      margin-top: var(--nb-space-xs);
+    }
+
+    &.status-danger {
+      color: var(--color-danger-default);
+    }
+
+    &.status-hint {
+      color: var(--text-hint-color);
+    }
+  }
+}
+
+.role-code {
+  color: var(--text-hint-color);
+  font-size: 0.813rem;
+  margin-left: var(--nb-space-xs);
+  font-weight: normal;
+}
+
+.footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--nb-space-md);
+  padding: var(--nb-space-md) var(--nb-space-lg);
+  // Removed border-top as per user request
+  background: var(--background-basic-color-1);
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  :host {
+    width: calc(100vw - 2rem);
+    min-width: calc(100vw - 2rem);
+  }
+
+  .user-form {
+    padding: var(--nb-space-lg) var(--nb-space-md);
+  }
+}
+

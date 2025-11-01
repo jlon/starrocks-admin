@@ -1,0 +1,105 @@
+<nb-card class="role-dialog">
+  <nb-card-header>
+    <div class="dialog-header">
+      <div>
+        <h5>{{ mode === 'create' ? '创建角色' : '编辑角色' }}</h5>
+        <p class="dialog-subtitle">
+          {{ mode === 'create' ? '配置角色基础信息与权限范围' : '调整角色信息与权限映射' }}
+        </p>
+      </div>
+      <button nbButton ghost status="basic" (click)="cancel()">
+        <nb-icon icon="close-outline"></nb-icon>
+      </button>
+    </div>
+  </nb-card-header>
+
+  <nb-card-body>
+    <form [formGroup]="form" class="role-form" novalidate>
+      <!-- Role Basic Information -->
+      <div class="form-group">
+        <label class="label" for="input-code">角色代码</label>
+        <nb-form-field>
+          <nb-icon nbPrefix icon="hash-outline"></nb-icon>
+          <input
+            nbInput
+            fullWidth
+            id="input-code"
+            placeholder="角色代码"
+            formControlName="code"
+            [readonly]="mode === 'edit'"
+            maxlength="50"
+          />
+        </nb-form-field>
+      </div>
+
+      <div class="form-group">
+        <label class="label" for="input-name">角色名称</label>
+        <nb-form-field>
+          <nb-icon nbPrefix icon="badge-outline"></nb-icon>
+          <input
+            nbInput
+            fullWidth
+            id="input-name"
+            placeholder="角色名称"
+            formControlName="name"
+            maxlength="50"
+          />
+        </nb-form-field>
+      </div>
+
+      <div class="form-group">
+        <label class="label" for="input-description">角色描述</label>
+        <nb-form-field>
+          <nb-icon nbPrefix icon="edit-outline"></nb-icon>
+          <textarea
+            nbInput
+            fullWidth
+            id="input-description"
+            placeholder="角色描述（可选）"
+            formControlName="description"
+            rows="2"
+            maxlength="200"
+          ></textarea>
+        </nb-form-field>
+      </div>
+
+      <!-- Menu Permissions Selection -->
+      <div class="form-group">
+        <label class="label" for="input-menus">菜单权限</label>
+        <nb-form-field>
+          <nb-icon nbPrefix icon="menu-outline"></nb-icon>
+          <nb-select
+            formControlName="menuIds"
+            id="input-menus"
+            placeholder="请选择菜单权限（可多选）"
+            [status]="form.get('menuIds')?.invalid && form.get('menuIds')?.touched ? 'danger' : 'basic'"
+            multiple
+            fullWidth
+            (selectedChange)="onMenuSelectionChange($event)"
+          >
+            <nb-option *ngFor="let menu of menuPermissions" [value]="menu.id">
+              {{ menu.name }}
+            </nb-option>
+          </nb-select>
+        </nb-form-field>
+        <ng-container *ngIf="form.get('menuIds')?.invalid && form.get('menuIds')?.touched">
+          <p class="caption status-danger" *ngIf="form.get('menuIds')?.errors?.['required']">
+            请至少选择一个菜单权限
+          </p>
+        </ng-container>
+        <p class="caption status-hint" *ngIf="menuPermissions.length === 0">
+          暂无可用菜单权限
+        </p>
+      </div>
+    </form>
+  </nb-card-body>
+
+  <nb-card-footer>
+    <div class="footer-actions">
+      <button nbButton ghost status="basic" (click)="cancel()">取消</button>
+      <button nbButton status="primary" (click)="submit()" [disabled]="form.invalid">
+        {{ mode === 'create' ? '创建角色' : '保存修改' }}
+      </button>
+    </div>
+  </nb-card-footer>
+</nb-card>

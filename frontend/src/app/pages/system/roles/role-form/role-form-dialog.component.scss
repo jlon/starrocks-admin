@@ -1,0 +1,122 @@
+@import '../../../../@theme/styles/themes';
+
+@include nb-install-component() {
+  :host {
+    display: block;
+    width: 34rem;
+    max-width: calc(100vw - 3rem);
+    min-width: 30rem;
+  }
+
+  .role-dialog {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--nb-space-md);
+    padding-bottom: var(--nb-space-md);
+
+    h5 {
+      margin: 0;
+      font-weight: 600;
+      font-size: 1.125rem;
+    }
+  }
+
+  .dialog-subtitle {
+    margin: 0;
+    margin-top: var(--nb-space-xs);
+    color: nb-theme(text-hint-color);
+    font-size: 0.875rem;
+  }
+
+  .role-form {
+    padding: var(--nb-space-md) var(--nb-space-xs) var(--nb-space-md) 0;
+  }
+
+  .form-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem 0;
+    margin-bottom: 0;
+    margin-top: var(--nb-space-xl);
+
+    &:first-child {
+      margin-top: 0;
+    }
+
+    .label {
+      flex: 0 0 6rem;
+      padding-top: 0.625rem;
+      padding-right: 0.75rem;
+      text-align: right;
+      font-weight: 500;
+      font-size: 0.875rem;
+      color: nb-theme(text-basic-color);
+      line-height: 1.25;
+    }
+
+    nb-form-field {
+      flex: 1 1 calc(100% - 6.75rem);
+      min-width: 0;
+      margin-bottom: 0;
+
+      // Fix nb-select prefix icon spacing to match nbInput (ngx-admin native spacing)
+      nb-select {
+        ::ng-deep {
+          button {
+            padding-left: 2.75rem !important;
+          }
+          
+          .select-placeholder,
+          .select-text {
+            padding-left: 0 !important;
+          }
+        }
+      }
+    }
+
+    .caption {
+      display: block;
+      margin-top: var(--nb-space-xs);
+      margin-left: 6.75rem;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      min-height: 1.2rem;
+
+      &.status-danger {
+        color: nb-theme(color-danger-default);
+      }
+
+      &.status-hint {
+        color: nb-theme(text-hint-color);
+      }
+    }
+  }
+
+  .footer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--nb-space-md);
+    padding: var(--nb-space-md) var(--nb-space-lg);
+    background: nb-theme(background-basic-color-1);
+  }
+
+  // Responsive adjustments
+  @media (max-width: 768px) {
+    :host {
+      width: calc(100vw - 2rem);
+      min-width: calc(100vw - 2rem);
+    }
+
+    .role-form {
+      padding: var(--nb-space-lg) var(--nb-space-md);
+    }
+  }
+}

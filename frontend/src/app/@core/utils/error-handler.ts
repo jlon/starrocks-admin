@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { NbToastrService } from '@nebular/theme';
 
 export class ErrorHandler {
   static extractErrorMessage(error: any): string {
@@ -77,5 +78,13 @@ export class ErrorHandler {
       503: '服务暂时不可用'
     };
     return statusMessages[status] || '网络请求失败';
+  }
+
+  /**
+   * Handle HTTP error and show toast notification
+   */
+  static handleHttpError(error: any, toastrService: NbToastrService): void {
+    const errorMsg = this.extractErrorMessage(error);
+    toastrService.danger(errorMsg, '错误', { duration: 5000 });
   }
 }

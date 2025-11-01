@@ -1,0 +1,299 @@
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { NbDialogService, NbToastrService } from '@nebular/theme';
+import { LocalDataSource } from 'ng2-smart-table';
+import { forkJoin, of, Subject } from 'rxjs';
+import { finalize, map, switchMap, takeUntil } from 'rxjs/operators';
+
+import {
+  CreateUserPayload,
+  UpdateUserPayload,
+  UserService,
+  UserWithRoles,
+} from '../../../@core/data/user.service';
+import { ErrorHandler } from '../../../@core/utils/error-handler';
+import { PermissionService } from '../../../@core/data/permission.service';
+import { RoleService, RoleWithPermissions } from '../../../@core/data/role.service';
+import { UsersRoleBadgeCellComponent } from './table/role-badge-cell.component';
+import { UsersActionsCellComponent } from './table/actions-cell.component';
+import {
+  UserFormDialogComponent,
+  UserFormDialogResult,
+} from './user-form/user-form-dialog.component';
+
+@Component({
+  selector: 'ngx-users',
+  templateUrl: './users.component.html',
+  styleUrls: ['./users.component.scss'],
+})
+export class UsersComponent implements OnInit, OnDestroy {
+  source: LocalDataSource = new LocalDataSource();
+  loading = false;
+  roleCatalog: RoleWithPermissions[] = [];
+  roleCatalogLoading = false;
+
+  hasListPermission = false;
+  canCreateUser = false;
+  canUpdateUser = false;
+  canDeleteUser = false;
+
+  settings: any = {};
+
+  private destroy$ = new Subject<void>();
+
+  constructor(
+    private userService: UserService,
+    private permissionService: PermissionService,
+    private roleService: RoleService,
+    private dialogService: NbDialogService,
+    private toastrService: NbToastrService,
+  ) {}
+
+  ngOnInit(): void {
+    this.permissionService.permissions$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.applyPermissionState());
+
+    this.applyPermissionState();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  loadUsers(): void {
+    if (!this.hasListPermission) {
+      this.loading = false;
+      this.source.load([]);
+      return;
+    }
+
+    this.loading = true;
+    this.userService.listUsers().subscribe({
+      next: (users) => {
+        this.source.load(users);
+        this.loading = false;
+      },
+      error: (error) => {
+        ErrorHandler.handleHttpError(error, this.toastrService);
+        this.loading = false;
+      },
+    });
+  }
+
+  private loadRoleCatalog(): void {
+    if (this.roleCatalog.length || this.roleCatalogLoading) {
+      return;
+    }
+
+    this.roleCatalogLoading = true;
+    this.userService
+      .listRoles()
+      .pipe(
+        switchMap((roles) => {
+          if (!roles.length) {
+            return of([] as RoleWithPermissions[]);
+          }
+          return forkJoin(
+            roles.map((role) =>
+              this.roleService
+                .getRolePermissions(role.id)
+                .pipe(map((permissions) => ({ ...role, permissions }))),
+            ),
+          );
+        }),
+        finalize(() => (this.roleCatalogLoading = false)),
+      )
+      .subscribe({
+        next: (roles) => {
+          this.roleCatalog = roles;
+        },
+        error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+      });
+  }
+
+  openCreateUser(): void {
+    if (!this.canCreateUser) {
+      return;
+    }
+
+    if (!this.roleCatalog.length) {
+      this.loadRoleCatalog();
+      this.toastrService.info('正在加载角色数据，请稍后重试', '提示');
+      return;
+    }
+
+    const dialogRef = this.dialogService.open(UserFormDialogComponent, {
+      context: {
+        mode: 'create',
+        roles: this.roleCatalog,
+      },
+      closeOnBackdropClick: false,
+      autoFocus: false,
+    });
+
+    dialogRef.onClose.subscribe((result?: UserFormDialogResult) => {
+      if (!result) {
+        return;
+      }
+      this.createUser(result);
+    });
+  }
+
+  openEditUser(user: UserWithRoles): void {
+    if (!this.canUpdateUser) {
+      return;
+    }
+
+    if (!this.roleCatalog.length) {
+      this.loadRoleCatalog();
+      this.toastrService.info('正在加载角色数据，请稍后重试', '提示');
+      return;
+    }
+
+    const dialogRef = this.dialogService.open(UserFormDialogComponent, {
+      context: {
+        mode: 'edit',
+        roles: this.roleCatalog,
+        user,
+      },
+      closeOnBackdropClick: false,
+      autoFocus: false,
+    });
+
+    dialogRef.onClose.subscribe((result?: UserFormDialogResult) => {
+      if (!result) {
+        return;
+      }
+      this.updateUser(user.id, result);
+    });
+  }
+
+  onDeleteUser(user: UserWithRoles): void {
+    if (!this.canDeleteUser) {
+      return;
+    }
+
+    const confirmed = window.confirm(`确定要删除用户「${user.username}」吗？`);
+    if (!confirmed) {
+      return;
+    }
+
+    this.userService.deleteUser(user.id).subscribe({
+      next: () => {
+        this.toastrService.success('用户已删除', '成功');
+        this.loadUsers();
+      },
+      error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+    });
+  }
+
+  private createUser(result: UserFormDialogResult): void {
+    if (result.mode !== 'create') {
+      return;
+    }
+
+    const payload = result.payload as CreateUserPayload;
+    this.userService.createUser(payload).subscribe({
+      next: () => {
+        this.toastrService.success('用户已创建', '成功');
+        this.loadUsers();
+      },
+      error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+    });
+  }
+
+  private updateUser(userId: number, result: UserFormDialogResult): void {
+    if (result.mode !== 'edit') {
+      return;
+    }
+
+    const payload = result.payload as UpdateUserPayload;
+    this.userService.updateUser(userId, payload).subscribe({
+      next: () => {
+        this.toastrService.success('用户信息已更新', '成功');
+        this.loadUsers();
+      },
+      error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+    });
+  }
+
+  private applyPermissionState(): void {
+    this.hasListPermission = this.permissionService.hasPermission('api:users:list');
+    this.canCreateUser = this.permissionService.hasPermission('api:users:create');
+    this.canUpdateUser = this.permissionService.hasPermission('api:users:update');
+    this.canDeleteUser = this.permissionService.hasPermission('api:users:delete');
+
+    this.settings = this.buildTableSettings();
+
+    this.settings.columns.actions.onComponentInitFunction = (
+      component: UsersActionsCellComponent,
+    ) => {
+      component.editUser.subscribe((row: UserWithRoles) => this.openEditUser(row));
+      component.deleteUser.subscribe((row: UserWithRoles) => this.onDeleteUser(row));
+    };
+
+    this.loadUsers();
+
+    if (this.canCreateUser || this.canUpdateUser) {
+      this.loadRoleCatalog();
+    }
+  }
+
+  private buildTableSettings(): any {
+    return {
+      mode: 'external',
+      hideSubHeader: false,
+      noDataMessage: this.hasListPermission ? '暂无用户数据' : '您暂无查看用户的权限',
+      actions: {
+        add: false,
+        edit: false,
+        delete: false,
+        position: 'right',
+      },
+      pager: {
+        display: true,
+        perPage: 10,
+      },
+      columns: {
+        id: {
+          title: 'ID',
+          type: 'number',
+          width: '8%',
+        },
+        username: {
+          title: '用户名',
+          type: 'string',
+        },
+        email: {
+          title: '邮箱',
+          type: 'string',
+        },
+        roles: {
+          title: '角色',
+          type: 'custom',
+          renderComponent: UsersRoleBadgeCellComponent,
+          filter: false,
+          sort: false,
+        },
+        created_at: {
+          title: '创建时间',
+          type: 'string',
+          valuePrepareFunction: (date: string) => new Date(date).toLocaleString('zh-CN'),
+        },
+        actions: {
+          title: '操作',
+          type: 'custom',
+          renderComponent: UsersActionsCellComponent,
+          filter: false,
+          sort: false,
+          valuePrepareFunction: () => ({
+            canEdit: this.canUpdateUser,
+            canDelete: this.canDeleteUser,
+          }),
+        },
+      },
+    };
+  }
+}
+

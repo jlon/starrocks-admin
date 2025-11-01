@@ -13,7 +13,7 @@ all = "warn"
 [dependencies]
 # Web framework
 axum = { version = "0.7", features = ["macros"] }
-tower = "0.4"
+tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 tokio = { version = "1", features = ["full"] }
 
@@ -62,6 +62,9 @@ validator = { version = "0.18", features = ["derive"] }
 
 # Regex
 regex = "1.10"
+
+# Access Control
+casbin = "2.7"
 
 [dev-dependencies]
 # Git hooks management (only install hooks, no runtime dependency)

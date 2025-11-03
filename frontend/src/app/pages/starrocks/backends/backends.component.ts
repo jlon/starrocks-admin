@@ -9,6 +9,11 @@ import { ClusterContextService } from '../../../@core/data/cluster-context.servi
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 
+interface UsageThresholds {
+  warn: number;
+  danger: number;
+}
+
 @Component({
   selector: 'ngx-backends',
   templateUrl: './backends.component.html',
@@ -21,6 +26,9 @@ export class BackendsComponent implements OnInit, OnDestroy {
   clusterName: string = '';
   loading = true;
   private destroy$ = new Subject<void>();
+  private readonly diskThresholds: UsageThresholds = { warn: 70, danger: 85 };
+  private readonly cpuThresholds: UsageThresholds = { warn: 60, danger: 85 };
+  private readonly memoryThresholds: UsageThresholds = { warn: 65, danger: 85 };
 
   settings = {
     mode: 'external',
@@ -86,18 +94,21 @@ export class BackendsComponent implements OnInit, OnDestroy {
       },
       UsedPct: {
         title: '磁盘使用率',
-        type: 'string',
+        type: 'html',
         width: '10%',
+        valuePrepareFunction: (value: string) => this.renderUsageBadge(value, this.diskThresholds),
       },
       CpuUsedPct: {
         title: 'CPU 使用率',
-        type: 'string',
+        type: 'html',
         width: '12%',
+        valuePrepareFunction: (value: string) => this.renderUsageBadge(value, this.cpuThresholds),
       },
       MemUsedPct: {
         title: '内存使用率',
-        type: 'string',
+        type: 'html',
         width: '10%',
+        valuePrepareFunction: (value: string) => this.renderUsageBadge(value, this.memoryThresholds),
       },
       NumRunningQueries: {
         title: '运行查询数',
@@ -207,5 +218,40 @@ export class BackendsComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
     });
+  }
+
+  private renderUsageBadge(rawValue: string, thresholds: UsageThresholds): string {
+    const label = rawValue?.trim() || '--';
+    const numericValue = this.extractNumericValue(rawValue);
+
+    if (Number.isNaN(numericValue)) {
+      return `<span class="usage-badge usage-neutral">${label}</span>`;
+    }
+
+    const status = this.resolveUsageStatus(numericValue, thresholds);
+    return `<span class="usage-badge usage-${status}">${label}</span>`;
+  }
+
+  private extractNumericValue(value: string | number | null | undefined): number {
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    if (value === null || value === undefined) {
+      return NaN;
+    }
+
+    const numericPart = value.toString().replace(/[^0-9.-]/g, '');
+    return parseFloat(numericPart);
+  }
+
+  private resolveUsageStatus(value: number, thresholds: UsageThresholds): 'good' | 'warn' | 'alert' {
+    if (value >= thresholds.danger) {
+      return 'alert';
+    }
+    if (value >= thresholds.warn) {
+      return 'warn';
+    }
+    return 'good';
   }
 }

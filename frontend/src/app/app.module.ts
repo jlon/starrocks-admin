@@ -7,6 +7,7 @@ import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { NgModule } from '@angular/core';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { RouteReuseStrategy } from '@angular/router';
 import { CoreModule } from './@core/core.module';
 import { ThemeModule } from './@theme/theme.module';
 import { AppComponent } from './app.component';
@@ -21,6 +22,7 @@ import {
 } from '@nebular/theme';
 import { JwtInterceptor } from './@core/interceptors/jwt.interceptor';
 import { AuthModule } from './auth/auth.module';
+import { TabRouteReuseStrategy } from './@core/routing/tab-route-reuse.strategy';
 
 @NgModule({
   declarations: [AppComponent],
@@ -41,6 +43,7 @@ import { AuthModule } from './auth/auth.module';
   ],
   providers: [
     { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },
+    { provide: RouteReuseStrategy, useClass: TabRouteReuseStrategy },
   ],
   bootstrap: [AppComponent],
 })

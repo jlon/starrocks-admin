@@ -221,6 +221,10 @@
         color: nb-theme(color-success-500);
       }
 
+      .menu-item-icon.icon-refresh {
+        color: nb-theme(color-primary-500);
+      }
+
       &:hover,
       &:focus {
         outline: none;
@@ -245,6 +249,10 @@
 
         .menu-item-icon.icon-toggle-pin {
           color: nb-theme(color-success-600);
+        }
+
+        .menu-item-icon.icon-refresh {
+          color: nb-theme(color-primary-600);
         }
       }
 

@@ -3,7 +3,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { TabService, TabItem } from '../../../@core/services/tab.service';
 
-type TabContextMenuAction = 'close-left' | 'close-right' | 'close-others' | 'toggle-pin';
+type TabContextMenuAction = 'refresh' | 'close-left' | 'close-right' | 'close-others' | 'toggle-pin';
 
 interface TabContextMenuItem {
   label: string;
@@ -96,6 +96,9 @@ export class TabBarComponent implements OnInit, OnDestroy {
     }
 
     switch (action) {
+      case 'refresh':
+        this.tabService.refreshTab(this.contextMenuTarget.id);
+        break;
       case 'close-left':
         this.tabService.closeLeftTabs(this.contextMenuTarget.id);
         break;
@@ -124,6 +127,11 @@ export class TabBarComponent implements OnInit, OnDestroy {
     const isPinned = tab.pinned;
 
     return [
+      {
+        label: '刷新',
+        icon: 'refresh-outline',
+        action: 'refresh',
+      },
       {
         label: '关闭左侧',
         icon: 'arrow-back-outline',

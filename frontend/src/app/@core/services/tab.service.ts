@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { Router } from '@angular/router';
+import { normalizeUrl } from '../utils/url-normalizer';
+import { TabReuseService } from './tab-reuse.service';
 
 export interface TabItem {
   id: string;
@@ -20,46 +22,9 @@ export class TabService {
   private tabsSubject = new BehaviorSubject<TabItem[]>([]);
   public tabs$ = this.tabsSubject.asObservable();
 
-  constructor(private router: Router) {
+  constructor(private router: Router, private tabReuseService: TabReuseService) {
     this.loadTabs();
     this.initializeDefaultTab();
-  }
-
-  /**
-   * 规范化 URL，用于比较（处理编码问题）
-   */
-  private normalizeUrl(url: string): string {
-    try {
-      let decoded = url;
-      try {
-        decoded = decodeURIComponent(url);
-      } catch (e) {
-        decoded = url;
-      }
-      
-      const [path, queryString] = decoded.split('?');
-      
-      let normalizedPath = path.replace(/\/+$/, '');
-      if (!normalizedPath.startsWith('/')) {
-        normalizedPath = '/' + normalizedPath;
-      }
-      
-      if (queryString) {
-        try {
-          const params = new URLSearchParams(queryString);
-          const sortedParams = Array.from(params.entries())
-            .sort((a, b) => a[0].localeCompare(b[0]));
-          const normalizedParams = new URLSearchParams(sortedParams);
-          return normalizedPath + '?' + normalizedParams.toString();
-        } catch (e) {
-          return normalizedPath + '?' + queryString;
-        }
-      }
-      
-      return normalizedPath;
-    } catch (e) {
-      return url;
-    }
   }
 
   /**
@@ -69,9 +34,9 @@ export class TabService {
    */
   addTab(tab: Omit<TabItem, 'active'>, navigate: boolean = true): void {
     const currentTabs = this.tabsSubject.value;
-    const normalizedNewUrl = this.normalizeUrl(tab.url);
+    const normalizedNewUrl = normalizeUrl(tab.url);
     const existingTab = currentTabs.find(t => {
-      const normalizedExistingUrl = this.normalizeUrl(t.url);
+      const normalizedExistingUrl = normalizeUrl(t.url);
       return normalizedExistingUrl === normalizedNewUrl;
     });
 
@@ -125,6 +90,8 @@ export class TabService {
       return; // 不能关闭固定Tab
     }
 
+    this.tabReuseService.markForRefresh(tabToClose.url);
+
     const updatedTabs = currentTabs.filter(t => t.id !== tabId);
     
     // 如果关闭的是当前激活Tab，需要激活其他Tab并刷新
@@ -146,48 +113,28 @@ export class TabService {
   closeLeftTabs(tabId: string): void {
     const currentTabs = this.tabsSubject.value;
     const targetIndex = currentTabs.findIndex(t => t.id === tabId);
-    
+
     if (targetIndex === -1) return;
 
-    const targetTab = currentTabs[targetIndex];
+    const targetBefore = currentTabs[targetIndex];
+    const wasActive = targetBefore?.active ?? false;
 
-    const filteredTabs = currentTabs.filter((tab, index) => {
-      // 保留固定Tab或目标Tab及其右侧的Tab
-      return tab.pinned || index >= targetIndex;
-    });
+    const removedTabs = currentTabs.filter((tab, index) => !tab.pinned && index < targetIndex);
 
-    if (filteredTabs.length === 0) {
-      return;
-    }
-
-    let activeTabId = filteredTabs.some(tab => tab.active) ? filteredTabs.find(tab => tab.active)!.id : null;
-    const targetExists = filteredTabs.some(tab => tab.id === tabId);
-
-    let updatedTabs = filteredTabs.map(tab => ({ ...tab }));
-
-    if (targetExists) {
-      updatedTabs = updatedTabs.map(tab => ({ ...tab, active: tab.id === tabId }));
-      activeTabId = tabId;
-    } else if (!activeTabId) {
-      const fallback = updatedTabs[updatedTabs.length - 1];
-      if (fallback) {
-        updatedTabs = updatedTabs.map(tab => ({ ...tab, active: tab.id === fallback.id }));
-        activeTabId = fallback.id;
-      }
-    }
+    const updatedTabs = currentTabs
+      .filter((tab, index) => tab.pinned || index >= targetIndex)
+      .map(tab => ({ ...tab, active: tab.id === tabId }));
 
     this.tabsSubject.next(updatedTabs);
     this.saveTabs();
 
-    if (activeTabId) {
-      const activeTab = updatedTabs.find(tab => tab.id === activeTabId);
-      if (activeTab) {
-        const { path, queryParams } = this.parseUrl(activeTab.url);
-        this.router.navigate(path, { queryParams });
+    this.tabReuseService.markManyForRefresh(removedTabs.map(tab => tab.url));
+
+    if (!wasActive) {
+      const targetTab = updatedTabs.find(tab => tab.id === tabId);
+      if (targetTab) {
+        this.router.navigate([targetTab.url]);
       }
-    } else if (targetExists) {
-      const { path, queryParams } = this.parseUrl(targetTab.url);
-      this.router.navigate(path, { queryParams });
     }
   }
 
@@ -197,42 +144,27 @@ export class TabService {
   closeRightTabs(tabId: string): void {
     const currentTabs = this.tabsSubject.value;
     const targetIndex = currentTabs.findIndex(t => t.id === tabId);
-    
+
     if (targetIndex === -1) return;
 
-    const filteredTabs = currentTabs.filter((tab, index) => {
-      // 保留固定Tab或目标Tab及其左侧的Tab
-      return tab.pinned || index <= targetIndex;
-    });
+    const targetBefore = currentTabs[targetIndex];
+    const wasActive = targetBefore?.active ?? false;
 
-    if (filteredTabs.length === 0) {
-      return;
-    }
+    const removedTabs = currentTabs.filter((tab, index) => !tab.pinned && index > targetIndex);
 
-    let activeTabId = filteredTabs.some(tab => tab.active) ? filteredTabs.find(tab => tab.active)!.id : null;
-    const targetExists = filteredTabs.some(tab => tab.id === tabId);
-
-    let updatedTabs = filteredTabs.map(tab => ({ ...tab }));
-
-    if (targetExists) {
-      updatedTabs = updatedTabs.map(tab => ({ ...tab, active: tab.id === tabId }));
-      activeTabId = tabId;
-    } else if (!activeTabId) {
-      const fallback = updatedTabs[updatedTabs.length - 1];
-      if (fallback) {
-        updatedTabs = updatedTabs.map(tab => ({ ...tab, active: tab.id === fallback.id }));
-        activeTabId = fallback.id;
-      }
-    }
+    const updatedTabs = currentTabs
+      .filter((tab, index) => tab.pinned || index <= targetIndex)
+      .map(tab => ({ ...tab, active: tab.id === tabId }));
 
     this.tabsSubject.next(updatedTabs);
     this.saveTabs();
 
-    if (activeTabId) {
-      const activeTab = updatedTabs.find(tab => tab.id === activeTabId);
-      if (activeTab) {
-        const { path, queryParams } = this.parseUrl(activeTab.url);
-        this.router.navigate(path, { queryParams });
+    this.tabReuseService.markManyForRefresh(removedTabs.map(tab => tab.url));
+
+    if (!wasActive) {
+      const targetTab = updatedTabs.find(tab => tab.id === tabId);
+      if (targetTab) {
+        this.router.navigate([targetTab.url]);
       }
     }
   }
@@ -242,28 +174,25 @@ export class TabService {
    */
   closeOtherTabs(tabId: string): void {
     const currentTabs = this.tabsSubject.value;
-    
-    const filteredTabs = currentTabs.filter(tab => {
-      // 保留固定Tab和目标Tab
-      return tab.pinned || tab.id === tabId;
-    });
 
-    if (filteredTabs.length === 0) {
-      return;
-    }
+    const removedTabs = currentTabs.filter(tab => !tab.pinned && tab.id !== tabId);
+    const targetBefore = currentTabs.find(tab => tab.id === tabId);
+    const wasActive = targetBefore?.active ?? false;
 
-    const updatedTabs = filteredTabs.map(tab => ({
-      ...tab,
-      active: tab.id === tabId,
-    }));
+    const updatedTabs = currentTabs
+      .filter(tab => tab.pinned || tab.id === tabId)
+      .map(tab => ({ ...tab, active: tab.id === tabId }));
 
     this.tabsSubject.next(updatedTabs);
     this.saveTabs();
 
-    const activeTab = updatedTabs.find(tab => tab.id === tabId) || updatedTabs[updatedTabs.length - 1];
-    if (activeTab) {
-      const { path, queryParams } = this.parseUrl(activeTab.url);
-      this.router.navigate(path, { queryParams });
+    this.tabReuseService.markManyForRefresh(removedTabs.map(tab => tab.url));
+
+    if (!wasActive) {
+      const activeTab = updatedTabs.find(tab => tab.id === tabId) || updatedTabs.find(tab => tab.active);
+      if (activeTab) {
+        this.router.navigate([activeTab.url]);
+      }
     }
   }
 
@@ -343,8 +272,8 @@ export class TabService {
     const isAlreadyActive = targetTab.active;
     
     // Check if we're already on the target URL (使用规范化比较)
-    const normalizedRouterUrl = this.normalizeUrl(this.router.url);
-    const normalizedTargetUrl = this.normalizeUrl(targetTab.url);
+    const normalizedRouterUrl = normalizeUrl(this.router.url);
+    const normalizedTargetUrl = normalizeUrl(targetTab.url);
     const isOnTargetUrl = normalizedRouterUrl === normalizedTargetUrl;
 
     // If already active and on target URL, do nothing
@@ -365,6 +294,21 @@ export class TabService {
     if (navigate && !isOnTargetUrl) {
       const { path, queryParams } = this.parseUrl(targetTab.url);
       this.router.navigate(path, { queryParams });
+    }
+  }
+
+  refreshTab(tabId: string): void {
+    const currentTabs = this.tabsSubject.value;
+    const targetTab = currentTabs.find(tab => tab.id === tabId);
+
+    if (!targetTab) {
+      return;
+    }
+
+    this.tabReuseService.markForRefresh(targetTab.url);
+
+    if (targetTab.active) {
+      this.router.navigateByUrl(targetTab.url);
     }
   }
 

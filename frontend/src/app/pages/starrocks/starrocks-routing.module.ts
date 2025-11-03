@@ -24,6 +24,7 @@ const routes: Routes = [
   {
     path: 'dashboard',
     component: DashboardComponent,
+    data: { reuse: true },
   },
   {
     path: 'clusters',
@@ -31,32 +32,39 @@ const routes: Routes = [
       {
         path: '',
         component: ClusterListComponent,
+        data: { reuse: true },
       },
       {
         path: 'new',
         component: ClusterFormComponent,
+        data: { reuse: true },
       },
       {
         path: ':id',
         component: ClusterDetailComponent,
+        data: { reuse: true },
       },
       {
         path: ':id/edit',
         component: ClusterFormComponent,
+        data: { reuse: true },
       },
     ],
   },
   {
     path: 'backends',
     component: BackendsComponent,
+    data: { reuse: true },
   },
   {
     path: 'frontends',
     component: FrontendsComponent,
+    data: { reuse: true },
   },
   {
     path: 'materialized-views',
     component: MaterializedViewsComponent,
+    data: { reuse: true },
   },
   {
     path: 'queries',
@@ -69,32 +77,39 @@ const routes: Routes = [
       {
         path: 'execution',
         component: QueryExecutionComponent,
+        data: { reuse: true },
       },
       {
         path: 'profiles',
         component: ProfileQueriesComponent,
+        data: { reuse: true },
       },
       {
         path: 'audit-logs',
         component: AuditLogsComponent,
+        data: { reuse: true },
       },
     ],
   },
   {
     path: 'sessions',
     component: SessionsComponent,
+    data: { reuse: true },
   },
   {
     path: 'variables',
     component: VariablesComponent,
+    data: { reuse: true },
   },
   {
     path: 'system',
     component: SystemManagementComponent,
+    data: { reuse: true },
   },
   {
     path: 'overview',
     component: ClusterOverviewComponent,
+    data: { reuse: true },
   },
 ];
 

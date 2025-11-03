@@ -67,7 +67,7 @@
                   <span class="resizer-grip"></span>
                 </div>
 
-                <div class="editor-panel">
+                <div class="editor-panel" [class.editor-collapsed]="sqlEditorCollapsed">
                   <!-- Collapsed SQL Bar (shown when editor is collapsed) -->
                   <div *ngIf="sqlEditorCollapsed" class="collapsed-sql-bar" (click)="toggleSqlEditor(false)">
                     <div class="collapsed-sql-preview">
@@ -125,33 +125,140 @@
                     </div>
 
                     <!-- CodeMirror Editor Container -->
-                  <div class="editor-wrapper">
-                    <div #editorContainer class="codemirror-container"></div>
+                    <div class="editor-wrapper">
+                      <div #editorContainer class="codemirror-container"></div>
 
-                    <!-- Loading overlay with Nebular spinner -->
-                    <div *ngIf="executing" class="loading-overlay">
-                      <nb-spinner size="large" status="primary" message="正在执行查询..."></nb-spinner>
-                    </div>
+                      <!-- Loading overlay with Nebular spinner -->
+                      <div *ngIf="executing" class="loading-overlay">
+                        <nb-spinner size="large" status="primary" message="正在执行查询..."></nb-spinner>
+                      </div>
 
-                    <div class="editor-footer d-flex justify-content-between align-items-center">
-                      <small class="hint-text">
-                        <nb-icon icon="info-outline"></nb-icon>
-                        SELECT 查询会自动添加 LIMIT 限制（如未指定）
-                      </small>
+                      <div class="editor-footer d-flex justify-content-between align-items-center">
+                        <small class="hint-text">
+                          <nb-icon icon="info-outline"></nb-icon>
+                          SELECT 查询会自动添加 LIMIT 限制（如未指定）
+                        </small>
 
-                      <div class="right-actions">
-                        <span class="limit-label">限制:</span>
-                        <nb-select 
-                          [(selected)]="queryLimit" 
-                          size="tiny"
-                          [disabled]="executing">
-                          <nb-option *ngFor="let option of limitOptions" [value]="option.value">
-                            {{ option.label }}
-                          </nb-option>
-                        </nb-select>
+                        <div class="right-actions">
+                          <span class="limit-label">限制:</span>
+                          <nb-select 
+                            [(selected)]="queryLimit" 
+                            size="tiny"
+                            [disabled]="executing">
+                            <nb-option *ngFor="let option of limitOptions" [value]="option.value">
+                              {{ option.label }}
+                            </nb-option>
+                          </nb-select>
+                        </div>
                       </div>
                     </div>
                   </div>
+
+                  <!-- Query Results (attached to editor panel) -->
+                  <div class="results-section" *ngIf="queryResult">
+                    <!-- Single Result (when only 1 SQL) -->
+                    <nb-card *ngIf="queryResults.length === 1" class="result-card">
+                      <nb-card-header>
+                        <div class="result-header">
+                          <h6 class="mb-0">查询结果</h6>
+                          <div class="result-actions">
+                            <div class="result-stat-item">
+                              <nb-icon icon="clock-outline" status="success" class="stat-icon"></nb-icon>
+                              <span class="stat-label">执行耗时:</span>
+                              <span class="stat-value stat-time">{{ executionTime }}ms</span>
+                            </div>
+                            <div class="result-stat-item">
+                              <nb-icon icon="list-outline" status="info" class="stat-icon"></nb-icon>
+                              <span class="stat-label">返回行数:</span>
+                              <span class="stat-value stat-count">{{ rowCount | number }}</span>
+                            </div>
+                            <button 
+                              *ngIf="queryResults[0].success"
+                              nbButton 
+                              size="small" 
+                              status="success"
+                              (click)="exportResults(0)"
+                              class="ml-2">
+                              <nb-icon icon="download-outline"></nb-icon>
+                              导出 CSV
+                            </button>
+                          </div>
+                        </div>
+                      </nb-card-header>
+                      <nb-card-body>
+                        <div *ngIf="queryResults[0].error" class="error-message mb-3">
+                          <nb-alert status="danger" [title]="'执行失败'">{{ queryResults[0].error }}</nb-alert>
+                        </div>
+                        <ng2-smart-table 
+                          *ngIf="resultSettings[0] && queryResults[0].success" 
+                          [settings]="resultSettings[0]" 
+                          [source]="resultSources[0]">
+                        </ng2-smart-table>
+                        <div *ngIf="queryResults[0].success && rowCount === 0" class="no-data-message">
+                          <nb-icon icon="inbox-outline"></nb-icon>
+                          <p>查询未返回任何数据</p>
+                        </div>
+                      </nb-card-body>
+                    </nb-card>
+
+                    <!-- Multiple Results (using nb-tabset) -->
+                    <nb-card *ngIf="queryResults.length > 1" class="result-card">
+                      <nb-card-body>
+                        <div class="tabset-with-export">
+                          <nb-tabset #tabsetRef class="result-tabset" (changeTab)="currentResultIndex = $event.tabId ? parseInt($event.tabId.split('-')[1]) : 0">
+                            <nb-tab 
+                              *ngFor="let result of queryResults; let i = index" 
+                              [tabTitle]="'结果' + (i + 1)"
+                              [tabId]="'result-' + i"
+                              [active]="i === 0">
+                              <div class="tab-content-wrapper">
+                                <!-- Error Message -->
+                                <div *ngIf="result.error" class="error-message mb-3">
+                                  <nb-alert status="danger" [title]="'执行失败'">{{ result.error }}</nb-alert>
+                                </div>
+
+                                <!-- Result Table -->
+                                <ng2-smart-table 
+                                  *ngIf="resultSettings[i] && result.success" 
+                                  [settings]="resultSettings[i]" 
+                                  [source]="resultSources[i]">
+                                </ng2-smart-table>
+
+                                <!-- Result Stats at bottom right -->
+                                <div *ngIf="result.success" class="result-stats-footer">
+                                  <span class="stats-text">
+                                    <nb-icon icon="list-outline" class="stats-icon"></nb-icon>
+                                    {{ result.row_count }} 行
+                                    <span class="stats-separator">|</span>
+                                    <nb-icon icon="clock-outline" class="stats-icon"></nb-icon>
+                                    {{ result.execution_time_ms }}ms
+                                  </span>
+                                </div>
+
+                                <!-- No Data Message -->
+                                <div *ngIf="result.success && result.row_count === 0" class="no-data-message">
+                                  <nb-icon icon="inbox-outline"></nb-icon>
+                                  <p>查询未返回任何数据</p>
+                                </div>
+                              </div>
+                            </nb-tab>
+                          </nb-tabset>
+
+                          <!-- Export button aligned with tabs -->
+                          <div class="export-button-wrapper" *ngIf="queryResults.length > 0 && queryResults[currentResultIndex]?.success && queryResults[currentResultIndex]?.row_count > 0">
+                            <button 
+                              nbButton 
+                              size="small" 
+                              status="success"
+                              (click)="exportResults(currentResultIndex)"
+                              class="export-btn">
+                              <nb-icon icon="download-outline" class="export-icon"></nb-icon>
+                              导出 CSV
+                            </button>
+                          </div>
+                        </div>
+                      </nb-card-body>
+                    </nb-card>
                   </div>
                 </div>
               </div>
@@ -184,113 +291,6 @@
                 </li>
               </ng-template>
 
-              <!-- Query Results -->
-              <div *ngIf="queryResult" class="mt-3">
-                <!-- Single Result (when only 1 SQL) -->
-                <nb-card *ngIf="queryResults.length === 1" class="result-card">
-                  <nb-card-header>
-                    <div class="result-header">
-                      <h6 class="mb-0">查询结果</h6>
-                      <div class="result-actions">
-                        <div class="result-stat-item">
-                          <nb-icon icon="clock-outline" status="success" class="stat-icon"></nb-icon>
-                          <span class="stat-label">执行耗时:</span>
-                          <span class="stat-value stat-time">{{ executionTime }}ms</span>
-                        </div>
-                        <div class="result-stat-item">
-                          <nb-icon icon="list-outline" status="info" class="stat-icon"></nb-icon>
-                          <span class="stat-label">返回行数:</span>
-                          <span class="stat-value stat-count">{{ rowCount | number }}</span>
-                        </div>
-                        <button 
-                          *ngIf="queryResults[0].success"
-                          nbButton 
-                          size="small" 
-                          status="success"
-                          (click)="exportResults(0)"
-                          class="ml-2">
-                          <nb-icon icon="download-outline"></nb-icon>
-                          导出 CSV
-                        </button>
-                      </div>
-                    </div>
-                  </nb-card-header>
-                  <nb-card-body>
-                    <div *ngIf="queryResults[0].error" class="error-message mb-3">
-                      <nb-alert status="danger" [title]="'执行失败'">{{ queryResults[0].error }}</nb-alert>
-                    </div>
-                    <ng2-smart-table 
-                      *ngIf="resultSettings[0] && queryResults[0].success" 
-                      [settings]="resultSettings[0]" 
-                      [source]="resultSources[0]">
-                    </ng2-smart-table>
-                    <div *ngIf="queryResults[0].success && rowCount === 0" class="no-data-message">
-                      <nb-icon icon="inbox-outline"></nb-icon>
-                      <p>查询未返回任何数据</p>
-                    </div>
-                  </nb-card-body>
-                </nb-card>
-
-                <!-- Multiple Results (using nb-tabset) -->
-                <nb-card *ngIf="queryResults.length > 1" class="result-card">
-                  <nb-card-body>
-                    <div class="tabset-with-export">
-                    <nb-tabset #tabsetRef class="result-tabset" (changeTab)="currentResultIndex = $event.tabId ? parseInt($event.tabId.split('-')[1]) : 0">
-                      <nb-tab 
-                        *ngFor="let result of queryResults; let i = index" 
-                        [tabTitle]="'结果' + (i + 1)"
-                        [tabId]="'result-' + i"
-                        [active]="i === 0">
-                          <div class="tab-content-wrapper">
-                          
-                          <!-- Error Message -->
-                          <div *ngIf="result.error" class="error-message mb-3">
-                            <nb-alert status="danger" [title]="'执行失败'">{{ result.error }}</nb-alert>
-                          </div>
-                          
-                          <!-- Result Table -->
-                          <ng2-smart-table 
-                            *ngIf="resultSettings[i] && result.success" 
-                            [settings]="resultSettings[i]" 
-                            [source]="resultSources[i]">
-                          </ng2-smart-table>
-                          
-                          <!-- Result Stats at bottom right -->
-                          <div *ngIf="result.success" class="result-stats-footer">
-                            <span class="stats-text">
-                              <nb-icon icon="list-outline" class="stats-icon"></nb-icon>
-                              {{ result.row_count }} 行
-                              <span class="stats-separator">|</span>
-                              <nb-icon icon="clock-outline" class="stats-icon"></nb-icon>
-                              {{ result.execution_time_ms }}ms
-                            </span>
-                          </div>
-                          
-                          <!-- No Data Message -->
-                          <div *ngIf="result.success && result.row_count === 0" class="no-data-message">
-                            <nb-icon icon="inbox-outline"></nb-icon>
-                            <p>查询未返回任何数据</p>
-                          </div>
-                        </div>
-                      </nb-tab>
-                    </nb-tabset>
-                    
-                    <!-- Export button aligned with tabs -->
-                    <div class="export-button-wrapper" *ngIf="queryResults.length > 0 && queryResults[currentResultIndex]?.success && queryResults[currentResultIndex]?.row_count > 0">
-                      <button 
-                        nbButton 
-                        size="small" 
-                        status="success"
-                        (click)="exportResults(currentResultIndex)"
-                        class="export-btn">
-                        <nb-icon icon="download-outline" class="export-icon"></nb-icon>
-                        导出 CSV
-                      </button>
-                    </div>
-                  </div>
-                  </nb-card-body>
-                </nb-card>
-              </div>
             </div>
           </nb-tab>
 

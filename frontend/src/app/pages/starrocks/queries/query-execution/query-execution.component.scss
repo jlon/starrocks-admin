@@ -405,19 +405,25 @@
     padding-left: 0.75rem;
     display: flex;
     flex-direction: column;
-  }
 
-  .sql-editor-section {
-    margin-bottom: 0.5rem;
-    width: 100%;
-    overflow: hidden;
-    transition: padding 200ms ease, margin 200ms ease;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
+    .results-section {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
 
-    .selection-toolbar {
+    .sql-editor-section {
+      margin-bottom: 0.5rem;
+      width: 100%;
+      overflow: hidden;
+      transition: padding 200ms ease, margin 200ms ease;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+
+      .selection-toolbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -598,6 +604,49 @@
       font-size: 12px;
     }
   }
+
+  &.editor-collapsed {
+    .collapsed-sql-bar {
+      margin-bottom: 0;
+    }
+
+    .results-section {
+      margin-top: 0.5rem;
+    }
+
+    .sql-editor-section {
+      margin-bottom: 0;
+      flex: 0 0 auto;
+      height: 0;
+      padding: 0;
+      overflow: hidden;
+
+      .selection-toolbar,
+      .editor-wrapper {
+        opacity: 0;
+        height: 0;
+        min-height: 0;
+        flex: 0 0 auto;
+        padding: 0;
+        margin: 0;
+      }
+
+      .editor-wrapper {
+        display: flex;
+        pointer-events: none;
+
+        .codemirror-container {
+          height: 0;
+          min-height: 0;
+        }
+
+        .editor-footer {
+          display: none;
+        }
+      }
+    }
+  }
+}
 
   @media (max-width: 992px) {
     .query-split-layout {

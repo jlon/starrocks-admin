@@ -46,8 +46,16 @@ interface NavTreeNode {
   styleUrls: ['./query-execution.component.scss'],
   animations: [
     trigger('editorCollapse', [
-      state('expanded', style({ height: '*', opacity: 1, overflow: 'hidden' })),
-      state('collapsed', style({ height: '0px', opacity: 0, paddingTop: 0, paddingBottom: 0, marginBottom: 0, overflow: 'hidden' })),
+      state('expanded', style({ height: '*', opacity: 1, overflow: 'visible' })),
+      state('collapsed', style({ 
+        height: '0px', 
+        opacity: 0, 
+        paddingTop: 0, 
+        paddingBottom: 0, 
+        marginTop: 0,
+        marginBottom: 0, 
+        overflow: 'hidden' 
+      })),
       transition('expanded <=> collapsed', animate('200ms ease')),
     ]),
   ],
@@ -310,22 +318,37 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     const windowHeight = window.innerHeight;
     const navbarHeight = 64; // Approximate navbar height
     const tabBarHeight = 48; // Tab bar height
-    const editorToolbarHeight = 80; // Selection breadcrumbs + buttons + toolbar
+    const cardHeaderHeight = 56; // nb-card header
+    const cardPadding = 32; // nb-card-body padding
+    const treeHeaderHeight = 48; // Tree panel header height
     const bottomMargin = 16; // Small margin at bottom
     
-    // Calculate available height
-    let availableHeight = windowHeight - navbarHeight - tabBarHeight - editorToolbarHeight - bottomMargin;
+    // Calculate tree panel height to stretch to bottom
+    const availableTreeHeight = windowHeight - navbarHeight - tabBarHeight - cardHeaderHeight - cardPadding - bottomMargin;
+    this.treePanelHeight = Math.max(300, availableTreeHeight);
     
+    // Calculate editor height based on tree height
+    const editorToolbarHeight = 80; // Selection breadcrumbs + buttons
+    const editorFooterHeight = 28; // Footer with limit selector
+    
+    if (this.sqlEditorCollapsed) {
+      this.editorHeight = 0;
+      if (this.editorView) {
+        this.applyEditorTheme();
+      }
+      return;
+    }
+
     // If there are results, reserve space for them
-    if (this.queryResult && !this.sqlEditorCollapsed) {
-      availableHeight = Math.max(300, availableHeight * 0.4); // Editor takes 40% when results shown
-    } else if (this.queryResult && this.sqlEditorCollapsed) {
-      availableHeight = 60; // Collapsed bar height
+    if (this.queryResult) {
+      const editorAvailableHeight = this.treePanelHeight - treeHeaderHeight - editorToolbarHeight - editorFooterHeight;
+      this.editorHeight = Math.max(200, editorAvailableHeight * 0.4); // Editor takes 40% when results shown
+    } else {
+      // No results, editor takes more space
+      const editorAvailableHeight = this.treePanelHeight - treeHeaderHeight - editorToolbarHeight - editorFooterHeight;
+      this.editorHeight = Math.max(200, editorAvailableHeight);
     }
     
-    this.editorHeight = Math.max(200, availableHeight);
-    const calculatedTreeHeight = this.editorHeight + this.treeExtraHeight;
-    this.treePanelHeight = Math.max(420, calculatedTreeHeight);
     if (this.editorView) {
       this.applyEditorTheme();
     }
@@ -488,29 +511,21 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       const dbName = pathParts[0];
       let foundNamespace: SQLNamespace | null = null;
       
-      console.log('[Schema Completion] Single path part:', dbName);
-      console.log('[Schema Completion] Selected catalog:', this.selectedCatalog);
-      console.log('[Schema Completion] Current schema keys:', Object.keys(this.currentSqlSchema));
-      
       // First, try to find in the selected catalog if available
       if (this.selectedCatalog && this.currentSqlSchema[this.selectedCatalog]) {
         const catalogNs = this.currentSqlSchema[this.selectedCatalog] as SQLNamespace;
-        console.log('[Schema Completion] Catalog namespace keys:', catalogNs ? Object.keys(catalogNs) : 'null');
         if (catalogNs && typeof catalogNs === 'object' && !Array.isArray(catalogNs) && catalogNs[dbName]) {
           foundNamespace = catalogNs[dbName] as SQLNamespace;
-          console.log('[Schema Completion] Found in selected catalog:', foundNamespace ? 'yes' : 'no');
         }
       }
       
       // If not found in selected catalog, search all catalogs
       if (!foundNamespace) {
-        console.log('[Schema Completion] Searching all catalogs...');
         for (const catalogKey in this.currentSqlSchema) {
           if (Object.prototype.hasOwnProperty.call(this.currentSqlSchema, catalogKey)) {
             const catalogNs = this.currentSqlSchema[catalogKey] as SQLNamespace;
             if (catalogNs && typeof catalogNs === 'object' && !Array.isArray(catalogNs) && catalogNs[dbName]) {
               foundNamespace = catalogNs[dbName] as SQLNamespace;
-              console.log('[Schema Completion] Found in catalog:', catalogKey);
               break;
             }
           }
@@ -518,11 +533,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       }
       
       if (!foundNamespace) {
-        console.log('[Schema Completion] Database not found in any catalog');
       } else {
-        console.log('[Schema Completion] Found namespace, is array:', Array.isArray(foundNamespace));
         if (Array.isArray(foundNamespace)) {
-          console.log('[Schema Completion] Table count:', foundNamespace.length);
         }
       }
       
@@ -549,7 +561,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     // Handle when targetNamespace is a table array (e.g., after "database.")
     if (Array.isArray(targetNamespace)) {
-      console.log('[Schema Completion] Processing table array, count:', targetNamespace.length);
       targetNamespace.forEach((tableName) => {
         if (!partialWord || tableName.toLowerCase().startsWith(partialWord.toLowerCase())) {
           completions.push({
@@ -559,7 +570,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           });
         }
       });
-      console.log('[Schema Completion] Generated completions:', completions.length);
       return completions.length > 0 ? { completions, from: wordStartPos } : null;
     }
 
@@ -603,7 +613,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     };
     
     processNamespace(targetNamespace, prefixPath);
-    console.log('[Schema Completion] Final completions count:', completions.length);
     return completions.length > 0 ? { completions, from: wordStartPos } : null;
   }
 
@@ -1156,10 +1165,11 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       this.sqlEditorCollapsed = !this.sqlEditorCollapsed;
     }
 
-    if (!this.sqlEditorCollapsed) {
-      // Simply recalculate height to make sure layout is correct after expansion
-      setTimeout(() => this.calculateEditorHeight(), 300);
-    }
+    // Recalculate editor dimensions immediately to sync CodeMirror theme height
+    this.calculateEditorHeight();
+
+    // When animation completes, recalc again to ensure layout settles
+    setTimeout(() => this.calculateEditorHeight(), 220);
   }
 
   // Real-time query methods

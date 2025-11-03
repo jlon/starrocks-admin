@@ -1,6 +1,6 @@
-import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, HostListener, TemplateRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { NbToastrService, NbThemeService } from '@nebular/theme';
+import { NbDialogRef, NbDialogService, NbToastrService, NbThemeService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -21,6 +21,14 @@ import { format } from 'sql-formatter';
 import { trigger, transition, style, animate, state } from '@angular/animations';
 
 type NavNodeType = 'catalog' | 'database' | 'group' | 'table';
+
+type ContextMenuAction = 'viewSchema' | 'viewPartitions';
+
+interface TreeContextMenuItem {
+  label: string;
+  icon: string;
+  action: ContextMenuAction;
+}
 
 interface NavTreeNode {
   id: string;
@@ -62,6 +70,7 @@ interface NavTreeNode {
 })
 export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('editorContainer', { static: false }) editorContainer!: ElementRef;
+  @ViewChild('tableSchemaDialog', { static: false }) tableSchemaDialogTemplate!: TemplateRef<any>;
   // Template tabset reference removed as it's no longer required
 
   // Data sources
@@ -121,6 +130,21 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   private readonly sqlDialect = MySQL;
   private readonly themeCompartment = new Compartment();
   private readonly sqlConfigCompartment = new Compartment();
+
+  // Table schema dialog state
+  schemaDialogTitle: string = '';
+  schemaDialogSubtitle: string = '';
+  currentSchemaCatalog: string | null = null;
+  currentSchemaDatabase: string | null = null;
+  currentSchemaTable: string | null = null;
+  currentTableSchema: string = '';
+  tableSchemaLoading: boolean = false;
+  private schemaDialogRef: NbDialogRef<any> | null = null;
+  contextMenuVisible: boolean = false;
+  contextMenuItems: TreeContextMenuItem[] = [];
+  contextMenuX = 0;
+  contextMenuY = 0;
+  private contextMenuTargetNode: NavTreeNode | null = null;
 
   private buildNodeId(...parts: (string | undefined)[]): string {
     return parts
@@ -238,6 +262,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     private toastrService: NbToastrService,
     private clusterContext: ClusterContextService,
     private themeService: NbThemeService,
+    private dialogService: NbDialogService,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);
@@ -294,6 +319,27 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     if (this.isTreeResizing) {
       this.isTreeResizing = false;
       document.body.classList.remove('resizing-tree');
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.contextMenuVisible) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (target && target.closest('.tree-context-menu')) {
+      return;
+    }
+
+    this.closeContextMenu();
+  }
+
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    if (this.contextMenuVisible) {
+      this.closeContextMenu();
     }
   }
   
@@ -353,6 +399,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       this.applyEditorTheme();
     }
   }
+
 
   private applyEditorTheme(): void {
     if (!this.editorView) {
@@ -785,6 +832,217 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     }
   }
 
+  onNodeRightClick(node: NavTreeNode, event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.contextMenuTargetNode = node;
+    this.selectedNodeId = node.id;
+
+    const items = this.buildContextMenuItems(node);
+    if (!items || items.length === 0) {
+      this.closeContextMenu();
+      return;
+    }
+
+    this.contextMenuItems = items;
+    const { x, y } = this.calculateContextMenuPosition(event, items.length);
+    this.contextMenuX = x;
+    this.contextMenuY = y;
+    this.contextMenuVisible = true;
+  }
+
+  private calculateContextMenuPosition(event: MouseEvent, itemCount: number): { x: number; y: number } {
+    const menuWidth = 200;
+    const menuHeight = itemCount * 40 + 16;
+    let x = event.clientX;
+    let y = event.clientY;
+
+    if (x + menuWidth > window.innerWidth - 8) {
+      x = Math.max(8, window.innerWidth - menuWidth - 8);
+    }
+
+    if (y + menuHeight > window.innerHeight - 8) {
+      y = Math.max(8, window.innerHeight - menuHeight - 8);
+    }
+
+    return { x, y };
+  }
+
+  private buildContextMenuItems(node: NavTreeNode): TreeContextMenuItem[] {
+    if (node.type === 'table') {
+      return [
+        {
+          label: '查看表结构',
+          icon: 'file-text-outline',
+          action: 'viewSchema',
+        },
+        {
+          label: '查看分区',
+          icon: 'layers-outline',
+          action: 'viewPartitions',
+        },
+      ];
+    }
+
+    return [];
+  }
+
+  private handleContextMenuAction(item: TreeContextMenuItem): void {
+    const action = item?.action;
+    const targetNode = this.contextMenuTargetNode;
+
+    if (!action || !targetNode) {
+      this.closeContextMenu();
+      return;
+    }
+
+    switch (action) {
+      case 'viewSchema':
+        if (targetNode.type === 'table') {
+          this.viewTableSchema(targetNode);
+        }
+        break;
+      case 'viewPartitions':
+        this.toastrService.info('分区信息功能即将上线', '敬请期待');
+        break;
+      default:
+        break;
+    }
+    this.closeContextMenu();
+  }
+
+  onContextMenuItemClick(item: TreeContextMenuItem, event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.handleContextMenuAction(item);
+  }
+
+  closeContextMenu(): void {
+    this.contextMenuVisible = false;
+    this.contextMenuItems = [];
+    this.contextMenuTargetNode = null;
+  }
+
+  private viewTableSchema(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+    const tableName = node.data?.table || node.name;
+
+    if (!databaseName || !tableName) {
+      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+      return;
+    }
+
+    this.schemaDialogTitle = '表结构';
+    this.schemaDialogSubtitle = tableName;
+    this.currentSchemaCatalog = catalogName || null;
+    this.currentSchemaDatabase = databaseName;
+    this.currentSchemaTable = tableName;
+    this.currentTableSchema = '';
+    this.tableSchemaLoading = true;
+
+    const qualifiedTableName = this.buildQualifiedTableName(catalogName, databaseName, tableName);
+
+    if (this.schemaDialogRef) {
+      this.schemaDialogRef.close();
+    }
+
+    this.schemaDialogRef = this.dialogService.open(this.tableSchemaDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+    });
+
+    if (this.schemaDialogRef) {
+      this.schemaDialogRef.onClose.subscribe(() => {
+        this.schemaDialogRef = null;
+      });
+    }
+
+    const sql = `SHOW CREATE TABLE ${qualifiedTableName}`;
+
+    this.nodeService
+      .executeSQL(sql)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => this.handleTableSchemaSuccess(result, tableName),
+        error: (error) => {
+          this.tableSchemaLoading = false;
+          this.currentTableSchema = '';
+          this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '获取表结构失败');
+        },
+      });
+  }
+
+  private handleTableSchemaSuccess(result: QueryExecuteResult | null | undefined, tableName: string): void {
+    this.tableSchemaLoading = false;
+
+    if (!result || !Array.isArray(result.results) || result.results.length === 0) {
+      this.currentTableSchema = '';
+      this.toastrService.warning('未返回表结构信息', '提示');
+      return;
+    }
+
+    const primaryResult = result.results[0];
+
+    if (!primaryResult.success) {
+      const errorMessage = primaryResult.error || '执行 SHOW CREATE TABLE 失败';
+      this.currentTableSchema = '';
+      this.toastrService.danger(errorMessage, '获取表结构失败');
+      return;
+    }
+
+    const columns = primaryResult.columns || [];
+    const rows = primaryResult.rows || [];
+
+    if (!rows || rows.length === 0) {
+      this.currentTableSchema = '';
+      this.toastrService.warning('未获取到建表语句', '提示');
+      return;
+    }
+
+    const createIndex = columns.findIndex((column) => (column || '').toLowerCase() === 'create table');
+    const tableIndex = columns.findIndex((column) => (column || '').toLowerCase() === 'table');
+
+    const matchedRow = rows.find((row) => {
+      if (tableIndex === -1) {
+        return true;
+      }
+      return Array.isArray(row) && row[tableIndex] === tableName;
+    }) || rows[0];
+
+    if (!matchedRow) {
+      this.currentTableSchema = '';
+      this.toastrService.warning('未获取到建表语句', '提示');
+      return;
+    }
+
+    let createStatement = '';
+    if (createIndex !== -1 && matchedRow.length > createIndex) {
+      createStatement = matchedRow[createIndex];
+    } else if (matchedRow.length > 1) {
+      createStatement = matchedRow[1];
+    } else if (matchedRow.length > 0) {
+      createStatement = matchedRow[0];
+    }
+
+    this.currentTableSchema = createStatement || '';
+  }
+
+  private buildQualifiedTableName(catalog: string, database: string, table: string): string {
+    const parts: string[] = [];
+
+    if (catalog && catalog.trim().length > 0) {
+      parts.push(`\`${catalog}\``);
+    }
+
+    parts.push(`\`${database}\``);
+    parts.push(`\`${table}\``);
+
+    return parts.join('.');
+  }
+
   private setSelectedContext(catalog: string, database: string | null, table: string | null): void {
     this.selectedCatalog = catalog;
     this.selectedDatabase = database;
@@ -803,6 +1061,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.selectedCatalog = '';
     this.selectedDatabase = null;
     this.selectedTable = null;
+    this.closeContextMenu();
     this.refreshSqlSchema();
   }
 
@@ -1091,6 +1350,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.destroy$.next();
     this.destroy$.complete();
     document.body.classList.remove('resizing-tree');
+    if (this.schemaDialogRef) {
+      this.schemaDialogRef.close();
+      this.schemaDialogRef = null;
+    }
+    this.contextMenuVisible = false;
+    this.contextMenuTargetNode = null;
   }
 
   // Tab switching
@@ -1295,7 +1560,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       actions: false,
       pager: {
         display: true,
-        perPage: 50,
+        perPage: 15,
       },
       columns: columns,
     };

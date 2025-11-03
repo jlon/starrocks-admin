@@ -8,7 +8,7 @@
             <nb-tabset (changeTab)="selectTab($event.tabId)">
               <!-- Real-time Query Tab -->
               <nb-tab tabTitle="实时查询" tabId="realtime" [active]="selectedTab === 'realtime'">
-            <div class="realtime-query-container">
+              <div class="realtime-query-container">
               <div class="query-split-layout">
                 <div class="nav-tree-wrapper" [class.collapsed]="treeCollapsed" [style.width.px]="treePanelWidth">
                   <ng-container *ngIf="!treeCollapsed; else collapsedButton">
@@ -265,7 +265,7 @@
 
               <ng-template #treeNodeTemplate let-node>
                 <li class="tree-node" [class.expanded]="node.expanded" [class.selected]="node.id === selectedNodeId">
-                  <div class="tree-node-row" [ngClass]="'type-' + node.type" [style.paddingLeft.px]="getNodeIndent(node)" (click)="onNodeSelect(node, $event)">
+                  <div class="tree-node-row" [ngClass]="'type-' + node.type" [style.paddingLeft.px]="getNodeIndent(node)" (click)="onNodeSelect(node, $event)" (contextmenu)="onNodeRightClick(node, $event)">
                     <button 
                       *ngIf="isNodeExpandable(node)"
                       nbButton 
@@ -321,4 +321,57 @@
       </nb-card-body>
     </nb-card>
   </div>
+</div>
+
+<!-- Table Schema Dialog Template -->
+<ng-template #tableSchemaDialog let-ref="dialogRef">
+  <nb-card class="table-schema-dialog">
+    <nb-card-header>
+      <div class="schema-dialog-header">
+        <div class="schema-dialog-title">
+          <nb-icon icon="file-text-outline" status="info"></nb-icon>
+          <div class="schema-text-group">
+            <span class="schema-title-text">{{ schemaDialogTitle || '表结构' }}</span>
+            <span class="schema-subtitle-text" *ngIf="schemaDialogSubtitle">{{ schemaDialogSubtitle }}</span>
+          </div>
+        </div>
+        <button nbButton ghost status="basic" size="tiny" (click)="ref.close()">
+          <nb-icon icon="close-outline"></nb-icon>
+        </button>
+      </div>
+    </nb-card-header>
+    <nb-card-body>
+      <div class="schema-loading" *ngIf="tableSchemaLoading">
+        <nb-spinner status="primary" size="large"></nb-spinner>
+        <p class="mt-2 text-hint">正在获取表结构...</p>
+      </div>
+      <div class="schema-content" *ngIf="!tableSchemaLoading">
+        <div class="schema-scroll">
+          <pre class="schema-text" *ngIf="currentTableSchema; else emptySchema">{{ currentTableSchema }}</pre>
+          <ng-template #emptySchema>
+            <div class="empty-schema">
+              <nb-icon icon="alert-circle-outline" status="warning"></nb-icon>
+              <p class="mb-0">未获取到建表语句</p>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+    </nb-card-body>
+  </nb-card>
+</ng-template>
+
+<div 
+  class="tree-context-menu" 
+  *ngIf="contextMenuVisible"
+  [style.left.px]="contextMenuX"
+  [style.top.px]="contextMenuY"
+  (contextmenu)="$event.preventDefault()">
+  <button 
+    type="button"
+    class="context-menu-item"
+    *ngFor="let item of contextMenuItems"
+    (click)="onContextMenuItemClick(item, $event)">
+    <nb-icon [icon]="item.icon"></nb-icon>
+    <span>{{ item.label }}</span>
+  </button>
 </div>

@@ -158,4 +158,118 @@
       }
     }
   }
+
+  .tab-context-menu {
+    position: fixed;
+    z-index: 1200;
+    min-width: 190px;
+    background: nb-theme(background-basic-color-1);
+    border: 1px solid nb-theme(border-basic-color-4);
+    border-radius: 0.75rem;
+    box-shadow: 0 22px 38px rgba(0, 0, 0, 0.32);
+    padding: 0.6rem 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .menu-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      width: 100%;
+      padding: 0.55rem 1.2rem 0.55rem 1.4rem;
+      background: transparent;
+      border: none;
+      color: nb-theme(text-basic-color);
+      font-size: 0.92rem;
+      text-align: left;
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        border-radius: 0 2px 2px 0;
+        background: nb-theme(color-primary-500);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+
+      .menu-item-icon {
+        font-size: 1.1rem;
+        transition: color 0.2s ease;
+      }
+
+      .menu-item-icon.icon-close-left {
+        color: nb-theme(color-warning-500);
+      }
+
+      .menu-item-icon.icon-close-right {
+        color: nb-theme(color-info-500);
+      }
+
+      .menu-item-icon.icon-close-others {
+        color: nb-theme(color-danger-500);
+      }
+
+      .menu-item-icon.icon-toggle-pin {
+        color: nb-theme(color-success-500);
+      }
+
+      &:hover,
+      &:focus {
+        outline: none;
+        background: nb-theme(color-primary-100);
+        color: nb-theme(color-primary-600);
+
+        &::before {
+          opacity: 1;
+        }
+
+        .menu-item-icon.icon-close-left {
+          color: nb-theme(color-warning-600);
+        }
+
+        .menu-item-icon.icon-close-right {
+          color: nb-theme(color-info-600);
+        }
+
+        .menu-item-icon.icon-close-others {
+          color: nb-theme(color-danger-600);
+        }
+
+        .menu-item-icon.icon-toggle-pin {
+          color: nb-theme(color-success-600);
+        }
+      }
+
+      &.disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+
+        .menu-item-icon {
+          color: nb-theme(text-hint-color);
+        }
+
+        &:hover,
+        &:focus {
+          background: transparent;
+          color: nb-theme(text-basic-color);
+
+          &::before {
+            opacity: 0;
+          }
+
+          .menu-item-icon {
+            color: nb-theme(text-hint-color);
+          }
+        }
+      }
+    }
+  }
 }

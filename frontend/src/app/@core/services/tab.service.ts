@@ -149,13 +149,46 @@ export class TabService {
     
     if (targetIndex === -1) return;
 
-    const updatedTabs = currentTabs.filter((tab, index) => {
+    const targetTab = currentTabs[targetIndex];
+
+    const filteredTabs = currentTabs.filter((tab, index) => {
       // 保留固定Tab或目标Tab及其右侧的Tab
       return tab.pinned || index >= targetIndex;
     });
 
+    if (filteredTabs.length === 0) {
+      return;
+    }
+
+    let activeTabId = filteredTabs.some(tab => tab.active) ? filteredTabs.find(tab => tab.active)!.id : null;
+    const targetExists = filteredTabs.some(tab => tab.id === tabId);
+
+    let updatedTabs = filteredTabs.map(tab => ({ ...tab }));
+
+    if (targetExists) {
+      updatedTabs = updatedTabs.map(tab => ({ ...tab, active: tab.id === tabId }));
+      activeTabId = tabId;
+    } else if (!activeTabId) {
+      const fallback = updatedTabs[updatedTabs.length - 1];
+      if (fallback) {
+        updatedTabs = updatedTabs.map(tab => ({ ...tab, active: tab.id === fallback.id }));
+        activeTabId = fallback.id;
+      }
+    }
+
     this.tabsSubject.next(updatedTabs);
     this.saveTabs();
+
+    if (activeTabId) {
+      const activeTab = updatedTabs.find(tab => tab.id === activeTabId);
+      if (activeTab) {
+        const { path, queryParams } = this.parseUrl(activeTab.url);
+        this.router.navigate(path, { queryParams });
+      }
+    } else if (targetExists) {
+      const { path, queryParams } = this.parseUrl(targetTab.url);
+      this.router.navigate(path, { queryParams });
+    }
   }
 
   /**
@@ -167,13 +200,41 @@ export class TabService {
     
     if (targetIndex === -1) return;
 
-    const updatedTabs = currentTabs.filter((tab, index) => {
+    const filteredTabs = currentTabs.filter((tab, index) => {
       // 保留固定Tab或目标Tab及其左侧的Tab
       return tab.pinned || index <= targetIndex;
     });
 
+    if (filteredTabs.length === 0) {
+      return;
+    }
+
+    let activeTabId = filteredTabs.some(tab => tab.active) ? filteredTabs.find(tab => tab.active)!.id : null;
+    const targetExists = filteredTabs.some(tab => tab.id === tabId);
+
+    let updatedTabs = filteredTabs.map(tab => ({ ...tab }));
+
+    if (targetExists) {
+      updatedTabs = updatedTabs.map(tab => ({ ...tab, active: tab.id === tabId }));
+      activeTabId = tabId;
+    } else if (!activeTabId) {
+      const fallback = updatedTabs[updatedTabs.length - 1];
+      if (fallback) {
+        updatedTabs = updatedTabs.map(tab => ({ ...tab, active: tab.id === fallback.id }));
+        activeTabId = fallback.id;
+      }
+    }
+
     this.tabsSubject.next(updatedTabs);
     this.saveTabs();
+
+    if (activeTabId) {
+      const activeTab = updatedTabs.find(tab => tab.id === activeTabId);
+      if (activeTab) {
+        const { path, queryParams } = this.parseUrl(activeTab.url);
+        this.router.navigate(path, { queryParams });
+      }
+    }
   }
 
   /**
@@ -182,13 +243,61 @@ export class TabService {
   closeOtherTabs(tabId: string): void {
     const currentTabs = this.tabsSubject.value;
     
-    const updatedTabs = currentTabs.filter(tab => {
+    const filteredTabs = currentTabs.filter(tab => {
       // 保留固定Tab和目标Tab
       return tab.pinned || tab.id === tabId;
     });
 
+    if (filteredTabs.length === 0) {
+      return;
+    }
+
+    const updatedTabs = filteredTabs.map(tab => ({
+      ...tab,
+      active: tab.id === tabId,
+    }));
+
     this.tabsSubject.next(updatedTabs);
     this.saveTabs();
+
+    const activeTab = updatedTabs.find(tab => tab.id === tabId) || updatedTabs[updatedTabs.length - 1];
+    if (activeTab) {
+      const { path, queryParams } = this.parseUrl(activeTab.url);
+      this.router.navigate(path, { queryParams });
+    }
+  }
+
+  togglePin(tabId: string): void {
+    const currentTabs = this.tabsSubject.value;
+    const targetIndex = currentTabs.findIndex(tab => tab.id === tabId);
+
+    if (targetIndex === -1) {
+      return;
+    }
+
+    const targetTab = { ...currentTabs[targetIndex] };
+    const toggledPinned = !targetTab.pinned;
+    targetTab.pinned = toggledPinned;
+    targetTab.closable = !toggledPinned;
+
+    const updatedTabs = currentTabs.map((tab, index) => {
+      if (index === targetIndex) {
+        return targetTab;
+      }
+      return { ...tab };
+    });
+
+    const reordered = this.reorderTabs(updatedTabs);
+
+    this.tabsSubject.next(reordered);
+    this.saveTabs();
+  }
+
+  private reorderTabs(tabs: TabItem[]): TabItem[] {
+    const pinnedTabs = tabs.filter(tab => tab.pinned);
+    const otherTabs = tabs.filter(tab => !tab.pinned);
+
+    return [...pinnedTabs, ...otherTabs];
   }
 
   /**

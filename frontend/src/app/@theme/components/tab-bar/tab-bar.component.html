@@ -5,7 +5,8 @@
       class="tab-item"
       [class.active]="tab.active"
       [class.pinned]="tab.pinned"
-      (click)="onTabClick(tab)">
+      (click)="onTabClick(tab)"
+      (contextmenu)="onTabContextMenu(tab, $event)">
       
       <!-- 固定图标 -->
       <nb-icon 
@@ -33,4 +34,21 @@
       </nb-icon>
     </div>
   </div>
+</div>
+
+<div 
+  class="tab-context-menu"
+  *ngIf="contextMenuVisible"
+  [style.left.px]="contextMenuX"
+  [style.top.px]="contextMenuY"
+  (contextmenu)="$event.preventDefault()">
+  <button 
+    type="button"
+    class="menu-item"
+    *ngFor="let item of contextMenuItems"
+    [class.disabled]="item.disabled"
+    (click)="onContextMenuItemClick(item, $event)">
+    <nb-icon [icon]="item.icon" [ngClass]="['menu-item-icon', 'icon-' + item.action]"></nb-icon>
+    <span>{{ item.label }}</span>
+  </button>
 </div>

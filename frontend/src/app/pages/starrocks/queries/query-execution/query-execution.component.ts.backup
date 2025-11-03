@@ -9,9 +9,9 @@ import { ClusterContextService } from '../../../../@core/data/cluster-context.se
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { EditorView } from '@codemirror/view';
-import { autocompletion, completionKeymap, Completion, CompletionSource } from '@codemirror/autocomplete';
+import { autocompletion, completionKeymap, Completion } from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { highlightActiveLine, highlightActiveLineGutter, drawSelection, keymap } from '@codemirror/view';
+import { highlightActiveLine, highlightActiveLineGutter, drawSelection, keymap, placeholder } from '@codemirror/view';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { EditorState, Compartment, type Extension } from '@codemirror/state';
 import { history, historyKeymap } from '@codemirror/commands';
@@ -446,246 +446,44 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     return namespace;
   }
 
-  private refreshSqlSchema(): void {
-    this.currentSqlSchema = this.buildSqlSchema();
-    this.applySqlSchema();
-  }
-
-  private buildSchemaCompletions(context: any): { completions: Completion[], from: number } | null {
-    if (Object.keys(this.currentSqlSchema).length === 0) {
-      return null;
-    }
-
+  private buildSchemaCompletions(schema: SQLNamespace): Completion[] {
     const completions: Completion[] = [];
-    const { state, pos } = context;
     
-    // Get text before cursor
-    const textBefore = state.doc.sliceString(Math.max(0, pos - 200), pos);
-    
-    // Parse the context to find dot notation prefix (e.g., "catalog.database." or "database.")
-    // Match patterns like "identifier." or "catalog.database." at the end of text before cursor
-    // Also capture any partial identifier being typed after the dot
-    const dotMatch = textBefore.match(/([\w\u4e00-\u9fa5.]+)\.(\w*)$/);
-    
-    // ONLY provide schema completions when after a dot
-    // This prevents schema items from interfering with keyword completions
-    if (!dotMatch || !dotMatch[1]) {
-      return null;
-    }
-    
-    // Found dot notation, parse the path
-    const pathParts = dotMatch[1].split('.').filter(p => p.trim());
-    const prefixPath = pathParts;
-    const partialWord = dotMatch[2] || ''; // The partial word being typed after the dot
-    const wordStartPos = partialWord ? pos - partialWord.length : pos; // Start position for replacement
-    
-    // Navigate to the target namespace
-    let targetNamespace: SQLNamespace | null = this.currentSqlSchema;
-    
-    // If only one path part (e.g., "sys."), it could be a database name
-    // Try to find it in all catalogs, prioritizing the selected catalog
-    if (pathParts.length === 1) {
-      const dbName = pathParts[0];
-      let foundNamespace: SQLNamespace | null = null;
-      
-      console.log('[Schema Completion] Single path part:', dbName);
-      console.log('[Schema Completion] Selected catalog:', this.selectedCatalog);
-      console.log('[Schema Completion] Current schema keys:', Object.keys(this.currentSqlSchema));
-      
-      // First, try to find in the selected catalog if available
-      if (this.selectedCatalog && this.currentSqlSchema[this.selectedCatalog]) {
-        const catalogNs = this.currentSqlSchema[this.selectedCatalog] as SQLNamespace;
-        console.log('[Schema Completion] Catalog namespace keys:', catalogNs ? Object.keys(catalogNs) : 'null');
-        if (catalogNs && typeof catalogNs === 'object' && !Array.isArray(catalogNs) && catalogNs[dbName]) {
-          foundNamespace = catalogNs[dbName] as SQLNamespace;
-          console.log('[Schema Completion] Found in selected catalog:', foundNamespace ? 'yes' : 'no');
-        }
-      }
-      
-      // If not found in selected catalog, search all catalogs
-      if (!foundNamespace) {
-        console.log('[Schema Completion] Searching all catalogs...');
-        for (const catalogKey in this.currentSqlSchema) {
-          if (Object.prototype.hasOwnProperty.call(this.currentSqlSchema, catalogKey)) {
-            const catalogNs = this.currentSqlSchema[catalogKey] as SQLNamespace;
-            if (catalogNs && typeof catalogNs === 'object' && !Array.isArray(catalogNs) && catalogNs[dbName]) {
-              foundNamespace = catalogNs[dbName] as SQLNamespace;
-              console.log('[Schema Completion] Found in catalog:', catalogKey);
-              break;
-            }
-          }
-        }
-      }
-      
-      if (!foundNamespace) {
-        console.log('[Schema Completion] Database not found in any catalog');
-      } else {
-        console.log('[Schema Completion] Found namespace, is array:', Array.isArray(foundNamespace));
-        if (Array.isArray(foundNamespace)) {
-          console.log('[Schema Completion] Table count:', foundNamespace.length);
-        }
-      }
-      
-      targetNamespace = foundNamespace;
-    } else {
-      // Multiple path parts (e.g., "catalog.database."), navigate normally
-      for (const part of pathParts) {
-        if (targetNamespace && typeof targetNamespace === 'object' && !Array.isArray(targetNamespace)) {
-          targetNamespace = (targetNamespace as SQLNamespace)[part] as SQLNamespace;
-          if (!targetNamespace) {
-            // Path not found in schema, return null
-            return null;
-          }
-        } else {
-          targetNamespace = null;
-          break;
-        }
-      }
-    }
-
-    if (!targetNamespace) {
-      return null;
-    }
-
-    // Handle when targetNamespace is a table array (e.g., after "database.")
-    if (Array.isArray(targetNamespace)) {
-      console.log('[Schema Completion] Processing table array, count:', targetNamespace.length);
-      targetNamespace.forEach((tableName) => {
-        if (!partialWord || tableName.toLowerCase().startsWith(partialWord.toLowerCase())) {
-          completions.push({
-            label: tableName,
-            detail: prefixPath.join('.') || undefined,
-            type: 'variable',
-          });
-        }
-      });
-      console.log('[Schema Completion] Generated completions:', completions.length);
-      return completions.length > 0 ? { completions, from: wordStartPos } : null;
-    }
-
-    // targetNamespace is an object (catalog or contains databases)
-    if (typeof targetNamespace !== 'object') {
-      return null;
-    }
-
-    // Build completions from target namespace
-    const processNamespace = (ns: SQLNamespace, path: string[] = []): void => {
+    const processNamespace = (ns: SQLNamespace, path: string[] = []) => {
       for (const key in ns) {
         if (Object.prototype.hasOwnProperty.call(ns, key)) {
           const value = ns[key];
           const currentPath = [...path, key];
           
           if (Array.isArray(value)) {
-            // Tables array
+            // Tables or columns
             value.forEach((item) => {
-              // Filter by partial word if exists
-              if (!partialWord || item.toLowerCase().startsWith(partialWord.toLowerCase())) {
-                completions.push({
-                  label: item,
-                  detail: currentPath.slice(0, -1).join('.') || undefined,
-                  type: 'variable',
-                });
-              }
+              completions.push({
+                label: item,
+                detail: currentPath.slice(0, -1).join('.') || 'table',
+                type: 'property',
+              });
             });
           } else if (typeof value === 'object' && value !== null) {
-            // Nested namespace (catalog/database)
-            // Filter by partial word if exists
-            if (!partialWord || key.toLowerCase().startsWith(partialWord.toLowerCase())) {
-              completions.push({
-                label: key,
-                detail: currentPath.slice(0, -1).join('.') || undefined,
-                type: 'namespace',
-              });
-            }
+            // Database or catalog
+            completions.push({
+              label: key,
+              detail: currentPath.slice(0, -1).join('.') || 'schema',
+              type: 'type',
+            });
+            processNamespace(value as SQLNamespace, currentPath);
           }
         }
       }
     };
     
-    processNamespace(targetNamespace, prefixPath);
-    console.log('[Schema Completion] Final completions count:', completions.length);
-    return completions.length > 0 ? { completions, from: wordStartPos } : null;
+    processNamespace(schema);
+    return completions;
   }
 
-  private buildKeywordCompletions(context: any): { completions: Completion[], from: number } | null {
-    // SQL keywords that should be suggested
-    const sqlKeywords = [
-      'SELECT', 'FROM', 'WHERE', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER',
-      'ON', 'AS', 'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'LIKE', 'BETWEEN', 'IS', 'NULL',
-      'GROUP', 'BY', 'HAVING', 'ORDER', 'ASC', 'DESC', 'LIMIT', 'OFFSET',
-      'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE', 'CREATE', 'DROP',
-      'ALTER', 'TABLE', 'DATABASE', 'INDEX', 'VIEW', 'TRIGGER', 'PROCEDURE',
-      'UNION', 'ALL', 'DISTINCT', 'COUNT', 'SUM', 'AVG', 'MAX', 'MIN',
-      'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'IF', 'ELSEIF',
-      'CAST', 'CONVERT', 'NULLIF', 'COALESCE',
-      'WITH', 'RECURSIVE',
-      'EXPLAIN', 'DESCRIBE', 'SHOW', 'USE',
-    ];
-
-    const { state, pos } = context;
-    const textBefore = state.doc.sliceString(Math.max(0, pos - 100), pos);
-    
-    // Don't suggest keywords if we're after a dot or in a quoted string
-    const isAfterDot = /[\w.]\.\s*$/.test(textBefore);
-    const isInQuotedString = /(['"])(?:[^\\]|\\.)*$/.test(textBefore);
-    
-    if (isAfterDot || isInQuotedString) {
-      return null;
-    }
-
-    // Extract the current word being typed (if any)
-    // Match word characters including those that may be part of SQL identifiers
-    const wordMatch = textBefore.match(/([a-zA-Z_][a-zA-Z0-9_]*)$/);
-    const currentWord = wordMatch ? wordMatch[1].toUpperCase() : '';
-    const wordStartPos = wordMatch ? pos - wordMatch[1].length : pos;
-    
-    // If user is typing a word, filter keywords that start with it
-    if (currentWord) {
-      const matchingKeywords = sqlKeywords.filter(keyword => 
-        keyword.startsWith(currentWord)
-      );
-      
-      if (matchingKeywords.length > 0) {
-        return {
-          completions: matchingKeywords.map(keyword => ({
-            label: keyword,
-            type: 'keyword',
-          })),
-          from: wordStartPos, // Start from the beginning of the current word
-        };
-      }
-    }
-
-    // If no word is being typed or no matching keywords, check if we should show all keywords
-    // Show all keywords at statement start (for explicit requests or clear boundaries)
-    const isStatementStart = /(^|\s|;|,|\(|\))\s*$/.test(textBefore);
-    
-    if (isStatementStart) {
-      // For explicit completions (Ctrl+Space) always show keywords
-      if (context.explicit) {
-        return {
-          completions: sqlKeywords.map(keyword => ({
-            label: keyword,
-            type: 'keyword',
-          })),
-          from: pos,
-        };
-      }
-      
-      // For auto-trigger, only show at very clear statement boundaries
-      const clearBoundary = /(^|[\s;])\s*$/.test(textBefore);
-      if (clearBoundary) {
-        return {
-          completions: sqlKeywords.map(keyword => ({
-            label: keyword,
-            type: 'keyword',
-          })),
-          from: pos,
-        };
-      }
-    }
-
-    return null;
+  private refreshSqlSchema(): void {
+    this.currentSqlSchema = this.buildSqlSchema();
+    this.applySqlSchema();
   }
 
   startTreeResize(event: MouseEvent): void {
@@ -937,44 +735,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       autocompletion({
         override: [
           (context) => {
-            // Build schema-aware completions based on context (for dot notation)
-            const schemaResult = this.buildSchemaCompletions(context);
-            
-            // If we have schema completions (e.g., after a dot), return them
-            if (schemaResult && schemaResult.completions.length > 0) {
-              return {
-                from: schemaResult.from,
-                options: schemaResult.completions,
-              };
-            }
-            
-            // Check if we're after a dot - if so, return empty to prevent keyword completion
-            const textBefore = context.state.doc.sliceString(Math.max(0, context.pos - 50), context.pos);
-            const isAfterDot = /[\w.]\.\s*$/.test(textBefore);
-            
-            if (isAfterDot) {
-              // After a dot but no completions found, return empty
-              return { from: context.pos, options: [] };
-            }
-            
-            // For keyword completions, manually add SQL keywords
-            // This is necessary because override prevents SQL extension's default completions
-            const keywordResult = this.buildKeywordCompletions(context);
-            if (keywordResult && keywordResult.completions.length > 0) {
-              return {
-                from: keywordResult.from,
-                options: keywordResult.completions,
-              };
-            }
-            
-            // Return null to try other completion sources
-            return null;
+            if (Object.keys(this.currentSqlSchema).length === 0) return null;
+            return { from: context.pos, options: this.buildSchemaCompletions(this.currentSqlSchema) };
           },
         ],
         activateOnTyping: true,
         defaultKeymap: true,
         maxRenderedOptions: 50,
       }),
+      placeholder('在此编写 SQL…'),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           this.sqlInput = update.state.doc.toString();

@@ -494,12 +494,14 @@
         max-width: 100% !important;
         box-sizing: border-box !important;
         height: 100% !important;
+        background-color: transparent !important;
 
           .cm-content {
             font-size: 20px;
             width: 100% !important;
             max-width: 100% !important;
             box-sizing: border-box !important;
+            background-color: transparent !important;
           }
 
           .cm-line {
@@ -515,6 +517,7 @@
             overflow-y: auto !important;
             box-sizing: border-box !important;
             height: 100% !important;
+            background-color: transparent !important;
           }
         }
       }

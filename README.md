@@ -102,6 +102,23 @@ System-level configuration management including user permissions, system functio
 
 ## Configuration
 
+### StarRocks User Permissions (Important)
+
+**Before adding a cluster**, you need to create a dedicated monitoring user with appropriate read-only permissions in StarRocks.
+
+```bash
+# Execute the permission setup script
+cd scripts
+mysql -h <fe_host> -P 9030 -u root -p < setup_starrocks_admin_role.sql
+
+# Verify permissions
+mysql -h <fe_host> -P 9030 -u starrocks_monitor -p < verify_permissions.sql
+```
+
+For detailed permission configuration guide, see [scripts/README_PERMISSIONS.md](scripts/README_PERMISSIONS.md)
+
+**Security Note:** Do NOT use the `root` account in production. Always create a dedicated monitoring user with minimal required permissions.
+
 ### Main Configuration File (conf/config.toml)
 
 ```toml
@@ -252,6 +269,23 @@ StarRocks Admin 提供了直观、美观的 Web 管理界面，涵盖集群管�
 系统级别的配置管理，包括用户权限、系统函数等功能。还支持自定义SQL。
 
 ## 配置说明
+
+### StarRocks 用户权限配置(重要)
+
+**在添加集群之前**,需要在 StarRocks 中创建专用的监控用户并授予适当的只读权限。
+
+```bash
+# 执行权限配置脚本
+cd scripts
+mysql -h <fe_host> -P 9030 -u root -p < setup_starrocks_admin_role.sql
+
+# 验证权限配置
+mysql -h <fe_host> -P 9030 -u starrocks_monitor -p < verify_permissions.sql
+```
+
+详细的权限配置指南请参考 [scripts/README_PERMISSIONS.md](scripts/README_PERMISSIONS.md)
+
+**安全提示:** 生产环境禁止使用 `root` 账号，务必创建专用的监控账号并遵循最小权限原则。
 
 ### 主配置文件 (conf/config.toml)
 

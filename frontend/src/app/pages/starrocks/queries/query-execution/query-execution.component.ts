@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, HostListener, TemplateRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { NbDialogRef, NbDialogService, NbToastrService, NbThemeService } from '@nebular/theme';
+import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrService, NbThemeService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -19,6 +19,7 @@ import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { sql, MySQL, type SQLNamespace } from '@codemirror/lang-sql';
 import { format } from 'sql-formatter';
 import { trigger, transition, style, animate, state } from '@angular/animations';
+import { renderMetricBadge, MetricThresholds } from '../../../../@core/utils/metric-badge';
 
 type NavNodeType = 'catalog' | 'database' | 'group' | 'table';
 
@@ -130,6 +131,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   private readonly sqlDialect = MySQL;
   private readonly themeCompartment = new Compartment();
   private readonly sqlConfigCompartment = new Compartment();
+  private readonly runningDurationThresholds: MetricThresholds = { warn: 3000, danger: 10000 };
 
   // Table schema dialog state
   schemaDialogTitle: string = '';
@@ -251,7 +253,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       QueryId: { title: 'Query ID', type: 'string' },
       User: { title: '用户', type: 'string', width: '10%' },
       Database: { title: '数据库', type: 'string', width: '10%' },
-      ExecTime: { title: '执行时间', type: 'string', width: '10%' },
+      ExecTime: {
+        title: '执行时间(ms)',
+        type: 'html',
+        width: '12%',
+        valuePrepareFunction: (value: string | number) => renderMetricBadge(value, this.runningDurationThresholds),
+      },
       Sql: { title: 'SQL', type: 'string' },
     },
   };

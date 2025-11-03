@@ -8,6 +8,7 @@ import { ClusterContextService } from '../../../@core/data/cluster-context.servi
 import { Cluster } from '../../../@core/data/cluster.service';
 import { NodeService, Session } from '../../../@core/data/node.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
+import { MetricThresholds, renderMetricBadge } from '../../../@core/utils/metric-badge';
 
 @Component({
   selector: 'ngx-sessions',
@@ -31,6 +32,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
     { value: 60, label: '1分钟' },
   ];
   private destroy$ = new Subject<void>();
+  private readonly sessionDurationThresholds: MetricThresholds = { warn: 60, danger: 300 };
 
   settings = {
     hideSubHeader: false, // Enable search
@@ -78,8 +80,9 @@ export class SessionsComponent implements OnInit, OnDestroy {
       },
       time: {
         title: 'Time (s)',
-        type: 'string',
+        type: 'html',
         width: '10%',
+        valuePrepareFunction: (value: string | number) => renderMetricBadge(value, this.sessionDurationThresholds),
       },
       state: {
         title: 'State',

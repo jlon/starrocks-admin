@@ -8,6 +8,7 @@ import { NodeService } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
+import { MetricThresholds, renderMetricBadge } from '../../../../@core/utils/metric-badge';
 
 @Component({
   selector: 'ngx-profile-queries',
@@ -33,6 +34,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     { value: 60, label: '1分钟' },
   ];
   private destroy$ = new Subject<void>();
+  private readonly profileDurationThresholds: MetricThresholds = { warn: 3000, danger: 10000 };
 
   // Profile dialog
   currentProfileDetail: string = '';
@@ -60,7 +62,12 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     columns: {
       QueryId: { title: 'Query ID', type: 'string', width: '25%' },
       StartTime: { title: '开始时间', type: 'string', width: '15%' },
-      Time: { title: '执行时间', type: 'string', width: '10%' },
+      Time: {
+        title: '执行时间',
+        type: 'html',
+        width: '10%',
+        valuePrepareFunction: (value: string | number) => renderMetricBadge(value, this.profileDurationThresholds),
+      },
       State: {
         title: '状态',
         type: 'html',

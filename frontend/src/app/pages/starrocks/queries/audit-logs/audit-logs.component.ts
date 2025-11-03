@@ -8,6 +8,7 @@ import { NodeService, QueryHistoryItem } from '../../../../@core/data/node.servi
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
+import { MetricThresholds, renderMetricBadge } from '../../../../@core/utils/metric-badge';
 
 @Component({
   selector: 'ngx-audit-logs',
@@ -36,6 +37,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     { value: 60, label: '1分钟' },
   ];
   private destroy$ = new Subject<void>();
+  private readonly durationThresholds: MetricThresholds = { warn: 3000, danger: 10000 };
 
   // Profile dialog
   currentProfile: any = null;
@@ -76,7 +78,12 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
       query_type: { title: '类型', type: 'string', width: '8%' },
       query_state: { title: '状态', type: 'string', width: '8%' },
       start_time: { title: '开始时间', type: 'string', width: '12%' },
-      total_ms: { title: '耗时(ms)', type: 'number', width: '8%' },
+      total_ms: {
+        title: '耗时(ms)',
+        type: 'html',
+        width: '8%',
+        valuePrepareFunction: (value: string | number) => renderMetricBadge(value, this.durationThresholds),
+      },
       sql_statement: { title: 'SQL', type: 'string' },
     },
   };

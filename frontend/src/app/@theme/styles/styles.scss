@@ -54,6 +54,38 @@ nb-dialog-container.modal-sm,
   width: 300px !important;
 }
 
+// Metric badge helpers
+.metric-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.metric-badge--good {
+  background: rgba(56, 193, 114, 0.16);
+  color: #2f9d5d;
+}
+
+.metric-badge--warn {
+  background: rgba(255, 173, 0, 0.18);
+  color: #c97a0c;
+}
+
+.metric-badge--alert {
+  background: rgba(220, 53, 69, 0.16);
+  color: #b51d37;
+}
+
+.metric-badge--neutral {
+  background: rgba(145, 153, 175, 0.14);
+  color: #6f7785;
+}
+
 // Profile dialog scroll container - must be global for overlay
 .profile-scroll-container {
   max-height: 70vh !important;

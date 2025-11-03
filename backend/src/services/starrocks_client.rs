@@ -27,13 +27,16 @@ impl StarRocksClient {
     }
 
     // Get backends via HTTP API
+    // Compatible with both shared-nothing and shared-data (compute-storage separation) architectures
+    // For shared-data mode: tries /backends first, falls back to /compute_nodes if empty
     pub async fn get_backends(&self) -> ApiResult<Vec<Backend>> {
-        let url = format!("{}/api/show_proc?path=/backends", self.get_base_url());
-        tracing::debug!("Fetching backends from: {}", url);
+        // Try shared-nothing architecture first (traditional BE nodes)
+        let url_be = format!("{}/api/show_proc?path=/backends", self.get_base_url());
+        tracing::debug!("Fetching backends from: {}", url_be);
 
-        let response = self
+        let response_be = self
             .http_client
-            .get(&url)
+            .get(&url_be)
             .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
             .send()
             .await
@@ -42,29 +45,84 @@ impl StarRocksClient {
                 ApiError::cluster_connection_failed(format!("Request failed: {}", e))
             })?;
 
-        if !response.status().is_success() {
-            tracing::error!("Backends API returned error status: {}", response.status());
+        if !response_be.status().is_success() {
+            tracing::error!("Backends API returned error status: {}", response_be.status());
             return Err(ApiError::cluster_connection_failed(format!(
                 "HTTP status: {}",
-                response.status()
+                response_be.status()
             )));
         }
 
-        let data: Value = response.json().await.map_err(|e| {
+        let data_be: Value = response_be.json().await.map_err(|e| {
             tracing::error!("Failed to parse backends response: {}", e);
             ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
         })?;
 
         // Try new format (direct array) first, then fall back to old format
-        if let Ok(backends) = serde_json::from_value::<Vec<Backend>>(data.clone()) {
+        let backends_result = if let Ok(backends) = serde_json::from_value::<Vec<Backend>>(data_be.clone()) {
             tracing::debug!("Retrieved {} backends using new format", backends.len());
-            return Ok(backends);
+            Ok(backends)
+        } else {
+            // Fallback to old format
+            match Self::parse_proc_result::<Backend>(&data_be) {
+                Ok(backends) => {
+                    tracing::debug!("Retrieved {} backends using old format", backends.len());
+                    Ok(backends)
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse backends: {}", e);
+                    Ok(Vec::new())
+                }
+            }
+        };
+
+        // If backends list is empty, try compute nodes (shared-data architecture)
+        if let Ok(ref backends) = backends_result {
+            if !backends.is_empty() {
+                return backends_result;
+            }
         }
 
-        // Fallback to old format
-        let backends = Self::parse_proc_result::<Backend>(&data)?;
-        tracing::debug!("Retrieved {} backends using old format", backends.len());
-        Ok(backends)
+        // Try shared-data architecture (CN nodes for compute-storage separation)
+        tracing::info!("No backends found, trying compute nodes for shared-data architecture");
+        let url_cn = format!("{}/api/show_proc?path=/compute_nodes", self.get_base_url());
+        tracing::debug!("Fetching compute nodes from: {}", url_cn);
+
+        let response_cn = self
+            .http_client
+            .get(&url_cn)
+            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
+            .send()
+            .await;
+
+        match response_cn {
+            Ok(resp) if resp.status().is_success() => {
+                match resp.json::<Value>().await {
+                    Ok(data_cn) => {
+                        // Try to parse compute nodes as backends
+                        if let Ok(compute_nodes) = serde_json::from_value::<Vec<Backend>>(data_cn.clone()) {
+                            tracing::info!("Retrieved {} compute nodes (shared-data mode)", compute_nodes.len());
+                            return Ok(compute_nodes);
+                        } else if let Ok(compute_nodes) = Self::parse_proc_result::<Backend>(&data_cn) {
+                            tracing::info!("Retrieved {} compute nodes using PROC format", compute_nodes.len());
+                            return Ok(compute_nodes);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse compute nodes response: {}", e);
+                    }
+                }
+            }
+            Ok(resp) => {
+                tracing::warn!("Compute nodes API returned error status: {}", resp.status());
+            }
+            Err(_) => {
+                // Error already logged above
+            }
+        }
+
+        // Return the original BE result (might be empty)
+        backends_result
     }
 
     // Execute SQL command via HTTP API

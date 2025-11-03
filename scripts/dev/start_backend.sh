@@ -80,13 +80,13 @@ start_service() {
     # 创建开发环境配置文件
     echo -e "${YELLOW}[INFO]${NC} 重新创建开发环境配置文件..."
     rm -f "$CONFIG_DIR/config.toml"
-    cat > "$CONFIG_DIR/config.toml" << 'EOF'
+    cat > "$CONFIG_DIR/config.toml" <<EOF
 [server]
 host = "0.0.0.0"
 port = 8081
 
 [database]
-url = "sqlite:///tmp/starrocks-admin.db"
+url = "sqlite://$DB_DIR/starrocks-admin.db"
 
 [auth]
 jwt_secret = "dev-secret-key-change-in-production"
@@ -104,6 +104,7 @@ enabled = false
 web_root = "../build/dist/web"
 EOF
     echo -e "${GREEN}[INFO]${NC} 配置文件已创建: $CONFIG_DIR/config.toml"
+    echo -e "${GREEN}[INFO]${NC} 数据库路径: $DB_DIR/starrocks-admin.db"
 
     # 强制重新编译以确保使用最新代码
     echo -e "${YELLOW}[BUILD]${NC} 编译最新代码..."

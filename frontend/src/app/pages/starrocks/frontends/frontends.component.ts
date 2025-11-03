@@ -31,11 +31,6 @@ export class FrontendsComponent implements OnInit, OnDestroy {
       perPage: 15,
     },
     columns: {
-      Id: { 
-        title: 'FE ID', 
-        type: 'string',
-        width: '6%',
-      },
       IP: { 
         title: '主机地址', 
         type: 'string',

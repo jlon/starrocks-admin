@@ -98,14 +98,9 @@ pub struct Frontend {
     #[serde(rename = "Version")]
     pub version: String,
     // New fields in StarRocks 3.5.2
-    #[serde(default)]
-    #[serde(rename = "Id")]
-    pub id: Option<String>,
-    #[serde(default)]
-    #[serde(rename = "IsHelper")]
+    #[serde(rename = "IsHelper", default)]
     pub is_helper: Option<String>,
-    #[serde(default)]
-    #[serde(rename = "StartTime")]
+    #[serde(rename = "StartTime", default)]
     pub start_time: Option<String>,
 }
 

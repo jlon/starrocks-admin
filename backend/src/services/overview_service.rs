@@ -1907,30 +1907,16 @@ impl OverviewService {
         alerts
     }
 
-    /// Get StarRocks version
     async fn get_starrocks_version(&self, cluster_id: i64) -> ApiResult<String> {
-        use crate::services::MySQLClient;
-
+        use crate::services::StarRocksClient;
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
-        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
-        let mysql_client = MySQLClient::from_pool(pool);
-
-        // Query StarRocks version using SELECT VERSION()
-        let sql = "SELECT VERSION() as version";
-        let (columns, rows) = mysql_client.query_raw(sql).await?;
-
-        // Find the version column index
-        if let Some(version_idx) = columns
-            .iter()
-            .position(|col| col.to_lowercase() == "version")
-            && let Some(row) = rows.first()
-            && let Some(version) = row.get(version_idx)
-        {
-            // StarRocks version format: StarRocks version 3.1.0
-            return Ok(version.clone());
+        let starrocks_client = StarRocksClient::new(cluster);
+        let frontends = starrocks_client.get_frontends().await?;
+        if let Some(fe) = frontends.first() {
+            Ok(fe.version.clone())
+        } else {
+            Ok("Unknown".to_string())
         }
-
-        Ok("Unknown".to_string())
     }
 }
 

@@ -144,6 +144,13 @@ export interface QueryExecuteResult {
   total_execution_time_ms: number;
 }
 
+export type TableObjectType = 'TABLE' | 'VIEW' | 'MATERIALIZED_VIEW';
+
+export interface TableInfo {
+  name: string;
+  object_type: TableObjectType;
+}
+
 export interface ProfileListItem {
   QueryId: string;
   StartTime: string;
@@ -238,12 +245,12 @@ export class NodeService {
   }
 
   // Get tables list for a database within an optional catalog
-  getTables(catalog: string | undefined, database: string): Observable<string[]> {
+  getTables(catalog: string | undefined, database: string): Observable<TableInfo[]> {
     const params: any = { database };
     if (catalog) {
       params.catalog = catalog;
     }
-    return this.api.get<string[]>(`/clusters/tables`, params);
+    return this.api.get<TableInfo[]>(`/clusters/tables`, params);
   }
 
   // Execute SQL API

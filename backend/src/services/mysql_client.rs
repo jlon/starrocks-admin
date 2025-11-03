@@ -93,14 +93,30 @@ impl MySQLSession {
             return Ok(());
         }
 
-        let use_catalog_sql = format!("USE CATALOG `{}`", catalog);
-        if let Err(e) = self
+        let use_catalog_sql_plain = format!("USE CATALOG {}", catalog);
+        if let Err(primary_err) = self
             .conn
-            .query::<mysql_async::Row, _>(&use_catalog_sql)
+            .query::<mysql_async::Row, _>(&use_catalog_sql_plain)
             .await
         {
-            tracing::warn!("USE CATALOG {} failed (may not be supported): {}", catalog, e);
-            // Don't fail - continue anyway, catalog might already be active
+            tracing::warn!(
+                "USE CATALOG {} without quotes failed: {}. Retrying with backticks.",
+                catalog,
+                primary_err
+            );
+
+            let use_catalog_sql_quoted = format!("USE CATALOG `{}`", catalog);
+            if let Err(fallback_err) = self
+                .conn
+                .query::<mysql_async::Row, _>(&use_catalog_sql_quoted)
+                .await
+            {
+                tracing::warn!(
+                    "USE CATALOG {} failed even with backticks: {}",
+                    catalog,
+                    fallback_err
+                );
+            }
         }
         Ok(())
     }
@@ -153,9 +169,28 @@ impl MySQLSession {
 
         Ok((columns, data_rows, execution_time_ms))
     }
+
+    pub async fn query_with_params<P>(
+        &mut self,
+        sql: &str,
+        params: P,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>), ApiError>
+    where
+        P: Into<mysql_async::Params>,
+    {
+        let rows: Vec<mysql_async::Row> = self
+            .conn
+            .exec(sql, params.into())
+            .await
+            .map_err(|e| {
+                tracing::error!("MySQL query execution failed: {}", e);
+                ApiError::internal_error(format!("SQL execution failed: {}", e))
+            })?;
+
+        Ok(process_query_result(rows))
+    }
 }
 
-// Process query results and extract column names and data rows
 fn process_query_result(rows: Vec<mysql_async::Row>) -> (Vec<String>, Vec<Vec<String>>) {
     if rows.is_empty() {
         return (Vec::new(), Vec::new());
@@ -164,7 +199,6 @@ fn process_query_result(rows: Vec<mysql_async::Row>) -> (Vec<String>, Vec<Vec<St
     let col_count = rows[0].columns_ref().len();
     let row_count = rows.len();
 
-    // Pre-allocate with known capacity to avoid reallocations
     let mut columns = Vec::with_capacity(col_count);
     let mut result_rows = Vec::with_capacity(row_count);
 
@@ -173,11 +207,9 @@ fn process_query_result(rows: Vec<mysql_async::Row>) -> (Vec<String>, Vec<Vec<St
         columns.push(col.name_str().to_string());
     }
 
-    // For large datasets, use batch processing optimization
     if row_count > 100 && col_count > 5 {
         process_query_result_batch(rows, &mut result_rows);
     } else {
-        // For small datasets, use simple iteration
         for row in rows.iter() {
             let mut row_data = Vec::with_capacity(col_count);
             for col_idx in 0..col_count {

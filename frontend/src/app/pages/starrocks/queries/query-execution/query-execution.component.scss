@@ -356,6 +356,31 @@
         color: nb-theme(text-basic-color);
       }
     }
+
+    .node-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 34px;
+      padding: 0.1rem 0.35rem;
+      border-radius: 6px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: nb-theme(border-basic-color-3);
+      color: nb-theme(text-hint-color);
+
+      &.node-badge-view {
+        background: nb-theme(color-info-100);
+        color: nb-theme(color-info-600);
+      }
+
+      &.node-badge-mv {
+        background: nb-theme(color-warning-100);
+        color: nb-theme(color-warning-600);
+      }
+    }
   }
 
   .tree-children {

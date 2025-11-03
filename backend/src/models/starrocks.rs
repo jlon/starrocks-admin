@@ -1,6 +1,20 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
 
+#[derive(Debug, Serialize, ToSchema, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TableObjectType {
+    Table,
+    View,
+    MaterializedView,
+}
+
+#[derive(Debug, Serialize, ToSchema, Clone)]
+pub struct TableMetadata {
+    pub name: String,
+    pub object_type: TableObjectType,
+}
+
 // Helper function to deserialize string to i64
 fn deserialize_string_to_i64<'de, D>(deserializer: D) -> Result<i64, D::Error>
 where

@@ -4,7 +4,7 @@ import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrServic
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { NodeService, QueryExecuteResult, SingleQueryResult } from '../../../../@core/data/node.service';
+import { NodeService, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
@@ -43,6 +43,7 @@ interface NavTreeNode {
     catalog?: string;
     database?: string;
     table?: string;
+    tableType?: TableObjectType;
     originalName?: string;
     tablesLoaded?: boolean;
     tableCount?: number;
@@ -121,7 +122,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   private resizeStartX = 0;
   private resizeStartWidth = 280;
   private databaseCache: Record<string, string[]> = {};
-  private tableCache: Record<string, string[]> = {};
+  private tableCache: Record<string, TableInfo[]> = {};
   private currentSqlSchema: SQLNamespace = {};
   treePanelHeight: number = 420;
   private readonly treeExtraHeight: number = 140;
@@ -197,21 +198,38 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     };
   }
 
-  private createTableNode(catalog: string, database: string, table: string): NavTreeNode {
+  private createTableNode(catalog: string, database: string, table: TableInfo): NavTreeNode {
+    const icon = this.getTableIcon(table.object_type);
     return {
-      id: this.buildNodeId('table', catalog, database, table),
-      name: table,
+      id: this.buildNodeId('table', catalog, database, table.name),
+      name: table.name,
       type: 'table',
-      icon: 'grid-outline',
+      icon,
       expanded: false,
       loading: false,
       children: [],
       data: {
         catalog,
         database,
-        table,
+        table: table.name,
+        tableType: table.object_type,
       },
     };
+  }
+
+  private getTableIcon(tableType: TableObjectType): string {
+    switch (tableType) {
+      case 'VIEW':
+        return 'eye-outline';
+      case 'MATERIALIZED_VIEW':
+        return 'layers-outline';
+      default:
+        return 'grid-outline';
+    }
+  }
+
+  private mapTableNames(tables: TableInfo[]): string[] {
+    return tables.map((table) => table.name).filter((name) => !!name);
   }
 
   // Real-time query state
@@ -501,7 +519,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       databases.forEach((databaseName) => {
         const tableKey = this.getDatabaseCacheKey(catalogName, databaseName);
         const tables = this.tableCache[tableKey] || [];
-        dbNamespace[databaseName] = tables.length > 0 ? tables : [];
+        const tableNames = this.mapTableNames(tables);
+        dbNamespace[databaseName] = tableNames.length > 0 ? tableNames : [];
       });
 
       namespace[catalogName || 'default'] = dbNamespace;
@@ -512,7 +531,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       Object.entries(this.tableCache).forEach(([cacheKey, tables]) => {
         const [, databaseName] = cacheKey.split('|');
         if (databaseName) {
-          fallback[databaseName] = tables.length > 0 ? tables : [];
+          const tableNames = this.mapTableNames(tables);
+          fallback[databaseName] = tableNames.length > 0 ? tableNames : [];
         }
       });
       if (Object.keys(fallback).length > 0) {
@@ -1119,8 +1139,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     const cacheKey = this.getDatabaseCacheKey(catalogName, databaseName);
 
-    const applyTables = (tables: string[]) => {
-      const tableList = tables || [];
+    const applyTables = (tables: TableInfo[]) => {
+      const tableList = tables ? [...tables] : [];
       this.tableCache[cacheKey] = tableList;
       node.children = tableList.map((table) => this.createTableNode(catalogName, databaseName, table));
       const baseName = node.data?.originalName || databaseName;

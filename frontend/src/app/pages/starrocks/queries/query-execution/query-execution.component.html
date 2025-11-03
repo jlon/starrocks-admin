@@ -281,6 +281,10 @@
                       <nb-icon [icon]="node.icon || 'folder-outline'"></nb-icon>
                     </div>
                     <span class="node-text">{{ node.name }}</span>
+                    <ng-container [ngSwitch]="node.data?.tableType">
+                      <span *ngSwitchCase="'VIEW'" class="node-badge node-badge-view">VIEW</span>
+                      <span *ngSwitchCase="'MATERIALIZED_VIEW'" class="node-badge node-badge-mv">MV</span>
+                    </ng-container>
                     <nb-spinner *ngIf="node.loading" size="tiny" status="primary"></nb-spinner>
                   </div>
                   <ul class="tree-children" *ngIf="node.children && node.children.length && node.expanded">

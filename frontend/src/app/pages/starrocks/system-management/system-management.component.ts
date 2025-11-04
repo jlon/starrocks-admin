@@ -15,6 +15,7 @@ import { SystemFunction, FunctionCategory, CreateFunctionRequest } from '../../.
 import { AddFunctionDialogComponent } from './add-function-dialog/add-function-dialog.component';
 import { EditFunctionDialogComponent } from './edit-function-dialog/edit-function-dialog.component';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
+import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 
 interface SystemFunctionOld {
   name: string;
@@ -108,6 +109,7 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
     private nodeService: NodeService,
     private clusterContext: ClusterContextService,
     private dialogService: NbDialogService,
+    private confirmDialogService: ConfirmDialogService,
     private toastrService: NbToastrService,
     private systemFunctionService: SystemFunctionService,
     private route: ActivatedRoute,
@@ -443,18 +445,28 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
 
   // 删除自定义功能
   deleteFunction(functionId: number) {
-    this.systemFunctionService.deleteFunction(functionId)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: () => {
-          // 从本地数据中移除
-          this.customFunctions = this.customFunctions.filter(f => f.id !== functionId);
-          this.mergeAndOrganizeFunctions();
-          this.toastrService.success('功能已删除', '成功');
-        },
-        error: (error) => {
-          console.error('Failed to delete function:', error);
-          this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败');
+    const functionToDelete = this.customFunctions.find(f => f.id === functionId);
+    if (!functionToDelete) {
+      return;
+    }
+
+    this.confirmDialogService.confirmDelete(functionToDelete.functionName)
+      .subscribe(confirmed => {
+        if (confirmed) {
+          this.systemFunctionService.deleteFunction(functionId)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+              next: () => {
+                // 从本地数据中移除
+                this.customFunctions = this.customFunctions.filter(f => f.id !== functionId);
+                this.mergeAndOrganizeFunctions();
+                this.toastrService.success('功能已删除', '成功');
+              },
+              error: (error) => {
+                console.error('Failed to delete function:', error);
+                this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败');
+              }
+            });
         }
       });
   }
@@ -801,18 +813,26 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
 
   // 删除分类
   deleteCategory(categoryName: string) {
-    if (confirm(`确定要删除分类 "${categoryName}" 吗？这将删除该分类下的所有自定义功能。`)) {
-      this.systemFunctionService.deleteCategory(categoryName).subscribe({
-        next: () => {
-          this.toastrService.success('分类删除成功');
-          this.loadSystemFunctions(); // 重新加载功能列表
-        },
-        error: (error) => {
-          console.error('删除分类失败:', error);
-          this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败');
-        }
-      });
-    }
+    this.confirmDialogService.confirm(
+      '确认删除分类',
+      `确定要删除分类 "${categoryName}" 吗？\n\n这将删除该分类下的所有自定义功能。`,
+      '删除',
+      '取消',
+      'danger'
+    ).subscribe(confirmed => {
+      if (confirmed) {
+        this.systemFunctionService.deleteCategory(categoryName).subscribe({
+          next: () => {
+            this.toastrService.success('分类删除成功');
+            this.loadSystemFunctions(); // 重新加载功能列表
+          },
+          error: (error) => {
+            console.error('删除分类失败:', error);
+            this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败');
+          }
+        });
+      }
+    });
   }
 
   // 获取分类图标

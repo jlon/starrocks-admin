@@ -9,6 +9,7 @@ import { Cluster } from '../../../@core/data/cluster.service';
 import { NodeService, Session } from '../../../@core/data/node.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { MetricThresholds, renderMetricBadge } from '../../../@core/utils/metric-badge';
+import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 
 @Component({
   selector: 'ngx-sessions',
@@ -105,6 +106,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
     
     private toastrService: NbToastrService,
     private dialogService: NbDialogService,
+    private confirmDialogService: ConfirmDialogService,
     private clusterContext: ClusterContextService,
     private nodeService: NodeService,
   ) {
@@ -171,22 +173,30 @@ export class SessionsComponent implements OnInit, OnDestroy {
   }
 
   killSession(session: Session): void {
-    if (confirm(`确定要终止会话 ${session.id} 吗？`)) {
-      this.loading = true;
-      this.nodeService.killSession(session.id).subscribe({
-        next: () => {
-          this.toastrService.success(`会话 ${session.id} 已成功终止`, '成功');
-          this.loadSessions();
-        },
-        error: (error) => {
-          this.toastrService.danger(
-            error.error?.message || '终止会话失败',
-            '错误'
-          );
-          this.loading = false;
-        },
-      });
-    }
+    this.confirmDialogService.confirm(
+      '确认终止会话',
+      `确定要终止会话 ${session.id} 吗？`,
+      '终止',
+      '取消',
+      'danger'
+    ).subscribe(confirmed => {
+      if (confirmed) {
+        this.loading = true;
+        this.nodeService.killSession(session.id).subscribe({
+          next: () => {
+            this.toastrService.success(`会话 ${session.id} 已成功终止`, '成功');
+            this.loadSessions();
+          },
+          error: (error) => {
+            this.toastrService.danger(
+              error.error?.message || '终止会话失败',
+              '错误'
+            );
+            this.loading = false;
+          },
+        });
+      }
+    });
   }
 
   toggleAutoRefresh(): void {

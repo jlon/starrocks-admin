@@ -19,6 +19,7 @@ import {
   UserFormDialogComponent,
   UserFormDialogResult,
 } from './user-form/user-form-dialog.component';
+import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 
 @Component({
   selector: 'ngx-users',
@@ -45,6 +46,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     private permissionService: PermissionService,
     private roleService: RoleService,
     private dialogService: NbDialogService,
+    private confirmDialogService: ConfirmDialogService,
     private toastrService: NbToastrService,
   ) {}
 
@@ -174,18 +176,18 @@ export class UsersComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const confirmed = window.confirm(`确定要删除用户「${user.username}」吗？`);
-    if (!confirmed) {
-      return;
-    }
-
-    this.userService.deleteUser(user.id).subscribe({
-      next: () => {
-        this.toastrService.success('用户已删除', '成功');
-        this.loadUsers();
-      },
-      error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
-    });
+    this.confirmDialogService.confirmDelete(user.username)
+      .subscribe(confirmed => {
+        if (confirmed) {
+          this.userService.deleteUser(user.id).subscribe({
+            next: () => {
+              this.toastrService.success('用户已删除', '成功');
+              this.loadUsers();
+            },
+            error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+          });
+        }
+      });
   }
 
   private createUser(result: UserFormDialogResult): void {

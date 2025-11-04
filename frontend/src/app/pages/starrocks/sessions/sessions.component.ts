@@ -46,7 +46,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
     },
     delete: {
       deleteButtonContent: '<i class="nb-trash"></i>',
-      confirmDelete: false,  // Use custom dialog instead of built-in confirm
+      confirmDelete: true,
     },
     pager: {
       display: true,
@@ -168,11 +168,9 @@ export class SessionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  onDelete(event: any): void {
-    this.killSession(event.data);
-  }
+  onDeleteConfirm(event: any): void {
+    const session = event.data as Session;
 
-  killSession(session: Session): void {
     this.confirmDialogService.confirm(
       '确认终止会话',
       `确定要终止会话 ${session.id} 吗？`,
@@ -180,22 +178,27 @@ export class SessionsComponent implements OnInit, OnDestroy {
       '取消',
       'danger'
     ).subscribe(confirmed => {
-      if (confirmed) {
-        this.loading = true;
-        this.nodeService.killSession(session.id).subscribe({
-          next: () => {
-            this.toastrService.success(`会话 ${session.id} 已成功终止`, '成功');
-            this.loadSessions();
-          },
-          error: (error) => {
-            this.toastrService.danger(
-              error.error?.message || '终止会话失败',
-              '错误'
-            );
-            this.loading = false;
-          },
-        });
+      if (!confirmed) {
+        event.confirm.reject();
+        return;
       }
+
+      this.loading = true;
+      this.nodeService.killSession(session.id).subscribe({
+        next: () => {
+          this.toastrService.success(`会话 ${session.id} 已成功终止`, '成功');
+          event.confirm.resolve();
+          this.loadSessions();
+        },
+        error: (error) => {
+          this.toastrService.danger(
+            error.error?.message || '终止会话失败',
+            '错误'
+          );
+          event.confirm.reject();
+          this.loading = false;
+        },
+      });
     });
   }
 

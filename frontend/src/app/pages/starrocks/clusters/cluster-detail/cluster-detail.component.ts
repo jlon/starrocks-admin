@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NbToastrService } from '@nebular/theme';
 import { ClusterService, Cluster, ClusterHealth } from '../../../../@core/data/cluster.service';
+import { ConfirmDialogService } from '../../../../@core/services/confirm-dialog.service';
 
 @Component({
   selector: 'ngx-cluster-detail',
@@ -19,6 +20,7 @@ export class ClusterDetailComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private toastrService: NbToastrService,
+    private confirmDialogService: ConfirmDialogService,
   ) {
     this.clusterId = parseInt(this.route.snapshot.paramMap.get('id') || '0', 10);
   }
@@ -62,16 +64,23 @@ export class ClusterDetailComponent implements OnInit {
   }
 
   deleteCluster(): void {
-    if (confirm(`确定要删除集群 "${this.cluster?.name}" 吗？`)) {
-      this.clusterService.deleteCluster(this.clusterId).subscribe({
-        next: () => {
-          this.toastrService.success('集群删除成功', '成功');
-          this.router.navigate(['/pages/starrocks/clusters']);
-        },
-        error: (error) => {
-          this.toastrService.danger(error.error?.message || '删除失败', '错误');
-        },
+    const clusterName = this.cluster?.name || '';
+
+    this.confirmDialogService.confirmDelete(clusterName)
+      .subscribe(confirmed => {
+        if (!confirmed) {
+          return;
+        }
+
+        this.clusterService.deleteCluster(this.clusterId).subscribe({
+          next: () => {
+            this.toastrService.success('集群删除成功', '成功');
+            this.router.navigate(['/pages/starrocks/clusters']);
+          },
+          error: (error) => {
+            this.toastrService.danger(error.error?.message || '删除失败', '错误');
+          },
+        });
       });
-    }
   }
 }

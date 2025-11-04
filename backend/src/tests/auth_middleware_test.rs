@@ -1,7 +1,7 @@
 // Integration tests for Auth Middleware with Permission Checking
 // Tests different users with different roles and permissions
 
-use crate::middleware::{AuthState, auth::auth_middleware, auth::extract_permission};
+use crate::middleware::{AuthState, auth::auth_middleware, permission_extractor::extract_permission};
 use crate::services::casbin_service::CasbinService;
 use crate::tests::common::{
     assign_role_to_user,

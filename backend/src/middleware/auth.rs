@@ -6,6 +6,7 @@ use axum::{
 };
 use std::sync::Arc;
 
+use crate::middleware::permission_extractor;
 use crate::services::casbin_service::CasbinService;
 use crate::utils::{ApiError, JwtUtil};
 
@@ -62,7 +63,7 @@ pub async fn auth_middleware(
     req.extensions_mut().insert(user_id);
     req.extensions_mut().insert(claims.username.clone());
 
-    if let Some((resource, action)) = extract_permission_internal(&method, &uri) {
+    if let Some((resource, action)) = permission_extractor::extract_permission(&method, &uri) {
         tracing::debug!("Checking permission for user {} -> {}:{}", user_id, resource, action);
 
         let allowed = state
@@ -90,104 +91,4 @@ pub async fn auth_middleware(
     }
 
     Ok(next.run(req).await)
-}
-
-/// 测试辅助
-#[cfg(test)]
-pub fn extract_permission(method: &str, uri: &str) -> Option<(String, String)> {
-    extract_permission_internal(method, uri)
-}
-
-fn extract_permission_internal(method: &str, uri: &str) -> Option<(String, String)> {
-    if uri == "/api/auth/permissions" {
-        return None;
-    }
-
-    let path = uri.strip_prefix("/api/").unwrap_or(uri);
-    let segments: Vec<&str> = path.split('/').collect();
-
-    let resource = match segments.first()? {
-        &"roles" => "roles",
-        &"permissions" => "permissions",
-        &"users" => "users",
-        &"clusters" => "clusters",
-        _ => return None,
-    };
-
-    let action = match (resource, segments.len(), method) {
-        ("roles", len, _) if len >= 3 && segments.get(2) == Some(&"permissions") => match method {
-            "PUT" => Some("permissions:update"),
-            "GET" => Some("permissions:get"),
-            _ => None,
-        },
-        ("users", len, _) if len >= 3 && segments.get(2) == Some(&"roles") => match method {
-            "POST" => Some("roles:assign"),
-            "DELETE" => Some("roles:remove"),
-            "GET" => Some("roles:get"),
-            _ => None,
-        },
-        ("clusters", len, verb) if len >= 2 => {
-            // Handle multi-level paths like /clusters/system-functions or /clusters/overview/extended
-            if let Some(second) = segments.get(1) {
-                // Check if second segment is an ID
-                if second.parse::<i64>().is_ok() {
-                    // Path like /clusters/{id} or /clusters/{id}/activate
-                    if len == 2 {
-                        match verb {
-                            "GET" => Some("get"),
-                            "PUT" => Some("update"),
-                            "DELETE" => Some("delete"),
-                            _ => None,
-                        }
-                    } else if let Some(action) = segments.get(2) {
-                        // Path like /clusters/{id}/activate or /clusters/{id}/health
-                        if verb == "POST" && *action == "health" {
-                            Some("health:post")
-                        } else {
-                            Some(*action)
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    // Non-ID path: extract action parts and normalize hyphens to colons
-                    // Examples:
-                    //   /clusters/system-functions -> system:functions
-                    //   /clusters/catalogs-databases -> catalogs:databases
-                    //   /clusters/overview/data-stats -> overview:data:stats
-                    let action_parts: Vec<&str> = segments.iter().skip(1).copied().collect();
-                    let action_str = action_parts.join(":").replace("-", ":");
-                    return Some((resource.to_string(), action_str));
-                }
-            } else {
-                None
-            }
-        },
-        (_, len, verb) => {
-            if len >= 2 {
-                let second = segments.get(1).copied();
-                if second.and_then(|val| val.parse::<i64>().ok()).is_some() {
-                    match verb {
-                        "GET" => Some("get"),
-                        "PUT" => Some("update"),
-                        "DELETE" => Some("delete"),
-                        _ => None,
-                    }
-                } else {
-                    match verb {
-                        "GET" => second,
-                        _ => None,
-                    }
-                }
-            } else {
-                match verb {
-                    "GET" => Some("list"),
-                    "POST" => Some("create"),
-                    _ => None,
-                }
-            }
-        },
-    }?;
-
-    Some((resource.to_string(), action.to_string()))
 }

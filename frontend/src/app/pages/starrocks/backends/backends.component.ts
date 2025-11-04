@@ -39,7 +39,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
     },
     delete: {
       deleteButtonContent: '<i class="nb-trash"></i>',
-      confirmDelete: false,  // Use custom dialog instead of built-in confirm
+      confirmDelete: true,  // Enable custom confirmation via deleteConfirm event
     },
     pager: {
       display: true,
@@ -114,31 +114,36 @@ export class BackendsComponent implements OnInit, OnDestroy {
     },
   };
 
-  onDelete(event: any): void {
+  onDeleteConfirm(event: any): void {
     const backend = event.data;
     const itemName = `${backend.IP}:${backend.HeartbeatPort}`;
     const additionalWarning = `⚠️ 警告: 删除节点是危险操作，请确保：\n1. 节点数据已迁移完成\n2. 集群有足够的副本数\n3. 该节点已停止服务`;
     
     this.confirmDialogService.confirmDelete(itemName, additionalWarning)
       .subscribe(confirmed => {
-        if (confirmed) {
-          this.nodeService.deleteBackend(backend.IP, backend.HeartbeatPort)
-            .subscribe({
-              next: () => {
-                this.toastrService.success(
-                  `Backend 节点 ${itemName} 已删除`,
-                  '成功'
-                );
-                this.loadBackends();
-              },
-              error: (error) => {
-                this.toastrService.danger(
-                  ErrorHandler.extractErrorMessage(error),
-                  '删除失败',
-                );
-              },
-            });
+        if (!confirmed) {
+          event.confirm.reject();
+          return;
         }
+
+        this.nodeService.deleteBackend(backend.IP, backend.HeartbeatPort)
+          .subscribe({
+            next: () => {
+              this.toastrService.success(
+                `Backend 节点 ${itemName} 已删除`,
+                '成功'
+              );
+              event.confirm.resolve();
+              this.loadBackends();
+            },
+            error: (error) => {
+              this.toastrService.danger(
+                ErrorHandler.extractErrorMessage(error),
+                '删除失败',
+              );
+              event.confirm.reject();
+            },
+          });
       });
   }
 

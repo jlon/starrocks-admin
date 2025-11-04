@@ -5,6 +5,7 @@ use crate::models::{
 use crate::services::{casbin_service::CasbinService, permission_service::PermissionService};
 use crate::utils::{ApiError, ApiResult};
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -201,6 +202,7 @@ impl RoleService {
     }
 
     /// Assign permissions to role
+    /// Automatically associates API permissions with menu permissions based on parent_id
     pub async fn assign_permissions_to_role(
         &self,
         role_id: i64,
@@ -208,6 +210,65 @@ impl RoleService {
     ) -> ApiResult<()> {
         // Check if role exists
         let _role = self.get_role(role_id).await?;
+
+        // Get all permissions to build menu->API mapping
+        let all_permissions: Vec<crate::models::Permission> = sqlx::query_as(
+            "SELECT * FROM permissions ORDER BY type, code"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Build menu->API mapping based on parent_id
+        // This ensures that when a menu permission is assigned, its associated API permissions are also assigned
+        let mut menu_to_apis: HashMap<i64, Vec<i64>> = HashMap::new();
+        
+        for api_perm in all_permissions.iter().filter(|p| p.r#type == "api") {
+            if let Some(parent_id) = api_perm.parent_id {
+                menu_to_apis
+                    .entry(parent_id)
+                    .or_insert_with(Vec::new)
+                    .push(api_perm.id);
+            }
+        }
+
+        // Extend permission list: add associated API permissions for selected menu permissions
+        let mut extended_permission_ids = req.permission_ids.clone();
+        
+        for permission_id in &req.permission_ids {
+            // Check if this is a menu permission
+            if let Some(perm) = all_permissions.iter().find(|p| p.id == *permission_id) {
+                if perm.r#type == "menu" {
+                    // Automatically add associated API permissions
+                    if let Some(api_ids) = menu_to_apis.get(permission_id) {
+                        extended_permission_ids.extend(api_ids.iter());
+                        tracing::debug!(
+                            "Menu permission {} (code: {}) auto-associated with {} API permissions",
+                            permission_id,
+                            perm.code,
+                            api_ids.len()
+                        );
+                    }
+                }
+            }
+        }
+
+        // Remove duplicates and sort for consistency
+        use std::collections::HashSet;
+        let mut final_permission_ids: Vec<i64> = extended_permission_ids
+            .into_iter()
+            .collect::<HashSet<i64>>()
+            .into_iter()
+            .collect();
+        final_permission_ids.sort();
+
+        let added_count = final_permission_ids.len() - req.permission_ids.len();
+        if added_count > 0 {
+            tracing::info!(
+                "Auto-associated {} API permissions with menu permissions for role ID: {}",
+                added_count,
+                role_id
+            );
+        }
 
         // Begin transaction
         let mut tx = self.pool.begin().await?;
@@ -218,8 +279,8 @@ impl RoleService {
             .execute(&mut *tx)
             .await?;
 
-        // Insert new role permissions
-        for permission_id in &req.permission_ids {
+        // Insert new role permissions (including auto-associated API permissions)
+        for permission_id in &final_permission_ids {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
                 .bind(role_id)
                 .bind(permission_id)
@@ -234,7 +295,12 @@ impl RoleService {
             .reload_policies_from_db(&self.pool)
             .await?;
 
-        tracing::info!("Permissions updated for role ID: {}", role_id);
+        tracing::info!(
+            "Permissions updated for role ID: {} (total: {} permissions, {} auto-associated)",
+            role_id,
+            final_permission_ids.len(),
+            added_count
+        );
 
         Ok(())
     }

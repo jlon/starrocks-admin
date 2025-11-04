@@ -108,17 +108,75 @@ impl MaterializedViewService {
         // First, find which database the MV belongs to
         let mv = self.get_materialized_view(mv_name).await?;
 
-        // Use the database name to query DDL
-        let sql = format!("SHOW CREATE MATERIALIZED VIEW `{}`.`{}`", mv.database_name, mv_name);
-        tracing::info!("Querying materialized view DDL: {}", sql);
+        // For sync MVs (ROLLUP), the DDL is already stored in the 'text' field from SHOW MATERIALIZED VIEWS
+        // ROLLUP MVs are indexes on tables, not standalone views, so SHOW CREATE MATERIALIZED VIEW doesn't work
+        if mv.refresh_type == "ROLLUP" {
+            if !mv.text.is_empty() {
+                tracing::info!("Using DDL from MV text field for ROLLUP: {}", mv_name);
+                return Ok(mv.text.clone());
+            }
+            // Fallback: try to construct DDL from SHOW ALTER MATERIALIZED VIEW
+            // But for now, return the text field or error
+            return Err(ApiError::not_found(format!(
+                "DDL for sync MV (ROLLUP) '{}' not available. ROLLUP MVs are table indexes, not standalone views.",
+                mv_name
+            )));
+        }
 
-        let results = self.mysql_client.query(&sql).await?;
+        // Create a session to use database context for async MVs
+        let mut session = self.mysql_client.create_session().await?;
+        session.use_database(&mv.database_name).await?;
+
+        // For async MVs, use SHOW CREATE MATERIALIZED VIEW
+        // Try different syntaxes
+        let sql1 = format!("SHOW CREATE MATERIALIZED VIEW `{}`.`{}`", mv.database_name, mv_name);
+        tracing::info!("Querying async MV DDL (attempt 1): {}", sql1);
+        
+        let (column_names, rows) = match session.execute(&sql1).await {
+            Ok((cols, rows, _)) => (cols, rows),
+            Err(_) => {
+                // Fallback: try without database prefix (already in database context)
+                let sql2 = format!("SHOW CREATE MATERIALIZED VIEW `{}`", mv_name);
+                tracing::info!("Querying async MV DDL (attempt 2): {}", sql2);
+                let (cols, rows, _) = session.execute(&sql2).await?;
+                (cols, rows)
+            }
+        };
+        
+        // Convert rows to JSON format for consistent processing
+        let mut results = Vec::new();
+        for row in rows {
+            let mut obj = serde_json::Map::new();
+            for (i, col_name) in column_names.iter().enumerate() {
+                if let Some(value) = row.get(i) {
+                    obj.insert(col_name.clone(), serde_json::Value::String(value.clone()));
+                }
+            }
+            results.push(serde_json::Value::Object(obj));
+        }
 
         // Extract DDL from result
-        if let Some(row) = results.first()
-            && let Some(ddl) = row.get("Create Materialized View").and_then(|v| v.as_str())
-        {
-            return Ok(ddl.to_string());
+        // StarRocks returns column name as "Create Materialized View" or "Create View"
+        if let Some(row) = results.first() {
+            // Try different possible column names
+            if let Some(ddl_val) = row.get("Create Materialized View") {
+                if let Some(ddl) = ddl_val.as_str() {
+                    return Ok(ddl.to_string());
+                }
+            }
+            if let Some(ddl_val) = row.get("Create View") {
+                if let Some(ddl) = ddl_val.as_str() {
+                    return Ok(ddl.to_string());
+                }
+            }
+            // If column name doesn't match, try to get the first string value from the row
+            if let Some(obj) = row.as_object() {
+                for (_key, value) in obj {
+                    if let Some(ddl) = value.as_str() {
+                        return Ok(ddl.to_string());
+                    }
+                }
+            }
         }
 
         Err(ApiError::not_found(format!("DDL for materialized view '{}' not found", mv_name)))

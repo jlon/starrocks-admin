@@ -7,6 +7,7 @@ import { ClusterService, Cluster, ClusterHealth } from '../../../@core/data/clus
 import { ClusterContextService } from '../../../@core/data/cluster-context.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { PermissionService } from '../../../@core/data/permission.service';
+import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 
 interface ClusterCard {
   cluster: Cluster;
@@ -44,6 +45,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private toastrService: NbToastrService,
     private router: Router,
     private permissionService: PermissionService,
+    private confirmDialogService: ConfirmDialogService,
   ) {}
 
   ngOnInit(): void {
@@ -218,17 +220,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.toastrService.warning('您没有删除集群的权限', '提示');
       return;
     }
-    if (confirm(`确定要删除集群 "${cluster.name}" 吗？`)) {
-      this.clusterService.deleteCluster(cluster.id).subscribe({
-        next: () => {
-          this.toastrService.success(`集群 "${cluster.name}" 已删除`, '成功');
-          this.loadClusters(); // 重新加载集群列表
-        },
-        error: (error) => {
-          this.handleError(error);
+    this.confirmDialogService.confirmDelete(cluster.name)
+      .subscribe(confirmed => {
+        if (!confirmed) {
+          return;
         }
+
+        this.clusterService.deleteCluster(cluster.id).subscribe({
+          next: () => {
+            this.toastrService.success(`集群 "${cluster.name}" 已删除`, '成功');
+            this.loadClusters();
+          },
+          error: (error) => {
+            this.handleError(error);
+          },
+        });
       });
-    }
   }
 
   private handleError(error: any): void {

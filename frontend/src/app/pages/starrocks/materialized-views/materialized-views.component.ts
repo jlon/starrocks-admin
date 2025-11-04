@@ -134,7 +134,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
     },
     delete: {
       deleteButtonContent: '<i class="nb-trash"></i>',
-      confirmDelete: false,  // Use custom dialog instead of built-in confirm
+      confirmDelete: false,
     },
     pager: {
       display: true,
@@ -442,7 +442,15 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
 
   onDelete(event: any) {
     const mv = event.data as MaterializedView;
-    this.deleteMV(mv);
+
+    this.confirmDialogService.confirmDelete(mv.name)
+      .subscribe(confirmed => {
+        if (!confirmed) {
+          return;
+        }
+
+        this.deleteMV(mv, event);
+      });
   }
 
   // Check if refresh action should be shown
@@ -602,32 +610,23 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
       });
   }
 
-  deleteMV(mv: MaterializedView) {
-    this.confirmDialogService
-      .confirm(
-        '删除物化视图',
-        `确定要删除物化视图 "${mv.name}" 吗？此操作不可恢复。`,
-        '删除',
-        '取消',
-      )
-      .subscribe((confirmed) => {
-        if (confirmed) {
-          this.mvService
-            .deleteMaterializedView( mv.name, true)
-            .pipe(takeUntil(this.destroy$))
-            .subscribe({
-              next: () => {
-                this.toastrService.success('物化视图删除成功', '成功');
-                this.loadMaterializedViews();
-              },
-              error: (error) => {
-                this.toastrService.danger(
-                  ErrorHandler.extractErrorMessage(error),
-                  '删除失败',
-                );
-              },
-            });
-        }
+  deleteMV(mv: MaterializedView, tableEvent?: any) {
+    this.mvService
+      .deleteMaterializedView( mv.name, true)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.toastrService.success('物化视图删除成功', '成功');
+          tableEvent?.confirm.resolve();
+          this.loadMaterializedViews();
+        },
+        error: (error) => {
+          this.toastrService.danger(
+            ErrorHandler.extractErrorMessage(error),
+            '删除失败',
+          );
+          tableEvent?.confirm.reject();
+        },
       });
   }
 

@@ -129,9 +129,9 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 ('api:clusters:overview:health', '集群健康卡片', 'api', 'clusters', 'overview:health', 'GET /api/clusters/overview/health'),
 ('api:clusters:overview:performance', '性能趋势', 'api', 'clusters', 'overview:performance', 'GET /api/clusters/overview/performance'),
 ('api:clusters:overview:resources', '资源趋势', 'api', 'clusters', 'overview:resources', 'GET /api/clusters/overview/resources'),
-('api:clusters:overview:data-stats', '数据统计', 'api', 'clusters', 'overview:data-stats', 'GET /api/clusters/overview/data-stats'),
-('api:clusters:overview:capacity-prediction', '容量预测', 'api', 'clusters', 'overview:capacity-prediction', 'GET /api/clusters/overview/capacity-prediction'),
-('api:clusters:overview:compaction-details', '压缩详情统计', 'api', 'clusters', 'overview:compaction-details', 'GET /api/clusters/overview/compaction-details');
+('api:clusters:overview:data:stats', '数据统计', 'api', 'clusters', 'overview:data:stats', 'GET /api/clusters/overview/data-stats'),
+('api:clusters:overview:capacity:prediction', '容量预测', 'api', 'clusters', 'overview:capacity:prediction', 'GET /api/clusters/overview/capacity-prediction'),
+('api:clusters:overview:compaction:details', '压缩详情统计', 'api', 'clusters', 'overview:compaction:details', 'GET /api/clusters/overview/compaction-details');
 
 -- ==============================================
 -- 8. Insert API Permissions - Nodes Management
@@ -151,7 +151,7 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 ('api:clusters:catalogs', '查询Catalog列表', 'api', 'clusters', 'catalogs', 'GET /api/clusters/catalogs'),
 ('api:clusters:databases', '查询数据库列表', 'api', 'clusters', 'databases', 'GET /api/clusters/databases'),
 ('api:clusters:tables', '查询表列表', 'api', 'clusters', 'tables', 'GET /api/clusters/tables'),
-('api:clusters:catalogs-databases', '查询Catalog和数据库树', 'api', 'clusters', 'catalogs-databases', 'GET /api/clusters/catalogs-databases'),
+('api:clusters:catalogs:databases', '查询Catalog和数据库树', 'api', 'clusters', 'catalogs:databases', 'GET /api/clusters/catalogs-databases'),
 -- Query Operations
 ('api:clusters:queries', '查询管理', 'api', 'clusters', 'queries', 'GET /api/clusters/queries'),
 ('api:clusters:queries:execute', '执行查询', 'api', 'clusters', 'queries:execute', 'POST /api/clusters/queries/execute'),
@@ -194,7 +194,41 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 -- System Info
 ('api:clusters:system', '功能卡片', 'api', 'clusters', 'system', 'GET /api/clusters/system'),
 ('api:clusters:system:runtime_info', '查询运行时信息', 'api', 'clusters', 'system:runtime_info', 'GET /api/clusters/system/runtime_info'),
-('api:clusters:system:function', '查询系统函数详情', 'api', 'clusters', 'system:function', 'GET /api/clusters/system/:function_name'),
+-- System Function Details (25 system functions)
+('api:clusters:system:brokers', '查询Broker节点', 'api', 'clusters', 'system:brokers', 'GET /api/clusters/system/brokers'),
+('api:clusters:system:frontends', '查询Frontend节点', 'api', 'clusters', 'system:frontends', 'GET /api/clusters/system/frontends'),
+('api:clusters:system:routine_loads', '查询Routine Load任务', 'api', 'clusters', 'system:routine_loads', 'GET /api/clusters/system/routine_loads'),
+('api:clusters:system:catalog', '查询目录', 'api', 'clusters', 'system:catalog', 'GET /api/clusters/system/catalog'),
+('api:clusters:system:colocation_group', '查询Colocation Group', 'api', 'clusters', 'system:colocation_group', 'GET /api/clusters/system/colocation_group'),
+('api:clusters:system:cluster_balance', '查询集群平衡', 'api', 'clusters', 'system:cluster_balance', 'GET /api/clusters/system/cluster_balance'),
+('api:clusters:system:load_error_hub', '查询加载错误信息', 'api', 'clusters', 'system:load_error_hub', 'GET /api/clusters/system/load_error_hub'),
+('api:clusters:system:meta_recovery', '查询元数据恢复', 'api', 'clusters', 'system:meta_recovery', 'GET /api/clusters/system/meta_recovery'),
+('api:clusters:system:global_current_queries', '查询全局当前查询', 'api', 'clusters', 'system:global_current_queries', 'GET /api/clusters/system/global_current_queries'),
+('api:clusters:system:tasks', '查询系统任务', 'api', 'clusters', 'system:tasks', 'GET /api/clusters/system/tasks'),
+('api:clusters:system:compute_nodes', '查询计算节点', 'api', 'clusters', 'system:compute_nodes', 'GET /api/clusters/system/compute_nodes'),
+('api:clusters:system:statistic', '查询统计信息', 'api', 'clusters', 'system:statistic', 'GET /api/clusters/system/statistic'),
+('api:clusters:system:jobs', '查询后台任务', 'api', 'clusters', 'system:jobs', 'GET /api/clusters/system/jobs'),
+('api:clusters:system:warehouses', '查询仓库', 'api', 'clusters', 'system:warehouses', 'GET /api/clusters/system/warehouses'),
+('api:clusters:system:resources', '查询资源', 'api', 'clusters', 'system:resources', 'GET /api/clusters/system/resources'),
+('api:clusters:system:transactions', '查询事务', 'api', 'clusters', 'system:transactions', 'GET /api/clusters/system/transactions'),
+('api:clusters:system:backends', '查询Backend节点', 'api', 'clusters', 'system:backends', 'GET /api/clusters/system/backends'),
+('api:clusters:system:current_queries', '查询当前查询', 'api', 'clusters', 'system:current_queries', 'GET /api/clusters/system/current_queries'),
+('api:clusters:system:stream_loads', '查询Stream Load任务', 'api', 'clusters', 'system:stream_loads', 'GET /api/clusters/system/stream_loads'),
+('api:clusters:system:replications', '查询复制状态', 'api', 'clusters', 'system:replications', 'GET /api/clusters/system/replications'),
+('api:clusters:system:dbs', '查询数据库', 'api', 'clusters', 'system:dbs', 'GET /api/clusters/system/dbs'),
+('api:clusters:system:current_backend_instances', '查询当前Backend实例', 'api', 'clusters', 'system:current_backend_instances', 'GET /api/clusters/system/current_backend_instances'),
+('api:clusters:system:historical_nodes', '查询历史节点', 'api', 'clusters', 'system:historical_nodes', 'GET /api/clusters/system/historical_nodes'),
+('api:clusters:system:compactions', '查询压缩任务', 'api', 'clusters', 'system:compactions', 'GET /api/clusters/system/compactions'),
+-- Additional system functions that may be called directly via PROC paths
+('api:clusters:system:tables', '查询表信息', 'api', 'clusters', 'system:tables', 'GET /api/clusters/system/tables'),
+('api:clusters:system:tablet_schema', '查询Tablet Schema', 'api', 'clusters', 'system:tablet_schema', 'GET /api/clusters/system/tablet_schema'),
+('api:clusters:system:partitions', '查询分区信息', 'api', 'clusters', 'system:partitions', 'GET /api/clusters/system/partitions'),
+('api:clusters:system:loads', '查询加载任务', 'api', 'clusters', 'system:loads', 'GET /api/clusters/system/loads'),
+('api:clusters:system:workgroups', '查询工作组', 'api', 'clusters', 'system:workgroups', 'GET /api/clusters/system/workgroups'),
+('api:clusters:system:tablets', '查询Tablet信息', 'api', 'clusters', 'system:tablets', 'GET /api/clusters/system/tablets'),
+('api:clusters:system:colocate_group', '查询Colocate Group', 'api', 'clusters', 'system:colocate_group', 'GET /api/clusters/system/colocate_group'),
+('api:clusters:system:routine_load_jobs', '查询Routine Load Jobs', 'api', 'clusters', 'system:routine_load_jobs', 'GET /api/clusters/system/routine_load_jobs'),
+('api:clusters:system:stream_load_jobs', '查询Stream Load Jobs', 'api', 'clusters', 'system:stream_load_jobs', 'GET /api/clusters/system/stream_load_jobs'),
 -- System Functions
 ('api:clusters:system:functions', '查询系统函数列表', 'api', 'clusters', 'system:functions', 'GET /api/clusters/system-functions'),
 ('api:clusters:system:functions:create', '创建系统函数', 'api', 'clusters', 'system:functions:create', 'POST /api/clusters/system-functions'),
@@ -315,9 +349,9 @@ LIMIT 1;
 --   ├─ api:clusters:overview:health            (GET /api/clusters/overview/health)
 --   ├─ api:clusters:overview:performance       (GET /api/clusters/overview/performance)
 --   ├─ api:clusters:overview:resources         (GET /api/clusters/overview/resources)
---   ├─ api:clusters:overview:data-stats        (GET /api/clusters/overview/data-stats)
---   ├─ api:clusters:overview:capacity-prediction  (GET /api/clusters/overview/capacity-prediction)
---   └─ api:clusters:overview:compaction-details   (GET /api/clusters/overview/compaction-details)
+--   ├─ api:clusters:overview:data:stats        (GET /api/clusters/overview/data-stats)
+--   ├─ api:clusters:overview:capacity:prediction  (GET /api/clusters/overview/capacity-prediction)
+--   └─ api:clusters:overview:compaction:details   (GET /api/clusters/overview/compaction-details)
 --
 -- 【节点管理】menu:nodes (parent)
 --   No direct APIs (parent menu only)
@@ -336,7 +370,7 @@ LIMIT 1;
 --   ├─ api:clusters:catalogs          (GET /api/clusters/catalogs)
 --   ├─ api:clusters:databases         (GET /api/clusters/databases)
 --   ├─ api:clusters:tables            (GET /api/clusters/tables)
---   ├─ api:clusters:catalogs-databases (GET /api/clusters/catalogs-databases)
+--   ├─ api:clusters:catalogs:databases (GET /api/clusters/catalogs-databases)
 --   ├─ api:clusters:queries           (GET /api/clusters/queries)
 --   ├─ api:clusters:queries:execute   (POST /api/clusters/queries/execute)
 --   └─ api:clusters:queries:kill      (DELETE /api/clusters/queries/:id)
@@ -501,7 +535,7 @@ WHERE code IN (
     'api:clusters:catalogs',
     'api:clusters:databases',
     'api:clusters:tables',
-    'api:clusters:catalogs-databases'
+    'api:clusters:catalogs:databases'
 );
 
 -- 19.3 Audit Logs Menu - Query History API
@@ -558,9 +592,9 @@ WHERE code IN (
     'api:clusters:overview:health',             -- Score: 58
     'api:clusters:overview:performance',        -- Score: 58
     'api:clusters:overview:resources',          -- Score: 58
-    'api:clusters:overview:data-stats',         -- Score: 58
-    'api:clusters:overview:capacity-prediction',-- Score: 58
-    'api:clusters:overview:compaction-details'  -- Score: 58
+    'api:clusters:overview:data:stats',         -- Score: 58
+    'api:clusters:overview:capacity:prediction',-- Score: 58
+    'api:clusters:overview:compaction:details'  -- Score: 58
 );
 
 -- 19.6.4 System Menu - System Function Management APIs
@@ -627,11 +661,55 @@ UPDATE permissions
 SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:queries:profiles')
 WHERE code = 'api:clusters:profiles';
 
--- 19.7.7 System Menu - Additional System APIs
+-- 19.7.7 System Menu - All System APIs (including 25 system function details)
 UPDATE permissions 
 SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system')
 WHERE code IN (
     'api:clusters:system',                    -- System info list
+    'api:clusters:system:runtime_info',       -- Runtime info
+    -- 25 System Function Details
+    'api:clusters:system:brokers',
+    'api:clusters:system:frontends',
+    'api:clusters:system:routine_loads',
+    'api:clusters:system:catalog',
+    'api:clusters:system:colocation_group',
+    'api:clusters:system:cluster_balance',
+    'api:clusters:system:load_error_hub',
+    'api:clusters:system:meta_recovery',
+    'api:clusters:system:global_current_queries',
+    'api:clusters:system:tasks',
+    'api:clusters:system:compute_nodes',
+    'api:clusters:system:statistic',
+    'api:clusters:system:jobs',
+    'api:clusters:system:warehouses',
+    'api:clusters:system:resources',
+    'api:clusters:system:transactions',
+    'api:clusters:system:backends',
+    'api:clusters:system:current_queries',
+    'api:clusters:system:stream_loads',
+    'api:clusters:system:replications',
+    'api:clusters:system:dbs',
+    'api:clusters:system:current_backend_instances',
+    'api:clusters:system:historical_nodes',
+    'api:clusters:system:compactions',
+    -- Additional system functions called via PROC paths
+    'api:clusters:system:tables',
+    'api:clusters:system:tablet_schema',
+    'api:clusters:system:partitions',
+    'api:clusters:system:loads',
+    'api:clusters:system:workgroups',
+    'api:clusters:system:tablets',
+    'api:clusters:system:colocate_group',
+    'api:clusters:system:routine_load_jobs',
+    'api:clusters:system:stream_load_jobs',
+    -- System Functions Management
+    'api:clusters:system:functions',
+    'api:clusters:system:functions:create',
+    'api:clusters:system:functions:update',
+    'api:clusters:system:functions:delete',
+    'api:clusters:system:functions:orders',
+    'api:clusters:system:functions:execute',
+    'api:clusters:system:functions:favorite',
     'api:system:functions:access-time',       -- Update access time
     'api:system:functions:category:delete'    -- Delete category
 );

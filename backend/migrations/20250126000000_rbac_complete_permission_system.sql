@@ -196,16 +196,16 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 ('api:clusters:system:runtime_info', '查询运行时信息', 'api', 'clusters', 'system:runtime_info', 'GET /api/clusters/system/runtime_info'),
 ('api:clusters:system:function', '查询系统函数详情', 'api', 'clusters', 'system:function', 'GET /api/clusters/system/:function_name'),
 -- System Functions
-('api:clusters:system-functions', '查询系统函数列表', 'api', 'clusters', 'system-functions', 'GET /api/clusters/system-functions'),
-('api:clusters:system-functions:create', '创建系统函数', 'api', 'clusters', 'system-functions:create', 'POST /api/clusters/system-functions'),
-('api:clusters:system-functions:update', '更新系统函数', 'api', 'clusters', 'system-functions:update', 'PUT /api/clusters/system-functions/:function_id'),
-('api:clusters:system-functions:delete', '删除系统函数', 'api', 'clusters', 'system-functions:delete', 'DELETE /api/clusters/system-functions/:function_id'),
-('api:clusters:system-functions:orders', '更新系统函数顺序', 'api', 'clusters', 'system-functions:orders', 'PUT /api/clusters/system-functions/orders'),
-('api:clusters:system-functions:execute', '执行系统函数', 'api', 'clusters', 'system-functions:execute', 'POST /api/clusters/system-functions/:function_id/execute'),
-('api:clusters:system-functions:favorite', '切换系统函数收藏', 'api', 'clusters', 'system-functions:favorite', 'PUT /api/clusters/system-functions/:function_id/favorite'),
+('api:clusters:system:functions', '查询系统函数列表', 'api', 'clusters', 'system:functions', 'GET /api/clusters/system-functions'),
+('api:clusters:system:functions:create', '创建系统函数', 'api', 'clusters', 'system:functions:create', 'POST /api/clusters/system-functions'),
+('api:clusters:system:functions:update', '更新系统函数', 'api', 'clusters', 'system:functions:update', 'PUT /api/clusters/system-functions/:function_id'),
+('api:clusters:system:functions:delete', '删除系统函数', 'api', 'clusters', 'system:functions:delete', 'DELETE /api/clusters/system-functions/:function_id'),
+('api:clusters:system:functions:orders', '更新系统函数顺序', 'api', 'clusters', 'system:functions:orders', 'PUT /api/clusters/system-functions/orders'),
+('api:clusters:system:functions:execute', '执行系统函数', 'api', 'clusters', 'system:functions:execute', 'POST /api/clusters/system-functions/:function_id/execute'),
+('api:clusters:system:functions:favorite', '切换系统函数收藏', 'api', 'clusters', 'system:functions:favorite', 'PUT /api/clusters/system-functions/:function_id/favorite'),
 -- System Functions (non-cluster specific)
-('api:system-functions:access-time', '更新系统函数访问时间', 'api', 'system-functions', 'access-time', 'PUT /api/system-functions/:function_name/access-time'),
-('api:system-functions:category:delete', '删除系统函数分类', 'api', 'system-functions', 'category:delete', 'DELETE /api/system-functions/category/:category_name');
+('api:system:functions:access-time', '更新系统函数访问时间', 'api', 'system', 'functions:access-time', 'PUT /api/system-functions/:function_name/access-time'),
+('api:system:functions:category:delete', '删除系统函数分类', 'api', 'system', 'functions:category:delete', 'DELETE /api/system-functions/category/:category_name');
 
 -- ==============================================
 -- 13. Insert API Permissions - RBAC Management
@@ -361,18 +361,18 @@ LIMIT 1;
 --   └─ api:clusters:materialized_views:alter   (PUT /api/clusters/materialized_views/:mv_name)
 --
 -- 【功能卡片】menu:system
---   ├─ api:clusters:system                     (GET /api/clusters/system)
---   ├─ api:clusters:system:runtime_info        (GET /api/clusters/system/runtime_info)
---   ├─ api:clusters:system:function            (GET /api/clusters/system/:function_name)
---   ├─ api:clusters:system-functions           (GET /api/clusters/system-functions)
---   ├─ api:clusters:system-functions:create    (POST /api/clusters/system-functions)
---   ├─ api:clusters:system-functions:update    (PUT /api/clusters/system-functions/:function_id)
---   ├─ api:clusters:system-functions:delete    (DELETE /api/clusters/system-functions/:function_id)
---   ├─ api:clusters:system-functions:orders    (PUT /api/clusters/system-functions/orders)
---   ├─ api:clusters:system-functions:execute   (POST /api/clusters/system-functions/:function_id/execute)
---   ├─ api:clusters:system-functions:favorite  (PUT /api/clusters/system-functions/:function_id/favorite)
---   ├─ api:system-functions:access-time        (PUT /api/system-functions/:function_name/access-time)
---   └─ api:system-functions:category:delete    (DELETE /api/system-functions/category/:category_name)
+--   ├─ api:clusters:system                      (GET /api/clusters/system)
+--   ├─ api:clusters:system:runtime_info         (GET /api/clusters/system/runtime_info)
+--   ├─ api:clusters:system:function             (GET /api/clusters/system/:function_name)
+--   ├─ api:clusters:system:functions            (GET /api/clusters/system-functions)
+--   ├─ api:clusters:system:functions:create     (POST /api/clusters/system-functions)
+--   ├─ api:clusters:system:functions:update     (PUT /api/clusters/system-functions/:function_id)
+--   ├─ api:clusters:system:functions:delete     (DELETE /api/clusters/system-functions/:function_id)
+--   ├─ api:clusters:system:functions:orders     (PUT /api/clusters/system-functions/orders)
+--   ├─ api:clusters:system:functions:execute    (POST /api/clusters/system-functions/:function_id/execute)
+--   ├─ api:clusters:system:functions:favorite   (PUT /api/clusters/system-functions/:function_id/favorite)
+--   ├─ api:system:functions:access-time         (PUT /api/system-functions/:function_name/access-time)
+--   └─ api:system:functions:category:delete     (DELETE /api/system-functions/category/:category_name)
 --
 -- 【会话管理】menu:sessions
 --   ├─ api:clusters:sessions          (GET /api/clusters/sessions)
@@ -470,7 +470,66 @@ DELETE FROM roles WHERE code IN ('operator', 'viewer');
 DELETE FROM permissions WHERE code = 'api:clusters:frontends:delete';
 
 -- ==============================================
--- 19. Ensure Admin Has ALL Permissions
+-- 19. Set Parent_ID for All Unmatched API Permissions
+-- ==============================================
+-- The frontend auto-matching algorithm uses path segment matching to associate
+-- API permissions with menu permissions. However, some APIs cannot be automatically
+-- matched due to path differences. We explicitly set parent_id for these cases.
+
+-- 19.1 Dashboard Menu - Cluster CRUD Operations
+-- menu:dashboard (path: "dashboard") cannot match api:clusters:* (path: "clusters:*")
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:dashboard')
+WHERE code IN (
+    'api:clusters:list',
+    'api:clusters:create',
+    'api:clusters:get',
+    'api:clusters:update',
+    'api:clusters:delete',
+    'api:clusters:activate',
+    'api:clusters:active',
+    'api:clusters:health',
+    'api:clusters:health:post',
+    'api:clusters:health:test'
+);
+
+-- 19.2 Queries Execution Menu - Catalog/Database/Table APIs
+-- menu:queries:execution (path: "queries:execution") cannot match api:clusters:catalogs/databases/tables
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:queries:execution')
+WHERE code IN (
+    'api:clusters:catalogs',
+    'api:clusters:databases',
+    'api:clusters:tables',
+    'api:clusters:catalogs-databases'
+);
+
+-- 19.3 Audit Logs Menu - Query History API
+-- menu:queries:audit-logs (path: "queries:audit-logs") has weak match with api:clusters:queries:history
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:queries:audit-logs')
+WHERE code = 'api:clusters:queries:history';
+
+-- 19.4 Materialized Views Menu - Underscore vs Hyphen Issue
+-- menu:materialized-views (hyphen) vs api:clusters:materialized_views (underscore)
+-- Explicitly set parent_id to avoid potential matching issues
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:materialized-views')
+WHERE code LIKE 'api:clusters:materialized_views%';
+
+-- 19.5 Roles Menu - Permissions API
+-- menu:roles (path: "roles") cannot match api:permissions:* (path: "permissions:*")
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:roles')
+WHERE code IN (
+    'api:permissions:list',
+    'api:permissions:menu',
+    'api:permissions:api',
+    'api:permissions:tree'
+);
+
+-- ==============================================
+-- 20. Ensure Admin Has ALL Permissions
 -- ==============================================
 -- This ensures admin role has all permissions, including any that
 -- might have been missed during initial migration or added later

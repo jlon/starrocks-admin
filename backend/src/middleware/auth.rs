@@ -126,8 +126,8 @@ fn extract_permission_internal(method: &str, uri: &str) -> Option<(String, Strin
             "GET" => Some("roles:get"),
             _ => None,
         },
-        ("clusters", len, verb) if len >= 3 => {
-            // Handle multi-level paths like /clusters/health/test or /clusters/overview/extended
+        ("clusters", len, verb) if len >= 2 => {
+            // Handle multi-level paths like /clusters/system-functions or /clusters/overview/extended
             if let Some(second) = segments.get(1) {
                 // Check if second segment is an ID
                 if second.parse::<i64>().is_ok() {
@@ -150,8 +150,13 @@ fn extract_permission_internal(method: &str, uri: &str) -> Option<(String, Strin
                         None
                     }
                 } else {
+                    // Non-ID path: extract action parts and normalize hyphens to colons
+                    // Examples:
+                    //   /clusters/system-functions -> system:functions
+                    //   /clusters/catalogs-databases -> catalogs:databases
+                    //   /clusters/overview/data-stats -> overview:data:stats
                     let action_parts: Vec<&str> = segments.iter().skip(1).copied().collect();
-                    let action_str = action_parts.join(":");
+                    let action_str = action_parts.join(":").replace("-", ":");
                     return Some((resource.to_string(), action_str));
                 }
             } else {

@@ -40,9 +40,10 @@ export class PermissionGuard implements CanActivate {
       return true; // Allow access if format is invalid (graceful degradation)
     }
  
-    console.warn('Permission denied:', requiredPermission);
-    // Redirect to dashboard if permission denied
-    this.router.navigate(['/pages/starrocks/dashboard']);
+    console.warn('Permission denied:', requiredPermission, 'at', state.url);
+    
+    // DO NOT redirect - let the component handle "no permission" display
+    // This avoids infinite redirect loops
     return false;
   }
 }

@@ -8,23 +8,25 @@ interface Role {
 @Component({
   selector: 'ngx-users-role-badge-cell',
   template: `
-    <div class="badge-group" *ngIf="value?.length; else empty">
-      <nb-badge
-        *ngFor="let role of value"
-        [text]="role.name"
-        status="info"
-        size="small"
-        class="badge-group__item"
-      ></nb-badge>
+    <div *ngIf="value?.length; else empty">
+      {{ getRoleNames() }}
     </div>
     <ng-template #empty>
-      <span class="text-hint">未分配</span>
+      <span class="text-hint">-</span>
     </ng-template>
   `,
-  styleUrls: ['./role-badge-cell.component.scss'],
+  styles: [`
+    .text-hint {
+      color: #999;
+    }
+  `],
 })
 export class UsersRoleBadgeCellComponent {
   @Input() value: Role[] = [];
+
+  getRoleNames(): string {
+    return this.value.map(role => role.name).join(', ');
+  }
 }
 
 

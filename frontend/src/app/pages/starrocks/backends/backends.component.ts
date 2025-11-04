@@ -166,21 +166,13 @@ export class BackendsComponent implements OnInit, OnDestroy {
             this.loadClusterInfo();
             this.loadBackends();
           }
-        } else {
-          // No active cluster - show error and stop loading
-          this.loading = false;
-          this.toastrService.danger(
-            '请先激活一个集群',
-            '未选择集群'
-          );
         }
+        // Backend will handle "no active cluster" case
       });
 
-    // Load data if clusterId is already set
-    if (this.clusterId && this.clusterId > 0) {
-      this.loadClusterInfo();
-      this.loadBackends();
-    }
+    // Load data - backend will get active cluster automatically
+    this.loadClusterInfo();
+    this.loadBackends();
   }
 
   ngOnDestroy(): void {

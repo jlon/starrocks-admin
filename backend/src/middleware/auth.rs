@@ -24,7 +24,9 @@ pub async fn auth_middleware(
     mut req: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    let uri = req.uri().to_string();
+    // Extract path without query parameters
+    let uri_full = req.uri().to_string();
+    let uri = uri_full.split('?').next().unwrap_or(&uri_full).to_string();
     let method = req.method().to_string();
 
     tracing::debug!("Auth middleware processing: {} {}", method, uri);
@@ -125,17 +127,32 @@ fn extract_permission_internal(method: &str, uri: &str) -> Option<(String, Strin
             _ => None,
         },
         ("clusters", len, verb) if len >= 3 => {
-            if let Some(last) = segments.last() {
-                let leaf = *last;
-                if leaf.parse::<i64>().is_err() {
-                    Some(leaf)
-                } else {
-                    match verb {
-                        "GET" => Some("get"),
-                        "PUT" => Some("update"),
-                        "DELETE" => Some("delete"),
-                        _ => None,
+            // Handle multi-level paths like /clusters/health/test or /clusters/overview/extended
+            if let Some(second) = segments.get(1) {
+                // Check if second segment is an ID
+                if second.parse::<i64>().is_ok() {
+                    // Path like /clusters/{id} or /clusters/{id}/activate
+                    if len == 2 {
+                        match verb {
+                            "GET" => Some("get"),
+                            "PUT" => Some("update"),
+                            "DELETE" => Some("delete"),
+                            _ => None,
+                        }
+                    } else if let Some(action) = segments.get(2) {
+                        // Path like /clusters/{id}/activate or /clusters/{id}/health
+                        if verb == "POST" && *action == "health" {
+                            Some("health:post")
+                        } else {
+                            Some(*action)
+                        }
+                    } else {
+                        None
                     }
+                } else {
+                    let action_parts: Vec<&str> = segments.iter().skip(1).copied().collect();
+                    let action_str = action_parts.join(":");
+                    return Some((resource.to_string(), action_str));
                 }
             } else {
                 None

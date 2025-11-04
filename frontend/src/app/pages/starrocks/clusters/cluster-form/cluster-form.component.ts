@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { NbToastrService } from '@nebular/theme';
 import { ClusterService, Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
+import { TabReuseService } from '../../../../@core/services/tab-reuse.service';
 
 @Component({
   selector: 'ngx-cluster-form',
@@ -24,6 +25,7 @@ export class ClusterFormComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private toastrService: NbToastrService,
+    private tabReuseService: TabReuseService,
   ) {
     this.clusterForm = this.fb.group({
       name: ['', [Validators.required, Validators.maxLength(100)]],
@@ -119,7 +121,7 @@ export class ClusterFormComponent implements OnInit {
           this.testConnectionAfterCreate(cluster.id);
         } else {
           this.toastrService.success('集群更新成功', '成功');
-          this.router.navigate(['/pages/starrocks/dashboard']);
+          this.navigateToDashboardWithRefresh();
         }
       },
       error: (error) => {
@@ -142,11 +144,11 @@ export class ClusterFormComponent implements OnInit {
         } else {
           this.toastrService.warning('集群已创建，但健康检查失败。请检查配置', '警告');
         }
-        this.router.navigate(['/pages/starrocks/dashboard']);
+        this.navigateToDashboardWithRefresh();
       },
       error: () => {
         this.toastrService.warning('集群已创建，但健康检查失败。请检查配置', '警告');
-        this.router.navigate(['/pages/starrocks/dashboard']);
+        this.navigateToDashboardWithRefresh();
       },
     });
   }
@@ -215,6 +217,11 @@ export class ClusterFormComponent implements OnInit {
       '错误',
     );
     this.loading = false;
+  }
+
+  private navigateToDashboardWithRefresh(): void {
+    this.tabReuseService.markForRefresh('/pages/starrocks/dashboard');
+    this.router.navigate(['/pages/starrocks/dashboard']);
   }
 }
 

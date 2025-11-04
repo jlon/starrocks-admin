@@ -25,8 +25,7 @@ const routes: Routes = [
   {
     path: 'dashboard',
     component: DashboardComponent,
-    canActivate: [PermissionGuard],
-    data: { permission: 'menu:dashboard', reuse: true },
+    data: { reuse: true },
   },
   {
     path: 'clusters',

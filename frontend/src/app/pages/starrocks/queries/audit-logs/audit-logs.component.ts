@@ -115,20 +115,12 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
             this.historyCurrentPage = 1;
             this.loadHistoryQueries();
           }
-        } else {
-          // No active cluster - show error and stop loading
-          this.loading = false;
-          this.toastrService.danger(
-            '请先激活一个集群',
-            '未选择集群'
-          );
         }
+        // Backend will handle "no active cluster" case
       });
 
-    // Load queries if clusterId is already set from route
-    if (this.clusterId && this.clusterId > 0) {
-      this.loadHistoryQueries();
-    }
+    // Load data - backend will get active cluster automatically
+    this.loadHistoryQueries();
   }
 
   ngOnDestroy(): void {

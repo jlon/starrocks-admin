@@ -71,7 +71,6 @@ export class VariablesComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    
     // Subscribe to active cluster changes
     this.clusterContext.activeCluster$
       .pipe(takeUntil(this.destroy$))
@@ -85,12 +84,11 @@ export class VariablesComponent implements OnInit, OnDestroy {
             this.loadVariables();
           }
         }
+        // Backend will handle "no active cluster" case
       });
 
-    // Load variables if clusterId is already set
-    if (this.clusterId && this.clusterId > 0) {
-      this.loadVariables();
-    }
+    // Load variables - backend will get active cluster automatically
+    this.loadVariables();
   }
 
   ngOnDestroy(): void {
@@ -99,11 +97,6 @@ export class VariablesComponent implements OnInit, OnDestroy {
   }
 
   loadVariables(): void {
-    if (!this.clusterId || this.clusterId === 0) {
-      this.loading = false;
-      return;
-    }
-
     this.loading = true;
     this.nodeService.getVariables(
       

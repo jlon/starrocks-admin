@@ -121,6 +121,8 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 ('api:clusters:activate', '激活集群', 'api', 'clusters', 'activate', 'PUT /api/clusters/:id/activate'),
 ('api:clusters:active', '获取活跃集群', 'api', 'clusters', 'active', 'GET /api/clusters/active'),
 ('api:clusters:health', '集群健康检查', 'api', 'clusters', 'health', 'GET /api/clusters/:id/health'),
+('api:clusters:health:post', '集群健康检查POST', 'api', 'clusters', 'health:post', 'POST /api/clusters/:id/health'),
+('api:clusters:health:test', '测试集群连接', 'api', 'clusters', 'health:test', 'POST /api/clusters/health/test'),
 -- Cluster Overview
 ('api:clusters:overview', '集群概览', 'api', 'clusters', 'overview', 'GET /api/clusters/overview'),
 ('api:clusters:overview:extended', '扩展集群概览', 'api', 'clusters', 'overview:extended', 'GET /api/clusters/overview/extended'),
@@ -237,9 +239,11 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 -- ==============================================
 -- 14. Insert API Permissions - Auth
 -- ==============================================
+-- Note: These are basic permissions that all logged-in users need
 INSERT OR IGNORE INTO permissions (code, name, type, resource, action, description) VALUES
 ('api:auth:me', '获取当前用户信息', 'api', 'auth', 'me', 'GET /api/auth/me'),
-('api:auth:me:update', '更新当前用户信息', 'api', 'auth', 'me:update', 'PUT /api/auth/me');
+('api:auth:me:update', '更新当前用户信息', 'api', 'auth', 'me:update', 'PUT /api/auth/me'),
+('api:auth:permissions', '获取当前用户权限', 'api', 'auth', 'permissions', 'GET /api/auth/permissions');
 
 -- ==============================================
 -- 15. Assign All Permissions to Admin Role
@@ -270,12 +274,12 @@ LIMIT 1;
 -- Default Data:
 --   - 1 system role (admin)
 --   - 14 menu permissions
---   - 76 API permissions
+--   - 79 API permissions (76 + 3 new: health:post, health:test, auth:permissions)
 --   - Admin role gets ALL permissions
 --   - Default admin user assigned admin role
 --
 -- Permission Coverage:
---   ✓ Cluster CRUD & Health Check
+--   ✓ Cluster CRUD & Health Check (including POST methods and test connection)
 --   ✓ Cluster Overview (8 endpoints)
 --   ✓ Backend/Frontend Management
 --   ✓ Query Management (Catalogs, Databases, Tables)
@@ -285,7 +289,7 @@ LIMIT 1;
 --   ✓ Sessions & Variables
 --   ✓ System Functions (12 operations)
 --   ✓ RBAC Management (Users, Roles, Permissions)
---   ✓ Auth (Me endpoints)
+--   ✓ Auth (Me endpoints + Current User Permissions)
 --
 -- ==============================================
 -- Menu-API Permission Mapping Reference
@@ -402,8 +406,10 @@ LIMIT 1;
 --   └─ api:roles:permissions:update   (PUT /api/roles/:id/permissions)
 --
 -- 【通用权限】(不属于特定菜单)
---   ├─ api:auth:me                    (GET /api/auth/me)
---   └─ api:auth:me:update             (PUT /api/auth/me)
+-- 所有登录用户的基础权限，用于获取和更新个人信息
+--   ├─ api:auth:me                    (GET /api/auth/me) - 查看个人资料
+--   ├─ api:auth:me:update             (PUT /api/auth/me) - 修改头像、邮箱等
+--   └─ api:auth:permissions           (GET /api/auth/permissions) - 获取权限列表（前端必需）
 --
 -- ==============================================
 -- Frontend Auto-Association Logic

@@ -130,20 +130,12 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
             this.clusterId = newClusterId;
             this.loadSystemFunctions();
           }
-        } else {
-          // No active cluster - show error and stop loading
-          this.loading = false;
-          this.toastrService.danger(
-            '请先激活一个集群',
-            '未选择集群'
-          );
         }
+        // Backend will handle "no active cluster" case
       });
 
-    // Load data if clusterId is already set
-    if (this.clusterId > 0) {
-      this.loadSystemFunctions();
-    }
+    // Load data - backend will get active cluster automatically
+    this.loadSystemFunctions();
 
     // 处理查询参数 - 每次查询参数变化时都处理
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(params => {

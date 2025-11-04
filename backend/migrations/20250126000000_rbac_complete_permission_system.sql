@@ -139,8 +139,7 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 ('api:clusters:backends', 'Backend节点列表', 'api', 'clusters', 'backends', 'GET /api/clusters/backends'),
 ('api:clusters:backends:delete', '删除Backend节点', 'api', 'clusters', 'backends:delete', 'DELETE /api/clusters/backends/:host/:port'),
 -- Frontend Operations
-('api:clusters:frontends', 'Frontend节点列表', 'api', 'clusters', 'frontends', 'GET /api/clusters/frontends'),
-('api:clusters:frontends:delete', '删除Frontend节点', 'api', 'clusters', 'frontends:delete', 'DELETE /api/clusters/frontends/:host/:port');
+('api:clusters:frontends', 'Frontend节点列表', 'api', 'clusters', 'frontends', 'GET /api/clusters/frontends');
 
 -- ==============================================
 -- 9. Insert API Permissions - Query Management
@@ -247,43 +246,17 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 -- ==============================================
 -- Admin role gets ALL permissions (both menu and api)
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
-SELECT 1, id FROM permissions;  -- admin role id = 1
+SELECT (SELECT id FROM roles WHERE code='admin'), id FROM permissions;
 
 -- ==============================================
--- 16. Assign Permissions to Operator Role
+-- 16. Assign Admin Role to Default Admin User
 -- ==============================================
--- Operator gets all permissions except user/role management
-INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
-SELECT 2, id FROM permissions 
-WHERE code NOT LIKE 'menu:users%' 
-  AND code NOT LIKE 'menu:roles%'
-  AND code NOT LIKE 'api:users:%'
-  AND code NOT LIKE 'api:roles:%'
-  AND code NOT LIKE 'api:permissions:%';
-
--- ==============================================
--- 17. Assign Permissions to Viewer Role
--- ==============================================
--- Viewer gets only read permissions (list, get, view actions)
-INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
-SELECT 3, id FROM permissions 
-WHERE action IN ('list', 'get', 'view', 'active', 'backends', 'frontends', 'catalogs', 'databases', 
-                 'tables', 'catalogs-databases', 'queries', 'queries:history', 'queries:profile',
-                 'materialized_views', 'materialized_views:get', 'materialized_views:ddl',
-                 'sessions', 'variables', 'overview', 'overview:extended', 'overview:health',
-                 'overview:performance', 'overview:resources', 'overview:data-stats',
-                 'overview:capacity-prediction', 'overview:compaction-details',
-                 'profiles', 'profiles:get', 'system', 'system:runtime_info', 'system:function',
-                 'system-functions', 'menu', 'api', 'tree', 'me', 'health')
-  AND code NOT LIKE 'menu:users%'
-  AND code NOT LIKE 'menu:roles%';
-
--- ==============================================
--- 18. Assign Admin Role to Default Admin User
--- ==============================================
--- Assign admin role to the default admin user (user id = 1)
+-- Assign admin role to the default admin user
 INSERT OR IGNORE INTO user_roles (user_id, role_id)
-SELECT id, 1 FROM users WHERE username = 'admin' LIMIT 1;
+SELECT u.id, (SELECT id FROM roles WHERE code='admin') 
+FROM users u 
+WHERE u.username = 'admin' 
+LIMIT 1;
 
 -- ========================================
 -- MIGRATION COMPLETE
@@ -297,15 +270,13 @@ SELECT id, 1 FROM users WHERE username = 'admin' LIMIT 1;
 -- Default Data:
 --   - 1 system role (admin)
 --   - 14 menu permissions
---   - 77 API permissions
+--   - 76 API permissions
 --   - Admin role gets ALL permissions
---   - Operator role gets all except user/role management
---   - Viewer role gets read-only permissions
 --   - Default admin user assigned admin role
 --
 -- Permission Coverage:
 --   ✓ Cluster CRUD & Health Check
---   ✓ Cluster Overview (7 endpoints)
+--   ✓ Cluster Overview (8 endpoints)
 --   ✓ Backend/Frontend Management
 --   ✓ Query Management (Catalogs, Databases, Tables)
 --   ✓ Query Execution & History
@@ -315,5 +286,196 @@ SELECT id, 1 FROM users WHERE username = 'admin' LIMIT 1;
 --   ✓ System Functions (12 operations)
 --   ✓ RBAC Management (Users, Roles, Permissions)
 --   ✓ Auth (Me endpoints)
+--
+-- ==============================================
+-- Menu-API Permission Mapping Reference
+-- ==============================================
+-- This section documents the relationship between menu permissions
+-- and their corresponding API permissions for proper RBAC enforcement.
+-- The frontend automatically associates API permissions when a menu
+-- is selected during role creation/editing.
+--
+-- 【集群列表】menu:dashboard
+--   ├─ api:clusters:list              (GET /api/clusters)
+--   ├─ api:clusters:create            (POST /api/clusters)
+--   ├─ api:clusters:get               (GET /api/clusters/:id)
+--   ├─ api:clusters:update            (PUT /api/clusters/:id)
+--   ├─ api:clusters:delete            (DELETE /api/clusters/:id)
+--   ├─ api:clusters:activate          (PUT /api/clusters/:id/activate)
+--   ├─ api:clusters:active            (GET /api/clusters/active)
+--   └─ api:clusters:health            (GET /api/clusters/:id/health)
+--
+-- 【集群概览】menu:overview
+--   ├─ api:clusters:overview                   (GET /api/clusters/overview)
+--   ├─ api:clusters:overview:extended          (GET /api/clusters/overview/extended)
+--   ├─ api:clusters:overview:health            (GET /api/clusters/overview/health)
+--   ├─ api:clusters:overview:performance       (GET /api/clusters/overview/performance)
+--   ├─ api:clusters:overview:resources         (GET /api/clusters/overview/resources)
+--   ├─ api:clusters:overview:data-stats        (GET /api/clusters/overview/data-stats)
+--   ├─ api:clusters:overview:capacity-prediction  (GET /api/clusters/overview/capacity-prediction)
+--   └─ api:clusters:overview:compaction-details   (GET /api/clusters/overview/compaction-details)
+--
+-- 【节点管理】menu:nodes (parent)
+--   No direct APIs (parent menu only)
+--
+-- 【Frontend节点】menu:nodes:frontends
+--   └─ api:clusters:frontends         (GET /api/clusters/frontends)
+--
+-- 【Backend节点】menu:nodes:backends
+--   ├─ api:clusters:backends          (GET /api/clusters/backends)
+--   └─ api:clusters:backends:delete   (DELETE /api/clusters/backends/:host/:port)
+--
+-- 【查询管理】menu:queries (parent)
+--   No direct APIs (parent menu only)
+--
+-- 【实时查询】menu:queries:execution
+--   ├─ api:clusters:catalogs          (GET /api/clusters/catalogs)
+--   ├─ api:clusters:databases         (GET /api/clusters/databases)
+--   ├─ api:clusters:tables            (GET /api/clusters/tables)
+--   ├─ api:clusters:catalogs-databases (GET /api/clusters/catalogs-databases)
+--   ├─ api:clusters:queries           (GET /api/clusters/queries)
+--   ├─ api:clusters:queries:execute   (POST /api/clusters/queries/execute)
+--   └─ api:clusters:queries:kill      (DELETE /api/clusters/queries/:id)
+--
+-- 【Profiles】menu:queries:profiles
+--   ├─ api:clusters:profiles          (GET /api/clusters/profiles)
+--   ├─ api:clusters:profiles:get      (GET /api/clusters/profiles/:query_id)
+--   └─ api:clusters:queries:profile   (GET /api/clusters/queries/:query_id/profile)
+--
+-- 【审计日志】menu:queries:audit-logs
+--   └─ api:clusters:queries:history   (GET /api/clusters/queries/history)
+--
+-- 【物化视图】menu:materialized-views
+--   ├─ api:clusters:materialized_views         (GET /api/clusters/materialized_views)
+--   ├─ api:clusters:materialized_views:get     (GET /api/clusters/materialized_views/:mv_name)
+--   ├─ api:clusters:materialized_views:create  (POST /api/clusters/materialized_views)
+--   ├─ api:clusters:materialized_views:update  (PUT /api/clusters/materialized_views/:name)
+--   ├─ api:clusters:materialized_views:delete  (DELETE /api/clusters/materialized_views/:name)
+--   ├─ api:clusters:materialized_views:ddl     (GET /api/clusters/materialized_views/:mv_name/ddl)
+--   ├─ api:clusters:materialized_views:refresh (POST /api/clusters/materialized_views/:mv_name/refresh)
+--   ├─ api:clusters:materialized_views:cancel  (POST /api/clusters/materialized_views/:mv_name/cancel)
+--   └─ api:clusters:materialized_views:alter   (PUT /api/clusters/materialized_views/:mv_name)
+--
+-- 【功能卡片】menu:system
+--   ├─ api:clusters:system                     (GET /api/clusters/system)
+--   ├─ api:clusters:system:runtime_info        (GET /api/clusters/system/runtime_info)
+--   ├─ api:clusters:system:function            (GET /api/clusters/system/:function_name)
+--   ├─ api:clusters:system-functions           (GET /api/clusters/system-functions)
+--   ├─ api:clusters:system-functions:create    (POST /api/clusters/system-functions)
+--   ├─ api:clusters:system-functions:update    (PUT /api/clusters/system-functions/:function_id)
+--   ├─ api:clusters:system-functions:delete    (DELETE /api/clusters/system-functions/:function_id)
+--   ├─ api:clusters:system-functions:orders    (PUT /api/clusters/system-functions/orders)
+--   ├─ api:clusters:system-functions:execute   (POST /api/clusters/system-functions/:function_id/execute)
+--   ├─ api:clusters:system-functions:favorite  (PUT /api/clusters/system-functions/:function_id/favorite)
+--   ├─ api:system-functions:access-time        (PUT /api/system-functions/:function_name/access-time)
+--   └─ api:system-functions:category:delete    (DELETE /api/system-functions/category/:category_name)
+--
+-- 【会话管理】menu:sessions
+--   ├─ api:clusters:sessions          (GET /api/clusters/sessions)
+--   └─ api:clusters:sessions:kill     (DELETE /api/clusters/sessions/:id)
+--
+-- 【变量管理】menu:variables
+--   ├─ api:clusters:variables         (GET /api/clusters/variables)
+--   └─ api:clusters:variables:update  (PUT /api/clusters/variables/:name)
+--
+-- 【用户管理】menu:users
+--   ├─ api:users:list                 (GET /api/users)
+--   ├─ api:users:get                  (GET /api/users/:id)
+--   ├─ api:users:create               (POST /api/users)
+--   ├─ api:users:update               (PUT /api/users/:id)
+--   ├─ api:users:delete               (DELETE /api/users/:id)
+--   ├─ api:users:roles:get            (GET /api/users/:id/roles)
+--   ├─ api:users:roles:assign         (POST /api/users/:id/roles)
+--   └─ api:users:roles:remove         (DELETE /api/users/:id/roles/:role_id)
+--
+-- 【角色管理】menu:roles
+--   ├─ api:roles:list                 (GET /api/roles)
+--   ├─ api:roles:get                  (GET /api/roles/:id)
+--   ├─ api:roles:create               (POST /api/roles)
+--   ├─ api:roles:update               (PUT /api/roles/:id)
+--   ├─ api:roles:delete               (DELETE /api/roles/:id)
+--   ├─ api:permissions:list           (GET /api/permissions)
+--   ├─ api:permissions:menu           (GET /api/permissions/menu)
+--   ├─ api:permissions:api            (GET /api/permissions/api)
+--   ├─ api:permissions:tree           (GET /api/permissions/tree)
+--   ├─ api:roles:permissions:get      (GET /api/roles/:id/permissions)
+--   └─ api:roles:permissions:update   (PUT /api/roles/:id/permissions)
+--
+-- 【通用权限】(不属于特定菜单)
+--   ├─ api:auth:me                    (GET /api/auth/me)
+--   └─ api:auth:me:update             (PUT /api/auth/me)
+--
+-- ==============================================
+-- Frontend Auto-Association Logic
+-- ==============================================
+-- When creating or editing a role in the frontend, the role form dialog
+-- (role-form-dialog.component.ts) automatically associates API permissions
+-- with menu permissions using the following algorithm:
+--
+-- 1. Build mapping during initialization (buildApiAssociations):
+--    - Extract path from permission code (e.g., "menu:nodes:backends" -> "nodes:backends")
+--    - Match API paths to menu paths using multiple scoring rules:
+--      a) Exact match or prefix match: score = 100 + path length
+--      b) All segments match: score = 80 + path length
+--      c) First segment match: score = 70 + first segment length
+--      d) Last segment match: score = 60 + last segment length
+--      e) Contains last segment: score = 50 + last segment length
+--    - Store bidirectional mapping: menuToApis and apiToMenus
+--
+-- 2. On submit (submit method):
+--    - Collect selected menu IDs from the form
+--    - For each selected menu, lookup associated APIs from menuToApis map
+--    - Merge menu IDs + API IDs into final permissionIds array
+--    - Send to backend for persistence
+--
+-- This ensures that when a user selects a menu permission, all related
+-- API permissions are automatically granted, maintaining consistency
+-- between frontend navigation access and backend API access.
+--
+-- ==============================================
+-- Data Cleanup and Fixes (For Existing Databases)
+-- ==============================================
+-- The following section handles cleanup and fixes for databases
+-- that were created with earlier versions of this migration.
+-- All operations are idempotent and safe to run multiple times.
+
+-- ==============================================
+-- 17. Remove Operator and Viewer Roles (if they exist)
+-- ==============================================
+-- Remove role_permissions associations for operator and viewer
+DELETE FROM role_permissions
+WHERE role_id IN (
+    SELECT id FROM roles WHERE code IN ('operator', 'viewer')
+);
+
+-- Remove user_roles associations for operator and viewer
+DELETE FROM user_roles
+WHERE role_id IN (
+    SELECT id FROM roles WHERE code IN ('operator', 'viewer')
+);
+
+-- Delete operator and viewer roles
+DELETE FROM roles WHERE code IN ('operator', 'viewer');
+
+-- ==============================================
+-- 18. Remove Non-existent Permissions
+-- ==============================================
+-- Delete api:clusters:frontends:delete permission (does not exist in code)
+DELETE FROM permissions WHERE code = 'api:clusters:frontends:delete';
+
+-- ==============================================
+-- 19. Ensure Admin Has ALL Permissions
+-- ==============================================
+-- This ensures admin role has all permissions, including any that
+-- might have been missed during initial migration or added later
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+SELECT (SELECT id FROM roles WHERE code='admin'), p.id 
+FROM permissions p
+WHERE NOT EXISTS (
+    SELECT 1 FROM role_permissions rp 
+    WHERE rp.role_id = (SELECT id FROM roles WHERE code='admin') 
+    AND rp.permission_id = p.id
+);
+
 --
 

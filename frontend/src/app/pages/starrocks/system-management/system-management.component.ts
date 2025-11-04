@@ -185,10 +185,7 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
 
   // 加载系统功能（从数据库加载所有功能）
   loadSystemFunctions() {
-    if (!this.clusterId) {
-      return;
-    }
-    
+    // Backend will get active cluster automatically - no need to check clusterId
     this.loading = true;
     
     // 从数据库加载所有功能（包括默认和自定义）
@@ -552,8 +549,7 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
 
   // 加载功能数据
   loadFunctionData(functionName: string, nestedPath?: string) {
-    if (!this.clusterId) return;
-    
+    // Backend will get active cluster automatically - no need to check clusterId
     this.loading = true;
     
     this.nodeService.getSystemFunctionDetail(functionName, nestedPath).subscribe({

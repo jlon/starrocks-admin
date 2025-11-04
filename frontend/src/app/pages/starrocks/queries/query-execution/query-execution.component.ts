@@ -1308,10 +1308,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private loadCatalogs(autoSelectFirst = true): void {
-    if (!this.clusterId) {
-      return;
-    }
-
+    // Backend will get active cluster automatically - no need to check clusterId
     this.loadingCatalogs = true;
     this.nodeService.getCatalogs().subscribe({
       next: (catalogs) => {

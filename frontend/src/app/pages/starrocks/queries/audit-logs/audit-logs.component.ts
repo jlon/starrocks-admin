@@ -164,11 +164,6 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
 
   // Load query history with pagination
   loadHistoryQueries(): void {
-    if (!this.clusterId || this.clusterId === 0) {
-      this.loading = false;
-      return;
-    }
-
     this.loading = true;
     this.nodeService
       .listQueryHistory(this.historyPageSize, (this.historyCurrentPage - 1) * this.historyPageSize)
@@ -235,11 +230,6 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
 
   // Search history methods
   searchHistory(): void {
-    if (!this.clusterId) {
-      return;
-    }
-    
-    // Reload history with current filters
     this.loadHistoryQueries();
   }
 

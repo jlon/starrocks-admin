@@ -145,11 +145,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
   }
 
   loadSessions(): void {
-    if (!this.clusterId || this.clusterId === 0) {
-      this.loading = false;
-      return;
-    }
-
+    // Backend will get active cluster automatically - no need to check clusterId
     this.loading = true;
     this.nodeService.getSessions().subscribe({
       next: (sessions) => {

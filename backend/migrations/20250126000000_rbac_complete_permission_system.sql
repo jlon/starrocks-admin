@@ -528,6 +528,141 @@ WHERE code IN (
     'api:permissions:tree'
 );
 
+-- 19.6 Low-Score Matches - Set parent_id for Stability
+-- These APIs can match via path algorithm but with low scores (<60).
+-- Setting parent_id explicitly ensures correct association and stability.
+
+-- 19.6.1 Queries Execution - Query Operation APIs
+-- These should belong to menu:queries:execution, not parent menu:queries
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:queries:execution')
+WHERE code IN (
+    'api:clusters:queries',           -- Score: 67 on parent, should be on execution
+    'api:clusters:queries:execute',   -- Score: 57
+    'api:clusters:queries:kill'       -- Score: 57
+);
+
+-- 19.6.2 Profiles Menu - Profile Detail API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:queries:profiles')
+WHERE code IN (
+    'api:clusters:profiles:get',      -- Score: 58
+    'api:clusters:queries:profile'    -- Score: 57, should be here not parent
+);
+
+-- 19.6.3 Overview Menu - Extended Overview APIs
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:overview')
+WHERE code IN (
+    'api:clusters:overview:extended',           -- Score: 58
+    'api:clusters:overview:health',             -- Score: 58
+    'api:clusters:overview:performance',        -- Score: 58
+    'api:clusters:overview:resources',          -- Score: 58
+    'api:clusters:overview:data-stats',         -- Score: 58
+    'api:clusters:overview:capacity-prediction',-- Score: 58
+    'api:clusters:overview:compaction-details'  -- Score: 58
+);
+
+-- 19.6.4 System Menu - System Function Management APIs
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system')
+WHERE code IN (
+    'api:clusters:system:function',          -- Score: 56
+    'api:clusters:system:functions',         -- Score: 56
+    'api:clusters:system:functions:create',  -- Score: 56
+    'api:clusters:system:functions:update',  -- Score: 56
+    'api:clusters:system:functions:delete',  -- Score: 56
+    'api:clusters:system:functions:orders',  -- Score: 56
+    'api:clusters:system:functions:execute', -- Score: 56
+    'api:clusters:system:functions:favorite',-- Score: 56
+    'api:clusters:system:runtime_info'       -- Score: 56
+);
+
+-- 19.6.5 Sessions Menu - Session Kill API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:sessions')
+WHERE code = 'api:clusters:sessions:kill';  -- Score: 58
+
+-- 19.6.6 Variables Menu - Variable Update API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:variables')
+WHERE code = 'api:clusters:variables:update';  -- Score: 59
+
+-- 19.6.7 Backend Nodes Menu - Backend Delete API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:nodes:backends')
+WHERE code = 'api:clusters:backends:delete';  -- Score: 58
+
+-- 19.7 Core List/Query APIs - Set parent_id for Base APIs
+-- These are the primary list/query APIs that were previously relying on high-score matching.
+-- Setting parent_id explicitly ensures 100% accuracy and prevents any potential issues.
+
+-- 19.7.1 Backend Nodes Menu - Backend List API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:nodes:backends')
+WHERE code = 'api:clusters:backends';
+
+-- 19.7.2 Frontend Nodes Menu - Frontend List API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:nodes:frontends')
+WHERE code = 'api:clusters:frontends';
+
+-- 19.7.3 Sessions Menu - Session List API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:sessions')
+WHERE code = 'api:clusters:sessions';
+
+-- 19.7.4 Variables Menu - Variable List API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:variables')
+WHERE code = 'api:clusters:variables';
+
+-- 19.7.5 Overview Menu - Base Overview API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:overview')
+WHERE code = 'api:clusters:overview';
+
+-- 19.7.6 Profiles Menu - Profile List API
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:queries:profiles')
+WHERE code = 'api:clusters:profiles';
+
+-- 19.7.7 System Menu - Additional System APIs
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system')
+WHERE code IN (
+    'api:clusters:system',                    -- System info list
+    'api:system:functions:access-time',       -- Update access time
+    'api:system:functions:category:delete'    -- Delete category
+);
+
+-- 19.7.8 Roles Menu - All Role Management APIs
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:roles')
+WHERE code IN (
+    'api:roles:list',
+    'api:roles:get',
+    'api:roles:create',
+    'api:roles:update',
+    'api:roles:delete',
+    'api:roles:permissions:get',
+    'api:roles:permissions:update'
+);
+
+-- 19.7.9 Users Menu - All User Management APIs
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:users')
+WHERE code IN (
+    'api:users:list',
+    'api:users:get',
+    'api:users:create',
+    'api:users:update',
+    'api:users:delete',
+    'api:users:roles:get',
+    'api:users:roles:assign',
+    'api:users:roles:remove'
+);
+
 -- ==============================================
 -- 20. Ensure Admin Has ALL Permissions
 -- ==============================================

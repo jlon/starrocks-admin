@@ -4,7 +4,12 @@
 use crate::middleware::{AuthState, auth::auth_middleware, auth::extract_permission};
 use crate::services::casbin_service::CasbinService;
 use crate::tests::common::{
-    assign_role_to_user, create_test_casbin_service, create_test_db, create_test_user,
+    assign_role_to_user,
+    create_role,
+    create_test_casbin_service,
+    create_test_db,
+    create_test_user,
+    grant_permissions,
     setup_test_data,
 };
 use crate::utils::JwtUtil;
@@ -48,6 +53,24 @@ fn generate_token(jwt_util: &JwtUtil, user_id: i64, username: &str) -> String {
         .expect("Failed to generate token")
 }
 
+async fn create_menu_only_role(pool: &sqlx::SqlitePool) -> i64 {
+    let role_id = create_role(pool, "ops", "Operator", "Operator role", false).await;
+
+    let menu_permission_ids: Vec<i64> = sqlx::query_as::<_, (i64,)>(
+        "SELECT id FROM permissions WHERE code LIKE 'menu:%'",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("Failed to fetch menu permissions")
+    .into_iter()
+    .map(|(id,)| id)
+    .collect();
+
+    grant_permissions(pool, role_id, &menu_permission_ids).await;
+
+    role_id
+}
+
 #[tokio::test]
 async fn test_admin_user_has_all_permissions() {
     let pool = create_test_db().await;
@@ -55,7 +78,8 @@ async fn test_admin_user_has_all_permissions() {
     let jwt_util = Arc::new(JwtUtil::new("test-secret-key-for-admin-test", "24h"));
 
     // Setup test data
-    let (admin_role_id, _operator_role_id, _permission_ids) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
 
     // Reload policies from database
     casbin_service.reload_policies_from_db(&pool).await.unwrap();
@@ -120,7 +144,8 @@ async fn test_operator_user_has_limited_permissions() {
     let jwt_util = Arc::new(JwtUtil::new("test-secret-key-for-operator-test", "24h"));
 
     // Setup test data
-    let (_admin_role_id, operator_role_id, _permission_ids) = setup_test_data(&pool).await;
+    setup_test_data(&pool).await;
+    let operator_role_id = create_menu_only_role(&pool).await;
 
     // Reload policies from database
     casbin_service.reload_policies_from_db(&pool).await.unwrap();
@@ -253,7 +278,7 @@ async fn test_custom_role_with_specific_permissions() {
     let jwt_util = Arc::new(JwtUtil::new("test-secret-key-for-custom-role-test", "24h"));
 
     // Setup base test data
-    let (_admin_role_id, _operator_role_id, _permission_ids) = setup_test_data(&pool).await;
+    setup_test_data(&pool).await;
 
     // Create a custom role with specific permissions
     let custom_role_id: (i64,) = sqlx::query_as(
@@ -349,7 +374,9 @@ async fn test_multiple_users_different_permissions() {
     let jwt_util = Arc::new(JwtUtil::new("test-secret-key-for-multiple-users-test", "24h"));
 
     // Setup test data
-    let (admin_role_id, operator_role_id, _permission_ids) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
+    let operator_role_id = create_menu_only_role(&pool).await;
 
     // Reload policies from database
     casbin_service.reload_policies_from_db(&pool).await.unwrap();
@@ -595,7 +622,8 @@ async fn test_user_permissions_updated_after_role_change() {
     let jwt_util = Arc::new(JwtUtil::new("test-secret-key-for-update-test", "24h"));
 
     // Setup test data
-    let (_admin_role_id, operator_role_id, _permission_ids) = setup_test_data(&pool).await;
+    setup_test_data(&pool).await;
+    let operator_role_id = create_menu_only_role(&pool).await;
 
     // Reload policies from database
     casbin_service.reload_policies_from_db(&pool).await.unwrap();

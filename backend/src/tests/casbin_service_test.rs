@@ -106,7 +106,8 @@ async fn test_casbin_service_reload_policies_from_db() {
     let service = create_test_casbin_service().await;
 
     // Setup test data with roles and permissions
-    let (admin_role_id, _operator_role_id, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
 
     // Create a user and assign admin role
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;

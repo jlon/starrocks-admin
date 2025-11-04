@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { ApiService } from './api.service';
 
 export interface RoleSummary {
@@ -38,6 +39,11 @@ export interface RoleWithPermissions extends RoleSummary {
   permissions: PermissionDto[];
 }
 
+interface RolePermissionsResponse {
+  role: RoleSummary;
+  permissions?: PermissionDto[];
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -65,7 +71,21 @@ export class RoleService {
   }
 
   getRolePermissions(roleId: number): Observable<PermissionDto[]> {
-    return this.api.get<PermissionDto[]>(`/roles/${roleId}/permissions`);
+    return this.api
+      .get<RolePermissionsResponse>(`/roles/${roleId}/permissions`)
+      .pipe(
+        map((response) => {
+          const permissions = response?.permissions;
+
+          if (!Array.isArray(permissions)) {
+            // eslint-disable-next-line no-console
+            console.warn('[RoleService] Unexpected permissions payload', response);
+            return [];
+          }
+
+          return permissions;
+        }),
+      );
   }
 
   updateRolePermissions(roleId: number, permissionIds: number[]): Observable<void> {

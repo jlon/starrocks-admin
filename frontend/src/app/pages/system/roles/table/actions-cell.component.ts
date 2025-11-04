@@ -18,8 +18,8 @@ export interface RoleActionPermissions {
         status="primary"
         nbTooltip="编辑角色"
         nbTooltipPlacement="top"
-        *ngIf="value?.canEdit"
-        (click)="edit.emit(rowData)"
+        [disabled]="!value?.canEdit"
+        (click)="onEditClick($event)"
       >
         <nb-icon icon="edit-2-outline"></nb-icon>
       </button>
@@ -30,8 +30,8 @@ export interface RoleActionPermissions {
         status="danger"
         nbTooltip="删除角色"
         nbTooltipPlacement="top"
-        *ngIf="value?.canDelete"
-        (click)="remove.emit(rowData)"
+        [disabled]="!value?.canDelete"
+        (click)="onDeleteClick($event)"
       >
         <nb-icon icon="trash-2-outline"></nb-icon>
       </button>
@@ -52,4 +52,18 @@ export class RolesActionsCellComponent {
   @Input() rowData!: RoleSummary;
   @Output() edit = new EventEmitter<RoleSummary>();
   @Output() remove = new EventEmitter<RoleSummary>();
+
+  onEditClick(event: Event): void {
+    event.stopPropagation();
+    if (this.rowData && !this.rowData.is_system && this.value?.canEdit) {
+      this.edit.emit(this.rowData);
+    }
+  }
+
+  onDeleteClick(event: Event): void {
+    event.stopPropagation();
+    if (this.rowData && !this.rowData.is_system && this.value?.canDelete) {
+      this.remove.emit(this.rowData);
+    }
+  }
 }

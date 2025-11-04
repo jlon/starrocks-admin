@@ -1,7 +1,12 @@
 use crate::models::{CreateRoleRequest, UpdateRolePermissionsRequest, UpdateRoleRequest};
 use crate::services::role_service::RoleService;
 use crate::services::{casbin_service::CasbinService, permission_service::PermissionService};
-use crate::tests::common::{create_test_casbin_service, create_test_db, setup_test_data};
+use crate::tests::common::{
+    create_role,
+    create_test_casbin_service,
+    create_test_db,
+    setup_test_data,
+};
 use crate::utils::ApiError;
 use std::sync::Arc;
 
@@ -47,6 +52,8 @@ async fn test_list_roles() {
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
     setup_test_data(&pool).await;
+    create_role(&pool, "ops", "Ops", "Ops role", false).await;
+    create_role(&pool, "auditor", "Auditor", "Auditor role", false).await;
 
     let result = service.list_roles().await;
     assert!(result.is_ok());
@@ -77,7 +84,8 @@ async fn test_get_role() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
 
     let result = service.get_role(admin_role_id).await;
     assert!(result.is_ok());
@@ -95,7 +103,8 @@ async fn test_get_role_with_permissions() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
 
     let result = service.get_role_with_permissions(admin_role_id).await;
     assert!(result.is_ok());
@@ -131,7 +140,7 @@ async fn test_create_role_duplicate_code() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    setup_test_data(&pool).await; // Creates admin, operator, viewer
+    setup_test_data(&pool).await; // Creates admin
 
     let req = CreateRoleRequest {
         code: "admin".to_string(), // Duplicate
@@ -155,7 +164,8 @@ async fn test_update_role() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (_, operator_role_id, _) = setup_test_data(&pool).await;
+    let _data = setup_test_data(&pool).await;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
 
     let req = UpdateRoleRequest {
         name: Some("Updated Operator".to_string()),
@@ -177,7 +187,8 @@ async fn test_update_role_name_only() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (_, operator_role_id, _) = setup_test_data(&pool).await;
+    let _data = setup_test_data(&pool).await;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
 
     let req = UpdateRoleRequest { name: Some("New Name".to_string()), description: None };
 
@@ -195,7 +206,8 @@ async fn test_update_role_description_only() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (_, operator_role_id, _) = setup_test_data(&pool).await;
+    let _data = setup_test_data(&pool).await;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
 
     let req = UpdateRoleRequest { name: None, description: Some("Only description".to_string()) };
 
@@ -213,7 +225,8 @@ async fn test_update_role_no_changes() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (_, operator_role_id, _) = setup_test_data(&pool).await;
+    let _data = setup_test_data(&pool).await;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
 
     let req = UpdateRoleRequest { name: None, description: None };
 
@@ -229,7 +242,8 @@ async fn test_update_system_role_name() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
 
     let req = UpdateRoleRequest { name: Some("New Admin Name".to_string()), description: None };
 
@@ -249,7 +263,8 @@ async fn test_update_system_role_description() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
 
     let req = UpdateRoleRequest { name: None, description: Some("New description".to_string()) };
 
@@ -265,7 +280,8 @@ async fn test_delete_role() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (_, operator_role_id, _) = setup_test_data(&pool).await;
+    let _data = setup_test_data(&pool).await;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
 
     let result = service.delete_role(operator_role_id).await;
     assert!(result.is_ok(), "Should delete non-system role");
@@ -283,7 +299,8 @@ async fn test_delete_system_role() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
 
     let result = service.delete_role(admin_role_id).await;
     assert!(result.is_err());
@@ -301,7 +318,9 @@ async fn test_assign_permissions_to_role() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (_, operator_role_id, permission_ids) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
+    let permission_ids = data.permission_ids.clone();
 
     // Assign first 3 permissions
     let req = UpdateRolePermissionsRequest { permission_ids: permission_ids[0..3].to_vec() };
@@ -327,7 +346,9 @@ async fn test_assign_permissions_to_role_replace() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (_, operator_role_id, permission_ids) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
+    let permission_ids = data.permission_ids.clone();
 
     // First assignment
     let req1 = UpdateRolePermissionsRequest { permission_ids: permission_ids[0..3].to_vec() };
@@ -365,7 +386,8 @@ async fn test_assign_permissions_to_role_empty() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (_, operator_role_id, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
 
     let req = UpdateRolePermissionsRequest { permission_ids: vec![] };
 
@@ -389,7 +411,8 @@ async fn test_get_role_permissions() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
 
     let result = service.get_role_permissions(admin_role_id).await;
     assert!(result.is_ok());

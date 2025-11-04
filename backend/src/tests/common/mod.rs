@@ -33,7 +33,12 @@ pub async fn create_test_casbin_service() -> Arc<CasbinService> {
 }
 
 /// Setup test data: roles, permissions, and relationships
-pub async fn setup_test_data(pool: &SqlitePool) -> (i64, i64, Vec<i64>) {
+pub struct TestData {
+    pub admin_role_id: i64,
+    pub permission_ids: Vec<i64>,
+}
+
+pub async fn setup_test_data(pool: &SqlitePool) -> TestData {
     // Clear existing test data first
     sqlx::query("DELETE FROM user_roles")
         .execute(pool)
@@ -85,24 +90,19 @@ pub async fn setup_test_data(pool: &SqlitePool) -> (i64, i64, Vec<i64>) {
     sqlx::query(
         r#"
         INSERT OR IGNORE INTO roles (code, name, description, is_system)
-        VALUES 
-        ('admin', 'Administrator', 'System administrator role', 1),
-        ('operator', 'Operator', 'Operator role', 0),
-        ('viewer', 'Viewer', 'Viewer role', 0)
+        VALUES ('admin', 'Administrator', 'System administrator role', 1)
         "#,
     )
     .execute(pool)
     .await
-    .expect("Failed to insert test roles");
+    .expect("Failed to insert admin role");
 
     // Get role IDs
-    let roles: Vec<(i64, String)> = sqlx::query_as("SELECT id, code FROM roles ORDER BY code")
-        .fetch_all(pool)
+    let (admin_role_id,): (i64,) = sqlx::query_as("SELECT id FROM roles WHERE code = ?")
+        .bind("admin")
+        .fetch_one(pool)
         .await
-        .expect("Failed to fetch roles");
-
-    let admin_role_id = roles.iter().find(|(_, code)| code == "admin").unwrap().0;
-    let operator_role_id = roles.iter().find(|(_, code)| code == "operator").unwrap().0;
+        .expect("Failed to fetch admin role");
 
     // Assign permissions to admin role (all permissions)
     for (perm_id, _) in &permissions {
@@ -114,20 +114,8 @@ pub async fn setup_test_data(pool: &SqlitePool) -> (i64, i64, Vec<i64>) {
             .expect("Failed to assign permissions to admin role");
     }
 
-    // Assign some permissions to operator role (only menu permissions)
-    for (perm_id, code) in &permissions {
-        if code.starts_with("menu:") {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
-                .bind(operator_role_id)
-                .bind(perm_id)
-                .execute(pool)
-                .await
-                .expect("Failed to assign permissions to operator role");
-        }
-    }
-
     let permission_ids: Vec<i64> = permissions.iter().map(|(id, _)| *id).collect();
-    (admin_role_id, operator_role_id, permission_ids)
+    TestData { admin_role_id, permission_ids }
 }
 
 /// Create a test user
@@ -157,4 +145,52 @@ pub async fn assign_role_to_user(pool: &SqlitePool, user_id: i64, role_id: i64) 
         .execute(pool)
         .await
         .expect("Failed to assign role to user");
+}
+
+/// Create a custom role for tests
+pub async fn create_role(
+    pool: &SqlitePool,
+    code: &str,
+    name: &str,
+    description: &str,
+    is_system: bool,
+) -> i64 {
+    sqlx::query("INSERT INTO roles (code, name, description, is_system) VALUES (?, ?, ?, ?)")
+        .bind(code)
+        .bind(name)
+        .bind(description)
+        .bind(if is_system { 1 } else { 0 })
+        .execute(pool)
+        .await
+        .expect("Failed to insert custom role");
+
+    let (id,): (i64,) = sqlx::query_as("SELECT id FROM roles WHERE code = ?")
+        .bind(code)
+        .fetch_one(pool)
+        .await
+        .expect("Failed to fetch custom role id");
+
+    id
+}
+
+/// Grant permissions to role (replaces existing assignments)
+pub async fn grant_permissions(pool: &SqlitePool, role_id: i64, permission_ids: &[i64]) {
+    let mut tx = pool.begin().await.expect("Failed to begin transaction");
+
+    sqlx::query("DELETE FROM role_permissions WHERE role_id = ?")
+        .bind(role_id)
+        .execute(&mut *tx)
+        .await
+        .expect("Failed to clear role permissions");
+
+    for permission_id in permission_ids {
+        sqlx::query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
+            .bind(role_id)
+            .bind(permission_id)
+            .execute(&mut *tx)
+            .await
+            .expect("Failed to grant permission to role");
+    }
+
+    tx.commit().await.expect("Failed to commit permission grants");
 }

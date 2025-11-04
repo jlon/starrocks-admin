@@ -1,5 +1,11 @@
 use crate::services::permission_service::PermissionService;
-use crate::tests::common::{create_test_casbin_service, create_test_db, setup_test_data};
+use crate::tests::common::{
+    create_role,
+    create_test_casbin_service,
+    create_test_db,
+    grant_permissions,
+    setup_test_data,
+};
 
 #[tokio::test]
 async fn test_list_permissions_empty() {
@@ -165,7 +171,8 @@ async fn test_get_user_permissions() {
     let casbin_service = create_test_casbin_service().await;
     let service = PermissionService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
     crate::tests::common::assign_role_to_user(&pool, user_id, admin_role_id).await;
 
@@ -192,7 +199,11 @@ async fn test_get_user_permissions_multiple_roles() {
     let casbin_service = create_test_casbin_service().await;
     let service = PermissionService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, operator_role_id, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
+    let limited_permissions: Vec<i64> = data.permission_ids.iter().take(3).copied().collect();
+    grant_permissions(&pool, operator_role_id, &limited_permissions).await;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
 
     // Assign both roles
@@ -227,7 +238,8 @@ async fn test_check_permission_with_permission() {
     let service = PermissionService::new(pool.clone(), casbin_service.clone());
 
     // Setup and reload policies
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
     crate::tests::common::assign_role_to_user(&pool, user_id, admin_role_id).await;
 
@@ -247,8 +259,8 @@ async fn test_check_permission_different_action() {
     let casbin_service = create_test_casbin_service().await;
     let service = PermissionService::new(pool.clone(), casbin_service.clone());
 
-    setup_test_data(&pool).await;
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
     crate::tests::common::assign_role_to_user(&pool, user_id, admin_role_id).await;
 

@@ -23,6 +23,21 @@ interface MenuPermission {
   code: string;
 }
 
+// Tree node structure for hierarchical permission display (inspired by query-execution tree)
+interface PermissionTreeNode {
+  id: number;
+  name: string;
+  code: string;
+  level: number;
+  icon: string;
+  parentId?: number;
+  children: PermissionTreeNode[];
+  checked: boolean;
+  indeterminate: boolean;
+  expanded: boolean; // Control collapse/expand state
+  permission: PermissionDto; // Reference to original permission
+}
+
 @Component({
   selector: 'ngx-role-form-dialog',
   templateUrl: './role-form-dialog.component.html',
@@ -35,6 +50,13 @@ export class RoleFormDialogComponent implements OnInit {
 
   form: FormGroup;
   menuPermissions: MenuPermission[] = [];
+
+  // Simple tree structure (root nodes only, inspired by query-execution)
+  permissionTree: PermissionTreeNode[] = [];
+  
+  // Node maps for quick lookup
+  private nodeMap = new Map<number, PermissionTreeNode>();
+  private parentMap = new Map<number, PermissionTreeNode>();
 
   // Maps for menu-API associations
   private menuToApis = new Map<number, PermissionDto[]>();
@@ -56,35 +78,27 @@ export class RoleFormDialogComponent implements OnInit {
     // Build menu-API associations
     this.buildApiAssociations();
 
-    // Extract menu permissions and build menu list
+    // Build permission tree structure
+    this.buildPermissionTree();
+
+    // Extract menu permissions (for backwards compatibility)
     this.extractMenuPermissions();
 
-    // Get initially selected menu IDs from permissions
-    const initialMenuIds = this.permissions
-      .filter((perm) => perm.type === 'menu' && perm.selected)
-      .map((perm) => perm.id);
-
-    // Sync APIs with initially selected menus
-    if (initialMenuIds.length > 0) {
-      this.syncApisWithSelectedMenus();
-    }
+    // Sync APIs and reactive form with existing selections
+    this.syncApisWithSelectedMenus();
+    this.updateMenuSelectionControl({ triggerApiSync: false });
 
     if (this.mode === 'edit' && this.role) {
       this.form.patchValue({
         code: this.role.code,
         name: this.role.name,
         description: this.role.description ?? '',
-        menuIds: initialMenuIds,
       });
       this.form.get('code')?.disable();
-    } else {
-      this.form.patchValue({
-        menuIds: initialMenuIds,
-      });
     }
   }
 
-  onMenuSelectionChange(selectedMenuIds: number[]): void {
+  private applyMenuSelectionChanges(selectedMenuIds: number[]): void {
     // Get previous selection to detect changes
     const previousMenuIds = this.form.get('menuIds')?.value || [];
 
@@ -165,17 +179,21 @@ export class RoleFormDialogComponent implements OnInit {
 
     // Extract menu paths from menu codes
     const menuPaths = menus
-      .map((menu) => ({
-        id: menu.id,
-        path: this.extractPermissionPath(menu.code) || menu.code || '',
-      }))
+      .map((menu) => {
+        const path = this.extractPermissionPath(menu.code) || menu.code || '';
+        const segments = path ? path.split(':') : [];
+        return {
+          id: menu.id,
+          path,
+          segments,
+        };
+      })
       .sort((a, b) => b.path.length - a.path.length);
 
     // Build associations between APIs and menus
     apis.forEach((api) => {
       const relatedMenuIds = new Set<number>();
 
-      // Check parent_id relationship
       if (api.parent_id) {
         const parentMenu = menus.find((m) => m.id === api.parent_id);
         if (parentMenu) {
@@ -183,22 +201,60 @@ export class RoleFormDialogComponent implements OnInit {
         }
       }
 
-      // Check code/resource matching
       const apiPath = this.extractPermissionPath(api.code) || api.resource || '';
+      const apiSegments = apiPath ? apiPath.split(':') : [];
+      const apiFirst = apiSegments.length ? apiSegments[0] : undefined;
+      const apiLast = apiSegments.length ? apiSegments[apiSegments.length - 1] : undefined;
+
+      let bestMatchId: number | null = null;
+      let bestScore = -1;
+
       if (apiPath) {
         for (const menuPath of menuPaths) {
           if (!menuPath.path) {
             continue;
           }
-          // Match if API path starts with menu path or equals menu path
+
+          const menuSegments = menuPath.segments;
+          const menuFirst = menuSegments.length ? menuSegments[0] : undefined;
+          const menuLast = menuSegments.length ? menuSegments[menuSegments.length - 1] : undefined;
+
+          let score = 0;
+
           if (apiPath === menuPath.path || apiPath.startsWith(`${menuPath.path}:`)) {
-            relatedMenuIds.add(menuPath.id);
-            break;
+            score = 100 + menuPath.path.length;
+          } else {
+            if (menuSegments.length > 1) {
+              const matchesAll = menuSegments.every((segment) => apiSegments.includes(segment));
+              if (matchesAll) {
+                score = Math.max(score, 80 + menuPath.path.length);
+              }
+            }
+
+            if (menuFirst && apiFirst && menuFirst === apiFirst) {
+              score = Math.max(score, 70 + menuFirst.length);
+            }
+
+            if (menuLast && apiLast && menuLast === apiLast) {
+              score = Math.max(score, 60 + menuLast.length);
+            }
+
+            if (menuLast && apiSegments.includes(menuLast)) {
+              score = Math.max(score, 50 + menuLast.length);
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatchId = menuPath.id;
           }
         }
       }
 
-      // Fallback: check resource matching
+      if (bestMatchId !== null && bestScore > 0) {
+        relatedMenuIds.add(bestMatchId);
+      }
+
       if (!relatedMenuIds.size && api.resource) {
         menus.forEach((menu) => {
           const menuPath = this.extractPermissionPath(menu.code) || '';
@@ -215,7 +271,6 @@ export class RoleFormDialogComponent implements OnInit {
         });
       }
 
-      // Store associations
       if (relatedMenuIds.size > 0) {
         const menuIdArray = Array.from(relatedMenuIds);
         this.apiToMenus.set(api.id, menuIdArray);
@@ -266,6 +321,24 @@ export class RoleFormDialogComponent implements OnInit {
     });
   }
 
+  private updateMenuSelectionControl(options: { triggerApiSync?: boolean } = {}): void {
+    const { triggerApiSync = true } = options;
+    const selectedMenuIds = this.getSelectedMenuIds();
+
+    if (triggerApiSync) {
+      this.applyMenuSelectionChanges(selectedMenuIds);
+    }
+
+    const control = this.form.get('menuIds');
+    control?.setValue(selectedMenuIds, { emitEvent: false });
+  }
+
+  private getSelectedMenuIds(): number[] {
+    return this.permissions
+      .filter((perm) => perm.type === 'menu' && perm.selected)
+      .map((perm) => perm.id);
+  }
+
   private extractPermissionPath(code?: string): string | null {
     if (!code) {
       return null;
@@ -292,5 +365,217 @@ export class RoleFormDialogComponent implements OnInit {
       name: normalizedName,
       description: normalizedDescription,
     };
+  }
+
+  // ============================================
+  // Tree Structure Methods
+  // ============================================
+
+  /**
+   * Build simple hierarchical permission tree (inspired by query-execution tree)
+   * No grouping, just pure hierarchy
+   */
+  private buildPermissionTree(): void {
+    const menuPermissions = this.permissions.filter((perm) => perm.type === 'menu');
+
+    // Step 1: Create tree nodes and build node map
+    menuPermissions.forEach((perm) => {
+      const parts = perm.code.split(':');
+      const level = parts.length - 1; // menu:nodes = 1, menu:nodes:backends = 2
+
+      const node: PermissionTreeNode = {
+        id: perm.id,
+        name: perm.name,
+        code: perm.code,
+        level,
+        icon: this.getPermissionIcon(perm.code),
+        checked: perm.selected || false,
+        indeterminate: false,
+        expanded: false, // Default collapsed
+        children: [],
+        permission: perm,
+      };
+
+      this.nodeMap.set(perm.id, node);
+    });
+
+    // Step 2: Build parent-child relationships and collect root nodes
+    const rootNodes: PermissionTreeNode[] = [];
+    
+    menuPermissions.forEach((perm) => {
+      const node = this.nodeMap.get(perm.id);
+      if (!node) return;
+
+      // Find parent by matching code prefix
+      const parentNode = this.findParentNodeByCode(perm.code);
+      if (parentNode) {
+        node.parentId = parentNode.id;
+        parentNode.children.push(node);
+        this.parentMap.set(node.id, parentNode);
+      } else {
+        // No parent: this is a root node
+        rootNodes.push(node);
+      }
+    });
+
+    // Step 3: Update indeterminate states based on initial selection
+    this.nodeMap.forEach((node) => {
+      if (node.children.length > 0) {
+        this.updateNodeState(node);
+      }
+    });
+
+    // Step 4: Set root nodes (sorted by name)
+    this.permissionTree = rootNodes.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Get icon for permission based on code
+   */
+  private getPermissionIcon(code: string): string {
+    if (code.includes('dashboard')) return 'home-outline';
+    if (code.includes('overview')) return 'bar-chart-outline';
+    if (code.includes('nodes')) return 'cube-outline';
+    if (code.includes('frontends') || code.includes('backends')) return 'hard-drive-outline';
+    if (code.includes('queries') || code.includes('execution') || code.includes('profiles') || code.includes('audit')) return 'search-outline';
+    if (code.includes('materialized-views')) return 'layers-outline';
+    if (code.includes('sessions')) return 'people-outline';
+    if (code.includes('variables')) return 'code-outline';
+    if (code.includes('system')) return 'settings-2-outline';
+    if (code.includes('users')) return 'person-outline';
+    if (code.includes('roles')) return 'shield-outline';
+    return 'folder-outline';
+  }
+
+  /**
+   * Find parent node by matching code prefix
+   */
+  private findParentNodeByCode(code: string): PermissionTreeNode | null {
+    const parts = code.split(':');
+    if (parts.length <= 2) return null; // Top-level node, no parent
+
+    // Try to find parent by removing last part
+    // e.g., menu:nodes:backends -> menu:nodes
+    const parentCode = parts.slice(0, parts.length - 1).join(':');
+
+    for (const node of this.nodeMap.values()) {
+      if (node.code === parentCode) {
+        return node;
+      }
+    }
+
+    return null;
+  }
+
+
+  /**
+   * Handle checkbox change for a tree node
+   */
+  onNodeCheckChange(node: PermissionTreeNode, checked: boolean): void {
+    node.checked = checked;
+    node.indeterminate = false;
+
+    // Update children recursively
+    this.setChildrenChecked(node, checked);
+
+    // Update parent states
+    if (node.parentId) {
+      const parent = this.parentMap.get(node.id);
+      if (parent) {
+        this.updateNodeState(parent);
+      }
+    }
+
+    // Sync to original permissions array
+    this.syncNodeToPermission(node);
+
+    // Reflect menu selection in reactive form
+    this.updateMenuSelectionControl();
+  }
+
+  /**
+   * Toggle node expand/collapse state
+   */
+  toggleNode(node: PermissionTreeNode, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    node.expanded = !node.expanded;
+  }
+
+  /**
+   * Check if node is expandable (has children)
+   */
+  isNodeExpandable(node: PermissionTreeNode): boolean {
+    return node.children && node.children.length > 0;
+  }
+
+  /**
+   * Get node indent based on level (for styling)
+   */
+  getNodeIndent(node: PermissionTreeNode): number {
+    // level 1: 12px, level 2: 32px, level 3: 52px
+    return 12 + (node.level - 1) * 20;
+  }
+
+  /**
+   * Track by function for ngFor optimization
+   */
+  trackNodeById(index: number, node: PermissionTreeNode): number {
+    return node.id;
+  }
+
+  /**
+   * Set all children to checked/unchecked recursively
+   */
+  private setChildrenChecked(node: PermissionTreeNode, checked: boolean): void {
+    node.children.forEach((child) => {
+      child.checked = checked;
+      child.indeterminate = false;
+      this.syncNodeToPermission(child);
+      this.setChildrenChecked(child, checked);
+    });
+  }
+
+  /**
+   * Update node's checked and indeterminate state based on children
+   */
+  private updateNodeState(node: PermissionTreeNode): void {
+    if (node.children.length === 0) return;
+
+    const checkedCount = node.children.filter((c) => c.checked).length;
+    const indeterminateCount = node.children.filter((c) => c.indeterminate).length;
+
+    if (checkedCount === node.children.length) {
+      // All children checked
+      node.checked = true;
+      node.indeterminate = false;
+    } else if (checkedCount > 0 || indeterminateCount > 0) {
+      // Some children checked or indeterminate
+      node.checked = false;
+      node.indeterminate = true;
+    } else {
+      // No children checked
+      node.checked = false;
+      node.indeterminate = false;
+    }
+
+    this.syncNodeToPermission(node);
+
+    // Recursively update parent
+    if (node.parentId) {
+      const parent = this.parentMap.get(node.id);
+      if (parent) {
+        this.updateNodeState(parent);
+      }
+    }
+  }
+
+  /**
+   * Sync tree node state to original permission object
+   */
+  private syncNodeToPermission(node: PermissionTreeNode): void {
+    node.permission.selected = node.checked;
   }
 }

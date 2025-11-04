@@ -14,7 +14,6 @@ import {
 import { PermissionService } from '../../../@core/data/permission.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
-import { RolesSystemBadgeCellComponent } from './table/system-badge-cell.component';
 import { RolesActionsCellComponent, RoleActionPermissions } from './table/actions-cell.component';
 import {
   RoleFormDialogComponent,
@@ -30,6 +29,7 @@ export class RolesComponent implements OnInit, OnDestroy {
   source: LocalDataSource = new LocalDataSource();
   loading = false;
   private destroy$ = new Subject<void>();
+  private rolePermissionCache = new Map<number, number[]>();
 
   private basePermissions: PermissionDto[] = [];
 
@@ -91,30 +91,39 @@ export class RolesComponent implements OnInit, OnDestroy {
 
     forkJoin([
       this.ensurePermissions(),
-      this.roleService.getRolePermissions(role.id),
-    ]).subscribe(([permissions, rolePermissions]) => {
-      const assignedIds = new Set(rolePermissions.map((permission) => permission.id));
-      const prepared = permissions.map((permission) => ({
-        ...permission,
-        selected: assignedIds.has(permission.id),
-      }));
+      this.getRolePermissionIds(role.id),
+    ])
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: ([permissions, rolePermissionIds]) => {
+          const assignedIds = new Set(rolePermissionIds);
+          const prepared = permissions.map((permission) => ({
+            ...permission,
+            selected: assignedIds.has(permission.id),
+          }));
 
-      const dialogRef = this.dialogService.open(RoleFormDialogComponent, {
-        context: {
-          mode: 'edit',
-          role,
-          permissions: prepared,
+          const dialogRef = this.dialogService.open(RoleFormDialogComponent, {
+            context: {
+              mode: 'edit',
+              role,
+              permissions: prepared,
+            },
+            closeOnBackdropClick: false,
+            autoFocus: false,
+          });
+
+          dialogRef.onClose
+            .pipe(takeUntil(this.destroy$))
+            .subscribe((result?: RoleFormDialogResult) => {
+              if (result && result.mode === 'edit') {
+                this.updateRole(role, result);
+              }
+            });
         },
-        closeOnBackdropClick: false,
-        autoFocus: false,
+        error: (error) => {
+          ErrorHandler.handleHttpError(error, this.toastrService);
+        },
       });
-
-      dialogRef.onClose.subscribe((result?: RoleFormDialogResult) => {
-        if (result && result.mode === 'edit') {
-          this.updateRole(role, result);
-        }
-      });
-    });
   }
 
   onDeleteRole(role: RoleSummary): void {
@@ -130,6 +139,7 @@ export class RolesComponent implements OnInit, OnDestroy {
       this.roleService.deleteRole(role.id).subscribe({
         next: () => {
           this.toastrService.success('角色已删除', '成功');
+          this.rolePermissionCache.delete(role.id);
           this.loadRoles();
         },
         error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
@@ -155,8 +165,11 @@ export class RolesComponent implements OnInit, OnDestroy {
         finalize(() => (this.loading = false)),
       )
       .subscribe({
-        next: () => {
+        next: (role) => {
           this.toastrService.success('角色创建成功', '成功');
+          if (role) {
+            this.rolePermissionCache.set(role.id, [...result.permissionIds]);
+          }
           this.loadRoles();
         },
         error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
@@ -176,6 +189,7 @@ export class RolesComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.toastrService.success('角色更新成功', '成功');
+          this.rolePermissionCache.set(role.id, [...result.permissionIds]);
           this.loadRoles();
         },
         error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
@@ -192,8 +206,12 @@ export class RolesComponent implements OnInit, OnDestroy {
     this.settings.columns.actions.onComponentInitFunction = (
       component: RolesActionsCellComponent,
     ) => {
-      component.edit.subscribe((role: RoleSummary) => this.openEditRole(role));
-      component.remove.subscribe((role: RoleSummary) => this.onDeleteRole(role));
+      component.edit
+        .pipe(takeUntil(this.destroy$))
+        .subscribe((role: RoleSummary) => this.openEditRole(role));
+      component.remove
+        .pipe(takeUntil(this.destroy$))
+        .subscribe((role: RoleSummary) => this.onDeleteRole(role));
     };
 
     if ((this.canCreateRole || this.canUpdateRole) && !this.basePermissions.length) {
@@ -240,6 +258,21 @@ export class RolesComponent implements OnInit, OnDestroy {
     );
   }
 
+  private getRolePermissionIds(roleId: number): Observable<number[]> {
+    const cached = this.rolePermissionCache.get(roleId);
+    if (cached) {
+      return of([...cached]);
+    }
+
+    return this.roleService.getRolePermissions(roleId).pipe(
+      map((permissions) => {
+        const ids = permissions.map((permission) => permission.id);
+        this.rolePermissionCache.set(roleId, ids);
+        return [...ids];
+      }),
+    );
+  }
+
   private buildTableSettings(): any {
     return {
       mode: 'external',
@@ -275,10 +308,10 @@ export class RolesComponent implements OnInit, OnDestroy {
         },
         is_system: {
           title: '系统角色',
-          type: 'custom',
-          renderComponent: RolesSystemBadgeCellComponent,
+          type: 'string',
           filter: false,
           sort: false,
+          valuePrepareFunction: (cell: boolean) => cell ? '是' : '否',
         },
         created_at: {
           title: '创建时间',

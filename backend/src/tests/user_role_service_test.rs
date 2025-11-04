@@ -1,6 +1,11 @@
 use crate::models::AssignUserRoleRequest;
 use crate::services::user_role_service::UserRoleService;
-use crate::tests::common::{create_test_casbin_service, create_test_db, setup_test_data};
+use crate::tests::common::{
+    create_role,
+    create_test_casbin_service,
+    create_test_db,
+    setup_test_data,
+};
 use crate::utils::ApiError;
 
 async fn create_test_user_role_service() -> UserRoleService {
@@ -29,7 +34,9 @@ async fn test_get_user_roles() {
     let casbin_service = create_test_casbin_service().await;
     let service = UserRoleService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, operator_role_id, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
 
     crate::tests::common::assign_role_to_user(&pool, user_id, admin_role_id).await;
@@ -47,7 +54,8 @@ async fn test_assign_role_to_user() {
     let casbin_service = create_test_casbin_service().await;
     let service = UserRoleService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
 
     let req = AssignUserRoleRequest { role_id: admin_role_id };
@@ -67,7 +75,8 @@ async fn test_assign_role_to_user_duplicate() {
     let casbin_service = create_test_casbin_service().await;
     let service = UserRoleService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
 
     let req = AssignUserRoleRequest { role_id: admin_role_id };
@@ -111,7 +120,8 @@ async fn test_remove_role_from_user() {
     let casbin_service = create_test_casbin_service().await;
     let service = UserRoleService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
     crate::tests::common::assign_role_to_user(&pool, user_id, admin_role_id).await;
 
@@ -129,7 +139,8 @@ async fn test_remove_role_from_user_not_assigned() {
     let casbin_service = create_test_casbin_service().await;
     let service = UserRoleService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, _, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
 
     let result = service.remove_role_from_user(user_id, admin_role_id).await;
@@ -146,7 +157,9 @@ async fn test_get_user_roles_detailed() {
     let casbin_service = create_test_casbin_service().await;
     let service = UserRoleService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, operator_role_id, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
 
     crate::tests::common::assign_role_to_user(&pool, user_id, admin_role_id).await;
@@ -170,7 +183,9 @@ async fn test_assign_remove_multiple_roles() {
     let casbin_service = create_test_casbin_service().await;
     let service = UserRoleService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, operator_role_id, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
 
     // Assign first role
@@ -203,7 +218,9 @@ async fn test_user_roles_sorted() {
     let casbin_service = create_test_casbin_service().await;
     let service = UserRoleService::new(pool.clone(), casbin_service);
 
-    let (admin_role_id, operator_role_id, _) = setup_test_data(&pool).await;
+    let data = setup_test_data(&pool).await;
+    let admin_role_id = data.admin_role_id;
+    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
     let user_id = crate::tests::common::create_test_user(&pool, "test_user").await;
 
     // Assign in reverse order
@@ -216,7 +233,7 @@ async fn test_user_roles_sorted() {
     // Verify roles are sorted by name
     let roles = service.get_user_roles(user_id).await.unwrap();
     assert_eq!(roles.len(), 2);
-    // admin should come before operator alphabetically
+    // admin should come before ops alphabetically
     assert_eq!(roles[0].code, "admin");
-    assert_eq!(roles[1].code, "operator");
+    assert_eq!(roles[1].code, "ops");
 }

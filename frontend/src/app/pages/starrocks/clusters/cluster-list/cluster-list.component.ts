@@ -31,7 +31,7 @@ export class ClusterListComponent implements OnInit {
     },
     delete: {
       deleteButtonContent: '<i class="nb-trash"></i>',
-      confirmDelete: true,
+      confirmDelete: false,  // Use custom dialog instead of built-in confirm
     },
     pager: {
       display: true,

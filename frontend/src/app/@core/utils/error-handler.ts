@@ -70,7 +70,7 @@ export class ErrorHandler {
   private static getDefaultMessageByStatus(status: number): string {
     const statusMessages: { [key: number]: string } = {
       400: '请求参数有误',
-      401: '未授权，请重新登录',
+      401: '没有权限执行此操作',
       403: '没有权限执行此操作',
       404: '请求的资源不存在',
       500: '服务器内部错误',

@@ -206,7 +206,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
           } else if (err.status === 404) {
             errorMsg = '请先激活一个集群';
           } else if (err.status === 401) {
-            errorMsg = '未授权，请重新登录';
+            errorMsg = '没有权限执行此操作';
           }
           
           this.toastr.danger(errorMsg, '错误');

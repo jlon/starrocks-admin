@@ -9,13 +9,13 @@ import {
 import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AuthService } from '../data/auth.service';
-import { Router } from '@angular/router';
+import { NbToastrService } from '@nebular/theme';
 
 @Injectable()
 export class JwtInterceptor implements HttpInterceptor {
   constructor(
     private authService: AuthService,
-    private router: Router,
+    private toastrService: NbToastrService,
   ) {}
 
   intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
@@ -32,11 +32,11 @@ export class JwtInterceptor implements HttpInterceptor {
     return next.handle(request).pipe(
       catchError((error: HttpErrorResponse) => {
         if (error.status === 401) {
-          // Auto logout if 401 response returned from API
-          this.authService.logout();
-          this.router.navigate(['/auth/login']);
+          const message =
+            error.error?.message || '没有权限执行此操作';
+          this.toastrService.danger(message, '无权限');
         }
-        return throwError(error);
+        return throwError(() => error);
       }),
     );
   }

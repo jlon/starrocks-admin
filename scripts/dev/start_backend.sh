@@ -98,10 +98,6 @@ allow_origin = "http://0.0.0.0:4200"
 [logging]
 level = "debug"
 file = "logs/starrocks-admin.log"
-
-[static_config]
-enabled = false
-web_root = "../build/dist/web"
 EOF
     echo -e "${GREEN}[INFO]${NC} 配置文件已创建: $CONFIG_DIR/config.toml"
     echo -e "${GREEN}[INFO]${NC} 数据库路径: $DB_DIR/starrocks-admin.db"

@@ -67,9 +67,6 @@ jwt_expires_in = "24h"
 level = "info,starrocks_admin_backend=debug"
 file = "logs/starrocks-admin.log"
 
-[static_config]
-enabled = true
-web_root = "web"
 
 # Metrics collector configuration
 [metrics]

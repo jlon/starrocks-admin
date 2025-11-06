@@ -12,11 +12,12 @@ help:
 	@echo "StarRocks Admin - Build Commands:"
 	@echo ""
 	@echo "Build:"
-	@echo "  make build        - Build backend and frontend, then create distribution package"
-	@echo "  make docker-build - Build Docker image"
-	@echo "  make docker-up    - Start Docker container"
-	@echo "  make docker-down  - Stop Docker container"
-	@echo "  make clean        - Clean build artifacts"
+	@echo "  make build              - Build backend and frontend, then create distribution package"
+	@echo "  make docker-build       - Build Docker image"
+	@echo "  make docker-up          - Start Docker container (rebuilds image if needed)"
+	@echo "  make docker-up-no-build - Start Docker container (uses existing image)"
+	@echo "  make docker-down        - Stop Docker container"
+	@echo "  make clean              - Clean build artifacts"
 	@echo ""
 
 # Build both backend and frontend, then create distribution package
@@ -45,11 +46,16 @@ build:
 # Build Docker image
 docker-build:
 	@echo "Building Docker image..."
-	@docker build -f deploy/docker/Dockerfile -t starrocks-admin .
+	@docker build -f deploy/docker/Dockerfile -t starrocks-admin:latest .
 
-# Start Docker container
+# Start Docker container (will rebuild if needed)
 docker-up:
 	@echo "Starting Docker container..."
+	@cd deploy/docker && docker compose up -d --build
+
+# Start Docker container without rebuild (use existing image)
+docker-up-no-build:
+	@echo "Starting Docker container (using existing image)..."
 	@cd deploy/docker && docker compose up -d
 
 # Stop Docker container

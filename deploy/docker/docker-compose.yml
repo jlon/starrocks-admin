@@ -1,11 +1,12 @@
 services:
   starrocks-admin:
+    image: starrocks-admin:latest
     build:
       context: ../../
       dockerfile: deploy/docker/Dockerfile
     container_name: starrocks-admin
     ports:
-      - "8080:8080"
+      - "6060:8080"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

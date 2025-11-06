@@ -1,5 +1,5 @@
 # Multi-stage build for StarRocks Admin
-FROM rust:1.75 as builder
+FROM rust:1.85.0 as builder
 
 # Install Node.js for frontend build
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
@@ -47,7 +47,7 @@ COPY --from=builder /app/backend/target/release/starrocks-admin ./bin/
 COPY --from=builder /app/backend/migrations ./migrations
 
 # Create default config
-RUN echo '[server]\nhost = "0.0.0.0"\nport = 8080\n\n[database]\nurl = "sqlite://data/starrocks-admin.db"\n\n[auth]\njwt_secret = "dev-secret-key-change-in-production"\njwt_expires_in = "24h"\n\n[logging]\nlevel = "info,starrocks_admin_backend=debug"\nfile = "logs/starrocks-admin.log"\n\n[static_config]\nenabled = true\nweb_root = "web"\n\n[metrics]\ninterval_secs = "30s"\nretention_days = "7d"\nenabled = true' > ./conf/config.toml
+RUN echo '[server]\nhost = "0.0.0.0"\nport = 8080\n\n[database]\nurl = "sqlite://data/starrocks-admin.db"\n\n[auth]\njwt_secret = "dev-secret-key-change-in-production"\njwt_expires_in = "24h"\n\n[logging]\nlevel = "info,starrocks_admin_backend=debug"\nfile = "logs/starrocks-admin.log"\n\n[metrics]\ninterval_secs = "30s"\nretention_days = "7d"\nenabled = true' > ./conf/config.toml
 
 # Set permissions
 RUN chown -R starrocks:starrocks /app

@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: starrocks-admin
-  labels:
-    name: starrocks-admin

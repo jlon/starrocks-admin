@@ -3,7 +3,13 @@
 
 /// Extract permission from URI and method
 pub fn extract_permission(method: &str, uri: &str) -> Option<(String, String)> {
+    // Routes that don't require permission check (only require authentication)
+    // These are basic read-only operations that all authenticated users should access
     if uri == "/api/auth/permissions" {
+        return None;
+    }
+    // GET /api/clusters/active - Get current active cluster (basic info for all users)
+    if uri == "/api/clusters/active" && method == "GET" {
         return None;
     }
 

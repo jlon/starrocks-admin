@@ -69,18 +69,21 @@ export class ClusterContextService {
   
   /**
    * Refresh active cluster from backend
+   * Note: We don't check permission here, let the backend decide.
+   * This allows users with page access to see the active cluster name,
+   * even if they don't have explicit 'api:clusters:active' permission.
+   * The backend will return 403 if the user truly doesn't have permission.
    */
   refreshActiveCluster(): void {
-    if (!this.permissionService.hasPermission('api:clusters:active')) {
-      this.activeClusterSubject.next(null);
-      return;
-    }
-    
+    // Always try to get active cluster from backend
+    // Backend will handle permission checking
     this.clusterService.getActiveCluster().pipe(
       tap((cluster) => {
         this.activeClusterSubject.next(cluster);
       }),
       catchError((error) => {
+        // If backend returns 403 or other error, set to null
+        // This is expected for users without permission
         this.activeClusterSubject.next(null);
         return of(null);
       })

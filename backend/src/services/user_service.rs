@@ -20,7 +20,6 @@ struct UserRoleRecord {
     description: Option<String>,
     is_system: bool,
     created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 #[derive(Clone)]

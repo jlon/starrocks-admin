@@ -67,6 +67,4 @@ regex = "1.10"
 casbin = "2.7"
 
 [dev-dependencies]
-# Git hooks management (only install hooks, no runtime dependency)
-cargo-husky = { version = "1", default-features = false, features = ["user-hooks"] }
 

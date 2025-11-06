@@ -77,11 +77,10 @@ impl StarRocksClient {
         };
 
         // If backends list is empty, try compute nodes (shared-data architecture)
-        if let Ok(ref backends) = backends_result {
-            if !backends.is_empty() {
+        if let Ok(ref backends) = backends_result
+            && !backends.is_empty() {
                 return backends_result;
             }
-        }
 
         // Try shared-data architecture (CN nodes for compute-storage separation)
         tracing::info!("No backends found, trying compute nodes for shared-data architecture");

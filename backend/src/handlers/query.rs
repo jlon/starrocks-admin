@@ -154,7 +154,7 @@ pub async fn list_tables(
         Ok((_, rows, _)) => rows
             .into_iter()
             .filter_map(|row| {
-                let name = row.get(0).map(|s| s.trim().to_string()).unwrap_or_default();
+                let name = row.first().map(|s| s.trim().to_string()).unwrap_or_default();
                 if name.is_empty() {
                     None
                 } else {
@@ -195,7 +195,7 @@ pub async fn list_tables(
                 Ok((_, rows)) => rows
                     .into_iter()
                     .filter_map(|row| {
-                        let name = row.get(0).map(|s| s.trim().to_string()).unwrap_or_default();
+                        let name = row.first().map(|s| s.trim().to_string()).unwrap_or_default();
                         if name.is_empty() {
                             return None;
                         }
@@ -223,8 +223,8 @@ pub async fn list_tables(
         }
     };
 
-    if !tables.is_empty() {
-        if let Ok((_, info_rows)) = session
+    if !tables.is_empty()
+        && let Ok((_, info_rows)) = session
             .query_with_params(
                 r#"
                 SELECT 
@@ -247,7 +247,7 @@ pub async fn list_tables(
             let type_map: std::collections::HashMap<_, _> = info_rows
                 .into_iter()
                 .filter_map(|row| {
-                    let name = row.get(0).map(|s| s.trim().to_string())?;
+                    let name = row.first().map(|s| s.trim().to_string())?;
                     let object_type_raw = row.get(1).map(|s| s.trim().to_uppercase())?;
                     let object_type = match object_type_raw.as_str() {
                         "MATERIALIZED_VIEW" => TableObjectType::MaterializedView,
@@ -264,7 +264,6 @@ pub async fn list_tables(
                 }
             }
         }
-    }
 
     tracing::debug!(
         "Database {}{} returned {} tables via MySQL client (with type metadata)",
@@ -515,9 +514,9 @@ fn parse_sql_statements(sql: &str) -> Vec<String> {
     let mut current = String::new();
     let mut in_single_quote = false;
     let mut in_double_quote = false;
-    let mut chars = sql.chars().peekable();
+    let chars = sql.chars().peekable();
 
-    while let Some(ch) = chars.next() {
+    for ch in chars {
         match ch {
             '\'' if !in_double_quote => {
                 in_single_quote = !in_single_quote;

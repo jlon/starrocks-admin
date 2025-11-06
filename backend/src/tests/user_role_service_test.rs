@@ -8,6 +8,7 @@ use crate::tests::common::{
 };
 use crate::utils::ApiError;
 
+#[allow(dead_code)]
 async fn create_test_user_role_service() -> UserRoleService {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;

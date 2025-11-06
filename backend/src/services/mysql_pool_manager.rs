@@ -87,7 +87,7 @@ impl MySQLPoolManager {
             .db_name(None::<String>) // No default database
             .prefer_socket(false) // Disable socket preference for StarRocks compatibility
             .ssl_opts(None::<SslOpts>) // No SSL for now
-            .tcp_keepalive(Some(30_000 as u32)) // 30 seconds
+            .tcp_keepalive(Some(30_000_u32)) // 30 seconds
             .tcp_nodelay(true) // Disable Nagle's algorithm for lower latency
             .pool_opts(
                 mysql_async::PoolOpts::default()

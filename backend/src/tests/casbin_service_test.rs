@@ -167,7 +167,7 @@ async fn test_casbin_service_double_add_policy() {
 
     // Add same policy twice
     let result1 = service.add_policy(1, "test", "action").await.unwrap();
-    let result2 = service.add_policy(1, "test", "action").await.unwrap();
+    let _result2 = service.add_policy(1, "test", "action").await.unwrap();
 
     // First should return true, second might return false (already exists)
     assert!(result1);
@@ -180,7 +180,7 @@ async fn test_casbin_service_double_add_role() {
 
     // Add same role assignment twice
     let result1 = service.add_role_for_user(600, 1).await.unwrap();
-    let result2 = service.add_role_for_user(600, 1).await.unwrap();
+    let _result2 = service.add_role_for_user(600, 1).await.unwrap();
 
     // First should return true, second might return false
     assert!(result1);

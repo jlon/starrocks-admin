@@ -48,7 +48,7 @@ fn test_role_response_from_role() {
     assert_eq!(response.code, "admin");
     assert_eq!(response.name, "Administrator");
     assert_eq!(response.description, Some("Admin role".to_string()));
-    assert_eq!(response.is_system, true);
+    assert!(response.is_system);
     assert_eq!(response.created_at, role.created_at);
 }
 

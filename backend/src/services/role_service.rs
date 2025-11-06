@@ -226,7 +226,7 @@ impl RoleService {
             if let Some(parent_id) = api_perm.parent_id {
                 menu_to_apis
                     .entry(parent_id)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(api_perm.id);
             }
         }
@@ -236,8 +236,8 @@ impl RoleService {
         
         for permission_id in &req.permission_ids {
             // Check if this is a menu permission
-            if let Some(perm) = all_permissions.iter().find(|p| p.id == *permission_id) {
-                if perm.r#type == "menu" {
+            if let Some(perm) = all_permissions.iter().find(|p| p.id == *permission_id)
+                && perm.r#type == "menu" {
                     // Automatically add associated API permissions
                     if let Some(api_ids) = menu_to_apis.get(permission_id) {
                         extended_permission_ids.extend(api_ids.iter());
@@ -249,7 +249,6 @@ impl RoleService {
                         );
                     }
                 }
-            }
         }
 
         // Remove duplicates and sort for consistency

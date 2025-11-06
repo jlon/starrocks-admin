@@ -1643,7 +1643,7 @@ impl OverviewService {
             .filter_map(|row| {
                 if row.len() >= 6 {
                     Some(TopPartitionByScore {
-                        db_name: row.get(0).map(|s| s.to_string()).unwrap_or_default(),
+                        db_name: row.first().map(|s| s.to_string()).unwrap_or_default(),
                         table_name: row.get(1).map(|s| s.to_string()).unwrap_or_default(),
                         partition_name: row.get(2).map(|s| s.to_string()).unwrap_or_default(),
                         max_score: row.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.0),
@@ -1661,7 +1661,7 @@ impl OverviewService {
         let task_stats_query = r#"SHOW PROC '/compactions'"#;
 
         let (_headers, rows) = client
-            .query_raw(&task_stats_query)
+            .query_raw(task_stats_query)
             .await
             .unwrap_or((vec![], vec![]));
 
@@ -1711,8 +1711,7 @@ impl OverviewService {
                             && start_time_str != "NULL"
                             && !finish_time_str.is_empty()
                             && finish_time_str != "NULL"
-                        {
-                            if let (Ok(start_time), Ok(finish_time)) = (
+                            && let (Ok(start_time), Ok(finish_time)) = (
                                 chrono::NaiveDateTime::parse_from_str(
                                     &start_time_str,
                                     "%Y-%m-%d %H:%M:%S",
@@ -1726,7 +1725,6 @@ impl OverviewService {
                                     finish_time.signed_duration_since(start_time).num_seconds();
                                 durations.push(duration);
                             }
-                        }
                     }
                 }
             }

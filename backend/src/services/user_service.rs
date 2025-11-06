@@ -240,11 +240,10 @@ impl UserService {
                 .await?
         };
 
-        if let Some((id,)) = existing {
-            if current_user.map(|uid| uid != id).unwrap_or(true) {
+        if let Some((id,)) = existing
+            && current_user.map(|uid| uid != id).unwrap_or(true) {
                 return Err(ApiError::validation_error("Username already exists"));
             }
-        }
 
         Ok(())
     }

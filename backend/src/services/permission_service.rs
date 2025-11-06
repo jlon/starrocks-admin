@@ -70,7 +70,7 @@ impl PermissionService {
 
             tree_map
                 .entry(perm.parent_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(node);
         }
 

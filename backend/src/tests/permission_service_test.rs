@@ -144,7 +144,7 @@ async fn test_get_permission_tree() {
     assert!(result.is_ok());
     let tree = result.unwrap();
 
-    assert!(tree.len() > 0, "Should return tree structure");
+    assert!(!tree.is_empty(), "Should return tree structure");
 
     // Check if tree structure is correct
     let has_children = tree.iter().any(|node| !node.children.is_empty());

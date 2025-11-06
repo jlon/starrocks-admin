@@ -159,16 +159,14 @@ impl MaterializedViewService {
         // StarRocks returns column name as "Create Materialized View" or "Create View"
         if let Some(row) = results.first() {
             // Try different possible column names
-            if let Some(ddl_val) = row.get("Create Materialized View") {
-                if let Some(ddl) = ddl_val.as_str() {
+            if let Some(ddl_val) = row.get("Create Materialized View")
+                && let Some(ddl) = ddl_val.as_str() {
                     return Ok(ddl.to_string());
                 }
-            }
-            if let Some(ddl_val) = row.get("Create View") {
-                if let Some(ddl) = ddl_val.as_str() {
+            if let Some(ddl_val) = row.get("Create View")
+                && let Some(ddl) = ddl_val.as_str() {
                     return Ok(ddl.to_string());
                 }
-            }
             // If column name doesn't match, try to get the first string value from the row
             if let Some(obj) = row.as_object() {
                 for (_key, value) in obj {

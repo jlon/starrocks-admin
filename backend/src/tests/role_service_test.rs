@@ -1,6 +1,6 @@
 use crate::models::{CreateRoleRequest, UpdateRolePermissionsRequest, UpdateRoleRequest};
 use crate::services::role_service::RoleService;
-use crate::services::{casbin_service::CasbinService, permission_service::PermissionService};
+use crate::services::permission_service::PermissionService;
 use crate::tests::common::{
     create_role,
     create_test_casbin_service,
@@ -61,7 +61,7 @@ async fn test_list_roles() {
     assert!(roles.len() >= 3, "Should return all roles");
 
     // System roles should come first
-    assert_eq!(roles[0].is_system, true, "System roles should be first");
+    assert!(roles[0].is_system, "System roles should be first");
 }
 
 #[tokio::test]
@@ -92,7 +92,7 @@ async fn test_get_role() {
     let role = result.unwrap();
     assert_eq!(role.id, admin_role_id);
     assert_eq!(role.code, "admin");
-    assert_eq!(role.is_system, true);
+    assert!(role.is_system);
 }
 
 #[tokio::test]
@@ -129,7 +129,7 @@ async fn test_create_role() {
     assert_eq!(role.code, "test_role");
     assert_eq!(role.name, "Test Role");
     assert_eq!(role.description, Some("Test description".to_string()));
-    assert_eq!(role.is_system, false);
+    assert!(!role.is_system);
 }
 
 #[tokio::test]
@@ -386,7 +386,7 @@ async fn test_assign_permissions_to_role_empty() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let data = setup_test_data(&pool).await;
+    let _data = setup_test_data(&pool).await;
     let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
 
     let req = UpdateRolePermissionsRequest { permission_ids: vec![] };

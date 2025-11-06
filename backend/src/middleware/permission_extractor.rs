@@ -1,6 +1,5 @@
 /// Permission extraction module for cleaner code organization
 /// Uses strategy pattern to handle different route patterns
-
 /// Extract permission from URI and method
 pub fn extract_permission(method: &str, uri: &str) -> Option<(String, String)> {
     // Routes that don't require permission check (only require authentication)
@@ -16,11 +15,11 @@ pub fn extract_permission(method: &str, uri: &str) -> Option<(String, String)> {
     let path = uri.strip_prefix("/api/").unwrap_or(uri);
     let segments: Vec<&str> = path.split('/').collect();
 
-    let resource = match segments.first()? {
-        &"roles" => "roles",
-        &"permissions" => "permissions",
-        &"users" => "users",
-        &"clusters" => "clusters",
+    let resource = match *(segments.first()?) {
+        "roles" => "roles",
+        "permissions" => "permissions",
+        "users" => "users",
+        "clusters" => "clusters",
         _ => return None,
     };
 
@@ -109,12 +108,14 @@ fn extract_clusters_id_action(segments: &[&str], method: &str) -> Option<String>
 }
 
 /// Extract action for special cluster paths
+type RouteHandler = Box<dyn Fn(&[&str], &str) -> Option<String>>;
+
 fn extract_clusters_special_paths(segments: &[&str], method: &str) -> Option<String> {
     let _second = segments.get(1)?;
     let _len = segments.len();
 
     // Special route handlers
-    let handlers: Vec<Box<dyn Fn(&[&str], &str) -> Option<String>>> = vec![
+    let handlers: Vec<RouteHandler> = vec![
         Box::new(|seg, m| {
             if m == "DELETE" && seg.len() == 4 && seg.get(1) == Some(&"backends") {
                 Some("backends:delete".to_string())
@@ -129,11 +130,10 @@ fn extract_clusters_special_paths(segments: &[&str], method: &str) -> Option<Str
         Box::new(|seg, m| {
             if m == "DELETE" && seg.len() >= 3 && seg.get(1) == Some(&"queries") {
                 // Check if second segment is a special path (history, execute)
-                if let Some(second) = seg.get(2) {
-                    if *second == "history" || *second == "execute" {
+                if let Some(second) = seg.get(2)
+                    && (*second == "history" || *second == "execute") {
                         return None;
                     }
-                }
                 // Path pattern: /clusters/queries/{query_id}
                 // query_id can be any string, not just numbers
                 // When query_id contains colons, it will be split into multiple segments
@@ -150,17 +150,15 @@ fn extract_clusters_special_paths(segments: &[&str], method: &str) -> Option<Str
                 // Path pattern: /clusters/queries/{query_id}/profile
                 // Check if last segment is "profile" (query_id may contain colons and be split)
                 // Exclude special paths like /queries/history/profile (unlikely but safe)
-                if let Some(last) = seg.last() {
-                    if *last == "profile" {
+                if let Some(last) = seg.last()
+                    && *last == "profile" {
                         // Check if second segment is not a special path
-                        if let Some(second) = seg.get(2) {
-                            if *second == "history" || *second == "execute" {
+                        if let Some(second) = seg.get(2)
+                            && (*second == "history" || *second == "execute") {
                                 return None;
                             }
-                        }
                         return Some("queries:profile".to_string());
                     }
-                }
                 None
             } else {
                 None
@@ -192,9 +190,9 @@ fn extract_clusters_special_paths(segments: &[&str], method: &str) -> Option<Str
                 None
             }
         }),
-        Box::new(|seg, m| extract_materialized_views_action(seg, m)),
-        Box::new(|seg, m| extract_variables_action(seg, m)),
-        Box::new(|seg, m| extract_system_functions_action(seg, m)),
+        Box::new(extract_materialized_views_action),
+        Box::new(extract_variables_action),
+        Box::new(extract_system_functions_action),
     ];
 
     for handler in handlers {
@@ -291,8 +289,8 @@ fn extract_action_default(resource: &str, segments: &[&str], method: &str) -> Op
         let second = segments.get(1).copied();
         
         // Check if second segment is a numeric ID
-        if let Some(second_str) = second {
-            if second_str.parse::<i64>().is_ok() {
+        if let Some(second_str) = second
+            && second_str.parse::<i64>().is_ok() {
                 return match method {
                     "GET" => Some("get".to_string()),
                     "PUT" => Some("update".to_string()),
@@ -300,7 +298,6 @@ fn extract_action_default(resource: &str, segments: &[&str], method: &str) -> Op
                     _ => None,
                 };
             }
-        }
 
         // Non-ID path
         match method {

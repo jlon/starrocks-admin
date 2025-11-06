@@ -21,6 +21,10 @@ help:
 
 # Build both backend and frontend, then create distribution package
 build:
+	@echo "Running clippy checks on backend..."
+	@cd $(BACKEND_DIR) && cargo clippy --release --all-targets -- --deny warnings --allow clippy::uninlined-format-args
+	@echo "✓ Clippy checks passed!"
+	@echo ""
 	@echo "Building StarRocks Admin..."
 	@bash build/build-backend.sh
 	@bash build/build-frontend.sh

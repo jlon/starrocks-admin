@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts
+build/
+target/
+frontend/dist/
+frontend/node_modules/
+frontend/.angular/
+
+# Development
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+docs/
+README.md
+LICENSE
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+**/*test*
+**/*spec*
+
+# Scripts (except those needed for build)
+scripts/
+
+# Deploy files (we're already in deploy)
+deploy/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+

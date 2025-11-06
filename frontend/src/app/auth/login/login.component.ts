@@ -58,8 +58,6 @@ export class LoginComponent implements OnInit {
     this.authService.login(this.user).subscribe({
       next: (response) => {
         this.submitted = false;
-        this.messages = ['Successfully logged in!'];
-        this.showMessages = true;
         
         // Handle remember me functionality
         if (this.rememberMe) {
@@ -68,6 +66,7 @@ export class LoginComponent implements OnInit {
           localStorage.removeItem('remembered_username');
         }
         
+        // Show single toast notification for login success
         this.toastrService.success('Welcome back!', 'Login Successful');
         // Navigate to return URL or dashboard after short delay
         setTimeout(() => {
@@ -76,9 +75,12 @@ export class LoginComponent implements OnInit {
       },
       error: (error) => {
         this.submitted = false;
-        this.errors = [error.error?.message || 'Login failed. Please check your credentials.'];
+        // Show error in alert (form validation errors use alert, API errors use alert too for consistency)
+        const errorMessage = error.error?.message || 'Login failed. Please check your credentials.';
+        this.errors = [errorMessage];
         this.showMessages = true;
-        this.toastrService.danger(this.errors[0], 'Login Failed');
+        // Don't show toast for API errors since we already show alert
+        // this.toastrService.danger(errorMessage, 'Login Failed');
       }
     });
   }

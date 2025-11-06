@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: starrocks-admin
+  namespace: starrocks-admin
+  labels:
+    app: starrocks-admin
+spec:
+  serviceName: starrocks-admin
+  replicas: 1  # SQLite only supports single writer, use 1 replica
+  selector:
+    matchLabels:
+      app: starrocks-admin
+  template:
+    metadata:
+      labels:
+        app: starrocks-admin
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: starrocks-admin
+        image: starrocks-admin:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        
+        env:
+        # Override config file settings via environment variables
+        - name: APP_SERVER_HOST
+          value: "0.0.0.0"
+        - name: APP_SERVER_PORT
+          value: "8080"
+        - name: APP_DATABASE_URL
+          value: "sqlite://data/starrocks-admin.db"
+        - name: APP_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: starrocks-admin-secret
+              key: jwt-secret
+        - name: APP_LOG_LEVEL
+          value: "info,starrocks_admin=debug"
+        - name: APP_METRICS_ENABLED
+          value: "true"
+        
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        - name: config
+          mountPath: /app/conf
+          readOnly: true
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30
+      
+      volumes:
+      - name: config
+        configMap:
+          name: starrocks-admin-config
+      - name: logs
+        emptyDir: {}
+  
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app: starrocks-admin
+    spec:
+      accessModes: 
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+      # Uncomment and set storageClassName if needed
+      # storageClassName: fast-ssd
+

@@ -9,6 +9,7 @@ import { ClusterContextService } from '../../../../@core/data/cluster-context.se
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { MetricThresholds, renderMetricBadge } from '../../../../@core/utils/metric-badge';
+import { AuthService } from '../../../../@core/data/auth.service';
 
 @Component({
   selector: 'ngx-audit-logs',
@@ -94,6 +95,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     private toastrService: NbToastrService,
     private clusterContext: ClusterContextService,
     private dialogService: NbDialogService,
+    private authService: AuthService,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);
@@ -151,6 +153,12 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
   startAutoRefresh(): void {
     this.stopAutoRefresh(); // Clear any existing interval
     this.refreshInterval = setInterval(() => {
+      // Stop auto-refresh if user is not authenticated (logged out)
+      if (!this.authService.isAuthenticated()) {
+        this.autoRefresh = false;
+        this.stopAutoRefresh();
+        return;
+      }
       this.loadHistoryQueries();
     }, this.selectedRefreshInterval * 1000);
   }

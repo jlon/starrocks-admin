@@ -21,6 +21,7 @@ import { format } from 'sql-formatter';
 import { trigger, transition, style, animate, state } from '@angular/animations';
 import { renderMetricBadge, MetricThresholds } from '../../../../@core/utils/metric-badge';
 import { ConfirmDialogService } from '../../../../@core/services/confirm-dialog.service';
+import { AuthService } from '../../../../@core/data/auth.service';
 
 type NavNodeType = 'catalog' | 'database' | 'group' | 'table';
 
@@ -290,6 +291,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     private themeService: NbThemeService,
     private dialogService: NbDialogService,
     private confirmDialogService: ConfirmDialogService,
+    private authService: AuthService,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);
@@ -1412,6 +1414,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   startAutoRefresh(): void {
     this.stopAutoRefresh(); // Clear any existing interval
     this.refreshInterval = setInterval(() => {
+      // Stop auto-refresh if user is not authenticated (logged out)
+      if (!this.authService.isAuthenticated()) {
+        this.autoRefresh = false;
+        this.stopAutoRefresh();
+        return;
+      }
       this.loadCurrentTab();
     }, this.selectedRefreshInterval * 1000);
   }

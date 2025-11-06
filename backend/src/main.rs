@@ -1,15 +1,18 @@
 use axum::{
+    body::Body,
+    http::{header, HeaderValue, StatusCode, Uri},
+    response::{IntoResponse, Response},
     Router, middleware as axum_middleware,
     routing::{delete, get, post, put},
 };
 use std::sync::Arc;
-use tower_http::services::ServeDir;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 mod config;
 mod db;
+mod embedded;
 mod handlers;
 mod middleware;
 mod models;
@@ -21,6 +24,7 @@ mod utils;
 mod tests;
 
 use config::Config;
+use embedded::WebAssets;
 use services::{
     AuthService, CasbinService, ClusterService, DataStatisticsService, MetricsCollectorService,
     MySQLPoolManager, OverviewService, PermissionService, RoleService, SystemFunctionService,
@@ -559,23 +563,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health", get(health_check))
         .route("/ready", get(ready_check));
 
-    // Static file serving (if enabled)
+    // Static file serving from embedded assets
     let static_routes = if config.static_config.enabled {
-        tracing::info!(
-            "Static file serving enabled, serving from: {}",
-            config.static_config.web_root
-        );
-        Router::new().nest_service("/", ServeDir::new(&config.static_config.web_root))
+        tracing::info!("Static file serving enabled, serving from embedded assets");
+        Router::new().fallback(serve_static_files)
     } else {
         Router::new()
     };
 
+    // Build the main app router
     let app = Router::new()
         .merge(SwaggerUi::new("/api-docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .merge(public_routes)
         .merge(protected_routes)
         .merge(health_routes)
-        .merge(static_routes)
+        .merge(static_routes); // Must be last to serve as fallback for SPA routes
+    
+    let app = app
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::permissive());
 
@@ -597,4 +601,67 @@ async fn health_check() -> &'static str {
 
 async fn ready_check() -> &'static str {
     "READY"
+}
+
+/// Serve static files from embedded assets
+/// Handles SPA routing by falling back to index.html for non-API routes
+///
+/// Flink-style implementation: backend is path-agnostic,
+/// relies on reverse proxy (Nginx/Traefik) rewrite rules
+async fn serve_static_files(uri: Uri) -> impl IntoResponse {
+    let path = uri.path().trim_start_matches('/');
+    
+    // Don't serve static files for API routes
+    if path.starts_with("api/") || path.starts_with("api-docs/") {
+        return (StatusCode::NOT_FOUND, "Not Found").into_response();
+    }
+    
+    // Try to get the file from embedded assets
+    if let Some(file) = WebAssets::get(path) {
+        let content_type = get_content_type(path);
+        let data: Vec<u8> = file.data.to_vec();
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, content_type)
+            .body(Body::from(data))
+            .unwrap()
+            .into_response();
+    }
+    
+    // For SPA routing, fall back to index.html for any non-API route
+    // Frontend uses relative API paths (./api), so it works with any deployment path
+    if let Some(index) = WebAssets::get("index.html") {
+        let data: Vec<u8> = index.data.to_vec();
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(Body::from(data))
+            .unwrap()
+            .into_response();
+    }
+    
+    (StatusCode::NOT_FOUND, "Not Found").into_response()
+}
+
+/// Get content type based on file extension
+fn get_content_type(path: &str) -> HeaderValue {
+    let ext = path.rsplit('.').next().unwrap_or("");
+    let content_type = match ext {
+        "html" => "text/html; charset=utf-8",
+        "js" => "application/javascript; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "json" => "application/json; charset=utf-8",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "eot" => "application/vnd.ms-fontobject",
+        "otf" => "font/otf",
+        _ => "application/octet-stream",
+    };
+    HeaderValue::from_static(content_type)
 }

@@ -209,8 +209,11 @@ export class UserSettingsComponent implements OnInit {
       },
       error: (error) => {
         this.submitted = false;
-        this.errors = [error.error?.message || '更新失败，请重试'];
-        this.toastrService.danger(this.errors[0], '错误');
+        // Show error in alert (form validation errors use alert, API errors use alert too for consistency)
+        const errorMessage = error.error?.message || '更新失败，请重试';
+        this.errors = [errorMessage];
+        // Don't show toast for API errors since we already show alert
+        // this.toastrService.danger(errorMessage, '错误');
       }
     });
   }

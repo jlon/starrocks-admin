@@ -3,6 +3,7 @@
 #
 # StarRocks Admin - Backend Build Script
 # Builds the Rust backend and outputs to build/dist/
+# Backend embeds frontend assets directly from frontend/dist/
 #
 
 set -e
@@ -23,17 +24,21 @@ echo -e "${GREEN}Building StarRocks Admin Backend${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Clean up old dist directory
-echo -e "${YELLOW}[0/4]${NC} Cleaning old build artifacts..."
-rm -rf "$DIST_DIR"
-
 # Create dist directories
+echo -e "${YELLOW}[0/4]${NC} Creating build directories..."
 mkdir -p "$DIST_DIR/bin"
 mkdir -p "$DIST_DIR/conf"
 mkdir -p "$DIST_DIR/lib"
 mkdir -p "$DIST_DIR/data"
 mkdir -p "$DIST_DIR/logs"
 mkdir -p "$DIST_DIR/migrations"
+
+# Clean old backend artifacts
+echo -e "${YELLOW}[0/4]${NC} Cleaning old backend artifacts..."
+rm -f "$DIST_DIR/bin/"*
+rm -f "$DIST_DIR/conf/"*
+rm -f "$DIST_DIR/lib/"*
+rm -f "$DIST_DIR/migrations/"*
 
 # Build backend
 echo -e "${YELLOW}[1/4]${NC} Compiling Rust backend (release mode)..."
@@ -400,3 +405,4 @@ echo -e "${GREEN}✓ Backend build complete!${NC}"
 echo -e "  Binary: $DIST_DIR/bin/starrocks-admin"
 echo -e "  Startup script: $DIST_DIR/bin/starrocks-admin.sh"
 echo -e "  Config file: $DIST_DIR/conf/config.toml"
+echo -e "  Note: Frontend assets are embedded directly from frontend/dist/"

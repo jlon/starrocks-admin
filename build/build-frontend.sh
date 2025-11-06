@@ -2,7 +2,8 @@
 
 #
 # StarRocks Admin - Frontend Build Script
-# Builds the Angular frontend and outputs to build/dist/web/
+# Builds the Angular frontend and outputs to frontend/dist/
+# Backend will directly embed from frontend/dist/ (no copy needed)
 #
 
 set -e
@@ -10,8 +11,6 @@ set -e
 # Get project root
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
-BUILD_DIR="$PROJECT_ROOT/build"
-DIST_DIR="$BUILD_DIR/dist"
 
 # Colors
 GREEN='\033[0;32m'
@@ -23,21 +22,18 @@ echo -e "${GREEN}Building StarRocks Admin Frontend${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Create web directory
-mkdir -p "$DIST_DIR/web"
-
-# Clean up old frontend build
-echo -e "${YELLOW}[1/3]${NC} Installing frontend dependencies..."
+echo -e "${YELLOW}[1/2]${NC} Installing frontend dependencies..."
 cd "$FRONTEND_DIR"
 npm install
 
-echo -e "${YELLOW}[2/3]${NC} Building Angular frontend (production mode)..."
+echo -e "${YELLOW}[2/2]${NC} Building Angular frontend (production mode)..."
+# SIMPLIFIED: No need to configure BASE_HREF anymore!
+# The backend auto-injects <base href> based on X-Forwarded-Prefix header
+# This makes the same build work for both root (/) and sub-path (/xxx) deployments
+echo "  Building with auto-detection mode (works for any deployment path)"
 npm run build -- --configuration production
-
-# Copy built files
-echo -e "${YELLOW}[3/3]${NC} Copying built frontend files..."
-cp -r dist/* "$DIST_DIR/web/"
 
 echo ""
 echo -e "${GREEN}✓ Frontend build complete!${NC}"
-echo -e "  Output: $DIST_DIR/web/"
+echo -e "  Output: $FRONTEND_DIR/dist/"
+echo -e "  Note: Backend will embed directly from this directory"

@@ -17,6 +17,7 @@ import {
   CompactionDetailStats,
 } from '../../../@core/data/overview.service';
 import { ClusterContextService } from '../../../@core/data/cluster-context.service';
+import { AuthService } from '../../../@core/data/auth.service';
 
 @Component({
   selector: 'ngx-cluster-overview',
@@ -93,6 +94,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
     private router: Router,
     private toastr: NbToastrService,
     private themeService: NbThemeService,
+    private authService: AuthService,
   ) {}
 
   ngOnInit() {
@@ -148,6 +150,12 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
           takeUntil(this.destroy$),
         )
         .subscribe(() => {
+          // Stop auto-refresh if user is not authenticated (logged out)
+          if (!this.authService.isAuthenticated()) {
+            this.autoRefresh = false;
+            this.destroy$.next();
+            return;
+          }
           if (this.autoRefresh) {
             this.loadOverview(false); // silent refresh
           }

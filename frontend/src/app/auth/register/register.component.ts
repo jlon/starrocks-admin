@@ -86,8 +86,7 @@ export class RegisterComponent {
     this.authService.register(registerData).subscribe({
       next: (response) => {
         this.submitted = false;
-        this.messages = ['Registration successful! Redirecting to login...'];
-        this.showMessages = true;
+        // Show single toast notification for registration success
         this.toastrService.success('Please login with your credentials', 'Registration Successful');
         // Navigate to login after short delay
         setTimeout(() => {
@@ -96,9 +95,12 @@ export class RegisterComponent {
       },
       error: (error) => {
         this.submitted = false;
-        this.errors = [error.error?.message || 'Registration failed. Please try again.'];
+        // Show error in alert (form validation errors use alert, API errors use toast)
+        const errorMessage = error.error?.message || 'Registration failed. Please try again.';
+        this.errors = [errorMessage];
         this.showMessages = true;
-        this.toastrService.danger(this.errors[0], 'Registration Failed');
+        // Don't show toast for API errors since we already show alert
+        // this.toastrService.danger(errorMessage, 'Registration Failed');
       }
     });
   }

@@ -1,3 +1,4 @@
+use clap::Parser;
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -61,16 +62,68 @@ pub struct MetricsCollectorConfig {
     pub enabled: bool,
 }
 
+/// Command line arguments for configuration overrides
+#[derive(Parser, Debug, Clone)]
+#[command(name = "starrocks-admin")]
+#[command(version, about = "StarRocks Admin - Cluster Management Platform")]
+pub struct CommandLineArgs {
+    /// Path to configuration file
+    #[arg(long, value_name = "PATH")]
+    pub config: Option<String>,
+
+    /// Server host (overrides config file)
+    #[arg(long, value_name = "HOST")]
+    pub server_host: Option<String>,
+
+    /// Server port (overrides config file)
+    #[arg(long, value_name = "PORT")]
+    pub server_port: Option<u16>,
+
+    /// Database URL (overrides config file)
+    #[arg(long, value_name = "URL")]
+    pub database_url: Option<String>,
+
+    /// JWT secret key (overrides config file)
+    #[arg(long, value_name = "SECRET")]
+    pub jwt_secret: Option<String>,
+
+    /// JWT expiration time (overrides config file, e.g., "24h")
+    #[arg(long, value_name = "DURATION")]
+    pub jwt_expires_in: Option<String>,
+
+    /// Logging level (overrides config file, e.g., "info,starrocks_admin_backend=debug")
+    #[arg(long, value_name = "LEVEL")]
+    pub log_level: Option<String>,
+
+    /// Metrics collection interval (overrides config file, e.g., "30s", "5m", "1h")
+    #[arg(long, value_name = "DURATION")]
+    pub metrics_interval_secs: Option<String>,
+
+    /// Metrics retention days (overrides config file, e.g., "7d", "2w")
+    #[arg(long, value_name = "DAYS")]
+    pub metrics_retention_days: Option<String>,
+
+    /// Enable/disable metrics collector (overrides config file)
+    #[arg(long, value_name = "BOOL")]
+    pub metrics_enabled: Option<bool>,
+}
+
 impl Config {
-    /// Load configuration with environment variable override support
+    /// Load configuration with command line, environment variable, and file support
     ///
-    /// Loading order:
-    /// 1. Load from config.toml file
-    /// 2. Override with environment variables (prefixed with APP_)
-    /// 3. Validate the final configuration
+    /// Loading order (priority from highest to lowest):
+    /// 1. Command line arguments
+    /// 2. Environment variables (prefixed with APP_)
+    /// 3. Configuration file (config.toml)
+    /// 4. Default values
     pub fn load() -> Result<Self, anyhow::Error> {
-        // 1. Load from config file
-        let mut config = if let Some(config_path) = Self::find_config_file() {
+        // Parse command line arguments first
+        let cli_args = CommandLineArgs::parse();
+
+        // 1. Load from config file (use CLI --config if provided, otherwise find default)
+        let config_path = cli_args.config.clone()
+            .or_else(Self::find_config_file);
+        let mut config = if let Some(config_path) = config_path {
             Self::from_toml(&config_path)?
         } else {
             tracing::warn!("Configuration file not found, using defaults");
@@ -80,7 +133,10 @@ impl Config {
         // 2. Override with environment variables
         config.apply_env_overrides();
 
-        // 3. Validate configuration
+        // 3. Override with command line arguments (highest priority)
+        config.apply_cli_overrides(&cli_args);
+
+        // 4. Validate configuration
         config.validate()?;
 
         Ok(config)
@@ -176,6 +232,80 @@ impl Config {
         }
     }
 
+    /// Apply command line argument overrides (highest priority)
+    fn apply_cli_overrides(&mut self, args: &CommandLineArgs) {
+        if let Some(host) = &args.server_host {
+            self.server.host = host.clone();
+            tracing::info!("Override server.host from CLI: {}", self.server.host);
+        }
+
+        if let Some(port) = args.server_port {
+            self.server.port = port;
+            tracing::info!("Override server.port from CLI: {}", self.server.port);
+        }
+
+        if let Some(db_url) = &args.database_url {
+            self.database.url = db_url.clone();
+            tracing::info!("Override database.url from CLI");
+        }
+
+        if let Some(secret) = &args.jwt_secret {
+            self.auth.jwt_secret = secret.clone();
+            tracing::info!("Override auth.jwt_secret from CLI");
+        }
+
+        if let Some(expires) = &args.jwt_expires_in {
+            self.auth.jwt_expires_in = expires.clone();
+            tracing::info!("Override auth.jwt_expires_in from CLI: {}", self.auth.jwt_expires_in);
+        }
+
+        if let Some(level) = &args.log_level {
+            self.logging.level = level.clone();
+            tracing::info!("Override logging.level from CLI: {}", self.logging.level);
+        }
+
+        if let Some(interval) = &args.metrics_interval_secs {
+            match parse_duration_to_secs(interval) {
+                Ok(val) => {
+                    self.metrics.interval_secs = val;
+                    tracing::info!(
+                        "Override metrics.interval_secs from CLI: {}",
+                        self.metrics.interval_secs
+                    );
+                },
+                Err(e) => tracing::warn!(
+                    "Invalid --metrics-interval-secs '{}': {} (keep {})",
+                    interval,
+                    e,
+                    self.metrics.interval_secs
+                ),
+            }
+        }
+
+        if let Some(retention) = &args.metrics_retention_days {
+            match parse_days_to_i64(retention) {
+                Ok(val) => {
+                    self.metrics.retention_days = val;
+                    tracing::info!(
+                        "Override metrics.retention_days from CLI: {}",
+                        self.metrics.retention_days
+                    );
+                },
+                Err(e) => tracing::warn!(
+                    "Invalid --metrics-retention-days '{}': {} (keep {})",
+                    retention,
+                    e,
+                    self.metrics.retention_days
+                ),
+            }
+        }
+
+        if let Some(enabled) = args.metrics_enabled {
+            self.metrics.enabled = enabled;
+            tracing::info!("Override metrics.enabled from CLI: {}", self.metrics.enabled);
+        }
+    }
+
     /// Validate configuration
     fn validate(&self) -> Result<(), anyhow::Error> {
         // Warn if using default JWT secret in production
@@ -229,7 +359,10 @@ impl Config {
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        Self { host: "0.0.0.0".to_string(), port: 8080 }
+        Self { 
+            host: "0.0.0.0".to_string(), 
+            port: 8080,
+        }
     }
 }
 

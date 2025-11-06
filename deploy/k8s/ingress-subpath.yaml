@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: starrocks-admin-config
+  namespace: starrocks-admin
+  labels:
+    app: starrocks-admin
+data:
+  config.toml: |
+    [server]
+    host = "0.0.0.0"
+    port = 8080
+    # IMPORTANT: Set base_path for sub-path deployment
+    # Must match the Ingress path without trailing slash
+    base_path = "/starrocks-admin"
+
+    [database]
+    url = "sqlite://data/starrocks-admin.db"
+
+    [auth]
+    jwt_secret = "will-be-overridden"
+    jwt_expires_in = "24h"
+
+    [logging]
+    level = "info,starrocks_admin=debug"
+    file = "logs/starrocks-admin.log"
+
+    [static_config]
+    enabled = true
+    web_root = "web"
+
+    [metrics]
+    interval_secs = "30s"
+    retention_days = "7d"
+    enabled = true
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: starrocks-admin
+  namespace: starrocks-admin
+  labels:
+    app: starrocks-admin
+  annotations:
+    # Nginx Ingress Controller annotations
+    kubernetes.io/ingress.class: "nginx"
+    
+    # IMPORTANT: Rewrite target for sub-path deployment
+    # $2 captures everything after /starrocks-admin
+    # Nginx will also set X-Forwarded-Prefix=/starrocks-admin automatically
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    
+    # Explicitly set X-Forwarded-Prefix for frontend to detect base path
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Forwarded-Prefix /starrocks-admin;
+    
+    # Proxy settings
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    
+    # TLS/SSL configuration
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: SAMEORIGIN";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+spec:
+  ingressClassName: nginx
+  
+  tls:
+  - hosts:
+    - your-domain.com
+    secretName: starrocks-admin-tls
+  
+  rules:
+  - host: your-domain.com
+    http:
+      paths:
+      # Sub-path deployment: /starrocks-admin(/|$)(.*)
+      # This matches:
+      # - /starrocks-admin
+      # - /starrocks-admin/
+      # - /starrocks-admin/anything/else
+      - path: /starrocks-admin(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: starrocks-admin
+            port:
+              number: 8080
+
+---
+# Example: Multiple applications on same domain
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: multi-app-ingress
+#   namespace: default
+# spec:
+#   ingressClassName: nginx
+#   rules:
+#   - host: your-domain.com
+#     http:
+#       paths:
+#       # App 1: StarRocks Admin at /starrocks-admin
+#       - path: /starrocks-admin(/|$)(.*)
+#         pathType: ImplementationSpecific
+#         backend:
+#           service:
+#             name: starrocks-admin
+#             namespace: starrocks-admin
+#             port:
+#               number: 8080
+#       
+#       # App 2: Kafka UI at /kafka
+#       - path: /kafka(/|$)(.*)
+#         pathType: ImplementationSpecific
+#         backend:
+#           service:
+#             name: kafka-ui
+#             port:
+#               number: 8080
+#       
+#       # App 3: Grafana at /grafana
+#       - path: /grafana(/|$)(.*)
+#         pathType: ImplementationSpecific
+#         backend:
+#           service:
+#             name: grafana
+#             port:
+#               number: 3000
+

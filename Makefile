@@ -21,20 +21,24 @@ help:
 
 # Build both backend and frontend, then create distribution package
 build:
-	@echo "Running clippy checks on backend..."
+	@echo "Building StarRocks Admin..."
+	@echo "Step 1: Building frontend (required for embedding)..."
+	@bash build/build-frontend.sh
+	@echo ""
+	@echo "Step 2: Running clippy checks on backend..."
 	@cd $(BACKEND_DIR) && cargo clippy --release --all-targets -- --deny warnings --allow clippy::uninlined-format-args
 	@echo "✓ Clippy checks passed!"
 	@echo ""
-	@echo "Building StarRocks Admin..."
+	@echo "Step 3: Building backend (with embedded frontend)..."
 	@bash build/build-backend.sh
-	@bash build/build-frontend.sh
 	@echo "Build complete! Output: $(DIST_DIR)"
 	@echo "Creating distribution package..."
 	@TIMESTAMP=$$(date +"%Y%m%d"); \
 	PACKAGE_NAME="starrocks-admin-$$TIMESTAMP.tar.gz"; \
 	PACKAGE_PATH="$(DIST_DIR)/$$PACKAGE_NAME"; \
 	echo "Package name: $$PACKAGE_NAME"; \
-	cd $(DIST_DIR) && tar -czf "$$PACKAGE_NAME" --transform 's,^,starrocks-admin/,' *; \
+	cd $(DIST_DIR) && tar -czf "$$PACKAGE_NAME" --transform 's,^,starrocks-admin/,' bin conf lib data logs migrations 2>/dev/null || \
+	cd $(DIST_DIR) && tar -czf "$$PACKAGE_NAME" --transform 's,^,starrocks-admin/,' bin conf lib data logs migrations; \
 	echo "Package created: $$PACKAGE_PATH"; \
 	echo "To extract: tar -xzf $$PACKAGE_NAME"
 

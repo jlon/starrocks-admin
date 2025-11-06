@@ -7,23 +7,21 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
 
 WORKDIR /app
 
-# Copy backend source
-COPY backend/ ./backend/
-WORKDIR /app/backend
-
-# Build backend
-RUN cargo build --release
-
-# Build frontend
-WORKDIR /app
+# Step 1: Build frontend first (required for embedding)
 COPY frontend/ ./frontend/
 WORKDIR /app/frontend
 
-# Install dependencies and build
+# Install dependencies and build (outputs to frontend/dist)
 RUN npm ci --silent
 RUN npm run build -- --configuration production
-# Clean up dev dependencies to reduce image size
-RUN npm prune --production
+
+# Step 2: Build backend (rust-embed will directly embed from ../frontend/dist)
+WORKDIR /app
+COPY backend/ ./backend/
+WORKDIR /app/backend
+
+# Build backend (rust-embed reads directly from ../frontend/dist, no copy needed)
+RUN cargo build --release
 
 # Final stage
 FROM debian:bookworm-slim
@@ -39,15 +37,17 @@ RUN useradd -r -s /bin/false starrocks
 
 # Create app directory structure
 WORKDIR /app
-RUN mkdir -p bin conf web lib data logs
+RUN mkdir -p bin conf lib data logs
 
 # Copy built artifacts
+# Frontend is embedded in the binary (from frontend/dist during build)
 COPY --from=builder /app/backend/target/release/starrocks-admin ./bin/
-COPY --from=builder /app/frontend/dist/ ./web/
-# Copy database migrations required at runtime
+
+# Copy database migrations (required at runtime)
 COPY --from=builder /app/backend/migrations ./migrations
+
 # Create default config
-RUN echo '[server]\nhost = "0.0.0.0"\nport = 8080\n\n[database]\nurl = "sqlite://data/starrocks-admin.db"\n\n[auth]\njwt_secret = "dev-secret-key-change-in-production"\njwt_expires_in = "24h"\n\n[cors]\nallow_origin = "http://localhost:4200"\n\n[logging]\nlevel = "info,starrocks_admin_backend=debug"\nfile = "logs/starrocks-admin.log"\n\n[static_config]\nenabled = true\nweb_root = "web"' > ./conf/config.toml
+RUN echo '[server]\nhost = "0.0.0.0"\nport = 8080\n\n[database]\nurl = "sqlite://data/starrocks-admin.db"\n\n[auth]\njwt_secret = "dev-secret-key-change-in-production"\njwt_expires_in = "24h"\n\n[logging]\nlevel = "info,starrocks_admin_backend=debug"\nfile = "logs/starrocks-admin.log"\n\n[static_config]\nenabled = true\nweb_root = "web"\n\n[metrics]\ninterval_secs = "30s"\nretention_days = "7d"\nenabled = true' > ./conf/config.toml
 
 # Set permissions
 RUN chown -R starrocks:starrocks /app

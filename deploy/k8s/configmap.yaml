@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: starrocks-admin-config
+  namespace: starrocks-admin
+  labels:
+    app: starrocks-admin
+data:
+  config.toml: |
+    [server]
+    host = "0.0.0.0"
+    port = 8080
+
+    [database]
+    url = "sqlite://data/starrocks-admin.db"
+
+    [auth]
+    # JWT secret will be overridden by environment variable from Secret
+    jwt_secret = "will-be-overridden"
+    jwt_expires_in = "24h"
+
+    [logging]
+    level = "info,starrocks_admin=debug"
+    file = "logs/starrocks-admin.log"
+
+    [static_config]
+    enabled = true
+    web_root = "web"
+
+    [metrics]
+    interval_secs = "30s"
+    retention_days = "7d"
+    enabled = true
+

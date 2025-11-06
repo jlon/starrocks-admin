@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
-import { catchError, tap } from 'rxjs/operators';
+import { catchError, tap, distinctUntilChanged } from 'rxjs/operators';
 import { Cluster, ClusterService } from './cluster.service';
 import { PermissionService } from './permission.service';
+import { AuthService } from './auth.service';
 
 /**
  * Global cluster context service
@@ -31,19 +32,52 @@ export class ClusterContextService {
   // Current active cluster
   private activeClusterSubject: BehaviorSubject<Cluster | null>;
   public activeCluster$: Observable<Cluster | null>;
+  private isRefreshing = false; // Flag to prevent concurrent refresh calls
   
   constructor(
     private clusterService: ClusterService,
     private permissionService: PermissionService,
+    private authService: AuthService,
   ) {
     this.activeClusterSubject = new BehaviorSubject<Cluster | null>(null);
     this.activeCluster$ = this.activeClusterSubject.asObservable();
     
-    // Try to load active cluster from backend on initialization
-    this.refreshActiveCluster();
-
-    this.permissionService.permissions$.subscribe(() => {
+    // Try to load active cluster from backend on initialization (only if authenticated)
+    if (this.authService.isAuthenticated()) {
       this.refreshActiveCluster();
+    }
+
+    // Listen to permission changes (triggers on login/logout)
+    // Use distinctUntilChanged to avoid duplicate calls when permissions array reference changes but content is same
+    this.permissionService.permissions$.pipe(
+      distinctUntilChanged((prev, curr) => prev.length === curr.length && prev.every((p, i) => p.id === curr[i]?.id))
+    ).subscribe(() => {
+      // Only refresh if user is authenticated
+      if (this.authService.isAuthenticated()) {
+        this.refreshActiveCluster();
+      } else {
+        // Clear active cluster when user logs out
+        this.clearActiveCluster();
+      }
+    });
+
+    // Listen to user changes directly to catch logout immediately
+    // Use distinctUntilChanged to avoid duplicate calls when user object reference changes but content is same
+    this.authService.currentUser.pipe(
+      distinctUntilChanged((prev, curr) => {
+        // Compare by user ID, or both null
+        if (!prev && !curr) return true;
+        if (!prev || !curr) return false;
+        return prev.id === curr.id;
+      })
+    ).subscribe((user) => {
+      if (!user) {
+        // User logged out, clear active cluster immediately
+        this.clearActiveCluster();
+      } else if (this.authService.isAuthenticated()) {
+        // User logged in, refresh active cluster
+        this.refreshActiveCluster();
+      }
     });
   }
   
@@ -75,16 +109,36 @@ export class ClusterContextService {
    * The backend will return 403 if the user truly doesn't have permission.
    */
   refreshActiveCluster(): void {
+    // Don't refresh if user is not authenticated (logged out)
+    if (!this.authService.isAuthenticated()) {
+      this.clearActiveCluster();
+      return;
+    }
+    
+    // Prevent concurrent refresh calls to avoid duplicate requests
+    if (this.isRefreshing) {
+      return;
+    }
+    
+    this.isRefreshing = true;
+    
     // Always try to get active cluster from backend
     // Backend will handle permission checking
     this.clusterService.getActiveCluster().pipe(
       tap((cluster) => {
         this.activeClusterSubject.next(cluster);
+        this.isRefreshing = false;
       }),
       catchError((error) => {
-        // If backend returns 403 or other error, set to null
-        // This is expected for users without permission
-        this.activeClusterSubject.next(null);
+        this.isRefreshing = false;
+        // If backend returns 401 (unauthorized) or 403 (forbidden), clear active cluster
+        // This is expected when user logs out or doesn't have permission
+        if (error.status === 401 || error.status === 403) {
+          this.clearActiveCluster();
+        } else {
+          // For other errors, keep current state
+          this.activeClusterSubject.next(null);
+        }
         return of(null);
       })
     ).subscribe();

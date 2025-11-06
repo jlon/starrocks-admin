@@ -10,6 +10,7 @@ import { NodeService, Session } from '../../../@core/data/node.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { MetricThresholds, renderMetricBadge } from '../../../@core/utils/metric-badge';
 import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
+import { AuthService } from '../../../@core/data/auth.service';
 
 @Component({
   selector: 'ngx-sessions',
@@ -109,6 +110,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
     private confirmDialogService: ConfirmDialogService,
     private clusterContext: ClusterContextService,
     private nodeService: NodeService,
+    private authService: AuthService,
   ) {
     // Try to get clusterId from route first
     // Get clusterId from ClusterContextService
@@ -223,6 +225,12 @@ export class SessionsComponent implements OnInit, OnDestroy {
   startAutoRefresh(): void {
     this.stopAutoRefresh(); // Clear any existing interval
     this.refreshInterval = setInterval(() => {
+      // Stop auto-refresh if user is not authenticated (logged out)
+      if (!this.authService.isAuthenticated()) {
+        this.autoRefresh = false;
+        this.stopAutoRefresh();
+        return;
+      }
       this.loadSessions();
     }, this.selectedRefreshInterval * 1000);
   }

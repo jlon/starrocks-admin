@@ -106,20 +106,12 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
             this.clusterId = newClusterId;
             this.loadProfiles();
           }
-        } else {
-          // No active cluster - show error and stop loading
-          this.loading = false;
-          this.toastrService.danger(
-            '请先激活一个集群',
-            '未选择集群'
-          );
         }
+        // Backend will handle "no active cluster" case
       });
 
-    // Load profiles if clusterId is already set from route
-    if (this.clusterId && this.clusterId > 0) {
-      this.loadProfiles();
-    }
+    // Load data - backend will get active cluster automatically
+    this.loadProfiles();
   }
 
   ngOnDestroy(): void {

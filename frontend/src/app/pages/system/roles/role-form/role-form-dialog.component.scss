@@ -1,0 +1,331 @@
+@import '../../../../@theme/styles/themes';
+
+@include nb-install-component() {
+  :host {
+    display: block;
+    width: 60rem;
+    max-width: calc(100vw - 2rem);
+    min-width: 48rem;
+  }
+
+  .role-dialog {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--nb-space-md);
+    padding-bottom: var(--nb-space-md);
+
+    h5 {
+      margin: 0;
+      font-weight: 600;
+      font-size: 1.125rem;
+    }
+  }
+
+  .dialog-subtitle {
+    margin: 0;
+    margin-top: var(--nb-space-xs);
+    color: nb-theme(text-hint-color);
+    font-size: 0.875rem;
+  }
+
+  .role-form {
+    padding: var(--nb-space-md) 0;
+  }
+
+  // Left-Right Layout
+  .form-layout {
+    display: grid;
+    grid-template-columns: minmax(14rem, 18rem) minmax(17rem, 1fr);
+    gap: 1.25rem;
+    align-items: stretch;
+  }
+
+  // Basic Info Section (Left)
+  .basic-info-section {
+    width: 100%;
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    gap: 1rem;
+    height: 100%;
+  }
+
+  .basic-info-section .form-group:last-child {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .basic-info-section .form-group:last-child textarea {
+    flex: 1 1 auto;
+    min-height: 8rem;
+  }
+
+  // Permission Section (Right) - Responsive width
+  .permission-section {
+    width: 100%;
+    min-width: 17rem;
+    max-width: 100%;
+
+    .section-label {
+      display: block;
+      margin-bottom: 0.75rem;
+      font-weight: 600;
+      font-size: 0.9375rem;
+      color: nb-theme(text-basic-color);
+    }
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    .label {
+      font-weight: 500;
+      font-size: 0.875rem;
+      color: nb-theme(text-basic-color);
+      line-height: 1.25;
+    }
+
+    nb-form-field {
+      width: 100%;
+      margin-bottom: 0;
+
+      // Fix nb-select prefix icon spacing to match nbInput (ngx-admin native spacing)
+      nb-select {
+        ::ng-deep {
+          button {
+            padding-left: 2.75rem !important;
+          }
+          
+          .select-placeholder,
+          .select-text {
+            padding-left: 0 !important;
+          }
+        }
+      }
+    }
+
+    .caption {
+      display: block;
+      margin-top: var(--nb-space-xs);
+      font-size: 0.75rem;
+      line-height: 1.4;
+      min-height: 1.2rem;
+
+      &.status-danger {
+        color: nb-theme(color-danger-default);
+      }
+
+      &.status-hint {
+        color: nb-theme(text-hint-color);
+      }
+    }
+  }
+
+  // ============================================
+  // Permission Tree Styles (Inspired by query-execution tree)
+  // ============================================
+
+  .permission-tree-container {
+    width: 100%;
+    min-width: 17rem;
+    background: nb-theme(background-basic-color-1);
+    border: 1px solid nb-theme(border-basic-color-3);
+    border-radius: nb-theme(radius);
+    overflow: hidden;
+  }
+
+  // Tree scroll container
+  .tree-scroll {
+    max-height: 21rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0.5rem;
+    width: 100%;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: nb-theme(background-basic-color-2);
+      border-radius: 3px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: nb-theme(border-basic-color-4);
+      border-radius: 3px;
+      
+      &:hover {
+        background: nb-theme(border-basic-color-5);
+      }
+    }
+  }
+
+  // Simple tree structure (no accordion)
+  .permission-tree {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .tree-node {
+    list-style: none;
+
+    .tree-node-row {
+      display: grid;
+      grid-template-columns: 1.5rem minmax(0, 1fr) 1.5rem;
+      align-items: center;
+      column-gap: 0.5rem;
+      padding: 0.25rem 0.75rem;
+      margin: 0.125rem 0;
+      border-radius: nb-theme(radius);
+      transition: all 0.15s ease;
+      cursor: pointer;
+
+      &:hover {
+        background: nb-theme(background-basic-color-2);
+      }
+
+      // Node icon (left)
+      .node-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.25rem;
+        flex-shrink: 0;
+
+        nb-icon {
+          font-size: 1.125rem;
+          color: nb-theme(color-primary-default);
+          opacity: 0.8;
+        }
+      }
+
+      // Checkbox with text (center, takes remaining space)
+      .node-checkbox {
+        min-width: 0;
+        margin: 0;
+
+        ::ng-deep {
+          .label {
+            margin: 0;
+            line-height: 1.4;
+            font-size: 0.875rem;
+            color: nb-theme(text-basic-color);
+            display: flex;
+            align-items: flex-start;
+          }
+
+          .customised-control {
+            align-items: flex-start;
+          }
+
+          .customised-control-input {
+            margin-right: 0.5rem;
+            margin-top: 0.125rem;
+            flex-shrink: 0;
+          }
+
+          .node-text {
+            word-break: break-word;
+            white-space: normal;
+            flex: 1;
+          }
+        }
+      }
+
+      // Toggle button (expand/collapse, right side)
+      .toggle-btn {
+        padding: 0;
+        width: 1.5rem;
+        height: 1.5rem;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+        flex-shrink: 0;
+        justify-self: end;
+
+        nb-icon {
+          font-size: 1rem;
+          color: nb-theme(text-hint-color);
+        }
+
+        &:hover {
+          background: nb-theme(background-basic-color-3);
+          border-radius: nb-theme(radius-sm);
+        }
+      }
+    }
+  }
+
+  .tree-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  // Empty state
+  .empty-tree {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1.5rem;
+    color: nb-theme(text-hint-color);
+    text-align: center;
+
+    nb-icon {
+      font-size: 2.5rem;
+      opacity: 0.3;
+      margin-bottom: 0.75rem;
+    }
+
+    span {
+      font-size: 0.875rem;
+    }
+  }
+
+  .footer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--nb-space-md);
+    padding: var(--nb-space-md) var(--nb-space-lg);
+    background: nb-theme(background-basic-color-1);
+  }
+
+  // Responsive adjustments
+  @media (max-width: 1024px) {
+    :host {
+      width: calc(100vw - 2rem);
+      min-width: calc(100vw - 2rem);
+    }
+
+    .form-layout {
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+    }
+
+    .permission-section {
+      min-width: 100%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .role-form {
+      padding: var(--nb-space-md);
+    }
+
+    .basic-info-section {
+      gap: 0.875rem;
+    }
+  }
+}

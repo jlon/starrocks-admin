@@ -6,6 +6,8 @@ import { NbToastrService } from '@nebular/theme';
 import { ClusterService, Cluster, ClusterHealth } from '../../../@core/data/cluster.service';
 import { ClusterContextService } from '../../../@core/data/cluster-context.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
+import { PermissionService } from '../../../@core/data/permission.service';
+import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 
 interface ClusterCard {
   cluster: Cluster;
@@ -23,6 +25,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
   clusters: ClusterCard[] = [];
   loading = true;
   activeCluster: Cluster | null = null;
+  hasClusterAccess = false;
+  canListClusters = false;
+  canCreateCluster = false;
+  canUpdateCluster = false;
+  canDeleteCluster = false;
+  canActivateCluster = false;
+  canViewActiveCluster = false;
+  canViewClusterDetails = false;
+  canViewBackends = false;
+  canViewFrontends = false;
+  canViewQueries = false;
+  private permissionSignature = '';
   private destroy$ = new Subject<void>();
 
   constructor(
@@ -30,10 +44,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private clusterContext: ClusterContextService,
     private toastrService: NbToastrService,
     private router: Router,
+    private permissionService: PermissionService,
+    private confirmDialogService: ConfirmDialogService,
   ) {}
 
   ngOnInit(): void {
-    // Subscribe to active cluster changes
     this.clusterContext.activeCluster$
       .pipe(takeUntil(this.destroy$))
       .subscribe(cluster => {
@@ -41,7 +56,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.updateActiveStatus();
       });
 
-    this.loadClusters();
+    this.permissionService.permissions$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.applyPermissionState());
+
+    this.applyPermissionState();
   }
 
   ngOnDestroy(): void {
@@ -50,6 +69,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   loadClusters(): void {
+    if (!this.canListClusters) {
+      this.loading = false;
+      return;
+    }
+
     this.loading = true;
     this.clusterService.listClusters().subscribe({
       next: (clusters) => {
@@ -91,6 +115,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleActiveCluster(clusterCard: ClusterCard) {
+    if (!this.canActivateCluster) {
+      this.toastrService.warning('您没有激活集群的权限', '提示');
+      return;
+    }
+
     if (clusterCard.isActive) {
       this.toastrService.warning('此集群已是活跃状态', '提示');
       return;
@@ -103,6 +132,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   loadHealthStatus(): void {
+    if (!this.hasClusterAccess) {
+      return;
+    }
+
     this.clusters.forEach((clusterCard) => {
       clusterCard.loading = true;
       this.clusterService.getHealth(clusterCard.cluster.id).subscribe({
@@ -130,42 +163,79 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  navigateToCluster(): void {
-    this.router.navigate(['/pages/starrocks/clusters']);
+  navigateToCluster(clusterId?: number): void {
+    if (!this.canViewClusterDetails) {
+      this.toastrService.warning('您没有查看集群详情的权限', '提示');
+      return;
+    }
+    const commands = clusterId ? ['/pages/starrocks/clusters', clusterId] : ['/pages/starrocks/clusters'];
+    this.router.navigate(commands);
   }
 
-  navigateToBackends(): void {
-    this.router.navigate(['/pages/starrocks/backends']);
+  navigateToBackends(clusterId?: number): void {
+    if (!this.canViewBackends) {
+      this.toastrService.warning('您没有查看 Backend 节点的权限', '提示');
+      return;
+    }
+    const commands = clusterId ? ['/pages/starrocks/backends', clusterId] : ['/pages/starrocks/backends'];
+    this.router.navigate(commands);
   }
 
-  navigateToFrontends(): void {
-    this.router.navigate(['/pages/starrocks/frontends']);
+  navigateToFrontends(clusterId?: number): void {
+    if (!this.canViewFrontends) {
+      this.toastrService.warning('您没有查看 Frontend 节点的权限', '提示');
+      return;
+    }
+    const commands = clusterId ? ['/pages/starrocks/frontends', clusterId] : ['/pages/starrocks/frontends'];
+    this.router.navigate(commands);
   }
 
-  navigateToQueries(): void {
-    this.router.navigate(['/pages/starrocks/queries/execution']);
+  navigateToQueries(clusterId?: number): void {
+    if (!this.canViewQueries) {
+      this.toastrService.warning('您没有查看查询信息的权限', '提示');
+      return;
+    }
+    const commands = clusterId ? ['/pages/starrocks/queries/execution', clusterId] : ['/pages/starrocks/queries/execution'];
+    this.router.navigate(commands);
   }
 
   addCluster(): void {
+    if (!this.canCreateCluster) {
+      this.toastrService.warning('您没有创建集群的权限', '提示');
+      return;
+    }
     this.router.navigate(['/pages/starrocks/clusters/new']);
   }
 
   editCluster(cluster: Cluster): void {
+    if (!this.canUpdateCluster) {
+      this.toastrService.warning('您没有编辑集群的权限', '提示');
+      return;
+    }
     this.router.navigate(['/pages/starrocks/clusters', cluster.id, 'edit']);
   }
 
   deleteCluster(cluster: Cluster): void {
-    if (confirm(`确定要删除集群 "${cluster.name}" 吗？`)) {
-      this.clusterService.deleteCluster(cluster.id).subscribe({
-        next: () => {
-          this.toastrService.success(`集群 "${cluster.name}" 已删除`, '成功');
-          this.loadClusters(); // 重新加载集群列表
-        },
-        error: (error) => {
-          this.handleError(error);
-        }
-      });
+    if (!this.canDeleteCluster) {
+      this.toastrService.warning('您没有删除集群的权限', '提示');
+      return;
     }
+    this.confirmDialogService.confirmDelete(cluster.name)
+      .subscribe(confirmed => {
+        if (!confirmed) {
+          return;
+        }
+
+        this.clusterService.deleteCluster(cluster.id).subscribe({
+          next: () => {
+            this.toastrService.success(`集群 "${cluster.name}" 已删除`, '成功');
+            this.loadClusters();
+          },
+          error: (error) => {
+            this.handleError(error);
+          },
+        });
+      });
   }
 
   private handleError(error: any): void {
@@ -174,6 +244,59 @@ export class DashboardComponent implements OnInit, OnDestroy {
       ErrorHandler.extractErrorMessage(error),
       '错误',
     );
+  }
+
+  private applyPermissionState(): void {
+    const canList = this.permissionService.hasPermission('api:clusters:list');
+    const canCreate = this.permissionService.hasPermission('api:clusters:create');
+    const canUpdate = this.permissionService.hasPermission('api:clusters:update');
+    const canDelete = this.permissionService.hasPermission('api:clusters:delete');
+    const canActivate = this.permissionService.hasPermission('api:clusters:activate');
+    const canViewActive = this.permissionService.hasPermission('api:clusters:active');
+    const canViewDetail = this.permissionService.hasPermission('api:clusters:get');
+    const canViewBackends = this.permissionService.hasPermission('api:clusters:backends');
+    const canViewFrontends = this.permissionService.hasPermission('api:clusters:frontends');
+    const canViewQuery = this.permissionService.hasPermission('api:clusters:queries');
+
+    const signature = [
+      canList,
+      canCreate,
+      canUpdate,
+      canDelete,
+      canActivate,
+      canViewActive,
+      canViewDetail,
+      canViewBackends,
+      canViewFrontends,
+      canViewQuery,
+    ]
+      .map(flag => (flag ? '1' : '0'))
+      .join('');
+
+    const signatureChanged = signature !== this.permissionSignature;
+    this.permissionSignature = signature;
+
+    this.canListClusters = canList;
+    this.canCreateCluster = canCreate;
+    this.canUpdateCluster = canUpdate;
+    this.canDeleteCluster = canDelete;
+    this.canActivateCluster = canActivate;
+    this.canViewActiveCluster = canViewActive;
+    this.canViewClusterDetails = canViewDetail;
+    this.canViewBackends = canViewBackends;
+    this.canViewFrontends = canViewFrontends;
+    this.canViewQueries = canViewQuery;
+    this.hasClusterAccess = this.canListClusters;
+
+    if (!this.hasClusterAccess) {
+      this.loading = false;
+      this.clusters = [];
+      return;
+    }
+
+    if (signatureChanged && this.canListClusters) {
+      this.loadClusters();
+    }
   }
 }
 

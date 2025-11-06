@@ -1,0 +1,11 @@
+.badge-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nb-space-xs);
+}
+
+.badge-group__item {
+  --badge-padding: 0 var(--nb-space-sm);
+}
+
+

@@ -9,6 +9,7 @@ import { Cluster } from '../../../@core/data/cluster.service';
 import { NodeService, Session } from '../../../@core/data/node.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { MetricThresholds, renderMetricBadge } from '../../../@core/utils/metric-badge';
+import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 
 @Component({
   selector: 'ngx-sessions',
@@ -105,6 +106,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
     
     private toastrService: NbToastrService,
     private dialogService: NbDialogService,
+    private confirmDialogService: ConfirmDialogService,
     private clusterContext: ClusterContextService,
     private nodeService: NodeService,
   ) {
@@ -127,22 +129,14 @@ export class SessionsComponent implements OnInit, OnDestroy {
             this.clusterId = newClusterId;
             this.loadSessions();
           }
-        } else {
-          // No active cluster - show error and stop loading
-          this.loading = false;
-          this.toastrService.danger(
-            '请先激活一个集群',
-            '未选择集群'
-          );
         }
+        // Backend will handle "no active cluster" case
       });
 
-    // Load sessions if clusterId is already set
-    if (this.clusterId && this.clusterId > 0) {
-      this.loadSessions();
-      if (this.autoRefresh) {
-        this.startAutoRefresh();
-      }
+    // Load data - backend will get active cluster automatically
+    this.loadSessions();
+    if (this.autoRefresh) {
+      this.startAutoRefresh();
     }
   }
 
@@ -153,11 +147,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
   }
 
   loadSessions(): void {
-    if (!this.clusterId || this.clusterId === 0) {
-      this.loading = false;
-      return;
-    }
-
+    // Backend will get active cluster automatically - no need to check clusterId
     this.loading = true;
     this.nodeService.getSessions().subscribe({
       next: (sessions) => {
@@ -178,16 +168,26 @@ export class SessionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  onDelete(event: any): void {
-    this.killSession(event.data);
-  }
+  onDeleteConfirm(event: any): void {
+    const session = event.data as Session;
 
-  killSession(session: Session): void {
-    if (confirm(`确定要终止会话 ${session.id} 吗？`)) {
+    this.confirmDialogService.confirm(
+      '确认终止会话',
+      `确定要终止会话 ${session.id} 吗？`,
+      '终止',
+      '取消',
+      'danger'
+    ).subscribe(confirmed => {
+      if (!confirmed) {
+        event.confirm.reject();
+        return;
+      }
+
       this.loading = true;
       this.nodeService.killSession(session.id).subscribe({
         next: () => {
           this.toastrService.success(`会话 ${session.id} 已成功终止`, '成功');
+          event.confirm.resolve();
           this.loadSessions();
         },
         error: (error) => {
@@ -195,10 +195,11 @@ export class SessionsComponent implements OnInit, OnDestroy {
             error.error?.message || '终止会话失败',
             '错误'
           );
+          event.confirm.reject();
           this.loading = false;
         },
       });
-    }
+    });
   }
 
   toggleAutoRefresh(): void {

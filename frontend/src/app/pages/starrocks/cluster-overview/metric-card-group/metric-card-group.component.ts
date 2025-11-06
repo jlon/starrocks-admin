@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { trigger, transition, style, animate } from '@angular/animations';
 
 @Component({
@@ -17,7 +17,7 @@ import { trigger, transition, style, animate } from '@angular/animations';
     ]),
   ],
 })
-export class MetricCardGroupComponent {
+export class MetricCardGroupComponent implements OnInit {
   @Input() title: string;
   @Input() icon: string;
   @Input() collapsed: boolean = false;
@@ -39,7 +39,7 @@ export class MetricCardGroupComponent {
     localStorage.setItem(key, String(this.collapsed));
   }
 
-  ngOnInit() {
+  ngOnInit(): void {
     // Load collapse state from localStorage
     const key = `metric_group_${this.title}_collapsed`;
     const saved = localStorage.getItem(key);

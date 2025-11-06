@@ -18,6 +18,11 @@ const routes: Routes = [{
         .then(m => m.UserSettingsModule),
     },
     {
+      path: 'system',
+      loadChildren: () => import('./system/system.module')
+        .then(m => m.SystemModule),
+    },
+    {
       path: '',
       redirectTo: 'starrocks',
       pathMatch: 'full',

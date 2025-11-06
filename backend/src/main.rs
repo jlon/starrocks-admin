@@ -16,10 +16,15 @@ mod models;
 mod services;
 mod utils;
 
+// Include tests module only in test builds
+#[cfg(test)]
+mod tests;
+
 use config::Config;
 use services::{
-    AuthService, ClusterService, DataStatisticsService, MetricsCollectorService, MySQLPoolManager,
-    OverviewService, SystemFunctionService,
+    AuthService, CasbinService, ClusterService, DataStatisticsService, MetricsCollectorService,
+    MySQLPoolManager, OverviewService, PermissionService, RoleService, SystemFunctionService,
+    UserRoleService, UserService,
 };
 use sqlx::SqlitePool;
 use utils::{JwtUtil, ScheduledExecutor};
@@ -45,6 +50,13 @@ pub struct AppState {
     pub metrics_collector_service: Arc<MetricsCollectorService>,
     pub data_statistics_service: Arc<DataStatisticsService>,
     pub overview_service: Arc<OverviewService>,
+
+    // RBAC Services
+    pub casbin_service: Arc<CasbinService>,
+    pub permission_service: Arc<PermissionService>,
+    pub role_service: Arc<RoleService>,
+    pub user_role_service: Arc<UserRoleService>,
+    pub user_service: Arc<UserService>,
 }
 
 #[derive(OpenApi)]
@@ -97,14 +109,38 @@ pub struct AppState {
         handlers::overview::get_capacity_prediction,
         handlers::overview::get_extended_cluster_overview,
         handlers::cluster::test_cluster_connection,
+        // RBAC Handlers
+        handlers::role::list_roles,
+        handlers::role::get_role,
+        handlers::role::create_role,
+        handlers::role::update_role,
+        handlers::role::delete_role,
+        handlers::role::get_role_with_permissions,
+        handlers::role::update_role_permissions,
+        handlers::permission::list_permissions,
+        handlers::permission::list_menu_permissions,
+        handlers::permission::list_api_permissions,
+        handlers::permission::get_permission_tree,
+        handlers::permission::get_current_user_permissions,
+        handlers::user_role::get_user_roles,
+        handlers::user_role::assign_role_to_user,
+        handlers::user_role::remove_role_from_user,
+        handlers::user::list_users,
+        handlers::user::get_user,
+        handlers::user::create_user,
+        handlers::user::update_user,
+        handlers::user::delete_user,
     ),
     components(
         schemas(
             models::User,
             models::UserResponse,
+            models::UserWithRolesResponse,
             models::CreateUserRequest,
+            models::AdminCreateUserRequest,
             models::LoginRequest,
             models::LoginResponse,
+            models::AdminUpdateUserRequest,
             models::Cluster,
             models::ClusterResponse,
             models::CreateClusterRequest,
@@ -134,6 +170,16 @@ pub struct AppState {
             models::CreateFunctionRequest,
             models::UpdateOrderRequest,
             models::FunctionOrder,
+            models::Role,
+            models::RoleResponse,
+            models::CreateRoleRequest,
+            models::UpdateRoleRequest,
+            models::RoleWithPermissions,
+            models::Permission,
+            models::PermissionResponse,
+            models::PermissionTree,
+            models::UpdateRolePermissionsRequest,
+            models::AssignUserRoleRequest,
             services::ClusterOverview,
             services::ExtendedClusterOverview,
             services::HealthCard,
@@ -174,6 +220,9 @@ pub struct AppState {
         (name = "Queries", description = "Query management"),
         (name = "Profiles", description = "Query profile management"),
         (name = "System", description = "System information"),
+        (name = "Roles", description = "Role management"),
+        (name = "Permissions", description = "Permission management"),
+        (name = "Users", description = "User role management"),
     ),
     modifiers(&SecurityAddon)
 )]
@@ -262,6 +311,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_data_statistics(Arc::clone(&data_statistics_service)),
     );
 
+    // Initialize RBAC services
+    let casbin_service = Arc::new(
+        CasbinService::new()
+            .await
+            .map_err(|e| format!("Failed to initialize Casbin service: {}", e))?,
+    );
+
+    // Load initial policies from database
+    casbin_service
+        .reload_policies_from_db(&pool)
+        .await
+        .map_err(|e| format!("Failed to load initial policies: {}", e))?;
+    tracing::info!("Casbin policies loaded from database");
+
+    let permission_service =
+        Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
+
+    let role_service = Arc::new(RoleService::new(
+        pool.clone(),
+        Arc::clone(&casbin_service),
+        Arc::clone(&permission_service),
+    ));
+
+    let user_role_service =
+        Arc::new(UserRoleService::new(pool.clone(), Arc::clone(&casbin_service)));
+
+    let user_service = Arc::new(UserService::new(pool.clone(), Arc::clone(&casbin_service)));
+
     // Build AppState with all services
     let app_state = AppState {
         db: pool.clone(),
@@ -273,6 +350,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         metrics_collector_service: Arc::clone(&metrics_collector_service),
         data_statistics_service: Arc::clone(&data_statistics_service),
         overview_service: Arc::clone(&overview_service),
+        casbin_service: Arc::clone(&casbin_service),
+        permission_service: Arc::clone(&permission_service),
+        role_service: Arc::clone(&role_service),
+        user_role_service: Arc::clone(&user_role_service),
+        user_service: Arc::clone(&user_service),
     };
 
     // Start metrics collector using ScheduledExecutor (configurable interval)
@@ -292,8 +374,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Wrap AppState in Arc for shared ownership across routes
     let app_state_arc = Arc::new(app_state);
 
-    // Auth state for middleware
-    let auth_state = middleware::AuthState { jwt_util: Arc::clone(&jwt_util) };
+    // Auth state for middleware (includes permission checking)
+    let auth_state = middleware::AuthState {
+        jwt_util: Arc::clone(&jwt_util),
+        casbin_service: Arc::clone(&casbin_service),
+    };
 
     // Public routes (no authentication required)
     let public_routes = Router::new()
@@ -433,6 +518,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/clusters/overview/compaction-details",
             get(handlers::overview::get_compaction_detail_stats),
         )
+        // RBAC Routes
+        // Roles
+        .route("/api/roles", get(handlers::role::list_roles).post(handlers::role::create_role))
+        .route(
+            "/api/roles/:id",
+            get(handlers::role::get_role)
+                .put(handlers::role::update_role)
+                .delete(handlers::role::delete_role),
+        )
+        .route(
+            "/api/roles/:id/permissions",
+            get(handlers::role::get_role_with_permissions)
+                .put(handlers::role::update_role_permissions),
+        )
+        // Permissions
+        .route("/api/permissions", get(handlers::permission::list_permissions))
+        .route("/api/permissions/menu", get(handlers::permission::list_menu_permissions))
+        .route("/api/permissions/api", get(handlers::permission::list_api_permissions))
+        .route("/api/permissions/tree", get(handlers::permission::get_permission_tree))
+        .route("/api/auth/permissions", get(handlers::permission::get_current_user_permissions))
+        // User Management
+        .route("/api/users", get(handlers::user::list_users).post(handlers::user::create_user))
+        .route(
+            "/api/users/:id",
+            get(handlers::user::get_user)
+                .put(handlers::user::update_user)
+                .delete(handlers::user::delete_user),
+        )
+        // User Roles
+        .route(
+            "/api/users/:id/roles",
+            get(handlers::user_role::get_user_roles).post(handlers::user_role::assign_role_to_user),
+        )
+        .route("/api/users/:id/roles/:role_id", delete(handlers::user_role::remove_role_from_user))
         .with_state(Arc::clone(&app_state_arc))
         .layer(axum_middleware::from_fn_with_state(auth_state, middleware::auth_middleware));
 

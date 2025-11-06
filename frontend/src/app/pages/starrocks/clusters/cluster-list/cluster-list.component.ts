@@ -31,7 +31,7 @@ export class ClusterListComponent implements OnInit {
     },
     delete: {
       deleteButtonContent: '<i class="nb-trash"></i>',
-      confirmDelete: true,
+      confirmDelete: false,
     },
     pager: {
       display: true,
@@ -118,22 +118,26 @@ export class ClusterListComponent implements OnInit {
   }
 
   onDelete(event: any): void {
-    this.confirmDialogService.confirmDelete(event.data.name)
+    const cluster = event.data as Cluster;
+
+    this.confirmDialogService.confirmDelete(cluster.name)
       .subscribe(confirmed => {
-        if (confirmed) {
-          this.clusterService.deleteCluster(event.data.id).subscribe({
-            next: () => {
-              this.toastrService.success('集群删除成功', '成功');
-              this.loadClusters();
-            },
-            error: (error) => {
-              this.toastrService.danger(
-                ErrorHandler.extractErrorMessage(error),
-                '错误',
-              );
-            },
-          });
+        if (!confirmed) {
+          return;
         }
+
+        this.clusterService.deleteCluster(cluster.id).subscribe({
+          next: () => {
+            this.toastrService.success('集群删除成功', '成功');
+            this.loadClusters();
+          },
+          error: (error) => {
+            this.toastrService.danger(
+              ErrorHandler.extractErrorMessage(error),
+              '错误',
+            );
+          },
+        });
       });
   }
 

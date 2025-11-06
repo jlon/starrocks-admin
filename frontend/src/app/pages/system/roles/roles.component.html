@@ -1,0 +1,37 @@
+<nb-card>
+  <nb-card-header>
+    <div class="header">
+      <div class="header__info">
+        <h5 class="header__title">角色管理</h5>
+        <p class="header__subtitle">维护系统角色，并为其分配访问权限</p>
+      </div>
+      <button
+        nbButton
+        status="primary"
+        size="small"
+        (click)="openCreateRole()"
+        [disabled]="!canCreateRole"
+        ngxHasPermission="api:roles:create"
+      >
+        <nb-icon icon="plus-outline"></nb-icon>
+        创建角色
+      </button>
+    </div>
+  </nb-card-header>
+
+  <nb-card-body>
+    <div *ngIf="loading" class="loading">
+      <nb-spinner size="large" status="primary"></nb-spinner>
+    </div>
+
+    <nb-alert *ngIf="!loading && !hasListPermission" status="warning">
+      您暂无查看角色的权限，请联系管理员获取授权。
+    </nb-alert>
+
+    <ng2-smart-table
+      *ngIf="!loading && hasListPermission"
+      [settings]="settings"
+      [source]="source"
+    ></ng2-smart-table>
+  </nb-card-body>
+</nb-card>

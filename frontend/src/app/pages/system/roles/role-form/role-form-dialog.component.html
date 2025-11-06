@@ -1,0 +1,140 @@
+<nb-card class="role-dialog">
+  <nb-card-header>
+    <div class="dialog-header">
+      <div>
+        <h5>{{ mode === 'create' ? '创建角色' : '编辑角色' }}</h5>
+        <p class="dialog-subtitle">
+          {{ mode === 'create' ? '配置角色基础信息与权限范围' : '调整角色信息与权限映射' }}
+        </p>
+      </div>
+      <button nbButton ghost status="basic" (click)="cancel()">
+        <nb-icon icon="close-outline"></nb-icon>
+      </button>
+    </div>
+  </nb-card-header>
+
+  <nb-card-body>
+    <form [formGroup]="form" class="role-form" novalidate>
+      <div class="form-layout">
+        <!-- Left: Role Basic Information -->
+        <div class="basic-info-section">
+          <div class="form-group">
+            <label class="label" for="input-code">角色代码</label>
+            <nb-form-field>
+              <input
+                nbInput
+                fullWidth
+                id="input-code"
+                formControlName="code"
+                [readonly]="mode === 'edit'"
+                maxlength="50"
+              />
+            </nb-form-field>
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="input-name">角色名称</label>
+            <nb-form-field>
+              <input
+                nbInput
+                fullWidth
+                id="input-name"
+                formControlName="name"
+                maxlength="50"
+              />
+            </nb-form-field>
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="input-description">角色描述</label>
+            <nb-form-field>
+              <textarea
+                nbInput
+                fullWidth
+                id="input-description"
+                formControlName="description"
+                rows="3"
+                maxlength="200"
+              ></textarea>
+            </nb-form-field>
+          </div>
+        </div>
+
+        <!-- Right: Permission Tree Selection -->
+        <div class="permission-section">
+          <label class="section-label">菜单权限</label>
+          <div class="permission-tree-container">
+            <!-- Simple tree structure (inspired by query-execution) -->
+            <div class="tree-scroll">
+              <ul class="permission-tree" *ngIf="permissionTree.length > 0; else emptyTree">
+                <ng-container *ngFor="let node of permissionTree; trackBy: trackNodeById">
+                  <ng-container *ngTemplateOutlet="treeNodeTemplate; context: { $implicit: node }"></ng-container>
+                </ng-container>
+              </ul>
+              
+              <ng-template #emptyTree>
+                <div class="empty-tree">
+                  <nb-icon icon="inbox-outline"></nb-icon>
+                  <span>暂无可用权限</span>
+                </div>
+              </ng-template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tree node recursive template (inspired by query-execution) -->
+      <ng-template #treeNodeTemplate let-node>
+        <li class="tree-node" [class.expanded]="node.expanded">
+          <div class="tree-node-row" [style.paddingLeft.px]="getNodeIndent(node)">
+            <!-- Icon -->
+            <div class="node-icon">
+              <nb-icon [icon]="node.icon"></nb-icon>
+            </div>
+
+            <!-- Checkbox and text -->
+            <nb-checkbox
+              class="node-checkbox"
+              [checked]="node.checked"
+              [indeterminate]="node.indeterminate"
+              (checkedChange)="onNodeCheckChange(node, $event)"
+              (click)="$event.stopPropagation()"
+            >
+              <span class="node-text">{{ node.name }}</span>
+            </nb-checkbox>
+
+            <!-- Expand/collapse button (right side) -->
+            <button
+              *ngIf="isNodeExpandable(node)"
+              nbButton
+              ghost
+              size="tiny"
+              class="toggle-btn"
+              type="button"
+              (click)="toggleNode(node, $event)"
+              [class.expanded]="node.expanded"
+            >
+              <nb-icon [icon]="node.expanded ? 'chevron-down-outline' : 'chevron-right-outline'"></nb-icon>
+            </button>
+          </div>
+
+          <!-- Children (recursive) -->
+          <ul class="tree-children" *ngIf="node.children && node.children.length && node.expanded">
+            <ng-container *ngFor="let child of node.children; trackBy: trackNodeById">
+              <ng-container *ngTemplateOutlet="treeNodeTemplate; context: { $implicit: child }"></ng-container>
+            </ng-container>
+          </ul>
+        </li>
+      </ng-template>
+    </form>
+  </nb-card-body>
+
+  <nb-card-footer>
+    <div class="footer-actions">
+      <button nbButton ghost status="basic" (click)="cancel()">取消</button>
+      <button nbButton status="primary" (click)="submit()" [disabled]="form.invalid">
+        {{ mode === 'create' ? '创建角色' : '保存修改' }}
+      </button>
+    </div>
+  </nb-card-footer>
+</nb-card>

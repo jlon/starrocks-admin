@@ -15,6 +15,7 @@ import { SystemFunction, FunctionCategory, CreateFunctionRequest } from '../../.
 import { AddFunctionDialogComponent } from './add-function-dialog/add-function-dialog.component';
 import { EditFunctionDialogComponent } from './edit-function-dialog/edit-function-dialog.component';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
+import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 
 interface SystemFunctionOld {
   name: string;
@@ -108,6 +109,7 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
     private nodeService: NodeService,
     private clusterContext: ClusterContextService,
     private dialogService: NbDialogService,
+    private confirmDialogService: ConfirmDialogService,
     private toastrService: NbToastrService,
     private systemFunctionService: SystemFunctionService,
     private route: ActivatedRoute,
@@ -130,20 +132,12 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
             this.clusterId = newClusterId;
             this.loadSystemFunctions();
           }
-        } else {
-          // No active cluster - show error and stop loading
-          this.loading = false;
-          this.toastrService.danger(
-            '请先激活一个集群',
-            '未选择集群'
-          );
         }
+        // Backend will handle "no active cluster" case
       });
 
-    // Load data if clusterId is already set
-    if (this.clusterId > 0) {
-      this.loadSystemFunctions();
-    }
+    // Load data - backend will get active cluster automatically
+    this.loadSystemFunctions();
 
     // 处理查询参数 - 每次查询参数变化时都处理
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe(params => {
@@ -193,10 +187,7 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
 
   // 加载系统功能（从数据库加载所有功能）
   loadSystemFunctions() {
-    if (!this.clusterId) {
-      return;
-    }
-    
+    // Backend will get active cluster automatically - no need to check clusterId
     this.loading = true;
     
     // 从数据库加载所有功能（包括默认和自定义）
@@ -454,18 +445,28 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
 
   // 删除自定义功能
   deleteFunction(functionId: number) {
-    this.systemFunctionService.deleteFunction(functionId)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: () => {
-          // 从本地数据中移除
-          this.customFunctions = this.customFunctions.filter(f => f.id !== functionId);
-          this.mergeAndOrganizeFunctions();
-          this.toastrService.success('功能已删除', '成功');
-        },
-        error: (error) => {
-          console.error('Failed to delete function:', error);
-          this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败');
+    const functionToDelete = this.customFunctions.find(f => f.id === functionId);
+    if (!functionToDelete) {
+      return;
+    }
+
+    this.confirmDialogService.confirmDelete(functionToDelete.functionName)
+      .subscribe(confirmed => {
+        if (confirmed) {
+          this.systemFunctionService.deleteFunction(functionId)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+              next: () => {
+                // 从本地数据中移除
+                this.customFunctions = this.customFunctions.filter(f => f.id !== functionId);
+                this.mergeAndOrganizeFunctions();
+                this.toastrService.success('功能已删除', '成功');
+              },
+              error: (error) => {
+                console.error('Failed to delete function:', error);
+                this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败');
+              }
+            });
         }
       });
   }
@@ -560,8 +561,7 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
 
   // 加载功能数据
   loadFunctionData(functionName: string, nestedPath?: string) {
-    if (!this.clusterId) return;
-    
+    // Backend will get active cluster automatically - no need to check clusterId
     this.loading = true;
     
     this.nodeService.getSystemFunctionDetail(functionName, nestedPath).subscribe({
@@ -813,18 +813,26 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
 
   // 删除分类
   deleteCategory(categoryName: string) {
-    if (confirm(`确定要删除分类 "${categoryName}" 吗？这将删除该分类下的所有自定义功能。`)) {
-      this.systemFunctionService.deleteCategory(categoryName).subscribe({
-        next: () => {
-          this.toastrService.success('分类删除成功');
-          this.loadSystemFunctions(); // 重新加载功能列表
-        },
-        error: (error) => {
-          console.error('删除分类失败:', error);
-          this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败');
-        }
-      });
-    }
+    this.confirmDialogService.confirm(
+      '确认删除分类',
+      `确定要删除分类 "${categoryName}" 吗？\n\n这将删除该分类下的所有自定义功能。`,
+      '删除',
+      '取消',
+      'danger'
+    ).subscribe(confirmed => {
+      if (confirmed) {
+        this.systemFunctionService.deleteCategory(categoryName).subscribe({
+          next: () => {
+            this.toastrService.success('分类删除成功');
+            this.loadSystemFunctions(); // 重新加载功能列表
+          },
+          error: (error) => {
+            console.error('删除分类失败:', error);
+            this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败');
+          }
+        });
+      }
+    });
   }
 
   // 获取分类图标

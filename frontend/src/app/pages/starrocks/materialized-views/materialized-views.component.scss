@@ -31,27 +31,49 @@
 }
 
 .detail-section {
-  padding: 1rem 0;
+  padding: 0.75rem 0;
+  height: 350px;
+  overflow: hidden;
+
+  .row {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .col-md-6 {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
 
   label.label {
     font-weight: 600;
     color: nb-theme(text-hint-color);
     margin-bottom: 0.25rem;
+    font-size: 0.875rem;
   }
 
   p {
     margin-bottom: 0;
+    font-size: 0.875rem;
+  }
+
+  .mb-3 {
+    margin-bottom: 0.75rem !important;
   }
 }
 
 .ddl-section {
-  padding: 1rem 0;
+  padding: 0.75rem 0;
+  height: 350px;
+  display: flex;
+  flex-direction: column;
 
   textarea {
     font-family: 'Courier New', Courier, monospace;
     font-size: 13px;
     line-height: 1.5;
-    min-height: 400px;
+    flex: 1;
+    resize: none;
   }
 }
 
@@ -145,6 +167,18 @@
     nb-card {
       width: 900px;
       max-width: 95vw;
+
+      nb-card-body {
+        overflow-x: hidden;
+      }
+    }
+
+    // Fix tabset content height to prevent dialog resize
+    nb-tabset {
+      .tab-content {
+        min-height: 350px;
+        overflow: hidden;
+      }
     }
   }
 }

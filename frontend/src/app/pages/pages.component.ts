@@ -6,6 +6,8 @@ import { filter, map } from 'rxjs/operators';
 import { MENU_ITEMS } from './pages-menu';
 import { AuthService } from '../@core/data/auth.service';
 import { TabService } from '../@core/services/tab.service';
+import { MenuFilterService } from '../@core/services/menu-filter.service';
+import { PermissionService } from '../@core/data/permission.service';
 
 @Component({
   selector: 'ngx-pages',
@@ -24,10 +26,22 @@ export class PagesComponent implements OnInit {
     private menuService: NbMenuService,
     private authService: AuthService,
     private router: Router,
-    private tabService: TabService
+    private tabService: TabService,
+    private menuFilterService: MenuFilterService,
+    private permissionService: PermissionService
   ) {}
 
   ngOnInit() {
+    // Filter menu items based on permissions
+    this.permissionService.permissions$.subscribe(() => {
+      this.menu = this.menuFilterService.filterMenuItems(MENU_ITEMS);
+    });
+
+    // Initialize permissions if not already initialized
+    if (this.authService.isAuthenticated()) {
+      this.permissionService.initPermissions().subscribe();
+    }
+
     // Listen to menu item clicks
     this.menuService.onItemClick()
       .pipe(

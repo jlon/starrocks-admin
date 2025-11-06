@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { Cluster, ClusterService } from './cluster.service';
+import { PermissionService } from './permission.service';
 
 /**
  * Global cluster context service
@@ -31,18 +32,28 @@ export class ClusterContextService {
   private activeClusterSubject: BehaviorSubject<Cluster | null>;
   public activeCluster$: Observable<Cluster | null>;
   
-  constructor(private clusterService: ClusterService) {
+  constructor(
+    private clusterService: ClusterService,
+    private permissionService: PermissionService,
+  ) {
     this.activeClusterSubject = new BehaviorSubject<Cluster | null>(null);
     this.activeCluster$ = this.activeClusterSubject.asObservable();
     
     // Try to load active cluster from backend on initialization
     this.refreshActiveCluster();
+
+    this.permissionService.permissions$.subscribe(() => {
+      this.refreshActiveCluster();
+    });
   }
   
   /**
    * Set the active cluster by calling backend API
    */
   setActiveCluster(cluster: Cluster): void {
+    if (!this.permissionService.hasPermission('api:clusters:activate')) {
+      return;
+    }
     // Call backend API to activate the cluster
     this.clusterService.activateCluster(cluster.id).pipe(
       tap((activatedCluster) => {
@@ -58,14 +69,21 @@ export class ClusterContextService {
   
   /**
    * Refresh active cluster from backend
+   * Note: We don't check permission here, let the backend decide.
+   * This allows users with page access to see the active cluster name,
+   * even if they don't have explicit 'api:clusters:active' permission.
+   * The backend will return 403 if the user truly doesn't have permission.
    */
   refreshActiveCluster(): void {
-    
+    // Always try to get active cluster from backend
+    // Backend will handle permission checking
     this.clusterService.getActiveCluster().pipe(
       tap((cluster) => {
         this.activeClusterSubject.next(cluster);
       }),
       catchError((error) => {
+        // If backend returns 403 or other error, set to null
+        // This is expected for users without permission
         this.activeClusterSubject.next(null);
         return of(null);
       })

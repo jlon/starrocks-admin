@@ -1,0 +1,38 @@
+:host {
+  display: block;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-lg);
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--nb-space-xs);
+  }
+
+  &__title {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  &__subtitle {
+    margin: 0;
+    color: var(--text-hint-color);
+    font-size: 0.875rem;
+  }
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--nb-space-xl) 0;
+}
+
+:host ::ng-deep ng2-smart-table table {
+  width: 100%;
+}
+

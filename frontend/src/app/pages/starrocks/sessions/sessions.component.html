@@ -61,7 +61,7 @@
           *ngIf="!loading && sessions.length > 0"
           [settings]="settings"
           [source]="source"
-          (delete)="onDelete($event)"
+          (deleteConfirm)="onDeleteConfirm($event)"
         ></ng2-smart-table>
       </nb-card-body>
     </nb-card>

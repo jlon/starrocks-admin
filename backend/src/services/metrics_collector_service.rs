@@ -31,9 +31,9 @@ struct MetricsAggregation {
     avg_disk_usage_pct: Option<f64>,
     max_disk_usage_pct: Option<f64>,
     #[allow(dead_code)]
-    avg_disk_used_bytes: Option<i64>,
+    avg_disk_used_bytes: Option<f64>, // AVG() returns REAL, not INTEGER
     #[allow(dead_code)]
-    max_disk_used_bytes: Option<i64>,
+    max_disk_used_bytes: Option<f64>, // MAX() may return REAL for large values
 }
 
 /// Metrics snapshot stored in database
@@ -788,7 +788,7 @@ impl MetricsCollectorService {
         let max_memory_usage = snapshots.max_memory_usage.unwrap_or(0.0);
         let avg_disk_usage_pct = snapshots.avg_disk_usage_pct.unwrap_or(0.0);
         let max_disk_usage_pct = snapshots.max_disk_usage_pct.unwrap_or(0.0);
-        let data_size_end = snapshots.max_disk_used_bytes.unwrap_or(0) as i64;
+        let data_size_end = snapshots.max_disk_used_bytes.unwrap_or(0.0) as i64;
         let data_growth_bytes = 0i64; // Would need previous day's value
 
         // Insert or update daily snapshot
@@ -853,6 +853,60 @@ impl MetricsCollectorService {
         Ok(())
     }
 
+    /// Detect the available query time column name in audit log table
+    /// Different StarRocks versions may use different column names
+    async fn detect_query_time_column(
+        &self,
+        mysql_client: &crate::services::mysql_client::MySQLClient,
+    ) -> Option<String> {
+        // First, try to get column list using SHOW COLUMNS
+        let show_columns_query = "SHOW COLUMNS FROM starrocks_audit_db__.starrocks_audit_tbl__";
+        
+        match mysql_client.query_raw(show_columns_query).await {
+            Ok((columns, rows)) => {
+                // Find the column index for "Field" column
+                let field_idx = columns.iter().position(|c| c.eq_ignore_ascii_case("Field"))?;
+                
+                // Possible column names to look for (in order of likelihood)
+                let possible_columns = vec!["queryTime", "query_time", "duration", "QueryTime", "queryDuration"];
+                
+                // Check each row for matching column name
+                for row in rows {
+                    if let Some(col_name) = row.get(field_idx) {
+                        let col_name_lower = col_name.to_lowercase();
+                        for possible_col in &possible_columns {
+                            if col_name_lower == possible_col.to_lowercase() {
+                                tracing::debug!("Detected query time column: {}", col_name);
+                                return Some(col_name.clone());
+                            }
+                        }
+                    }
+                }
+            },
+            Err(e) => {
+                tracing::debug!("Failed to get column list, trying fallback method: {}", e);
+                // Fallback: try direct queries with common column names
+                let possible_columns = vec!["queryTime", "query_time", "duration", "QueryTime", "queryDuration"];
+                
+                for col_name in possible_columns {
+                    // Use a safe query that won't fail if column doesn't exist
+                    let test_query = format!(
+                        "SELECT COUNT(*) as cnt FROM starrocks_audit_db__.starrocks_audit_tbl__ WHERE {} > 0 LIMIT 1",
+                        col_name
+                    );
+                    
+                    if mysql_client.query(&test_query).await.is_ok() {
+                        tracing::debug!("Detected query time column (fallback): {}", col_name);
+                        return Some(col_name.to_string());
+                    }
+                }
+            },
+        }
+        
+        tracing::warn!("Could not detect query time column in audit log table. Available columns may differ by StarRocks version.");
+        None
+    }
+
     /// Get real latency percentiles from audit logs using StarRocks percentile functions
     /// Reference: https://docs.starrocks.io/zh/docs/category/percentile/
     async fn get_real_latency_percentiles(&self, cluster: &Cluster) -> ApiResult<(f64, f64, f64)> {
@@ -862,21 +916,33 @@ impl MetricsCollectorService {
         let pool = self.mysql_pool_manager.get_pool(cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
 
+        // Detect the available query time column name
+        let query_time_col = match self.detect_query_time_column(&mysql_client).await {
+            Some(col) => col,
+            None => {
+                tracing::debug!("Query time column not found, skipping audit log percentile calculation");
+                return Ok((0.0, 0.0, 0.0)); // Return zeros to fallback to Prometheus
+            },
+        };
+
         // Use StarRocks percentile_approx function to calculate P50, P95, P99 from audit logs
         // Query recent 3 days of data for comprehensive percentiles
-        let query = r#"
+        let query = format!(
+            r#"
             SELECT 
-                COALESCE(percentile_approx(queryTime, 0.50), 0) as p50,
-                COALESCE(percentile_approx(queryTime, 0.95), 0) as p95,
-                COALESCE(percentile_approx(queryTime, 0.99), 0) as p99
+                COALESCE(percentile_approx({}, 0.50), 0) as p50,
+                COALESCE(percentile_approx({}, 0.95), 0) as p95,
+                COALESCE(percentile_approx({}, 0.99), 0) as p99
             FROM starrocks_audit_db__.starrocks_audit_tbl__
             WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 3 DAY)
-                AND queryTime > 0
+                AND {} > 0
                 AND state = 'EOF'
                 AND isQuery = 1
-        "#;
+        "#,
+            query_time_col, query_time_col, query_time_col, query_time_col
+        );
 
-        match mysql_client.query(query).await {
+        match mysql_client.query(&query).await {
             Ok(results) => {
                 if let Some(row) = results.first() {
                     // Parse percentile values - percentile_approx returns DOUBLE, so try f64 first

@@ -1223,7 +1223,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       highlightActiveLine(),
       highlightActiveLineGutter(),
       highlightSelectionMatches(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      syntaxHighlighting(defaultHighlightStyle),
       keymap.of([
         ...completionKeymap,
         ...historyKeymap,

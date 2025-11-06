@@ -20,6 +20,7 @@ import { sql, MySQL, type SQLNamespace } from '@codemirror/lang-sql';
 import { format } from 'sql-formatter';
 import { trigger, transition, style, animate, state } from '@angular/animations';
 import { renderMetricBadge, MetricThresholds } from '../../../../@core/utils/metric-badge';
+import { ConfirmDialogService } from '../../../../@core/services/confirm-dialog.service';
 
 type NavNodeType = 'catalog' | 'database' | 'group' | 'table';
 
@@ -288,6 +289,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     private clusterContext: ClusterContextService,
     private themeService: NbThemeService,
     private dialogService: NbDialogService,
+    private confirmDialogService: ConfirmDialogService,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);
@@ -1485,6 +1487,27 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         return;
     }
 
+    const trimmedSql = this.sqlInput.trim();
+    if (this.containsDangerousStatement(trimmedSql)) {
+      this.confirmDialogService.confirm(
+        '危险操作确认',
+        '检测到 SQL 包含删除或破坏性语句，是否继续执行？',
+        '继续执行',
+        '取消',
+        'danger',
+      ).subscribe((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+        this.executeSQLInternal(trimmedSql);
+      });
+      return;
+    }
+
+    this.executeSQLInternal(trimmedSql);
+  }
+
+  private executeSQLInternal(sql: string): void {
     this.executing = true;
     this.queryResult = null;
     this.resultSettings = [];
@@ -1493,32 +1516,32 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.currentResultIndex = 0;
 
     this.nodeService.executeSQL(
-      this.sqlInput.trim(), 
-      this.queryLimit, 
+      sql,
+      this.queryLimit,
       this.selectedCatalog || undefined,
-      this.selectedDatabase || undefined
+      this.selectedDatabase || undefined,
     ).subscribe({
       next: (result) => {
         this.queryResult = result;
         this.queryResults = result.results;
         this.executionTime = result.total_execution_time_ms;
-        
+
         // Build settings and data sources for each result
         this.resultSettings = [];
         this.resultSources = [];
-        
+
         let totalRowCount = 0;
         let successCount = 0;
-        
+
         result.results.forEach((singleResult, index) => {
           if (singleResult.success) {
             successCount++;
             totalRowCount += singleResult.row_count;
-            
+
             // Build dynamic table settings for this result
             const settings = this.buildResultSettings(singleResult);
             this.resultSettings.push(settings);
-            
+
             // Convert rows to objects for ng2-smart-table
             const dataRows = singleResult.rows.map(row => {
               const obj: any = {};
@@ -1527,7 +1550,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
               });
               return obj;
             });
-            
+
             const source = new LocalDataSource();
             source.load(dataRows);
             this.resultSources.push(source);
@@ -1539,14 +1562,14 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             this.resultSources.push(source);
           }
         });
-        
+
         this.rowCount = totalRowCount;
         this.executing = false;
-        
+
         if (result.results.length > 1) {
           this.toastrService.success(
             `执行 ${result.results.length} 个SQL，成功 ${successCount} 个，共返回 ${totalRowCount} 行`,
-            '成功'
+            '成功',
           );
         } else {
           const singleResult = result.results[0];
@@ -1556,7 +1579,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             this.toastrService.danger(singleResult.error || '执行失败', '执行失败');
           }
         }
-        
+
         // Auto-collapse SQL editor after successful query
         if (result.results.length > 0 && result.results[0].success) {
           setTimeout(() => {
@@ -1569,6 +1592,26 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '执行失败');
       },
     });
+  }
+
+  private containsDangerousStatement(sql: string): boolean {
+    const normalized = sql
+      .replace(/--.*$/gm, '')
+      .replace(/#.*/gm, '')
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const tokens = normalized
+      .split(';')
+      .map(segment => segment.trim().toUpperCase())
+      .filter(segment => segment.length > 0);
+
+    if (tokens.length === 0) {
+      return false;
+    }
+
+    const dangerousPrefixes = ['DELETE', 'DROP', 'TRUNCATE', 'ALTER'];
+
+    return tokens.some(statement => dangerousPrefixes.some(prefix => statement.startsWith(prefix)));
   }
 
   buildResultSettings(result: SingleQueryResult): any {

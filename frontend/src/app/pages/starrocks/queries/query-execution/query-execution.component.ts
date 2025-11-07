@@ -36,7 +36,9 @@ type ContextMenuAction =
   | 'viewTableStats'       // 表级别
   | 'viewCompactionScore'  // 表级别
   | 'triggerCompaction'    // 表级别 - 手动触发Compaction
-  | 'cancelCompaction';    // Compaction任务 - 取消任务
+  | 'cancelCompaction'     // Compaction任务 - 取消任务
+  | 'viewMaterializedViewRefreshStatus'  // 物化视图 - 查看刷新状态
+  | 'viewViewQueryPlan';   // 视图 - 查看查询计划
 
 interface TreeContextMenuItem {
   label: string;
@@ -167,7 +169,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   infoDialogData: any[] = [];
   infoDialogLoading: boolean = false;
   infoDialogError: string | null = null;
-  infoDialogType: 'transactions' | 'compactions' | 'compactionDetails' | 'loads' | 'databaseStats' | 'tableStats' | 'partitions' | 'compactionScore' | null = null;
+  infoDialogType: 'transactions' | 'compactions' | 'compactionDetails' | 'loads' | 'databaseStats' | 'tableStats' | 'partitions' | 'compactionScore' | 'mvRefreshStatus' | null = null;
   infoDialogSettings: any = {};
   infoDialogSource: LocalDataSource = new LocalDataSource();
   
@@ -986,6 +988,11 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             icon: 'file-text-outline',
             action: 'viewSchema',
           },
+          {
+            label: '查看查询计划',
+            icon: 'search-outline',
+            action: 'viewViewQueryPlan',
+          },
         ];
       }
       
@@ -996,6 +1003,11 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             label: '查看物化视图结构',
             icon: 'file-text-outline',
             action: 'viewSchema',
+          },
+          {
+            label: '查看刷新状态',
+            icon: 'refresh-outline',
+            action: 'viewMaterializedViewRefreshStatus',
           },
           {
             label: '查看分区',
@@ -1134,6 +1146,20 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             return;
           }
           this.openCompactionTriggerDialog(targetNode);
+        }
+        break;
+      case 'viewMaterializedViewRefreshStatus':
+        if (targetNode.type === 'table' && targetNode.data?.tableType === 'MATERIALIZED_VIEW') {
+          this.viewMaterializedViewRefreshStatus(targetNode);
+        }
+        break;
+      case 'viewViewQueryPlan':
+        if (targetNode.type === 'table') {
+          const tableType = targetNode.data?.tableType;
+          // Only VIEW supports query plan (materialized views are physical tables, query plan is just table scan)
+          if (tableType === 'VIEW') {
+            this.viewViewQueryPlan(targetNode);
+          }
         }
         break;
       default:
@@ -1976,6 +2002,173 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     }, catalogName, databaseName);
   }
 
+  private viewMaterializedViewRefreshStatus(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+    const tableName = node.data?.table || node.name;
+
+    if (!databaseName || !tableName) {
+      this.toastrService.warning('无法识别该物化视图所属的数据库', '提示');
+      return;
+    }
+
+    this.openInfoDialog('物化视图刷新状态', 'mvRefreshStatus', () => {
+      const sql = `SELECT 
+        TABLE_NAME,
+        IS_ACTIVE,
+        REFRESH_TYPE,
+        LAST_REFRESH_STATE,
+        LAST_REFRESH_START_TIME,
+        LAST_REFRESH_FINISHED_TIME,
+        LAST_REFRESH_DURATION,
+        LAST_REFRESH_ERROR_MESSAGE,
+        INACTIVE_REASON
+      FROM information_schema.materialized_views 
+      WHERE TABLE_SCHEMA = '${databaseName}' AND TABLE_NAME = '${tableName}'`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        TABLE_NAME: { title: '物化视图名', type: 'string', width: '15%' },
+        IS_ACTIVE: { 
+          title: '是否激活', 
+          type: 'html', 
+          width: '10%',
+          valuePrepareFunction: (value: any) => {
+            const isActive = String(value).toLowerCase() === 'true';
+            return isActive 
+              ? '<span class="badge badge-success">激活</span>'
+              : '<span class="badge badge-danger">未激活</span>';
+          },
+        },
+        REFRESH_TYPE: { 
+          title: '刷新类型', 
+          type: 'html', 
+          width: '12%',
+          valuePrepareFunction: (value: string) => {
+            const type = String(value || '').toUpperCase();
+            if (type === 'ASYNC') {
+              return '<span class="badge badge-info">异步</span>';
+            } else if (type === 'ROLLUP') {
+              return '<span class="badge badge-primary">同步</span>';
+            }
+            return `<span class="badge badge-basic">${value || '-'}</span>`;
+          },
+        },
+        LAST_REFRESH_STATE: { 
+          title: '最后刷新状态', 
+          type: 'html', 
+          width: '12%',
+          valuePrepareFunction: (value: string) => {
+            const state = String(value || '').toUpperCase();
+            if (state === 'SUCCESS') {
+              return '<span class="badge badge-success">成功</span>';
+            } else if (state === 'FAILED' || state === 'ERROR') {
+              return '<span class="badge badge-danger">失败</span>';
+            } else if (state === 'RUNNING' || state === 'PENDING') {
+              return '<span class="badge badge-info">进行中</span>';
+            }
+            return `<span class="badge badge-warning">${value || '-'}</span>`;
+          },
+        },
+        LAST_REFRESH_START_TIME: { title: '最后刷新开始时间', type: 'string', width: '15%' },
+        LAST_REFRESH_FINISHED_TIME: { title: '最后刷新完成时间', type: 'string', width: '15%' },
+        LAST_REFRESH_DURATION: { 
+          title: '刷新耗时(秒)', 
+          type: 'html', 
+          width: '10%',
+          valuePrepareFunction: (value: any) => {
+            if (value === null || value === undefined || value === '') {
+              return '-';
+            }
+            const num = typeof value === 'string' ? parseFloat(value) : value;
+            return isNaN(num) ? '-' : num.toFixed(2);
+          },
+        },
+        LAST_REFRESH_ERROR_MESSAGE: { 
+          title: '错误信息', 
+          type: 'html', 
+          width: '15%',
+          valuePrepareFunction: (value: any) => {
+            if (!value || value === 'NULL' || value === '') {
+              return '<span class="badge badge-success">无错误</span>';
+            }
+            return this.renderLongText(value, 30);
+          },
+        },
+        INACTIVE_REASON: { 
+          title: '未激活原因', 
+          type: 'html', 
+          width: '15%',
+          valuePrepareFunction: (value: any) => {
+            if (!value || value === 'NULL' || value === '') {
+              return '-';
+            }
+            return this.renderLongText(value, 30);
+          },
+        },
+      },
+    }, catalogName, databaseName);
+  }
+
+  private viewViewQueryPlan(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+    const tableName = node.data?.table || node.name;
+
+    if (!databaseName || !tableName) {
+      this.toastrService.warning('无法识别该视图所属的数据库', '提示');
+      return;
+    }
+
+    // Show query plan in a dialog
+    this.schemaDialogTitle = '视图查询计划';
+    this.schemaDialogSubtitle = tableName;
+    this.currentSchemaCatalog = catalogName || null;
+    this.currentSchemaDatabase = databaseName;
+    this.currentSchemaTable = tableName;
+    this.currentTableSchema = '';
+    this.tableSchemaLoading = true;
+
+    const qualifiedTableName = this.buildQualifiedTableName(catalogName, databaseName, tableName);
+    const explainSql = `EXPLAIN SELECT * FROM ${qualifiedTableName} LIMIT 1`;
+
+    if (this.schemaDialogRef) {
+      this.schemaDialogRef.close();
+    }
+
+    this.schemaDialogRef = this.dialogService.open(this.tableSchemaDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+    });
+
+    this.nodeService.executeSQL(explainSql, 1000, catalogName || undefined, databaseName)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => {
+          this.tableSchemaLoading = false;
+          if (result.results && result.results.length > 0 && result.results[0].success) {
+            const firstResult = result.results[0];
+            // EXPLAIN returns a single column "Explain String" with the plan
+            if (firstResult.rows && firstResult.rows.length > 0) {
+              this.currentTableSchema = firstResult.rows.map(row => row[0]).join('\n');
+            } else {
+              this.currentTableSchema = '查询计划为空';
+            }
+          } else {
+            const error = result.results?.[0]?.error || '查询失败';
+            this.currentTableSchema = `错误: ${error}`;
+          }
+        },
+        error: (error) => {
+          this.tableSchemaLoading = false;
+          const errorMessage = ErrorHandler.extractErrorMessage(error);
+          this.currentTableSchema = `错误: ${errorMessage}`;
+        },
+      });
+  }
+
   private viewTableTransactions(node: NavTreeNode): void {
     const catalogName = node.data?.catalog || '';
     const databaseName = node.data?.database || '';
@@ -2021,7 +2214,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   // Helper methods for info dialog
   private openInfoDialog(
     title: string,
-    type: 'transactions' | 'compactions' | 'compactionDetails' | 'loads' | 'databaseStats' | 'tableStats' | 'partitions' | 'compactionScore',
+    type: 'transactions' | 'compactions' | 'compactionDetails' | 'loads' | 'databaseStats' | 'tableStats' | 'partitions' | 'compactionScore' | 'mvRefreshStatus',
     queryFn: () => Observable<QueryExecuteResult>,
     settings: any,
     catalog?: string,

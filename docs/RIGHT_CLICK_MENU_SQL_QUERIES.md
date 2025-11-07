@@ -320,6 +320,34 @@ SHOW CREATE TABLE `<catalog>`.`<database>`.`<table>`
 
 ---
 
+### 1.1. 查看视图查询计划 (viewViewQueryPlan) - 仅视图
+
+**实现方式**（新增 ✅）：
+
+```sql
+EXPLAIN SELECT * FROM `<catalog>`.`<database>`.`<view>` LIMIT 1
+```
+
+**返回字段**：
+- Explain String: 查询计划文本（多行）
+
+**功能说明**：
+- 显示视图的查询执行计划
+- 帮助分析视图查询性能
+- 快速定位视图查询慢的原因
+
+**UI实现**：
+- 使用与表结构相同的对话框显示
+- 显示格式化的查询计划文本
+
+**适用对象**：
+- 仅适用于 VIEW 类型
+- **注意**：物化视图（MATERIALIZED_VIEW）不支持此功能，因为物化视图是物理表，`EXPLAIN SELECT * FROM <mv>` 只是简单的表扫描，意义不大。如需了解物化视图的构建逻辑，请查看物化视图的定义（CREATE MATERIALIZED VIEW 语句）。
+
+**状态**：✅ 已实现
+
+---
+
 ### 2. 查看分区 (viewTablePartitions)
 
 **实现方式**（已修复 ✅）：
@@ -531,6 +559,53 @@ ORDER BY PARTITION_NAME
 
 ---
 
+### 7. 查看物化视图刷新状态 (viewMaterializedViewRefreshStatus) - 仅物化视图
+
+**实现方式**（新增 ✅）：
+
+```sql
+SELECT 
+  TABLE_NAME,
+  IS_ACTIVE,
+  REFRESH_TYPE,
+  LAST_REFRESH_STATE,
+  LAST_REFRESH_START_TIME,
+  LAST_REFRESH_FINISHED_TIME,
+  LAST_REFRESH_DURATION,
+  LAST_REFRESH_ERROR_MESSAGE,
+  INACTIVE_REASON
+FROM information_schema.materialized_views 
+WHERE TABLE_SCHEMA = '<database_name>' AND TABLE_NAME = '<mv_name>'
+```
+
+**返回字段**：
+- TABLE_NAME: 物化视图名
+- IS_ACTIVE: 是否激活（true/false）
+- REFRESH_TYPE: 刷新类型（ASYNC/ROLLUP）
+- LAST_REFRESH_STATE: 最后刷新状态（SUCCESS/FAILED/RUNNING等）
+- LAST_REFRESH_START_TIME: 最后刷新开始时间
+- LAST_REFRESH_FINISHED_TIME: 最后刷新完成时间
+- LAST_REFRESH_DURATION: 最后刷新耗时（秒）
+- LAST_REFRESH_ERROR_MESSAGE: 最后刷新错误信息
+- INACTIVE_REASON: 未激活原因
+
+**功能说明**：
+- 快速查看物化视图的刷新状态
+- 帮助定位物化视图刷新失败问题
+- 查看刷新耗时和错误信息
+
+**UI实现**：
+- 使用 ngx-admin 原生的 `ng2-smart-table` 组件
+- 状态字段使用原生 `badge` 样式显示（成功/失败/进行中等）
+- 错误信息使用长文本截断工具函数显示
+
+**适用对象**：
+- 仅适用于 MATERIALIZED_VIEW 类型
+
+**状态**：✅ 已实现
+
+---
+
 ## 已实现的功能详情
 
 ### 1. SHOW PROC '/compactions' - 查看Compaction任务 ✅
@@ -600,6 +675,8 @@ SHOW PROC '/transactions/<db_id>/finished'
 8. **查看Compaction任务** - 使用 `SHOW PROC '/compactions'`（已修复）
 9. **查看事务信息** - 使用 `SHOW PROC '/transactions/<db_id>/running'` 和 `/finished'`，支持tab切换（已修复）
 10. **CS分数查询** - 直接使用 `AVG_CS`, `P50_CS`, `MAX_CS` 字段（已修复）
+11. **查看物化视图刷新状态** - 使用 `information_schema.materialized_views`（新增）
+12. **查看视图查询计划** - 使用 `EXPLAIN SELECT * FROM <view> LIMIT 1`，仅支持 VIEW（新增，物化视图不支持，因为物化视图是物理表，查询计划只是表扫描）
 
 ### 已修复的问题 ✅
 1. **CS分数显示为0**：

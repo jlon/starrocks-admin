@@ -9,6 +9,7 @@ import { ClusterContextService } from '../../../../@core/data/cluster-context.se
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { MetricThresholds, renderMetricBadge } from '../../../../@core/utils/metric-badge';
+import { renderLongText } from '../../../../@core/utils/text-truncate';
 import { AuthService } from '../../../../@core/data/auth.service';
 
 @Component({
@@ -78,7 +79,12 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
           return `<span class="badge badge-${status}">${value}</span>`;
         },
       },
-      Statement: { title: 'SQL语句', type: 'string', width: '40%' },
+      Statement: { 
+        title: 'SQL语句', 
+        type: 'html', 
+        width: '40%',
+        valuePrepareFunction: (value: any) => renderLongText(value, 100),
+      },
     },
   };
 

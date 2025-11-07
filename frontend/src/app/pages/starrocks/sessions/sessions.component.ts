@@ -9,6 +9,7 @@ import { Cluster } from '../../../@core/data/cluster.service';
 import { NodeService, Session } from '../../../@core/data/node.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { MetricThresholds, renderMetricBadge } from '../../../@core/utils/metric-badge';
+import { renderLongText } from '../../../@core/utils/text-truncate';
 import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 import { AuthService } from '../../../@core/data/auth.service';
 
@@ -93,11 +94,11 @@ export class SessionsComponent implements OnInit, OnDestroy {
       },
       info: {
         title: 'Info',
-        type: 'string',
+        type: 'html',
         width: '25%',
         valuePrepareFunction: (value: any) => {
           if (!value) return 'N/A';
-          return value.length > 100 ? value.substring(0, 100) + '...' : value;
+          return renderLongText(value, 80);
         },
       },
     },

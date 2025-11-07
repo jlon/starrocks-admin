@@ -9,6 +9,7 @@ import { ClusterContextService } from '../../../../@core/data/cluster-context.se
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { MetricThresholds, renderMetricBadge } from '../../../../@core/utils/metric-badge';
+import { renderLongText } from '../../../../@core/utils/text-truncate';
 import { AuthService } from '../../../../@core/data/auth.service';
 
 @Component({
@@ -85,7 +86,11 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
         width: '8%',
         valuePrepareFunction: (value: string | number) => renderMetricBadge(value, this.durationThresholds),
       },
-      sql_statement: { title: 'SQL', type: 'string' },
+      sql_statement: { 
+        title: 'SQL', 
+        type: 'html',
+        valuePrepareFunction: (value: any) => renderLongText(value, 100),
+      },
     },
   };
 

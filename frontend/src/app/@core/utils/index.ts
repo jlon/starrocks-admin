@@ -11,3 +11,5 @@ export {
   SeoService,
   StateService,
 };
+
+export { renderLongText } from './text-truncate';

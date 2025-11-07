@@ -1083,3 +1083,106 @@
     }
   }
 }
+
+// Page-level loading overlay for info dialogs
+.info-dialog-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  
+  .loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: nb-theme(background-basic-color-1);
+    border-radius: nb-theme(border-radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    
+    p {
+      margin-top: 1rem;
+      color: nb-theme(text-hint-color);
+      font-size: 0.9rem;
+    }
+  }
+}
+
+// Info dialog card styles - limit size and make scrollable
+.info-dialog-card {
+  max-width: 90vw;
+  max-height: 85vh;
+  width: min(90vw, 1200px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  
+  nb-card-header {
+    flex-shrink: 0;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid nb-theme(border-basic-color-3);
+    
+    h5 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+  }
+  
+  .info-dialog-body {
+    flex: 1;
+    overflow: auto;
+    padding: 1rem 1.25rem;
+    min-height: 0;
+    
+    // Style for ng2-smart-table to ensure it fits
+    ::ng-deep ng2-smart-table {
+      .ng2-smart-table {
+        table-layout: auto;
+        
+        th, td {
+          max-width: 300px;
+          position: relative; // For tooltip positioning
+          
+          // For cells with HTML content (spans), let the span handle truncation
+          span {
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: middle;
+            
+            // Ensure tooltip works - title attribute should work natively
+            &[title] {
+              cursor: help;
+            }
+          }
+          
+          // For cells without spans, apply ellipsis directly
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        
+        // Allow horizontal scroll for wide tables
+        .ng2-smart-table-container {
+          overflow-x: auto;
+        }
+      }
+    }
+  }
+  
+  nb-card-footer {
+    flex-shrink: 0;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid nb-theme(border-basic-color-3);
+  }
+}

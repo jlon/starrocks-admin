@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, Hos
 import { ActivatedRoute } from '@angular/router';
 import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrService, NbThemeService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
-import { Subject } from 'rxjs';
+import { Subject, Observable } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { NodeService, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
@@ -20,12 +20,23 @@ import { sql, MySQL, type SQLNamespace } from '@codemirror/lang-sql';
 import { format } from 'sql-formatter';
 import { trigger, transition, style, animate, state } from '@angular/animations';
 import { renderMetricBadge, MetricThresholds } from '../../../../@core/utils/metric-badge';
+import { renderLongText } from '../../../../@core/utils/text-truncate';
 import { ConfirmDialogService } from '../../../../@core/services/confirm-dialog.service';
 import { AuthService } from '../../../../@core/data/auth.service';
 
 type NavNodeType = 'catalog' | 'database' | 'group' | 'table';
 
-type ContextMenuAction = 'viewSchema' | 'viewPartitions';
+type ContextMenuAction = 
+  | 'viewSchema' 
+  | 'viewPartitions'
+  | 'viewTransactions'      // 数据库/表级别
+  | 'viewCompactions'       // 数据库/表级别
+  | 'viewLoads'            // 数据库级别
+  | 'viewDatabaseStats'    // 数据库级别
+  | 'viewTableStats'       // 表级别
+  | 'viewCompactionScore'  // 表级别
+  | 'triggerCompaction'    // 表级别 - 手动触发Compaction
+  | 'cancelCompaction';    // Compaction任务 - 取消任务
 
 interface TreeContextMenuItem {
   label: string;
@@ -75,7 +86,8 @@ interface NavTreeNode {
 export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('editorContainer', { static: false }) editorContainer!: ElementRef;
   @ViewChild('tableSchemaDialog', { static: false }) tableSchemaDialogTemplate!: TemplateRef<any>;
-  // Template tabset reference removed as it's no longer required
+  @ViewChild('infoDialog', { static: false }) infoDialogTemplate!: TemplateRef<any>;
+  @ViewChild('compactionTriggerDialog', { static: false }) compactionTriggerDialogTemplate!: TemplateRef<any>;
 
   // Data sources
   runningSource: LocalDataSource = new LocalDataSource();
@@ -145,6 +157,29 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   currentTableSchema: string = '';
   tableSchemaLoading: boolean = false;
   private schemaDialogRef: NbDialogRef<any> | null = null;
+
+  // Info dialog state (for transactions, compactions, loads, stats, etc.)
+  private infoDialogRef: NbDialogRef<any> | null = null;
+  infoDialogTitle: string = '';
+  infoDialogData: any[] = [];
+  infoDialogLoading: boolean = false;
+  infoDialogError: string | null = null;
+  infoDialogType: 'transactions' | 'compactions' | 'compactionDetails' | 'loads' | 'databaseStats' | 'tableStats' | 'partitions' | 'compactionScore' | null = null;
+  infoDialogSettings: any = {};
+  infoDialogSource: LocalDataSource = new LocalDataSource();
+  
+  // Page-level loading state for info dialogs
+  infoDialogPageLoading: boolean = false;
+  
+  // Compaction trigger dialog state
+  compactionTriggerDialogRef: NbDialogRef<any> | null = null;
+  compactionTriggerTable: string | null = null;
+  compactionTriggerDatabase: string | null = null;
+  compactionTriggerCatalog: string | null = null;
+  compactionSelectedPartitions: string[] = [];
+  compactionTriggerMode: 'table' | 'partition' = 'table';
+  compactionTriggering: boolean = false;
+  availablePartitions: string[] = [];
   contextMenuVisible: boolean = false;
   contextMenuItems: TreeContextMenuItem[] = [];
   contextMenuX = 0;
@@ -901,7 +936,77 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private buildContextMenuItems(node: NavTreeNode): TreeContextMenuItem[] {
+    if (node.type === 'database') {
+      return [
+        {
+          label: '查看事务信息',
+          icon: 'activity-outline',
+          action: 'viewTransactions',
+        },
+        {
+          label: '查看Compaction信息',
+          icon: 'layers-outline',
+          action: 'viewCompactions',
+        },
+        {
+          label: '查看导入作业',
+          icon: 'upload-outline',
+          action: 'viewLoads',
+        },
+        {
+          label: '查看数据库统计',
+          icon: 'bar-chart-outline',
+          action: 'viewDatabaseStats',
+        },
+      ];
+    }
+
     if (node.type === 'table') {
+      const tableType = node.data?.tableType;
+      
+      // View (视图) - 只有逻辑结构，没有物理存储
+      if (tableType === 'VIEW') {
+        return [
+          {
+            label: '查看视图结构',
+            icon: 'file-text-outline',
+            action: 'viewSchema',
+          },
+        ];
+      }
+      
+      // Materialized View (物化视图) - 有物理存储，但Compaction由系统管理
+      if (tableType === 'MATERIALIZED_VIEW') {
+        return [
+          {
+            label: '查看物化视图结构',
+            icon: 'file-text-outline',
+            action: 'viewSchema',
+          },
+          {
+            label: '查看分区',
+            icon: 'layers-outline',
+            action: 'viewPartitions',
+          },
+          {
+            label: '查看Compaction Score',
+            icon: 'trending-up-outline',
+            action: 'viewCompactionScore',
+          },
+          {
+            label: '查看表统计',
+            icon: 'bar-chart-outline',
+            action: 'viewTableStats',
+          },
+          {
+            label: '查看表事务',
+            icon: 'activity-outline',
+            action: 'viewTransactions',
+          },
+        ];
+      }
+      
+      // Regular Table (普通表) - 所有功能
       return [
         {
           label: '查看表结构',
@@ -912,6 +1017,26 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           label: '查看分区',
           icon: 'layers-outline',
           action: 'viewPartitions',
+        },
+        {
+          label: '查看Compaction Score',
+          icon: 'trending-up-outline',
+          action: 'viewCompactionScore',
+        },
+        {
+          label: '查看表统计',
+          icon: 'bar-chart-outline',
+          action: 'viewTableStats',
+        },
+        {
+          label: '查看表事务',
+          icon: 'activity-outline',
+          action: 'viewTransactions',
+        },
+        {
+          label: '手动触发Compaction',
+          icon: 'flash-outline',
+          action: 'triggerCompaction',
         },
       ];
     }
@@ -935,7 +1060,67 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         }
         break;
       case 'viewPartitions':
-        this.toastrService.info('分区信息功能即将上线', '敬请期待');
+        if (targetNode.type === 'table') {
+          // Views don't have partitions
+          if (targetNode.data?.tableType === 'VIEW') {
+            this.toastrService.warning('视图没有分区信息', '提示');
+            return;
+          }
+          this.viewTablePartitions(targetNode);
+        }
+        break;
+      case 'viewTransactions':
+        if (targetNode.type === 'database') {
+          this.viewDatabaseTransactions(targetNode);
+        } else if (targetNode.type === 'table') {
+          this.viewTableTransactions(targetNode);
+        }
+        break;
+      case 'viewCompactions':
+        if (targetNode.type === 'database') {
+          this.viewDatabaseCompactions(targetNode);
+        }
+        break;
+      case 'viewLoads':
+        if (targetNode.type === 'database') {
+          this.viewDatabaseLoads(targetNode);
+        }
+        break;
+      case 'viewDatabaseStats':
+        if (targetNode.type === 'database') {
+          this.viewDatabaseStats(targetNode);
+        }
+        break;
+      case 'viewTableStats':
+        if (targetNode.type === 'table') {
+          // Views may not have accurate stats, but we allow viewing
+          this.viewTableStats(targetNode);
+        }
+        break;
+      case 'viewCompactionScore':
+        if (targetNode.type === 'table') {
+          // Views don't have compaction score
+          if (targetNode.data?.tableType === 'VIEW') {
+            this.toastrService.warning('视图没有Compaction Score信息', '提示');
+            return;
+          }
+          this.viewTableCompactionScore(targetNode);
+        }
+        break;
+      case 'triggerCompaction':
+        if (targetNode.type === 'table') {
+          // Only regular tables can trigger compaction manually
+          const tableType = targetNode.data?.tableType;
+          if (tableType === 'VIEW') {
+            this.toastrService.warning('视图不支持手动触发Compaction', '提示');
+            return;
+          }
+          if (tableType === 'MATERIALIZED_VIEW') {
+            this.toastrService.warning('物化视图的Compaction由系统自动管理，不建议手动触发', '提示');
+            return;
+          }
+          this.openCompactionTriggerDialog(targetNode);
+        }
         break;
       default:
         break;
@@ -1072,6 +1257,849 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     parts.push(`\`${table}\``);
 
     return parts.join('.');
+  }
+
+  // Database level view methods
+  private viewDatabaseTransactions(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || node.name;
+
+    if (!databaseName) {
+      this.toastrService.warning('无法识别数据库名称', '提示');
+      return;
+    }
+
+    this.openInfoDialog('事务信息', 'transactions', () => {
+      // Query transactions for this database
+      const sql = `SELECT * FROM information_schema.be_txns 
+        WHERE PARTITION_ID IN (
+          SELECT PARTITION_ID FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}'
+        )
+        ORDER BY CREATE_TIME DESC
+        LIMIT 100`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        BE_ID: { title: 'BE ID', type: 'string', width: '10%' },
+        TXN_ID: { title: '事务ID', type: 'string', width: '12%' },
+        PARTITION_ID: { title: '分区ID', type: 'string', width: '12%' },
+        TABLET_ID: { title: 'Tablet ID', type: 'string', width: '12%' },
+        CREATE_TIME: { title: '创建时间', type: 'string', width: '15%' },
+        COMMIT_TIME: { title: '提交时间', type: 'string', width: '15%' },
+        PUBLISH_TIME: { title: '发布时间', type: 'string', width: '15%' },
+        NUM_ROW: { title: '行数', type: 'string', width: '9%' },
+      },
+    }, catalogName, databaseName);
+  }
+
+  private viewDatabaseCompactions(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || node.name;
+
+    if (!databaseName) {
+      this.toastrService.warning('无法识别数据库名称', '提示');
+      return;
+    }
+
+    this.openInfoDialog('Compaction信息', 'compactions', () => {
+      // Query compaction tasks using SHOW PROC
+      // Note: SHOW PROC cannot be used directly in executeSQL, so we query partitions_meta for Compaction Score
+      const sql = `SELECT 
+        TABLE_NAME,
+        PARTITION_NAME,
+        AVG_CS,
+        P50_CS,
+        MAX_CS,
+        DATA_SIZE,
+        ROW_COUNT,
+        COMPACT_VERSION,
+        VISIBLE_VERSION
+      FROM information_schema.partitions_meta 
+      WHERE DB_NAME = '${databaseName}'
+      ORDER BY MAX_CS DESC
+      LIMIT 100`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        TABLE_NAME: { title: '表名', type: 'string', width: '15%' },
+        PARTITION_NAME: { title: '分区名', type: 'string', width: '15%' },
+        AVG_CS: { 
+          title: '平均CS', 
+          type: 'html', 
+          width: '10%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        P50_CS: { 
+          title: 'P50 CS', 
+          type: 'html', 
+          width: '10%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        MAX_CS: { 
+          title: '最大CS', 
+          type: 'html', 
+          width: '10%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        DATA_SIZE: { title: '数据大小', type: 'string', width: '12%' },
+        ROW_COUNT: { title: '行数', type: 'string', width: '10%' },
+        COMPACT_VERSION: { title: 'Compact版本', type: 'string', width: '10%' },
+        VISIBLE_VERSION: { title: '可见版本', type: 'string', width: '8%' },
+      },
+    }, catalogName, databaseName);
+  }
+
+  private viewDatabaseLoads(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || node.name;
+
+    if (!databaseName) {
+      this.toastrService.warning('无法识别数据库名称', '提示');
+      return;
+    }
+
+    this.openInfoDialog('导入作业', 'loads', () => {
+      const sql = `SELECT 
+        JOB_ID,
+        LABEL,
+        STATE,
+        PROGRESS,
+        TYPE,
+        PRIORITY,
+        SCAN_ROWS,
+        FILTERED_ROWS,
+        SINK_ROWS,
+        CREATE_TIME,
+        LOAD_START_TIME,
+        LOAD_FINISH_TIME,
+        ERROR_MSG
+      FROM information_schema.loads 
+      WHERE DATABASE_NAME = '${databaseName}'
+      ORDER BY CREATE_TIME DESC
+      LIMIT 100`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        JOB_ID: { title: '作业ID', type: 'string', width: '10%' },
+        LABEL: { title: '标签', type: 'string', width: '15%' },
+        STATE: { 
+          title: '状态', 
+          type: 'html', 
+          width: '10%',
+          valuePrepareFunction: (value: string) => this.renderLoadState(value),
+        },
+        PROGRESS: { title: '进度', type: 'string', width: '12%' },
+        TYPE: { title: '类型', type: 'string', width: '8%' },
+        PRIORITY: { title: '优先级', type: 'string', width: '8%' },
+        SCAN_ROWS: { title: '扫描行数', type: 'string', width: '10%' },
+        SINK_ROWS: { title: '导入行数', type: 'string', width: '10%' },
+        CREATE_TIME: { title: '创建时间', type: 'string', width: '12%' },
+        ERROR_MSG: { 
+          title: '错误信息', 
+          type: 'html', 
+          width: '5%',
+          valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+        },
+      },
+    }, catalogName, databaseName);
+  }
+
+  private viewDatabaseStats(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || node.name;
+
+    if (!databaseName) {
+      this.toastrService.warning('无法识别数据库名称', '提示');
+      return;
+    }
+
+    this.openInfoDialog('数据库统计', 'databaseStats', () => {
+      const sql = `SELECT 
+        TABLE_NAME,
+        COUNT(DISTINCT PARTITION_NAME) as PARTITION_COUNT,
+        SUM(ROW_COUNT) as TOTAL_ROWS,
+        SUM(CASE WHEN DATA_SIZE LIKE '%KB' THEN CAST(REPLACE(DATA_SIZE, 'KB', '') AS DECIMAL) / 1024
+                 WHEN DATA_SIZE LIKE '%MB' THEN CAST(REPLACE(DATA_SIZE, 'MB', '') AS DECIMAL)
+                 WHEN DATA_SIZE LIKE '%GB' THEN CAST(REPLACE(DATA_SIZE, 'GB', '') AS DECIMAL) * 1024
+                 ELSE 0 END) as TOTAL_SIZE_MB,
+        AVG(MAX_CS) as AVG_MAX_CS,
+        MAX(MAX_CS) as MAX_CS_OVERALL
+      FROM information_schema.partitions_meta 
+      WHERE DB_NAME = '${databaseName}'
+      GROUP BY TABLE_NAME
+      ORDER BY TOTAL_ROWS DESC`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        TABLE_NAME: { title: '表名', type: 'string', width: '20%' },
+        PARTITION_COUNT: { title: '分区数', type: 'string', width: '12%' },
+        TOTAL_ROWS: { title: '总行数', type: 'string', width: '15%' },
+        TOTAL_SIZE_MB: { title: '总大小(MB)', type: 'string', width: '15%' },
+        AVG_MAX_CS: { 
+          title: '平均最大CS', 
+          type: 'html', 
+          width: '15%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        MAX_CS_OVERALL: { 
+          title: '最大CS', 
+          type: 'html', 
+          width: '15%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+      },
+    }, catalogName, databaseName);
+  }
+
+  // Table level view methods
+  private viewTablePartitions(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+    const tableName = node.data?.table || node.name;
+
+    if (!databaseName || !tableName) {
+      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+      return;
+    }
+
+    // Views don't have partitions
+    if (node.data?.tableType === 'VIEW') {
+      this.toastrService.warning('视图是逻辑表，没有物理分区信息', '提示');
+      return;
+    }
+
+    this.openInfoDialog('分区信息', 'partitions', () => {
+      const sql = `SELECT 
+        PARTITION_NAME,
+        PARTITION_ID,
+        PARTITION_KEY,
+        PARTITION_VALUE,
+        DATA_SIZE,
+        ROW_COUNT,
+        AVG_CS,
+        P50_CS,
+        MAX_CS,
+        COMPACT_VERSION,
+        VISIBLE_VERSION,
+        STORAGE_PATH
+      FROM information_schema.partitions_meta 
+      WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+      ORDER BY PARTITION_NAME`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        PARTITION_NAME: { title: '分区名', type: 'string', width: '15%' },
+        PARTITION_ID: { title: '分区ID', type: 'string', width: '10%' },
+        PARTITION_KEY: { 
+          title: '分区键', 
+          type: 'html', 
+          width: '12%',
+          valuePrepareFunction: (value: any) => this.renderLongText(value, 40),
+        },
+        PARTITION_VALUE: { 
+          title: '分区值', 
+          type: 'html', 
+          width: '12%',
+          valuePrepareFunction: (value: any) => this.renderLongText(value, 40),
+        },
+        DATA_SIZE: { title: '数据大小', type: 'string', width: '10%' },
+        ROW_COUNT: { title: '行数', type: 'string', width: '10%' },
+        AVG_CS: { 
+          title: '平均CS', 
+          type: 'html', 
+          width: '8%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        MAX_CS: { 
+          title: '最大CS', 
+          type: 'html', 
+          width: '8%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        COMPACT_VERSION: { title: 'Compact版本', type: 'string', width: '10%' },
+        VISIBLE_VERSION: { title: '可见版本', type: 'string', width: '10%' },
+        STORAGE_PATH: { 
+          title: '存储路径', 
+          type: 'html', 
+          width: '7%',
+          valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+        },
+      },
+    }, catalogName, databaseName);
+  }
+
+  private viewTableCompactionScore(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+    const tableName = node.data?.table || node.name;
+
+    if (!databaseName || !tableName) {
+      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+      return;
+    }
+
+    // Views don't have compaction score
+    if (node.data?.tableType === 'VIEW') {
+      this.toastrService.warning('视图是逻辑表，没有Compaction Score信息', '提示');
+      return;
+    }
+
+    this.openInfoDialog('Compaction Score', 'compactionScore', () => {
+      const sql = `SELECT 
+        PARTITION_NAME,
+        AVG_CS,
+        P50_CS,
+        MAX_CS,
+        DATA_SIZE,
+        ROW_COUNT,
+        COMPACT_VERSION,
+        VISIBLE_VERSION
+      FROM information_schema.partitions_meta 
+      WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+      ORDER BY MAX_CS DESC`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        PARTITION_NAME: { title: '分区名', type: 'string', width: '15%' },
+        AVG_CS: { 
+          title: '平均CS', 
+          type: 'html', 
+          width: '12%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        P50_CS: { 
+          title: 'P50 CS', 
+          type: 'html', 
+          width: '12%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        MAX_CS: { 
+          title: '最大CS', 
+          type: 'html', 
+          width: '12%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        DATA_SIZE: { title: '数据大小', type: 'string', width: '12%' },
+        ROW_COUNT: { title: '行数', type: 'string', width: '12%' },
+        COMPACT_VERSION: { title: 'Compact版本', type: 'string', width: '12%' },
+        VISIBLE_VERSION: { title: '可见版本', type: 'string', width: '13%' },
+      },
+    }, catalogName, databaseName);
+  }
+
+  private viewTableStats(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+    const tableName = node.data?.table || node.name;
+
+    if (!databaseName || !tableName) {
+      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+      return;
+    }
+
+    // Views may not have accurate partition stats, but we allow viewing
+    // Materialized views have physical storage, so they have stats
+    // Regular tables have stats
+    // So we only block pure views from partition-based stats
+    // Note: We allow viewing even for views, as they might have some metadata
+
+    this.openInfoDialog('表统计', 'tableStats', () => {
+      const sql = `SELECT 
+        PARTITION_NAME,
+        PARTITION_ID,
+        DATA_SIZE,
+        ROW_COUNT,
+        BUCKETS,
+        REPLICATION_NUM,
+        STORAGE_MEDIUM,
+        AVG_CS,
+        MAX_CS,
+        STORAGE_PATH
+      FROM information_schema.partitions_meta 
+      WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+      ORDER BY PARTITION_NAME`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        PARTITION_NAME: { title: '分区名', type: 'string', width: '15%' },
+        PARTITION_ID: { title: '分区ID', type: 'string', width: '10%' },
+        DATA_SIZE: { title: '数据大小', type: 'string', width: '12%' },
+        ROW_COUNT: { title: '行数', type: 'string', width: '12%' },
+        BUCKETS: { title: '分桶数', type: 'string', width: '8%' },
+        REPLICATION_NUM: { title: '副本数', type: 'string', width: '8%' },
+        STORAGE_MEDIUM: { title: '存储介质', type: 'string', width: '10%' },
+        AVG_CS: { 
+          title: '平均CS', 
+          type: 'html', 
+          width: '8%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        MAX_CS: { 
+          title: '最大CS', 
+          type: 'html', 
+          width: '8%',
+          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+        },
+        STORAGE_PATH: { 
+          title: '存储路径', 
+          type: 'html', 
+          width: '9%',
+          valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+        },
+      },
+    }, catalogName, databaseName);
+  }
+
+  private viewTableTransactions(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+    const tableName = node.data?.table || node.name;
+
+    if (!databaseName || !tableName) {
+      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+      return;
+    }
+
+    // Views don't have transactions (they are logical, not physical)
+    if (node.data?.tableType === 'VIEW') {
+      this.toastrService.warning('视图是逻辑表，不涉及物理事务', '提示');
+      return;
+    }
+
+    this.openInfoDialog('表事务信息', 'transactions', () => {
+      const sql = `SELECT * FROM information_schema.be_txns 
+        WHERE PARTITION_ID IN (
+          SELECT PARTITION_ID FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+        )
+        ORDER BY CREATE_TIME DESC
+        LIMIT 100`;
+
+      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    }, {
+      columns: {
+        BE_ID: { title: 'BE ID', type: 'string', width: '10%' },
+        TXN_ID: { title: '事务ID', type: 'string', width: '12%' },
+        PARTITION_ID: { title: '分区ID', type: 'string', width: '12%' },
+        TABLET_ID: { title: 'Tablet ID', type: 'string', width: '12%' },
+        CREATE_TIME: { title: '创建时间', type: 'string', width: '15%' },
+        COMMIT_TIME: { title: '提交时间', type: 'string', width: '15%' },
+        PUBLISH_TIME: { title: '发布时间', type: 'string', width: '15%' },
+        NUM_ROW: { title: '行数', type: 'string', width: '9%' },
+      },
+    }, catalogName, databaseName);
+  }
+
+  // Helper methods for info dialog
+  private openInfoDialog(
+    title: string,
+    type: 'transactions' | 'compactions' | 'compactionDetails' | 'loads' | 'databaseStats' | 'tableStats' | 'partitions' | 'compactionScore',
+    queryFn: () => Observable<QueryExecuteResult>,
+    settings: any,
+    catalog?: string,
+    database?: string
+  ): void {
+    this.infoDialogTitle = title;
+    this.infoDialogType = type;
+    this.infoDialogSettings = {
+      mode: 'external',
+      hideSubHeader: false,
+      noDataMessage: '暂无数据',
+      actions: false,
+      pager: {
+        display: true,
+        perPage: 15,
+      },
+      columns: settings.columns,
+    };
+    this.infoDialogLoading = false; // Don't show loading in dialog
+    this.infoDialogError = null;
+    this.infoDialogData = [];
+    this.infoDialogPageLoading = true; // Show page-level loading
+
+    // Close existing dialog if any
+    if (this.infoDialogRef) {
+      this.infoDialogRef.close();
+    }
+
+    // Load data first, then open dialog
+    queryFn()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => {
+          this.infoDialogPageLoading = false; // Hide loading
+
+          if (result.results && result.results.length > 0 && result.results[0].success) {
+            const firstResult = result.results[0];
+            const dataRows = firstResult.rows.map(row => {
+              const obj: any = {};
+              firstResult.columns.forEach((col, idx) => {
+                obj[col] = row[idx];
+              });
+              return obj;
+            });
+            this.infoDialogData = dataRows;
+            this.infoDialogSource.load(dataRows);
+            this.infoDialogError = null;
+
+            // Open dialog with data
+            this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
+              hasBackdrop: true,
+              closeOnBackdropClick: true,
+              closeOnEsc: true,
+              context: {
+                catalog,
+                database,
+              },
+            });
+
+            if (this.infoDialogRef) {
+              this.infoDialogRef.onClose.subscribe(() => {
+                this.infoDialogRef = null;
+              });
+              
+              // Wait for dialog to render, then ensure tooltips work
+              setTimeout(() => {
+                this.ensureTooltipsWork();
+              }, 100);
+            }
+          } else {
+            const error = result.results?.[0]?.error || '查询失败';
+            this.infoDialogError = error;
+            this.infoDialogData = [];
+            this.infoDialogSource.load([]);
+            
+            // Show error and open dialog to display error
+            this.toastrService.danger(error, '查询失败');
+            this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
+              hasBackdrop: true,
+              closeOnBackdropClick: true,
+              closeOnEsc: true,
+              context: {
+                catalog,
+                database,
+              },
+            });
+
+            if (this.infoDialogRef) {
+              this.infoDialogRef.onClose.subscribe(() => {
+                this.infoDialogRef = null;
+              });
+            }
+          }
+        },
+        error: (error) => {
+          this.infoDialogPageLoading = false; // Hide loading
+          const errorMessage = ErrorHandler.extractErrorMessage(error);
+          this.infoDialogError = errorMessage;
+          this.infoDialogData = [];
+          this.infoDialogSource.load([]);
+          
+          // Show error and open dialog to display error
+          this.toastrService.danger(errorMessage, '查询失败');
+          this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
+            hasBackdrop: true,
+            closeOnBackdropClick: true,
+            closeOnEsc: true,
+            context: {
+              catalog,
+              database,
+            },
+          });
+
+          if (this.infoDialogRef) {
+            this.infoDialogRef.onClose.subscribe(() => {
+              this.infoDialogRef = null;
+            });
+          }
+        },
+      });
+  }
+
+  // Helper method to render long text with truncation and tooltip
+  // Now uses the shared utility function
+  private renderLongText(value: any, maxLength: number = 50): string {
+    return renderLongText(value, maxLength);
+  }
+
+  // Ensure tooltips work in ng2-smart-table and add copy functionality
+  // This is a workaround for cases where ng2-smart-table doesn't properly render title attributes
+  private ensureTooltipsWork(): void {
+    if (!this.infoDialogRef) return;
+    
+    // Find all spans with title attributes in the dialog
+    const dialogElement = document.querySelector('.info-dialog-card');
+    if (!dialogElement) return;
+    
+    const spansWithTitle = dialogElement.querySelectorAll('span[title]');
+    spansWithTitle.forEach((span: Element) => {
+      const title = span.getAttribute('title');
+      if (title && span.textContent) {
+        // Ensure the title attribute is set (in case it was stripped)
+        span.setAttribute('title', title);
+        // Add cursor style if not already present
+        if (!span.getAttribute('style') || !span.getAttribute('style')?.includes('cursor')) {
+          const currentStyle = span.getAttribute('style') || '';
+          span.setAttribute('style', currentStyle + (currentStyle ? '; ' : '') + 'cursor: help;');
+        }
+        
+        // Add click to copy functionality (right-click or double-click)
+        span.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          this.copyToClipboard(title);
+        });
+        
+        // Also support right-click context menu for copy
+        span.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.copyToClipboard(title);
+        });
+        
+        // Add visual indicator
+        span.setAttribute('data-copyable', 'true');
+        const originalTitle = span.getAttribute('title') || title;
+        span.setAttribute('title', originalTitle + ' (双击或右键复制)');
+      }
+    });
+  }
+
+  private copyToClipboard(text: string): void {
+    if (!text) return;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        this.toastrService.success('已复制到剪贴板', '成功', { duration: 2000 });
+      }).catch((err) => {
+        console.error('Failed to copy text:', err);
+        this.fallbackCopyText(text);
+      });
+    } else {
+      this.fallbackCopyText(text);
+    }
+  }
+
+  private fallbackCopyText(text: string): void {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      document.execCommand('copy');
+      this.toastrService.success('已复制到剪贴板', '成功', { duration: 2000 });
+    } catch (err) {
+      console.error('Fallback copy failed:', err);
+      this.toastrService.danger('复制失败', '错误');
+    }
+    
+    document.body.removeChild(textArea);
+  }
+
+  // Render helper methods
+  private renderCompactionScore(value: number): string {
+    if (value === null || value === undefined) {
+      return '<span class="badge badge-basic">-</span>';
+    }
+    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(numValue)) {
+      return '<span class="badge badge-basic">-</span>';
+    }
+    
+    let badgeClass = 'badge-success'; // < 10: green
+    if (numValue >= 2000) {
+      badgeClass = 'badge-danger'; // >= 2000: red
+    } else if (numValue >= 100) {
+      badgeClass = 'badge-warning'; // >= 100: orange/yellow
+    } else if (numValue >= 10) {
+      badgeClass = 'badge-info'; // >= 10: yellow
+    }
+    
+    return `<span class="badge ${badgeClass}">${numValue.toFixed(2)}</span>`;
+  }
+
+  private renderLoadState(value: string): string {
+    if (!value) return '-';
+    const badges: { [key: string]: string } = {
+      FINISHED: '<span class="badge badge-success">完成</span>',
+      LOADING: '<span class="badge badge-info">加载中</span>',
+      PENDING: '<span class="badge badge-warning">等待中</span>',
+      CANCELLED: '<span class="badge badge-danger">已取消</span>',
+      QUEUEING: '<span class="badge badge-info">队列中</span>',
+    };
+    return badges[value] || `<span class="badge badge-basic">${value}</span>`;
+  }
+
+  // Compaction trigger dialog
+  private openCompactionTriggerDialog(node: NavTreeNode): void {
+    const catalogName = node.data?.catalog || '';
+    const databaseName = node.data?.database || '';
+    const tableName = node.data?.table || node.name;
+
+    if (!databaseName || !tableName) {
+      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+      return;
+    }
+
+    // Only regular tables can trigger compaction manually
+    const tableType = node.data?.tableType;
+    if (tableType === 'VIEW') {
+      this.toastrService.warning('视图不支持手动触发Compaction', '提示');
+      return;
+    }
+    if (tableType === 'MATERIALIZED_VIEW') {
+      this.toastrService.warning('物化视图的Compaction由系统自动管理，不建议手动触发', '提示');
+      return;
+    }
+
+    this.compactionTriggerTable = tableName;
+    this.compactionTriggerDatabase = databaseName;
+    this.compactionTriggerCatalog = catalogName;
+    this.compactionSelectedPartitions = [];
+    this.compactionTriggerMode = 'table';
+    this.compactionTriggering = false;
+
+    // Load partitions for selection
+    const sql = `SELECT PARTITION_NAME 
+      FROM information_schema.partitions_meta 
+      WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+      ORDER BY PARTITION_NAME`;
+
+    this.nodeService
+      .executeSQL(sql, 100, catalogName || undefined, databaseName)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => {
+          if (result.results && result.results.length > 0 && result.results[0].success) {
+            this.availablePartitions = result.results[0].rows.map(row => row[0]);
+          }
+        },
+        error: (error) => {
+          console.error('Failed to load partitions:', error);
+        },
+      });
+
+    if (this.compactionTriggerDialogRef) {
+      this.compactionTriggerDialogRef.close();
+    }
+
+    this.compactionTriggerDialogRef = this.dialogService.open(this.compactionTriggerDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+    });
+
+    if (this.compactionTriggerDialogRef) {
+      this.compactionTriggerDialogRef.onClose.subscribe(() => {
+        this.compactionTriggerDialogRef = null;
+      });
+    }
+  }
+
+  closeCompactionTriggerDialog(): void {
+    if (this.compactionTriggerDialogRef) {
+      this.compactionTriggerDialogRef.close();
+    }
+  }
+
+  togglePartitionSelection(partition: string, checked: boolean): void {
+    if (checked) {
+      if (!this.compactionSelectedPartitions.includes(partition)) {
+        this.compactionSelectedPartitions.push(partition);
+      }
+    } else {
+      const index = this.compactionSelectedPartitions.indexOf(partition);
+      if (index > -1) {
+        this.compactionSelectedPartitions.splice(index, 1);
+      }
+    }
+  }
+
+  triggerCompaction(): void {
+    if (!this.compactionTriggerTable || !this.compactionTriggerDatabase) {
+      return;
+    }
+
+    if (this.compactionTriggerMode === 'partition' && this.compactionSelectedPartitions.length === 0) {
+      this.toastrService.warning('请至少选择一个分区', '提示');
+      return;
+    }
+
+    const qualifiedTableName = this.buildQualifiedTableName(
+      this.compactionTriggerCatalog || '',
+      this.compactionTriggerDatabase,
+      this.compactionTriggerTable
+    );
+
+    let actionDesc = '';
+    if (this.compactionTriggerMode === 'table') {
+      actionDesc = `对整个表 "${this.compactionTriggerTable}" 执行Compaction`;
+    } else {
+      if (this.compactionSelectedPartitions.length === 1) {
+        actionDesc = `对分区 "${this.compactionSelectedPartitions[0]}" 执行Compaction`;
+      } else {
+        actionDesc = `对 ${this.compactionSelectedPartitions.length} 个分区执行Compaction`;
+      }
+    }
+
+    this.confirmDialogService
+      .confirm(
+        '确认触发Compaction',
+        `确定要${actionDesc}吗？\n\nCompaction任务会在后台执行，不会阻塞当前操作。`,
+        '确认触发',
+        '取消',
+        'primary'
+      )
+      .subscribe((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+
+        this.compactionTriggering = true;
+        let sql = '';
+        if (this.compactionTriggerMode === 'table') {
+          sql = `ALTER TABLE ${qualifiedTableName} COMPACT`;
+        } else {
+          if (this.compactionSelectedPartitions.length === 1) {
+            sql = `ALTER TABLE ${qualifiedTableName} COMPACT \`${this.compactionSelectedPartitions[0]}\``;
+          } else {
+            const partitions = this.compactionSelectedPartitions.map(p => `\`${p}\``).join(', ');
+            sql = `ALTER TABLE ${qualifiedTableName} COMPACT (${partitions})`;
+          }
+        }
+
+        this.nodeService
+          .executeSQL(sql, undefined, this.compactionTriggerCatalog || undefined, this.compactionTriggerDatabase)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: (result) => {
+              this.compactionTriggering = false;
+              if (result.results && result.results.length > 0 && result.results[0].success) {
+                this.toastrService.success('Compaction任务已触发', '成功');
+                this.closeCompactionTriggerDialog();
+              } else {
+                const error = result.results?.[0]?.error || '触发失败';
+                this.toastrService.danger(error, '触发Compaction失败');
+              }
+            },
+            error: (error) => {
+              this.compactionTriggering = false;
+              this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '触发Compaction失败');
+            },
+          });
+      });
   }
 
   private setSelectedContext(catalog: string, database: string | null, table: string | null): void {

@@ -404,6 +404,14 @@
         <strong>错误：</strong>{{ infoDialogError }}
       </nb-alert>
 
+      <!-- Transaction tabs (only for transactions type) -->
+      <nb-tabset *ngIf="infoDialogType === 'transactions' && !infoDialogError" (changeTab)="switchTransactionTab($event.tabId)">
+        <nb-tab tabTitle="运行中" tabId="running" [active]="transactionCurrentTab === 'running'">
+        </nb-tab>
+        <nb-tab tabTitle="已完成" tabId="finished" [active]="transactionCurrentTab === 'finished'">
+        </nb-tab>
+      </nb-tabset>
+
       <ng2-smart-table
         *ngIf="!infoDialogError"
         [settings]="infoDialogSettings"
@@ -411,10 +419,19 @@
       </ng2-smart-table>
     </nb-card-body>
     <nb-card-footer>
-      <div class="d-flex justify-content-end">
-        <button nbButton status="basic" (click)="ref.close()">
-          关闭
-        </button>
+      <div class="d-flex align-items-center">
+        <!-- Per page selector - moved to left bottom -->
+        <div class="per-page-selector" *ngIf="!infoDialogError">
+          <label>每页显示：</label>
+          <nb-select 
+            [(selected)]="infoDialogPerPage" 
+            (selectedChange)="onPerPageChange($event)"
+            size="small">
+            <nb-option *ngFor="let option of perPageOptions" [value]="option">
+              {{ option }}
+            </nb-option>
+          </nb-select>
+        </div>
       </div>
     </nb-card-footer>
   </nb-card>

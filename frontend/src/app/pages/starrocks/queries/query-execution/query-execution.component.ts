@@ -2,8 +2,8 @@ import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, Hos
 import { ActivatedRoute } from '@angular/router';
 import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrService, NbThemeService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
-import { Subject, Observable } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Subject, Observable, forkJoin, of } from 'rxjs';
+import { map, catchError, takeUntil } from 'rxjs/operators';
 import { NodeService, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
@@ -60,6 +60,7 @@ interface NavTreeNode {
     originalName?: string;
     tablesLoaded?: boolean;
     tableCount?: number;
+    dbId?: string; // Cached database ID
   };
 }
 
@@ -137,6 +138,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   private resizeStartWidth = 280;
   private databaseCache: Record<string, string[]> = {};
   private tableCache: Record<string, TableInfo[]> = {};
+  // Cache database ID mapping: catalog|database -> dbId
+  private databaseIdCache: Record<string, string> = {};
   private currentSqlSchema: SQLNamespace = {};
   treePanelHeight: number = 420;
   private readonly treeExtraHeight: number = 140;
@@ -170,6 +173,16 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   
   // Page-level loading state for info dialogs
   infoDialogPageLoading: boolean = false;
+  
+  // Pagination settings for info dialogs
+  infoDialogPerPage: number = 15;
+  perPageOptions = [10, 15, 20, 30, 50, 100];
+  
+  // Transaction dialog state (for tab switching)
+  transactionRunningData: any[] = [];
+  transactionFinishedData: any[] = [];
+  transactionCurrentTab: 'running' | 'finished' = 'running';
+  transactionColumns: any = {};
   
   // Compaction trigger dialog state
   compactionTriggerDialogRef: NbDialogRef<any> | null = null;
@@ -231,6 +244,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         originalName: database,
         tablesLoaded: false,
         tableCount: 0,
+        dbId: undefined, // Will be populated when loading databases
       },
     };
   }
@@ -1260,6 +1274,63 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   // Database level view methods
+  
+  /**
+   * Get database ID from cache or query SHOW PROC '/dbs'
+   * Returns Observable that emits the database ID or null if not found
+   */
+  private getDatabaseId(catalogName: string, databaseName: string, node: NavTreeNode): Observable<string | null> {
+    // Try to get database ID from cached node data or cache
+    let dbId: string | null = node.data?.dbId || null;
+    
+    if (!dbId) {
+      // Try to get from cache
+      const dbIdCacheKey = `${catalogName}|${databaseName}`;
+      dbId = this.databaseIdCache[dbIdCacheKey] || null;
+    }
+
+    if (dbId) {
+      // Return cached ID immediately
+      return of(dbId);
+    }
+
+    // Fallback: query SHOW PROC '/dbs' if not cached
+    const getDbIdSql = `SHOW PROC '/dbs'`;
+    return this.nodeService.executeSQL(getDbIdSql, 1000, catalogName || undefined, undefined)
+      .pipe(
+        map((result) => {
+          if (result.results && result.results.length > 0 && result.results[0].success) {
+            const firstResult = result.results[0];
+            let foundDbId: string | null = null;
+            
+            // Find database ID by matching DbName
+            for (const row of firstResult.rows) {
+              const dbNameIdx = firstResult.columns.findIndex(col => col === 'DbName');
+              const dbIdIdx = firstResult.columns.findIndex(col => col === 'DbId');
+              if (dbNameIdx >= 0 && dbIdIdx >= 0 && row[dbNameIdx] === databaseName) {
+                foundDbId = String(row[dbIdIdx]);
+                // Cache it
+                const dbIdCacheKey = `${catalogName}|${databaseName}`;
+                this.databaseIdCache[dbIdCacheKey] = foundDbId;
+                // Update node data
+                if (node.data) {
+                  node.data.dbId = foundDbId;
+                }
+                break;
+              }
+            }
+
+            return foundDbId;
+          }
+          return null;
+        }),
+        catchError((error) => {
+          this.toastrService.danger(`获取数据库ID失败: ${ErrorHandler.extractErrorMessage(error)}`, '错误');
+          return of(null);
+        })
+      );
+  }
+
   private viewDatabaseTransactions(node: NavTreeNode): void {
     const catalogName = node.data?.catalog || '';
     const databaseName = node.data?.database || node.name;
@@ -1269,29 +1340,228 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       return;
     }
 
-    this.openInfoDialog('事务信息', 'transactions', () => {
-      // Query transactions for this database
-      const sql = `SELECT * FROM information_schema.be_txns 
-        WHERE PARTITION_ID IN (
-          SELECT PARTITION_ID FROM information_schema.partitions_meta 
-          WHERE DB_NAME = '${databaseName}'
-        )
-        ORDER BY CREATE_TIME DESC
-        LIMIT 100`;
+    this.getDatabaseId(catalogName, databaseName, node)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (dbId) => {
+          if (!dbId) {
+            this.toastrService.warning(`无法找到数据库 ${databaseName} 的ID`, '提示');
+            return;
+          }
+          // Open dialog with tab support for running and finished transactions
+          this.openTransactionsDialogWithTabs(databaseName, dbId, catalogName);
+        },
+      });
+  }
 
-      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
-    }, {
-      columns: {
-        BE_ID: { title: 'BE ID', type: 'string', width: '10%' },
-        TXN_ID: { title: '事务ID', type: 'string', width: '12%' },
-        PARTITION_ID: { title: '分区ID', type: 'string', width: '12%' },
-        TABLET_ID: { title: 'Tablet ID', type: 'string', width: '12%' },
-        CREATE_TIME: { title: '创建时间', type: 'string', width: '15%' },
-        COMMIT_TIME: { title: '提交时间', type: 'string', width: '15%' },
-        PUBLISH_TIME: { title: '发布时间', type: 'string', width: '15%' },
-        NUM_ROW: { title: '行数', type: 'string', width: '9%' },
+  private openTransactionsDialogWithTabs(databaseName: string, dbId: string, catalogName?: string, tableName?: string): void {
+    // Show loading state immediately
+    this.infoDialogTitle = '事务信息';
+    this.infoDialogType = 'transactions';
+    this.infoDialogPageLoading = true;
+    this.infoDialogError = null;
+    this.infoDialogData = [];
+    this.infoDialogSource.load([]);
+
+    // Define columns for transaction display
+    const transactionColumns = {
+      TransactionId: { title: '事务ID', type: 'string', width: '12%' },
+      Label: { 
+        title: '标签', 
+        type: 'html', 
+        width: '20%',
+        valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
       },
-    }, catalogName, databaseName);
+      Coordinator: { 
+        title: '协调者', 
+        type: 'html', 
+        width: '15%',
+        valuePrepareFunction: (value: any) => this.renderLongText(value, 25),
+      },
+      TransactionStatus: { 
+        title: '状态', 
+        type: 'html', 
+        width: '10%',
+        valuePrepareFunction: (value: string) => {
+          const status = value || '';
+          if (status === 'VISIBLE') {
+            return '<span class="badge badge-success">VISIBLE</span>';
+          } else if (status === 'ABORTED') {
+            return '<span class="badge badge-danger">ABORTED</span>';
+          } else if (status === 'COMMITTED') {
+            return '<span class="badge badge-info">COMMITTED</span>';
+          }
+          return `<span class="badge badge-warning">${status}</span>`;
+        },
+      },
+      LoadJobSourceType: { 
+        title: '来源类型', 
+        type: 'html', 
+        width: '12%',
+        valuePrepareFunction: (value: any) => this.renderLongText(value, 20),
+      },
+      PrepareTime: { title: '准备时间', type: 'string', width: '12%' },
+      CommitTime: { 
+        title: '提交时间', 
+        type: 'html', 
+        width: '12%',
+        valuePrepareFunction: (value: any) => {
+          if (!value || value === 'NULL') {
+            return '<span class="badge badge-warning">未提交</span>';
+          }
+          return String(value);
+        },
+      },
+      PublishTime: { title: '发布时间', type: 'string', width: '12%' },
+      FinishTime: { 
+        title: '完成时间', 
+        type: 'html', 
+        width: '12%',
+        valuePrepareFunction: (value: any) => {
+          if (!value || value === 'NULL') {
+            return '<span class="badge badge-info">进行中</span>';
+          }
+          return String(value);
+        },
+      },
+      ErrMsg: { 
+        title: '错误信息', 
+        type: 'html', 
+        width: '15%',
+        valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+      },
+    };
+
+    // Set settings BEFORE opening dialog to ensure actions are disabled
+    this.infoDialogSettings = {
+      mode: 'external',
+      hideSubHeader: false,
+      noDataMessage: '暂无数据',
+      actions: {
+        add: false,
+        edit: false,
+        delete: false,
+        position: 'left',
+      },
+      pager: {
+        display: true,
+        perPage: this.infoDialogPerPage,
+      },
+      columns: transactionColumns,
+    };
+    this.transactionColumns = transactionColumns;
+
+    // Close existing dialog if any
+    if (this.infoDialogRef) {
+      this.infoDialogRef.close();
+    }
+
+    // Open dialog with loading state
+    this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+      context: {
+        catalog: catalogName,
+        database: databaseName,
+      },
+    });
+
+    // Query running transactions
+    const runningSql = `SHOW PROC '/transactions/${dbId}/running'`;
+    const finishedSql = `SHOW PROC '/transactions/${dbId}/finished'`;
+
+    // Load both queries
+    forkJoin({
+      running: this.nodeService.executeSQL(runningSql, 1000, catalogName || undefined, databaseName),
+      finished: this.nodeService.executeSQL(finishedSql, 1000, catalogName || undefined, databaseName),
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (results) => {
+          // Process running transactions
+          let runningData: any[] = [];
+          if (results.running.results && results.running.results.length > 0 && results.running.results[0].success) {
+            const runningResult = results.running.results[0];
+            runningData = runningResult.rows.map(row => {
+              const obj: any = {};
+              runningResult.columns.forEach((col, idx) => {
+                obj[col] = row[idx];
+              });
+              return obj;
+            });
+          }
+
+          // Process finished transactions
+          let finishedData: any[] = [];
+          if (results.finished.results && results.finished.results.length > 0 && results.finished.results[0].success) {
+            const finishedResult = results.finished.results[0];
+            finishedData = finishedResult.rows.map(row => {
+              const obj: any = {};
+              finishedResult.columns.forEach((col, idx) => {
+                obj[col] = row[idx];
+              });
+              return obj;
+            });
+          }
+
+          // Filter by table name if provided (filter by Label field which may contain table name)
+          if (tableName) {
+            runningData = runningData.filter(item => {
+              const label = String(item.Label || '').toLowerCase();
+              return label.includes(tableName.toLowerCase());
+            });
+            finishedData = finishedData.filter(item => {
+              const label = String(item.Label || '').toLowerCase();
+              return label.includes(tableName.toLowerCase());
+            });
+          }
+
+          // Store data for tab switching
+          this.transactionRunningData = runningData;
+          this.transactionFinishedData = finishedData;
+          this.transactionCurrentTab = 'running';
+          this.transactionColumns = transactionColumns;
+
+          // Update dialog with data
+          this.infoDialogSettings = {
+            mode: 'external',
+            hideSubHeader: false,
+            noDataMessage: '暂无数据',
+            actions: {
+              add: false,
+              edit: false,
+              delete: false,
+              position: 'left',
+            },
+            pager: {
+              display: true,
+              perPage: this.infoDialogPerPage,
+            },
+            columns: transactionColumns,
+          };
+          this.infoDialogData = runningData;
+          this.infoDialogSource.load(runningData);
+          this.infoDialogError = null;
+          this.infoDialogPageLoading = false;
+
+          if (this.infoDialogRef) {
+            this.infoDialogRef.onClose.subscribe(() => {
+              this.infoDialogRef = null;
+            });
+            
+            // Wait for table to render, then ensure tooltips work
+            setTimeout(() => {
+              this.ensureTooltipsWork();
+            }, 300);
+          }
+        },
+        error: (error) => {
+          this.infoDialogPageLoading = false;
+          const errorMessage = ErrorHandler.extractErrorMessage(error);
+          this.toastrService.danger(errorMessage, '查询失败');
+        },
+      });
   }
 
   private viewDatabaseCompactions(node: NavTreeNode): void {
@@ -1303,51 +1573,79 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       return;
     }
 
-    this.openInfoDialog('Compaction信息', 'compactions', () => {
-      // Query compaction tasks using SHOW PROC
-      // Note: SHOW PROC cannot be used directly in executeSQL, so we query partitions_meta for Compaction Score
-      const sql = `SELECT 
-        TABLE_NAME,
-        PARTITION_NAME,
-        AVG_CS,
-        P50_CS,
-        MAX_CS,
-        DATA_SIZE,
-        ROW_COUNT,
-        COMPACT_VERSION,
-        VISIBLE_VERSION
-      FROM information_schema.partitions_meta 
-      WHERE DB_NAME = '${databaseName}'
-      ORDER BY MAX_CS DESC
-      LIMIT 100`;
-
-      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
+    // Show Compaction tasks using SHOW PROC '/compactions'
+    this.openInfoDialog('Compaction任务', 'compactionDetails', () => {
+      const sql = `SHOW PROC '/compactions'`;
+      return this.nodeService.executeSQL(sql, 1000, catalogName || undefined, databaseName);
     }, {
       columns: {
-        TABLE_NAME: { title: '表名', type: 'string', width: '15%' },
-        PARTITION_NAME: { title: '分区名', type: 'string', width: '15%' },
-        AVG_CS: { 
-          title: '平均CS', 
+        Partition: { 
+          title: '分区', 
           type: 'html', 
-          width: '10%',
-          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+          width: '25%',
+          valuePrepareFunction: (value: any) => {
+            // Partition format: database.table.partition_id
+            const partitionStr = String(value || '');
+            const parts = partitionStr.split('.');
+            if (parts.length >= 3) {
+              const dbName = parts[0];
+              const tableName = parts[1];
+              const partitionId = parts[2];
+              const dbTable = `${dbName}.${tableName}`;
+              return `${this.renderLongText(dbTable, 20)}<br><small>分区ID: ${this.renderLongText(partitionId, 15)}</small>`;
+            }
+            return this.renderLongText(partitionStr, 30);
+          },
         },
-        P50_CS: { 
-          title: 'P50 CS', 
+        TxnID: { title: '事务ID', type: 'string', width: '10%' },
+        StartTime: { title: '开始时间', type: 'string', width: '12%' },
+        CommitTime: { 
+          title: '提交时间', 
           type: 'html', 
-          width: '10%',
-          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+          width: '12%',
+          valuePrepareFunction: (value: any) => {
+            if (!value || value === 'NULL') {
+              return '<span class="badge badge-warning">未提交</span>';
+            }
+            return String(value);
+          },
         },
-        MAX_CS: { 
-          title: '最大CS', 
+        FinishTime: { 
+          title: '完成时间', 
           type: 'html', 
-          width: '10%',
-          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+          width: '12%',
+          valuePrepareFunction: (value: any) => {
+            if (!value || value === 'NULL') {
+              return '<span class="badge badge-info">进行中</span>';
+            }
+            return String(value);
+          },
         },
-        DATA_SIZE: { title: '数据大小', type: 'string', width: '12%' },
-        ROW_COUNT: { title: '行数', type: 'string', width: '10%' },
-        COMPACT_VERSION: { title: 'Compact版本', type: 'string', width: '10%' },
-        VISIBLE_VERSION: { title: '可见版本', type: 'string', width: '8%' },
+        Error: { 
+          title: '错误', 
+          type: 'html', 
+          width: '15%',
+          valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+        },
+        Profile: { 
+          title: 'Profile', 
+          type: 'html', 
+          width: '14%',
+          valuePrepareFunction: (value: any) => {
+            if (!value || value === 'NULL') {
+              return '-';
+            }
+            try {
+              const profile = typeof value === 'string' ? JSON.parse(value) : value;
+              const subTaskCount = profile.sub_task_count || 0;
+              const readLocalMb = profile.read_local_mb || 0;
+              const readRemoteMb = profile.read_remote_mb || 0;
+              return `<small>子任务: ${subTaskCount}<br>读取: ${readLocalMb}MB本地, ${readRemoteMb}MB远程</small>`;
+            } catch {
+              return this.renderLongText(value, 20);
+            }
+          },
+        },
       },
     }, catalogName, databaseName);
   }
@@ -1377,7 +1675,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         LOAD_FINISH_TIME,
         ERROR_MSG
       FROM information_schema.loads 
-      WHERE DATABASE_NAME = '${databaseName}'
+      WHERE DB_NAME = '${databaseName}'
       ORDER BY CREATE_TIME DESC
       LIMIT 100`;
 
@@ -1385,7 +1683,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     }, {
       columns: {
         JOB_ID: { title: '作业ID', type: 'string', width: '10%' },
-        LABEL: { title: '标签', type: 'string', width: '15%' },
+        LABEL: { 
+          title: '标签', 
+          type: 'html', 
+          width: '15%',
+          valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+        },
         STATE: { 
           title: '状态', 
           type: 'html', 
@@ -1422,11 +1725,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         TABLE_NAME,
         COUNT(DISTINCT PARTITION_NAME) as PARTITION_COUNT,
         SUM(ROW_COUNT) as TOTAL_ROWS,
-        SUM(CASE WHEN DATA_SIZE LIKE '%KB' THEN CAST(REPLACE(DATA_SIZE, 'KB', '') AS DECIMAL) / 1024
+        ROUND(SUM(CASE 
+                 WHEN DATA_SIZE LIKE '%KB' THEN CAST(REPLACE(DATA_SIZE, 'KB', '') AS DECIMAL) / 1024
                  WHEN DATA_SIZE LIKE '%MB' THEN CAST(REPLACE(DATA_SIZE, 'MB', '') AS DECIMAL)
                  WHEN DATA_SIZE LIKE '%GB' THEN CAST(REPLACE(DATA_SIZE, 'GB', '') AS DECIMAL) * 1024
-                 ELSE 0 END) as TOTAL_SIZE_MB,
-        AVG(MAX_CS) as AVG_MAX_CS,
+                 WHEN DATA_SIZE LIKE '%TB' THEN CAST(REPLACE(DATA_SIZE, 'TB', '') AS DECIMAL) * 1024 * 1024
+                 WHEN DATA_SIZE LIKE '%B' AND DATA_SIZE != '0B' THEN CAST(REPLACE(REPLACE(DATA_SIZE, 'B', ''), ' ', '') AS DECIMAL) / 1024 / 1024
+                 ELSE 0 
+             END), 2) as TOTAL_SIZE_MB,
+        ROUND(AVG(MAX_CS), 2) as AVG_MAX_CS,
         MAX(MAX_CS) as MAX_CS_OVERALL
       FROM information_schema.partitions_meta 
       WHERE DB_NAME = '${databaseName}'
@@ -1439,7 +1746,18 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         TABLE_NAME: { title: '表名', type: 'string', width: '20%' },
         PARTITION_COUNT: { title: '分区数', type: 'string', width: '12%' },
         TOTAL_ROWS: { title: '总行数', type: 'string', width: '15%' },
-        TOTAL_SIZE_MB: { title: '总大小(MB)', type: 'string', width: '15%' },
+        TOTAL_SIZE_MB: { 
+          title: '总大小(MB)', 
+          type: 'html', 
+          width: '15%',
+          valuePrepareFunction: (value: any) => {
+            if (value === null || value === undefined || value === '') {
+              return '0.00';
+            }
+            const num = typeof value === 'string' ? parseFloat(value) : value;
+            return isNaN(num) ? '0.00' : num.toFixed(2);
+          },
+        },
         AVG_MAX_CS: { 
           title: '平均最大CS', 
           type: 'html', 
@@ -1674,28 +1992,30 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       return;
     }
 
-    this.openInfoDialog('表事务信息', 'transactions', () => {
-      const sql = `SELECT * FROM information_schema.be_txns 
-        WHERE PARTITION_ID IN (
-          SELECT PARTITION_ID FROM information_schema.partitions_meta 
-          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
-        )
-        ORDER BY CREATE_TIME DESC
-        LIMIT 100`;
+    this.getDatabaseId(catalogName, databaseName, node)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (dbId) => {
+          if (!dbId) {
+            this.toastrService.warning(`无法找到数据库 ${databaseName} 的ID`, '提示');
+            return;
+          }
+          // Open dialog with tab support, filtering by table name
+          this.openTransactionsDialogWithTabs(databaseName, dbId, catalogName, tableName);
+        },
+      });
+  }
 
-      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
-    }, {
-      columns: {
-        BE_ID: { title: 'BE ID', type: 'string', width: '10%' },
-        TXN_ID: { title: '事务ID', type: 'string', width: '12%' },
-        PARTITION_ID: { title: '分区ID', type: 'string', width: '12%' },
-        TABLET_ID: { title: 'Tablet ID', type: 'string', width: '12%' },
-        CREATE_TIME: { title: '创建时间', type: 'string', width: '15%' },
-        COMMIT_TIME: { title: '提交时间', type: 'string', width: '15%' },
-        PUBLISH_TIME: { title: '发布时间', type: 'string', width: '15%' },
-        NUM_ROW: { title: '行数', type: 'string', width: '9%' },
-      },
-    }, catalogName, databaseName);
+  switchTransactionTab(tab: 'running' | 'finished'): void {
+    this.transactionCurrentTab = tab;
+    const data = tab === 'running' ? this.transactionRunningData : this.transactionFinishedData;
+    this.infoDialogData = data;
+    this.infoDialogSource.load(data);
+    
+    // Wait for table to render after tab switch, then ensure tooltips work
+    setTimeout(() => {
+      this.ensureTooltipsWork();
+    }, 300);
   }
 
   // Helper methods for info dialog
@@ -1709,20 +2029,35 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   ): void {
     this.infoDialogTitle = title;
     this.infoDialogType = type;
+    // Load perPage preference from localStorage
+    const savedPerPage = localStorage.getItem('infoDialogPerPage');
+    if (savedPerPage) {
+      const parsed = parseInt(savedPerPage, 10);
+      if (this.perPageOptions.includes(parsed)) {
+        this.infoDialogPerPage = parsed;
+      }
+    }
+    
     this.infoDialogSettings = {
       mode: 'external',
       hideSubHeader: false,
       noDataMessage: '暂无数据',
-      actions: false,
+      actions: {
+        add: false,
+        edit: false,
+        delete: false,
+        position: 'left',
+      },
       pager: {
         display: true,
-        perPage: 15,
+        perPage: this.infoDialogPerPage,
       },
       columns: settings.columns,
     };
     this.infoDialogLoading = false; // Don't show loading in dialog
     this.infoDialogError = null;
     this.infoDialogData = [];
+    this.infoDialogSource.load([]);
     this.infoDialogPageLoading = true; // Show page-level loading
 
     // Close existing dialog if any
@@ -1730,7 +2065,24 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       this.infoDialogRef.close();
     }
 
-    // Load data first, then open dialog
+    // Open dialog immediately with loading state
+    this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+      context: {
+        catalog,
+        database,
+      },
+    });
+
+    if (this.infoDialogRef) {
+      this.infoDialogRef.onClose.subscribe(() => {
+        this.infoDialogRef = null;
+      });
+    }
+
+    // Load data
     queryFn()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -1739,61 +2091,39 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
           if (result.results && result.results.length > 0 && result.results[0].success) {
             const firstResult = result.results[0];
-            const dataRows = firstResult.rows.map(row => {
+            let dataRows = firstResult.rows.map(row => {
               const obj: any = {};
               firstResult.columns.forEach((col, idx) => {
                 obj[col] = row[idx];
               });
               return obj;
             });
+
+            // Filter Compaction tasks by database if database is provided
+            if (type === 'compactionDetails' && database) {
+              dataRows = dataRows.filter((row: any) => {
+                const partition = String(row.Partition || '');
+                // Partition format: database.table.partition_id
+                return partition.startsWith(`${database}.`);
+              });
+            }
+
             this.infoDialogData = dataRows;
             this.infoDialogSource.load(dataRows);
             this.infoDialogError = null;
 
-            // Open dialog with data
-            this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
-              hasBackdrop: true,
-              closeOnBackdropClick: true,
-              closeOnEsc: true,
-              context: {
-                catalog,
-                database,
-              },
-            });
-
-            if (this.infoDialogRef) {
-              this.infoDialogRef.onClose.subscribe(() => {
-                this.infoDialogRef = null;
-              });
-              
-              // Wait for dialog to render, then ensure tooltips work
+              // Wait for table to render, then ensure tooltips work
               setTimeout(() => {
                 this.ensureTooltipsWork();
-              }, 100);
-            }
+              }, 300);
           } else {
             const error = result.results?.[0]?.error || '查询失败';
             this.infoDialogError = error;
             this.infoDialogData = [];
             this.infoDialogSource.load([]);
             
-            // Show error and open dialog to display error
+            // Show error (dialog already open)
             this.toastrService.danger(error, '查询失败');
-            this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
-              hasBackdrop: true,
-              closeOnBackdropClick: true,
-              closeOnEsc: true,
-              context: {
-                catalog,
-                database,
-              },
-            });
-
-            if (this.infoDialogRef) {
-              this.infoDialogRef.onClose.subscribe(() => {
-                this.infoDialogRef = null;
-              });
-            }
           }
         },
         error: (error) => {
@@ -1803,23 +2133,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           this.infoDialogData = [];
           this.infoDialogSource.load([]);
           
-          // Show error and open dialog to display error
+          // Show error (dialog already open)
           this.toastrService.danger(errorMessage, '查询失败');
-          this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
-            hasBackdrop: true,
-            closeOnBackdropClick: true,
-            closeOnEsc: true,
-            context: {
-              catalog,
-              database,
-            },
-          });
-
-          if (this.infoDialogRef) {
-            this.infoDialogRef.onClose.subscribe(() => {
-              this.infoDialogRef = null;
-            });
-          }
         },
       });
   }
@@ -1885,6 +2200,24 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     } else {
       this.fallbackCopyText(text);
     }
+  }
+
+  // Handle per page change
+  onPerPageChange(newPerPage: number): void {
+    this.infoDialogPerPage = newPerPage;
+    localStorage.setItem('infoDialogPerPage', newPerPage.toString());
+    
+    // Update settings and reload data
+    this.infoDialogSettings = {
+      ...this.infoDialogSettings,
+      pager: {
+        ...this.infoDialogSettings.pager,
+        perPage: newPerPage,
+      },
+    };
+    
+    // Reload data source to apply new pagination
+    this.infoDialogSource.setPaging(1, newPerPage, true);
   }
 
   private fallbackCopyText(text: string): void {
@@ -2129,18 +2462,60 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     const cacheKey = this.getCatalogKey(catalogName);
 
     if (this.databaseCache[cacheKey]) {
-      node.children = this.databaseCache[cacheKey].map((db) => this.createDatabaseNode(catalogName, db));
+      node.children = this.databaseCache[cacheKey].map((db) => {
+        const dbNode = this.createDatabaseNode(catalogName, db);
+        // Restore cached database ID if available
+        const dbIdCacheKey = `${catalogName}|${db}`;
+        if (this.databaseIdCache[dbIdCacheKey] && dbNode.data) {
+          dbNode.data.dbId = this.databaseIdCache[dbIdCacheKey];
+        }
+        return dbNode;
+      });
       return;
     }
 
     node.loading = true;
     this.loadingDatabases = true;
 
-    this.nodeService.getDatabases(catalogName || undefined).subscribe({
-      next: (databases) => {
-        const dbList = databases || [];
+    // Load databases and their IDs in parallel
+    forkJoin({
+      databases: this.nodeService.getDatabases(catalogName || undefined),
+      dbIds: this.nodeService.executeSQL(`SHOW PROC '/dbs'`, 1000, catalogName || undefined, undefined),
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (results) => {
+          const dbList = results.databases || [];
         this.databaseCache[cacheKey] = dbList;
-        node.children = dbList.map((db) => this.createDatabaseNode(catalogName, db));
+          
+          // Parse database IDs from SHOW PROC '/dbs'
+          if (results.dbIds.results && results.dbIds.results.length > 0 && results.dbIds.results[0].success) {
+            const dbIdsResult = results.dbIds.results[0];
+            const dbNameIdx = dbIdsResult.columns.findIndex(col => col === 'DbName');
+            const dbIdIdx = dbIdsResult.columns.findIndex(col => col === 'DbId');
+            
+            if (dbNameIdx >= 0 && dbIdIdx >= 0) {
+              for (const row of dbIdsResult.rows) {
+                const dbName = String(row[dbNameIdx] || '');
+                const dbId = String(row[dbIdIdx] || '');
+                if (dbName && dbId) {
+                  const dbIdCacheKey = `${catalogName}|${dbName}`;
+                  this.databaseIdCache[dbIdCacheKey] = dbId;
+                }
+              }
+            }
+          }
+          
+          // Create database nodes with cached IDs
+          node.children = dbList.map((db) => {
+            const dbNode = this.createDatabaseNode(catalogName, db);
+            const dbIdCacheKey = `${catalogName}|${db}`;
+            if (this.databaseIdCache[dbIdCacheKey] && dbNode.data) {
+              dbNode.data.dbId = this.databaseIdCache[dbIdCacheKey];
+            }
+            return dbNode;
+          });
+          
         node.loading = false;
         this.loadingDatabases = false;
         this.refreshSqlSchema();

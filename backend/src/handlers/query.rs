@@ -176,7 +176,7 @@ pub async fn list_tables(
                 SELECT 
                     t.TABLE_NAME,
                     CASE
-                        WHEN t.TABLE_TYPE = 'BASE TABLE' THEN 'TABLE'
+                        WHEN t.TABLE_TYPE = 'TABLE' OR t.TABLE_TYPE = 'BASE TABLE' THEN 'TABLE'
                         WHEN mv.TABLE_NAME IS NOT NULL THEN 'MATERIALIZED_VIEW'
                         ELSE 'VIEW'
                     END AS OBJECT_TYPE
@@ -230,7 +230,7 @@ pub async fn list_tables(
                 SELECT 
                     t.TABLE_NAME,
                     CASE
-                        WHEN t.TABLE_TYPE = 'BASE TABLE' THEN 'TABLE'
+                        WHEN t.TABLE_TYPE = 'TABLE' OR t.TABLE_TYPE = 'BASE TABLE' THEN 'TABLE'
                         WHEN mv.TABLE_NAME IS NOT NULL THEN 'MATERIALIZED_VIEW'
                         ELSE 'VIEW'
                     END AS OBJECT_TYPE

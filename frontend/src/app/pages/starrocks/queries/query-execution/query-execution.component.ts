@@ -2028,28 +2028,32 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     };
 
     const storageColumns = {
-      PARTITION_NAME: { title: '分区名', type: 'string', width: '18%' },
-      PARTITION_ID: { 
-        title: '分区ID', 
+      METRIC: { 
+        title: '统计项', 
+        type: 'string', 
+        width: '35%',
+        filter: false,
+        sort: false,
+      },
+      VALUE: { 
+        title: '数值', 
         type: 'html', 
-        width: '12%',
-        valuePrepareFunction: (value: any) => {
-          if (value === null || value === undefined || value === '' || value === 'NULL') {
+        width: '65%',
+        filter: false,
+        sort: false,
+        valuePrepareFunction: (value: any, row: any) => {
+          if (value === null || value === undefined || value === '') {
             return '<span class="text-muted">-</span>';
+          }
+          // Format CS values with color badges
+          if (row.METRIC === '平均CS' || row.METRIC === '最大CS') {
+            const csValue = parseFloat(value);
+            if (!isNaN(csValue)) {
+              return this.renderCompactionScore(csValue);
+            }
           }
           return String(value);
         },
-      },
-      DATA_SIZE: { title: '数据大小', type: 'string', width: '12%' },
-      ROW_COUNT: { title: '行数', type: 'string', width: '12%' },
-      BUCKETS: { title: '分桶数', type: 'string', width: '10%' },
-      REPLICATION_NUM: { title: '副本数', type: 'string', width: '10%' },
-      STORAGE_MEDIUM: { title: '存储介质', type: 'string', width: '12%' },
-      STORAGE_PATH: { 
-        title: '存储路径', 
-        type: 'html', 
-        width: '14%',
-        valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
       },
     };
 
@@ -2156,18 +2160,97 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         ORDER BY MAX_CS DESC`;
         break;
       case 'storage':
-        sql = `SELECT 
-          PARTITION_NAME,
-          PARTITION_ID,
-          DATA_SIZE,
-          ROW_COUNT,
-          BUCKETS,
-          REPLICATION_NUM,
-          STORAGE_MEDIUM,
-          STORAGE_PATH
-        FROM information_schema.partitions_meta 
-        WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
-        ORDER BY PARTITION_NAME`;
+        // Table-level summary statistics
+        sql = `
+          SELECT 
+            '表名' as METRIC,
+            '${tableName}' as VALUE
+          UNION ALL
+          SELECT 
+            '表类型',
+            COALESCE((SELECT TABLE_TYPE FROM information_schema.tables WHERE TABLE_SCHEMA = '${databaseName}' AND TABLE_NAME = '${tableName}' LIMIT 1), '-')
+          UNION ALL
+          SELECT 
+            '引擎',
+            COALESCE((SELECT ENGINE FROM information_schema.tables WHERE TABLE_SCHEMA = '${databaseName}' AND TABLE_NAME = '${tableName}' LIMIT 1), '-')
+          UNION ALL
+          SELECT 
+            '分区数量',
+            CAST(COUNT(*) AS CHAR) 
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '总数据大小(MB)',
+            CAST(ROUND(SUM(
+              CASE 
+                WHEN DATA_SIZE LIKE '%KB' THEN CAST(REPLACE(REPLACE(DATA_SIZE, 'KB', ''), ' ', '') AS DECIMAL) / 1024
+                WHEN DATA_SIZE LIKE '%MB' THEN CAST(REPLACE(REPLACE(DATA_SIZE, 'MB', ''), ' ', '') AS DECIMAL)
+                WHEN DATA_SIZE LIKE '%GB' THEN CAST(REPLACE(REPLACE(DATA_SIZE, 'GB', ''), ' ', '') AS DECIMAL) * 1024
+                WHEN DATA_SIZE LIKE '%TB' THEN CAST(REPLACE(REPLACE(DATA_SIZE, 'TB', ''), ' ', '') AS DECIMAL) * 1024 * 1024
+                WHEN DATA_SIZE LIKE '%B' AND DATA_SIZE != '0B' THEN CAST(REPLACE(REPLACE(DATA_SIZE, 'B', ''), ' ', '') AS DECIMAL) / 1024 / 1024
+                ELSE 0 
+              END
+            ), 2) AS CHAR)
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '总行数',
+            CAST(SUM(CAST(ROW_COUNT AS UNSIGNED)) AS CHAR)
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '平均分桶数',
+            CAST(ROUND(AVG(CAST(BUCKETS AS UNSIGNED)), 2) AS CHAR)
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '最小分桶数',
+            CAST(MIN(CAST(BUCKETS AS UNSIGNED)) AS CHAR)
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '最大分桶数',
+            CAST(MAX(CAST(BUCKETS AS UNSIGNED)) AS CHAR)
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '副本数',
+            CAST(MIN(CAST(REPLICATION_NUM AS UNSIGNED)) AS CHAR)
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '存储介质',
+            COALESCE(MIN(STORAGE_MEDIUM), '-')
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '平均CS',
+            CAST(ROUND(AVG(AVG_CS), 2) AS CHAR)
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '最大CS',
+            CAST(ROUND(MAX(MAX_CS), 2) AS CHAR)
+          FROM information_schema.partitions_meta 
+          WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+          UNION ALL
+          SELECT 
+            '创建时间',
+            COALESCE((SELECT DATE_FORMAT(CREATE_TIME, '%Y-%m-%d %H:%i:%s') FROM information_schema.tables WHERE TABLE_SCHEMA = '${databaseName}' AND TABLE_NAME = '${tableName}' LIMIT 1), '-')
+          UNION ALL
+          SELECT 
+            '更新时间',
+            COALESCE((SELECT DATE_FORMAT(UPDATE_TIME, '%Y-%m-%d %H:%i:%s') FROM information_schema.tables WHERE TABLE_SCHEMA = '${databaseName}' AND TABLE_NAME = '${tableName}' LIMIT 1), '-')
+        `;
         break;
     }
 
@@ -2193,6 +2276,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
               this.tableStatsCompactionData = data;
               break;
             case 'storage':
+              // For storage tab, data is already in key-value format from SQL
               this.tableStatsStorageData = data;
               break;
           }
@@ -2214,19 +2298,24 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   private updateTableStatsTabDisplay(tab: 'partition' | 'compaction' | 'storage'): void {
     let data: any[] = [];
     let columns: any = {};
+    let pagerEnabled = true;
 
     switch (tab) {
       case 'partition':
         data = this.tableStatsPartitionData;
         columns = this.tableStatsColumns.partition;
+        pagerEnabled = true;
         break;
       case 'compaction':
         data = this.tableStatsCompactionData;
         columns = this.tableStatsColumns.compaction;
+        pagerEnabled = true;
         break;
       case 'storage':
         data = this.tableStatsStorageData;
         columns = this.tableStatsColumns.storage;
+        // Disable pager for summary statistics (usually only one row)
+        pagerEnabled = false;
         break;
     }
 
@@ -2245,7 +2334,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         position: 'left',
       },
       pager: {
-        display: true,
+        display: pagerEnabled,
         perPage: this.infoDialogPerPage,
       },
       columns: columns,

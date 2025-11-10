@@ -186,6 +186,34 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   transactionCurrentTab: 'running' | 'finished' = 'running';
   transactionColumns: any = {};
   
+  // Table stats dialog state (for tab switching)
+  tableStatsPartitionData: any[] = [];
+  tableStatsCompactionData: any[] = [];
+  tableStatsStorageData: any[] = [];
+  tableStatsCurrentTab: 'partition' | 'compaction' | 'storage' = 'partition';
+  tableStatsColumns: any = {};
+  tableStatsDataLoaded: {
+    partition: boolean;
+    compaction: boolean;
+    storage: boolean;
+  } = {
+    partition: false,
+    compaction: false,
+    storage: false,
+  };
+  tableStatsLoadingState: {
+    partition: boolean;
+    compaction: boolean;
+    storage: boolean;
+  } = {
+    partition: false,
+    compaction: false,
+    storage: false,
+  };
+  tableStatsDatabaseName: string = '';
+  tableStatsTableName: string = '';
+  tableStatsCatalogName: string | undefined = undefined;
+  
   // Compaction trigger dialog state
   compactionTriggerDialogRef: NbDialogRef<any> | null = null;
   compactionTriggerTable: string | null = null;
@@ -1010,16 +1038,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             action: 'viewMaterializedViewRefreshStatus',
           },
           {
-            label: '查看分区',
-            icon: 'layers-outline',
-            action: 'viewPartitions',
-          },
-          {
-            label: '查看Compaction Score',
-            icon: 'trending-up-outline',
-            action: 'viewCompactionScore',
-          },
-          {
             label: '查看表统计',
             icon: 'bar-chart-outline',
             action: 'viewTableStats',
@@ -1038,16 +1056,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           label: '查看表结构',
           icon: 'file-text-outline',
           action: 'viewSchema',
-        },
-        {
-          label: '查看分区',
-          icon: 'layers-outline',
-          action: 'viewPartitions',
-        },
-        {
-          label: '查看Compaction Score',
-          icon: 'trending-up-outline',
-          action: 'viewCompactionScore',
         },
         {
           label: '查看表统计',
@@ -1085,16 +1093,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           this.viewTableSchema(targetNode);
         }
         break;
-      case 'viewPartitions':
-        if (targetNode.type === 'table') {
-          // Views don't have partitions
-          if (targetNode.data?.tableType === 'VIEW') {
-            this.toastrService.warning('视图没有分区信息', '提示');
-            return;
-          }
-          this.viewTablePartitions(targetNode);
-        }
-        break;
       case 'viewTransactions':
         if (targetNode.type === 'database') {
           this.viewDatabaseTransactions(targetNode);
@@ -1121,16 +1119,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         if (targetNode.type === 'table') {
           // Views may not have accurate stats, but we allow viewing
           this.viewTableStats(targetNode);
-        }
-        break;
-      case 'viewCompactionScore':
-        if (targetNode.type === 'table') {
-          // Views don't have compaction score
-          if (targetNode.data?.tableType === 'VIEW') {
-            this.toastrService.warning('视图没有Compaction Score信息', '提示');
-            return;
-          }
-          this.viewTableCompactionScore(targetNode);
         }
         break;
       case 'triggerCompaction':
@@ -1948,58 +1936,340 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       return;
     }
 
-    // Views may not have accurate partition stats, but we allow viewing
-    // Materialized views have physical storage, so they have stats
-    // Regular tables have stats
-    // So we only block pure views from partition-based stats
-    // Note: We allow viewing even for views, as they might have some metadata
+    // Views don't have physical partitions
+    if (node.data?.tableType === 'VIEW') {
+      this.toastrService.warning('视图是逻辑表，没有物理分区信息', '提示');
+      return;
+    }
 
-    this.openInfoDialog('表统计', 'tableStats', () => {
-      const sql = `SELECT 
-        PARTITION_NAME,
-        PARTITION_ID,
-        DATA_SIZE,
-        ROW_COUNT,
-        BUCKETS,
-        REPLICATION_NUM,
-        STORAGE_MEDIUM,
-        AVG_CS,
-        MAX_CS,
-        STORAGE_PATH
-      FROM information_schema.partitions_meta 
-      WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
-      ORDER BY PARTITION_NAME`;
+    // Open dialog with three tabs: partition structure, compaction score, storage stats
+    this.openTableStatsDialogWithTabs(databaseName, tableName, catalogName);
+  }
 
-      return this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName);
-    }, {
-      columns: {
-        PARTITION_NAME: { title: '分区名', type: 'string', width: '15%' },
-        PARTITION_ID: { title: '分区ID', type: 'string', width: '10%' },
-        DATA_SIZE: { title: '数据大小', type: 'string', width: '12%' },
-        ROW_COUNT: { title: '行数', type: 'string', width: '12%' },
-        BUCKETS: { title: '分桶数', type: 'string', width: '8%' },
-        REPLICATION_NUM: { title: '副本数', type: 'string', width: '8%' },
-        STORAGE_MEDIUM: { title: '存储介质', type: 'string', width: '10%' },
-        AVG_CS: { 
-          title: '平均CS', 
-          type: 'html', 
-          width: '8%',
-          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
-        },
-        MAX_CS: { 
-          title: '最大CS', 
-          type: 'html', 
-          width: '8%',
-          valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
-        },
-        STORAGE_PATH: { 
-          title: '存储路径', 
-          type: 'html', 
-          width: '9%',
-          valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+  private openTableStatsDialogWithTabs(databaseName: string, tableName: string, catalogName?: string): void {
+    // Show loading state immediately
+    this.infoDialogTitle = '表统计';
+    this.infoDialogType = 'tableStats';
+    this.infoDialogPageLoading = true;
+    this.infoDialogError = null;
+    this.infoDialogData = [];
+    this.infoDialogSource.load([]);
+
+    // Define columns for each tab
+    const partitionColumns = {
+      PARTITION_NAME: { title: '分区名', type: 'string', width: '20%' },
+      PARTITION_ID: { 
+        title: '分区ID', 
+        type: 'html', 
+        width: '15%',
+        valuePrepareFunction: (value: any) => {
+          if (value === null || value === undefined || value === '' || value === 'NULL') {
+            return '<span class="text-muted">-</span>';
+          }
+          return String(value);
         },
       },
-    }, catalogName, databaseName);
+      PARTITION_KEY: { 
+        title: '分区键', 
+        type: 'html', 
+        width: '25%',
+        valuePrepareFunction: (value: any) => {
+          if (value === null || value === undefined || value === '' || value === 'NULL') {
+            return '<span class="text-muted">无分区</span>';
+          }
+          return this.renderLongText(value, 40);
+        },
+      },
+      PARTITION_VALUE: { 
+        title: '分区值', 
+        type: 'html', 
+        width: '25%',
+        valuePrepareFunction: (value: any) => {
+          if (value === null || value === undefined || value === '' || value === 'NULL') {
+            return '<span class="text-muted">-</span>';
+          }
+          return this.renderLongText(value, 40);
+        },
+      },
+      DATA_SIZE: { title: '数据大小', type: 'string', width: '15%' },
+      ROW_COUNT: { title: '行数', type: 'string', width: '15%' },
+      STORAGE_PATH: { 
+        title: '存储路径', 
+        type: 'html', 
+        width: '20%',
+        valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+      },
+    };
+
+    const compactionColumns = {
+      PARTITION_NAME: { title: '分区名', type: 'string', width: '18%' },
+      AVG_CS: { 
+        title: '平均CS', 
+        type: 'html', 
+        width: '15%',
+        valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+      },
+      P50_CS: { 
+        title: 'P50 CS', 
+        type: 'html', 
+        width: '15%',
+        valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+      },
+      MAX_CS: { 
+        title: '最大CS', 
+        type: 'html', 
+        width: '15%',
+        valuePrepareFunction: (value: number) => this.renderCompactionScore(value),
+      },
+      DATA_SIZE: { title: '数据大小', type: 'string', width: '12%' },
+      ROW_COUNT: { title: '行数', type: 'string', width: '12%' },
+      COMPACT_VERSION: { title: 'Compact版本', type: 'string', width: '14%' },
+      VISIBLE_VERSION: { title: '可见版本', type: 'string', width: '14%' },
+    };
+
+    const storageColumns = {
+      PARTITION_NAME: { title: '分区名', type: 'string', width: '18%' },
+      PARTITION_ID: { 
+        title: '分区ID', 
+        type: 'html', 
+        width: '12%',
+        valuePrepareFunction: (value: any) => {
+          if (value === null || value === undefined || value === '' || value === 'NULL') {
+            return '<span class="text-muted">-</span>';
+          }
+          return String(value);
+        },
+      },
+      DATA_SIZE: { title: '数据大小', type: 'string', width: '12%' },
+      ROW_COUNT: { title: '行数', type: 'string', width: '12%' },
+      BUCKETS: { title: '分桶数', type: 'string', width: '10%' },
+      REPLICATION_NUM: { title: '副本数', type: 'string', width: '10%' },
+      STORAGE_MEDIUM: { title: '存储介质', type: 'string', width: '12%' },
+      STORAGE_PATH: { 
+        title: '存储路径', 
+        type: 'html', 
+        width: '14%',
+        valuePrepareFunction: (value: any) => this.renderLongText(value, 30),
+      },
+    };
+
+    this.tableStatsColumns = {
+      partition: partitionColumns,
+      compaction: compactionColumns,
+      storage: storageColumns,
+    };
+
+    // Open dialog first
+    if (this.infoDialogRef) {
+      this.infoDialogRef.close();
+    }
+
+    this.infoDialogSettings = {
+      mode: 'external',
+      hideSubHeader: false,
+      actions: { add: false, edit: false, delete: false, position: 'left' },
+      pager: { display: true, perPage: this.infoDialogPerPage },
+      columns: partitionColumns,
+    };
+
+    this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+      context: {},
+    });
+
+    // Store table info for lazy loading other tabs
+    this.tableStatsDatabaseName = databaseName;
+    this.tableStatsTableName = tableName;
+    this.tableStatsCatalogName = catalogName;
+    
+    // Reset loading states
+    this.tableStatsDataLoaded = {
+      partition: false,
+      compaction: false,
+      storage: false,
+    };
+    this.tableStatsLoadingState = {
+      partition: false,
+      compaction: false,
+      storage: false,
+    };
+
+    // Only load partition data initially (first tab)
+    this.loadTableStatsTabData('partition');
+  }
+
+  switchTableStatsTab(tab: 'partition' | 'compaction' | 'storage'): void {
+    this.tableStatsCurrentTab = tab;
+    
+    // Load data if not already loaded
+    if (!this.tableStatsDataLoaded[tab] && !this.tableStatsLoadingState[tab]) {
+      this.loadTableStatsTabData(tab);
+      return;
+    }
+    
+    // If data is already loaded or loading, just switch the display
+    this.updateTableStatsTabDisplay(tab);
+  }
+
+  private loadTableStatsTabData(tab: 'partition' | 'compaction' | 'storage'): void {
+    if (this.tableStatsLoadingState[tab]) {
+      return; // Already loading
+    }
+
+    this.tableStatsLoadingState[tab] = true;
+    this.infoDialogPageLoading = true;
+    this.infoDialogError = null;
+
+    const databaseName = this.tableStatsDatabaseName;
+    const tableName = this.tableStatsTableName;
+    const catalogName = this.tableStatsCatalogName;
+
+    let sql = '';
+    switch (tab) {
+      case 'partition':
+        sql = `SELECT 
+          PARTITION_NAME,
+          PARTITION_ID,
+          PARTITION_KEY,
+          PARTITION_VALUE,
+          DATA_SIZE,
+          ROW_COUNT,
+          STORAGE_PATH
+        FROM information_schema.partitions_meta 
+        WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+        ORDER BY PARTITION_NAME`;
+        break;
+      case 'compaction':
+        sql = `SELECT 
+          PARTITION_NAME,
+          AVG_CS,
+          P50_CS,
+          MAX_CS,
+          DATA_SIZE,
+          ROW_COUNT,
+          COMPACT_VERSION,
+          VISIBLE_VERSION
+        FROM information_schema.partitions_meta 
+        WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+        ORDER BY MAX_CS DESC`;
+        break;
+      case 'storage':
+        sql = `SELECT 
+          PARTITION_NAME,
+          PARTITION_ID,
+          DATA_SIZE,
+          ROW_COUNT,
+          BUCKETS,
+          REPLICATION_NUM,
+          STORAGE_MEDIUM,
+          STORAGE_PATH
+        FROM information_schema.partitions_meta 
+        WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+        ORDER BY PARTITION_NAME`;
+        break;
+    }
+
+    this.nodeService.executeSQL(sql, 100, catalogName || undefined, databaseName)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => {
+          this.tableStatsLoadingState[tab] = false;
+          this.infoDialogPageLoading = false;
+          this.infoDialogError = null;
+
+          const queryResult = result.results?.[0];
+          const data = queryResult?.success && queryResult.rows
+            ? this.parseTableRows(queryResult.rows, queryResult.columns)
+            : [];
+
+          // Store data
+          switch (tab) {
+            case 'partition':
+              this.tableStatsPartitionData = data;
+              break;
+            case 'compaction':
+              this.tableStatsCompactionData = data;
+              break;
+            case 'storage':
+              this.tableStatsStorageData = data;
+              break;
+          }
+
+          this.tableStatsDataLoaded[tab] = true;
+          
+          // Update display
+          this.updateTableStatsTabDisplay(tab);
+        },
+        error: (error) => {
+          this.tableStatsLoadingState[tab] = false;
+          this.infoDialogPageLoading = false;
+          const errorMessage = ErrorHandler.extractErrorMessage(error);
+          this.infoDialogError = errorMessage;
+        },
+      });
+  }
+
+  private updateTableStatsTabDisplay(tab: 'partition' | 'compaction' | 'storage'): void {
+    let data: any[] = [];
+    let columns: any = {};
+
+    switch (tab) {
+      case 'partition':
+        data = this.tableStatsPartitionData;
+        columns = this.tableStatsColumns.partition;
+        break;
+      case 'compaction':
+        data = this.tableStatsCompactionData;
+        columns = this.tableStatsColumns.compaction;
+        break;
+      case 'storage':
+        data = this.tableStatsStorageData;
+        columns = this.tableStatsColumns.storage;
+        break;
+    }
+
+    this.infoDialogData = data;
+    
+    // Force update settings by creating a completely new object reference
+    // This ensures ng2-smart-table detects the change
+    this.infoDialogSettings = {
+      mode: 'external',
+      hideSubHeader: false,
+      noDataMessage: '暂无数据',
+      actions: {
+        add: false,
+        edit: false,
+        delete: false,
+        position: 'left',
+      },
+      pager: {
+        display: true,
+        perPage: this.infoDialogPerPage,
+      },
+      columns: columns,
+    };
+    
+    // Reload data source after settings update
+    this.infoDialogSource.load(data);
+
+    // Ensure tooltips work after tab switch
+    setTimeout(() => {
+      this.ensureTooltipsWork();
+    }, 300);
+  }
+
+  private parseTableRows(rows: any[][], columns: string[]): any[] {
+    return rows.map(row => {
+      const obj: any = {};
+      columns.forEach((col, idx) => {
+        // Handle null/undefined values - convert to empty string for consistency
+        const value = row[idx];
+        obj[col] = value === null || value === undefined ? '' : value;
+      });
+      return obj;
+    });
   }
 
   private viewMaterializedViewRefreshStatus(node: NavTreeNode): void {

@@ -348,9 +348,15 @@ EXPLAIN SELECT * FROM `<catalog>`.`<database>`.`<view>` LIMIT 1
 
 ---
 
-### 2. 查看分区 (viewTablePartitions)
+### 2. 查看表统计 (viewTableStats) - 合并功能（三个Tab）
 
-**实现方式**（已修复 ✅）：
+**实现方式**（已优化 ✅）：
+
+**功能说明**：
+- 将原来的"查看分区"、"查看Compaction Score"和"查看表统计"三个功能合并为一个"查看表统计"功能
+- 使用三个Tab页展示不同维度的信息，减少重复，提高用户体验
+
+**Tab 1: 分区结构** - 专注于分区结构管理
 
 ```sql
 SELECT 
@@ -360,11 +366,6 @@ SELECT
   PARTITION_VALUE,
   DATA_SIZE,
   ROW_COUNT,
-  AVG_CS,
-  P50_CS,
-  MAX_CS,
-  COMPACT_VERSION,
-  VISIBLE_VERSION,
   STORAGE_PATH
 FROM information_schema.partitions_meta 
 WHERE DB_NAME = '<database_name>' AND TABLE_NAME = '<table_name>'
@@ -378,31 +379,9 @@ ORDER BY PARTITION_NAME
 - PARTITION_VALUE: 分区值（长文本，已应用缩略）
 - DATA_SIZE: 数据大小
 - ROW_COUNT: 行数
-- AVG_CS: 平均CS（已修复，直接使用字段名）
-- P50_CS: P50 CS（已修复，直接使用字段名）
-- MAX_CS: 最大CS（已修复，直接使用字段名）
-- COMPACT_VERSION: Compact版本
-- VISIBLE_VERSION: 可见版本
 - STORAGE_PATH: 存储路径（长文本，已应用缩略）
 
-**修复说明**：
-- ✅ CS分数查询已修复，直接使用 `AVG_CS`, `P50_CS`, `MAX_CS` 字段
-
-**UI实现**：
-- 使用 ngx-admin 原生的 `ng2-smart-table` 组件
-- 长文本字段（PARTITION_KEY, PARTITION_VALUE, STORAGE_PATH）使用工具函数进行截断显示
-- CS分数使用自定义渲染函数显示，带有颜色标识
-
-**限制**：
-- 视图（VIEW）不支持此功能
-
-**状态**：✅ 已实现并修复
-
----
-
-### 3. 查看Compaction Score (viewTableCompactionScore)
-
-**实现方式**（已修复 ✅）：
+**Tab 2: Compaction Score** - 专注于Compaction健康度
 
 ```sql
 SELECT 
@@ -421,33 +400,15 @@ ORDER BY MAX_CS DESC
 
 **返回字段**：
 - PARTITION_NAME: 分区名
-- AVG_CS: 平均CS（已修复，直接使用字段名）
-- P50_CS: P50 CS（已修复，直接使用字段名）
-- MAX_CS: 最大CS（已修复，直接使用字段名）
+- AVG_CS: 平均CS
+- P50_CS: P50 CS
+- MAX_CS: 最大CS
 - DATA_SIZE: 数据大小
 - ROW_COUNT: 行数
 - COMPACT_VERSION: Compact版本
 - VISIBLE_VERSION: 可见版本
 
-**修复说明**：
-- ✅ 移除了不必要的COALESCE处理
-- ✅ 直接使用 `information_schema.partitions_meta` 表的 `AVG_CS`, `P50_CS`, `MAX_CS` 字段
-- ✅ 测试确认字段名正确，数据正常显示
-
-**UI实现**：
-- 使用 ngx-admin 原生的 `ng2-smart-table` 组件
-- CS分数使用自定义渲染函数显示，带有颜色标识（基于阈值）
-
-**限制**：
-- 视图（VIEW）不支持此功能
-
-**状态**：✅ 已实现并修复
-
----
-
-### 4. 查看表统计 (viewTableStats)
-
-**实现方式**（已修复 ✅）：
+**Tab 3: 表统计** - 专注于存储资源配置
 
 ```sql
 SELECT 
@@ -458,8 +419,6 @@ SELECT
   BUCKETS,
   REPLICATION_NUM,
   STORAGE_MEDIUM,
-  AVG_CS,
-  MAX_CS,
   STORAGE_PATH
 FROM information_schema.partitions_meta 
 WHERE DB_NAME = '<database_name>' AND TABLE_NAME = '<table_name>'
@@ -474,22 +433,28 @@ ORDER BY PARTITION_NAME
 - BUCKETS: 分桶数
 - REPLICATION_NUM: 副本数
 - STORAGE_MEDIUM: 存储介质
-- AVG_CS: 平均CS（已修复，直接使用字段名）
-- MAX_CS: 最大CS（已修复，直接使用字段名）
 - STORAGE_PATH: 存储路径（长文本，已应用缩略）
 
-**修复说明**：
-- ✅ CS分数查询已修复，直接使用 `AVG_CS`, `MAX_CS` 字段
+**优化说明**：
+- ✅ 合并三个功能为一个，减少菜单项数量
+- ✅ 使用Tab切换，信息集中展示
+- ✅ 每个Tab专注于特定维度，减少字段重复
+- ✅ 三个Tab的数据并行加载，提高性能
 
 **UI实现**：
-- 使用 ngx-admin 原生的 `ng2-smart-table` 组件
+- 使用 ngx-admin 原生的 `nb-tabset` 组件实现Tab切换
+- 使用 ngx-admin 原生的 `ng2-smart-table` 组件展示数据
 - 长文本字段使用工具函数进行截断显示
+- CS分数使用自定义渲染函数显示，带有颜色标识
 
-**状态**：✅ 已实现并修复
+**限制**：
+- 视图（VIEW）不支持此功能
+
+**状态**：✅ 已实现并优化
 
 ---
 
-### 5. 查看表事务 (viewTableTransactions)
+### 3. 查看表事务 (viewTableTransactions)
 
 **实现方式**（已修复 ✅）：
 
@@ -666,17 +631,16 @@ SHOW PROC '/transactions/<db_id>/finished'
 
 ### 已实现的功能 ✅
 1. 查看表结构（SHOW CREATE TABLE）
-2. 查看分区信息
+2. **查看表统计** - 合并功能，包含三个Tab：分区结构、Compaction Score、表统计（已优化）
 3. 查看导入作业
 4. 查看数据库统计
-5. 查看表统计
-6. 手动触发Compaction
-7. 分页每页条数选择器
-8. **查看Compaction任务** - 使用 `SHOW PROC '/compactions'`（已修复）
-9. **查看事务信息** - 使用 `SHOW PROC '/transactions/<db_id>/running'` 和 `/finished'`，支持tab切换（已修复）
-10. **CS分数查询** - 直接使用 `AVG_CS`, `P50_CS`, `MAX_CS` 字段（已修复）
-11. **查看物化视图刷新状态** - 使用 `information_schema.materialized_views`（新增）
-12. **查看视图查询计划** - 使用 `EXPLAIN SELECT * FROM <view> LIMIT 1`，仅支持 VIEW（新增，物化视图不支持，因为物化视图是物理表，查询计划只是表扫描）
+5. 手动触发Compaction
+6. 分页每页条数选择器
+7. **查看Compaction任务** - 使用 `SHOW PROC '/compactions'`（已修复）
+8. **查看事务信息** - 使用 `SHOW PROC '/transactions/<db_id>/running'` 和 `/finished'`，支持tab切换（已修复）
+9. **CS分数查询** - 直接使用 `AVG_CS`, `P50_CS`, `MAX_CS` 字段（已修复）
+10. **查看物化视图刷新状态** - 使用 `information_schema.materialized_views`（新增）
+11. **查看视图查询计划** - 使用 `EXPLAIN SELECT * FROM <view> LIMIT 1`，仅支持 VIEW（新增，物化视图不支持，因为物化视图是物理表，查询计划只是表扫描）
 
 ### 已修复的问题 ✅
 1. **CS分数显示为0**：

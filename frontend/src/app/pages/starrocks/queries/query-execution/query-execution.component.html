@@ -412,6 +412,16 @@
         </nb-tab>
       </nb-tabset>
 
+      <!-- Table stats tabs (only for tableStats type) -->
+      <nb-tabset *ngIf="infoDialogType === 'tableStats' && !infoDialogError" (changeTab)="switchTableStatsTab($event.tabId)">
+        <nb-tab tabTitle="分区结构" tabId="partition" [active]="tableStatsCurrentTab === 'partition'">
+        </nb-tab>
+        <nb-tab tabTitle="Compaction Score" tabId="compaction" [active]="tableStatsCurrentTab === 'compaction'">
+        </nb-tab>
+        <nb-tab tabTitle="表统计" tabId="storage" [active]="tableStatsCurrentTab === 'storage'">
+        </nb-tab>
+      </nb-tabset>
+
       <ng2-smart-table
         *ngIf="!infoDialogError"
         [settings]="infoDialogSettings"

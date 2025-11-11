@@ -4,7 +4,7 @@ import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrServic
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject, Observable, forkJoin, of } from 'rxjs';
 import { map, catchError, takeUntil } from 'rxjs/operators';
-import { NodeService, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType } from '../../../../@core/data/node.service';
+import { NodeService, Query, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
@@ -151,7 +151,9 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   private readonly sqlDialect = MySQL;
   private readonly themeCompartment = new Compartment();
   private readonly sqlConfigCompartment = new Compartment();
-  private readonly runningDurationThresholds: MetricThresholds = { warn: 3000, danger: 10000 };
+  // Slow query thresholds: 5min(300000ms)=blue, 10min(600000ms)=yellow, 30min(1800000ms)=red
+  private readonly runningDurationThresholds: MetricThresholds = { warn: 300000, danger: 600000 };
+  private readonly slowQueryRedThreshold = 1800000; // 30 minutes
 
   // Table schema dialog state
   schemaDialogTitle: string = '';
@@ -343,24 +345,87 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     mode: 'external',
     hideSubHeader: false, // Enable search
     noDataMessage: '当前没有运行中的查询',
-    actions: false,
+    selectMode: 'multi',
+    actions: {
+      add: false,
+      edit: true,
+      delete: true,
+      position: 'right',
+      width: '120px',
+    },
+    edit: {
+      editButtonContent: '<i class="nb-search"></i>',
+    },
+    delete: {
+      deleteButtonContent: '<i class="nb-trash"></i>',
+      confirmDelete: true,
+    },
     pager: {
       display: true,
       perPage: 20,
     },
     columns: {
-      QueryId: { title: 'Query ID', type: 'string' },
-      User: { title: '用户', type: 'string', width: '10%' },
-      Database: { title: '数据库', type: 'string', width: '10%' },
-      ExecTime: {
-        title: '执行时间(ms)',
-        type: 'html',
-        width: '12%',
-        valuePrepareFunction: (value: string | number) => renderMetricBadge(value, this.runningDurationThresholds),
+      QueryId: { 
+        title: 'Query ID', 
+        type: 'string',
+        width: '15%',
       },
-      Sql: { title: 'SQL', type: 'string' },
+      User: { 
+        title: '用户', 
+        type: 'string', 
+        width: '8%' 
+      },
+      Database: { 
+        title: '数据库', 
+        type: 'string', 
+        width: '10%' 
+      },
+      ExecTime: {
+        title: '执行时间',
+        type: 'html',
+        width: '10%',
+        valuePrepareFunction: (value: string | number, row: any) => this.renderSlowQueryBadge(value),
+      },
+      ScanBytes: {
+        title: '扫描数据量',
+        type: 'html',
+        width: '10%',
+        valuePrepareFunction: (value: string | number) => this.formatBytes(value),
+      },
+      ProcessRows: {
+        title: '处理行数',
+        type: 'string',
+        width: '10%',
+        valuePrepareFunction: (value: string | number) => this.formatNumber(value),
+      },
+      CPUTime: {
+        title: 'CPU时间',
+        type: 'html',
+        width: '10%',
+        valuePrepareFunction: (value: string | number) => this.formatTime(value),
+      },
+      Sql: { 
+        title: 'SQL', 
+        type: 'html',
+        valuePrepareFunction: (value: any) => renderLongText(value, 100),
+      },
     },
   };
+
+  // Filter state for running queries
+  runningQueryFilter: {
+    state?: string;
+    slowQueryOnly?: boolean;
+    highCostOnly?: boolean;
+  } = {};
+
+  // Selected query IDs for batch operations
+  selectedQueryIds: string[] = [];
+
+  // Query detail dialog state
+  currentQueryDetail: Query | null = null;
+  @ViewChild('queryDetailDialog', { static: false }) queryDetailDialogTemplate!: TemplateRef<any>;
+  private queryDetailDialogRef: NbDialogRef<any> | null = null;
 
   constructor(
     private nodeService: NodeService,
@@ -3401,13 +3466,312 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.loading = true;
     this.nodeService.listQueries().subscribe({
       next: (queries) => {
-        this.runningSource.load(queries);
+        // Apply filters
+        let filteredQueries = queries;
+        
+        if (this.runningQueryFilter.slowQueryOnly) {
+          filteredQueries = filteredQueries.filter(q => {
+            const execTime = this.parseExecTime(q.ExecTime);
+            return execTime >= 300000; // 5 minutes
+          });
+        }
+        
+        if (this.runningQueryFilter.highCostOnly) {
+          filteredQueries = filteredQueries.filter(q => {
+            const scanBytes = this.parseBytes(q.ScanBytes);
+            return scanBytes >= 1073741824; // 1GB
+          });
+        }
+        
+        this.runningSource.load(filteredQueries);
         this.loading = false;
+        // Clear selection when data reloads
+        this.selectedQueryIds = [];
       },
       error: (error) => {
         this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
         this.loading = false;
       },
+    });
+  }
+
+  // Render slow query badge with color coding: 5min=blue, 10min=yellow, 30min=red
+  renderSlowQueryBadge(value: string | number): string {
+    const execTime = typeof value === 'number' ? value : this.parseExecTime(value);
+    const timeStr = this.formatExecTime(execTime);
+    
+    if (execTime >= this.slowQueryRedThreshold) {
+      // 30 minutes or more - red
+      return `<span class="metric-badge metric-badge--alert">${timeStr}</span>`;
+    } else if (execTime >= this.runningDurationThresholds.danger) {
+      // 10 minutes or more - yellow
+      return `<span class="metric-badge metric-badge--warn">${timeStr}</span>`;
+    } else if (execTime >= this.runningDurationThresholds.warn) {
+      // 5 minutes or more - blue (info)
+      return `<span class="metric-badge metric-badge--info">${timeStr}</span>`;
+    } else {
+      // Less than 5 minutes - normal
+      return `<span class="metric-badge metric-badge--good">${timeStr}</span>`;
+    }
+  }
+
+  // Format execution time
+  formatExecTime(ms: number): string {
+    if (ms < 1000) {
+      return `${ms}ms`;
+    } else if (ms < 60000) {
+      return `${(ms / 1000).toFixed(1)}s`;
+    } else if (ms < 3600000) {
+      return `${(ms / 60000).toFixed(1)}m`;
+    } else {
+      return `${(ms / 3600000).toFixed(1)}h`;
+    }
+  }
+
+  // Parse execution time from string
+  parseExecTime(value: string | number): number {
+    if (typeof value === 'number') {
+      return value;
+    }
+    const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
+    return isNaN(num) ? 0 : num;
+  }
+
+  // Format bytes
+  formatBytes(value: string | number): string {
+    const bytes = typeof value === 'number' ? value : this.parseBytes(value);
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+  }
+
+  // Parse bytes from string
+  parseBytes(value: string | number): number {
+    if (typeof value === 'number') {
+      return value;
+    }
+    const str = value.toString().trim();
+    if (!str || str === '0' || str === '0 B') return 0;
+    
+    // Try to parse as number first
+    const num = parseFloat(str.replace(/[^0-9.-]/g, ''));
+    if (!isNaN(num) && !str.match(/[A-Za-z]/)) {
+      return num;
+    }
+    
+    // Parse with unit (e.g., "1.5 GB", "500 MB")
+    const match = str.match(/^([0-9.]+)\s*([KMGT]?B?)$/i);
+    if (match) {
+      const size = parseFloat(match[1]);
+      const unit = match[2].toUpperCase();
+      const multipliers: { [key: string]: number } = {
+        'B': 1,
+        'KB': 1024,
+        'MB': 1024 * 1024,
+        'GB': 1024 * 1024 * 1024,
+        'TB': 1024 * 1024 * 1024 * 1024,
+      };
+      return size * (multipliers[unit] || 1);
+    }
+    
+    return 0;
+  }
+
+  // Format number with thousand separator
+  formatNumber(value: string | number): string {
+    const num = typeof value === 'number' ? value : parseFloat(value.toString().replace(/[^0-9.-]/g, '')) || 0;
+    return num.toLocaleString('en-US');
+  }
+
+  // Format time (for CPUTime)
+  formatTime(value: string | number): string {
+    const num = typeof value === 'number' ? value : parseFloat(value.toString().replace(/[^0-9.-]/g, '')) || 0;
+    if (num < 1000) {
+      return `${num}ms`;
+    } else if (num < 60000) {
+      return `${(num / 1000).toFixed(1)}s`;
+    } else {
+      return `${(num / 60000).toFixed(1)}m`;
+    }
+  }
+
+  // Handle query deletion (kill query)
+  onQueryDeleteConfirm(event: any): void {
+    const query = event.data as Query;
+    
+    this.confirmDialogService.confirm(
+      '确认查杀查询',
+      `确定要查杀查询 ${query.QueryId} 吗？`,
+      '查杀',
+      '取消',
+      'danger'
+    ).subscribe(confirmed => {
+      if (!confirmed) {
+        event.confirm.reject();
+        return;
+      }
+
+      this.loading = true;
+      this.nodeService.killQuery(query.QueryId).subscribe({
+        next: () => {
+          this.toastrService.success(`查询 ${query.QueryId} 已成功查杀`, '成功');
+          event.confirm.resolve();
+          // Remove from selected list if exists
+          this.selectedQueryIds = this.selectedQueryIds.filter(id => id !== query.QueryId);
+          this.loadRunningQueries();
+        },
+        error: (error) => {
+          this.toastrService.danger(
+            ErrorHandler.extractErrorMessage(error),
+            '查杀失败'
+          );
+          event.confirm.reject();
+          this.loading = false;
+        },
+      });
+    });
+  }
+
+  // Batch kill queries
+  batchKillQueries(queryIds: string[]): void {
+    if (queryIds.length === 0) {
+      this.toastrService.warning('请选择要查杀的查询', '提示');
+      return;
+    }
+
+    this.confirmDialogService.confirm(
+      '确认批量查杀',
+      `确定要查杀 ${queryIds.length} 个查询吗？`,
+      '查杀',
+      '取消',
+      'danger'
+    ).subscribe(confirmed => {
+      if (!confirmed) {
+        return;
+      }
+
+      this.loading = true;
+      let successCount = 0;
+      let failCount = 0;
+      let completed = 0;
+
+      queryIds.forEach(queryId => {
+        this.nodeService.killQuery(queryId).subscribe({
+          next: () => {
+            successCount++;
+            completed++;
+            if (completed === queryIds.length) {
+              this.loading = false;
+              this.selectedQueryIds = []; // Clear selection after batch kill
+              if (failCount === 0) {
+                this.toastrService.success(`成功查杀 ${successCount} 个查询`, '成功');
+              } else {
+                this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+              }
+              this.loadRunningQueries();
+            }
+          },
+          error: (error) => {
+            failCount++;
+            completed++;
+            if (completed === queryIds.length) {
+              this.loading = false;
+              this.selectedQueryIds = []; // Clear selection after batch kill
+              if (successCount > 0) {
+                this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+              } else {
+                this.toastrService.danger('批量查杀失败', '错误');
+              }
+              this.loadRunningQueries();
+            }
+          },
+        });
+      });
+    });
+  }
+
+  // Apply filter
+  applyRunningQueryFilter(): void {
+    this.loadRunningQueries();
+  }
+
+  // Reset filter
+  resetRunningQueryFilter(): void {
+    this.runningQueryFilter = {};
+    this.loadRunningQueries();
+  }
+
+  // Handle query row selection
+  onQueryRowSelect(event: any): void {
+    if (event.isSelected) {
+      if (!this.selectedQueryIds.includes(event.data.QueryId)) {
+        this.selectedQueryIds.push(event.data.QueryId);
+      }
+    } else {
+      this.selectedQueryIds = this.selectedQueryIds.filter(id => id !== event.data.QueryId);
+    }
+  }
+
+  // Batch kill selected queries
+  batchKillSelectedQueries(): void {
+    if (this.selectedQueryIds.length === 0) {
+      this.toastrService.warning('请先选择要查杀的查询', '提示');
+      return;
+    }
+    this.batchKillQueries(this.selectedQueryIds);
+  }
+
+  // Show query detail dialog
+  onQueryEdit(event: any): void {
+    const query = event.data as Query;
+    this.currentQueryDetail = query;
+    
+    if (this.queryDetailDialogRef) {
+      this.queryDetailDialogRef.close();
+    }
+    
+    this.queryDetailDialogRef = this.dialogService.open(this.queryDetailDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+      context: {},
+    });
+  }
+
+  // Kill query from detail dialog
+  killQueryFromDetail(): void {
+    if (!this.currentQueryDetail) {
+      return;
+    }
+
+    this.confirmDialogService.confirm(
+      '确认查杀查询',
+      `确定要查杀查询 ${this.currentQueryDetail.QueryId} 吗？`,
+      '查杀',
+      '取消',
+      'danger'
+    ).subscribe(confirmed => {
+      if (!confirmed) {
+        return;
+      }
+
+      this.loading = true;
+      this.nodeService.killQuery(this.currentQueryDetail!.QueryId).subscribe({
+        next: () => {
+          this.toastrService.success(`查询 ${this.currentQueryDetail!.QueryId} 已成功查杀`, '成功');
+          this.selectedQueryIds = this.selectedQueryIds.filter(id => id !== this.currentQueryDetail!.QueryId);
+          this.loadRunningQueries();
+        },
+        error: (error) => {
+          this.toastrService.danger(
+            ErrorHandler.extractErrorMessage(error),
+            '查杀失败'
+          );
+          this.loading = false;
+        },
+      });
     });
   }
 

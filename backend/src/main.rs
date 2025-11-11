@@ -259,11 +259,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Add file logging if configured
     if let Some(log_file) = &config.logging.file {
         // Ensure log directory exists
-        if let Some(parent) = std::path::Path::new(log_file).parent() {
+        let log_path = std::path::Path::new(log_file);
+        if let Some(parent) = log_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
 
-        let file_appender = tracing_appender::rolling::daily("logs", "starrocks-admin.log");
+        // Extract directory and filename prefix from config
+        let log_dir = log_path.parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or("logs");
+        let file_name = log_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("starrocks-admin.log");
+        // Remove .log extension if present (rolling appender adds date suffix)
+        let file_prefix = file_name.strip_suffix(".log")
+            .unwrap_or(file_name);
+
+        let file_appender = tracing_appender::rolling::daily(log_dir, file_prefix);
         let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
         registry
             .with(tracing_subscriber::fmt::layer().with_writer(non_blocking))

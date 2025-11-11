@@ -189,6 +189,10 @@ export class NodeService {
     return this.api.get<Query[]>(`/clusters/queries`);
   }
 
+  killQuery(queryId: string): Observable<any> {
+    return this.api.delete(`/clusters/queries/${queryId}`);
+  }
+
   getSystemFunctions(): Observable<SystemFunction[]> {
     return this.api.get<SystemFunction[]>(`/clusters/system`);
   }

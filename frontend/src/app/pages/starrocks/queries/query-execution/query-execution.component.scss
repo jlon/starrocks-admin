@@ -1211,3 +1211,69 @@
     border-top: 1px solid nb-theme(border-basic-color-3);
   }
 }
+
+// Query detail dialog styles
+.query-detail-dialog {
+  min-width: 600px;
+  max-width: 900px;
+  
+  .query-detail-content {
+    padding: 1rem 0;
+    
+    .detail-row {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid nb-theme(border-basic-color-3);
+      
+      &:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+      
+      &.detail-row-full {
+        flex-direction: column;
+        
+        .detail-label {
+          margin-bottom: 0.5rem;
+        }
+      }
+      
+      .detail-label {
+        min-width: 120px;
+        font-weight: 600;
+        color: nb-theme(text-basic-color);
+        margin-right: 1rem;
+        flex-shrink: 0;
+      }
+      
+      .detail-value {
+        flex: 1;
+        color: nb-theme(text-hint-color);
+        word-break: break-word;
+      }
+      
+      .sql-content {
+        width: 100%;
+        margin-top: 0.5rem;
+        
+        .sql-text {
+          background: nb-theme(background-basic-color-2);
+          padding: 1rem;
+          border-radius: nb-theme(border-radius);
+          border: 1px solid nb-theme(border-basic-color-3);
+          font-family: 'Courier New', monospace;
+          font-size: 0.875rem;
+          line-height: 1.6;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          max-height: 400px;
+          overflow-y: auto;
+          color: nb-theme(text-basic-color);
+        }
+      }
+    }
+  }
+}

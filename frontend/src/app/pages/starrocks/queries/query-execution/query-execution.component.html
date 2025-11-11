@@ -308,11 +308,49 @@
 
           <!-- Running Queries Tab -->
           <nb-tab tabTitle="运行中" tabId="running" [active]="selectedTab === 'running'">
+            <!-- Filter and Actions Bar -->
+            <div class="d-flex justify-content-between align-items-center mb-3" *ngIf="!loading" style="gap: 1rem;">
+              <div class="d-flex align-items-center" style="gap: 1rem;">
+                <nb-checkbox 
+                  [(ngModel)]="runningQueryFilter.slowQueryOnly"
+                  (checkedChange)="applyRunningQueryFilter()">
+                  仅显示慢查询（≥5分钟）
+                </nb-checkbox>
+                <nb-checkbox 
+                  [(ngModel)]="runningQueryFilter.highCostOnly"
+                  (checkedChange)="applyRunningQueryFilter()">
+                  仅显示高消耗查询（≥1GB）
+                </nb-checkbox>
+                <button 
+                  *ngIf="runningQueryFilter.slowQueryOnly || runningQueryFilter.highCostOnly"
+                  nbButton 
+                  ghost 
+                  size="tiny"
+                  (click)="resetRunningQueryFilter()">
+                  清除筛选
+                </button>
+              </div>
+              <div class="d-flex align-items-center" style="gap: 0.5rem;">
+                <button 
+                  nbButton 
+                  status="danger" 
+                  size="small"
+                  (click)="batchKillSelectedQueries()"
+                  [disabled]="selectedQueryIds.length === 0">
+                  <nb-icon icon="trash-2-outline"></nb-icon>
+                  批量查杀 ({{ selectedQueryIds.length }})
+                </button>
+              </div>
+            </div>
+            
             <div *ngIf="loading" class="text-center mt-3"><nb-spinner status="primary"></nb-spinner></div>
             <ng2-smart-table 
               *ngIf="!loading" 
               [settings]="runningSettings" 
-              [source]="runningSource">
+              [source]="runningSource"
+              (delete)="onQueryDeleteConfirm($event)"
+              (edit)="onQueryEdit($event)"
+              (userRowSelect)="onQueryRowSelect($event)">
             </ng2-smart-table>
           </nb-tab>
           </nb-tabset>
@@ -514,6 +552,70 @@
           [disabled]="compactionTriggering || (compactionTriggerMode === 'partition' && compactionSelectedPartitions.length === 0)">
           <nb-icon icon="flash-outline"></nb-icon>
           {{ compactionTriggering ? '触发中...' : '触发Compaction' }}
+        </button>
+      </div>
+    </nb-card-footer>
+  </nb-card>
+</ng-template>
+
+<!-- Query Detail Dialog Template -->
+<ng-template #queryDetailDialog let-ref="dialogRef">
+  <nb-card class="query-detail-dialog">
+    <nb-card-header>
+      <div class="d-flex justify-content-between align-items-center">
+        <h5>查询详情</h5>
+        <button nbButton ghost (click)="ref.close()">
+          <nb-icon icon="close-outline"></nb-icon>
+        </button>
+      </div>
+    </nb-card-header>
+    <nb-card-body *ngIf="currentQueryDetail">
+      <div class="query-detail-content">
+        <div class="detail-row">
+          <label class="detail-label">Query ID:</label>
+          <span class="detail-value">{{ currentQueryDetail.QueryId }}</span>
+        </div>
+        <div class="detail-row">
+          <label class="detail-label">用户:</label>
+          <span class="detail-value">{{ currentQueryDetail.User }}</span>
+        </div>
+        <div class="detail-row">
+          <label class="detail-label">数据库:</label>
+          <span class="detail-value">{{ currentQueryDetail.Database || 'N/A' }}</span>
+        </div>
+        <div class="detail-row">
+          <label class="detail-label">连接ID:</label>
+          <span class="detail-value">{{ currentQueryDetail.ConnectionId }}</span>
+        </div>
+        <div class="detail-row">
+          <label class="detail-label">执行时间:</label>
+          <span class="detail-value" [innerHTML]="renderSlowQueryBadge(currentQueryDetail.ExecTime)"></span>
+        </div>
+        <div class="detail-row">
+          <label class="detail-label">扫描数据量:</label>
+          <span class="detail-value" [innerHTML]="formatBytes(currentQueryDetail.ScanBytes)"></span>
+        </div>
+        <div class="detail-row">
+          <label class="detail-label">处理行数:</label>
+          <span class="detail-value">{{ formatNumber(currentQueryDetail.ProcessRows) }}</span>
+        </div>
+        <div class="detail-row">
+          <label class="detail-label">CPU时间:</label>
+          <span class="detail-value" [innerHTML]="formatTime(currentQueryDetail.CPUTime)"></span>
+        </div>
+        <div class="detail-row detail-row-full">
+          <label class="detail-label">SQL语句:</label>
+          <div class="sql-content">
+            <pre class="sql-text">{{ currentQueryDetail.Sql || 'N/A' }}</pre>
+          </div>
+        </div>
+      </div>
+    </nb-card-body>
+    <nb-card-footer>
+      <div class="d-flex justify-content-end">
+        <button nbButton status="danger" (click)="killQueryFromDetail(); ref.close()">
+          <nb-icon icon="trash-2-outline"></nb-icon>
+          查杀查询
         </button>
       </div>
     </nb-card-footer>

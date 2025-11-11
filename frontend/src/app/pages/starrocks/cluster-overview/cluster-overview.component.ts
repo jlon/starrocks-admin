@@ -40,8 +40,8 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
   
   timeRange: string = '1h';
   loading = false;
-  autoRefresh = true;
-  refreshInterval = 30; // seconds - will be loaded from config or use default
+  autoRefresh = false; // Default: disabled (will be enabled when interval is selected)
+  refreshInterval: number | 'off' = 'off'; // Default: off (Grafana style)
 
   // Latency percentile selection
   selectedLatencyPercentile: 'P50' | 'P95' | 'P99' = 'P99';
@@ -70,12 +70,12 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
     { label: '3 Days', value: '3d' },
   ];
 
-  // Refresh interval options (can be customized in config)
+  // Refresh interval options (Grafana style)
   refreshIntervalOptions = [
-    { label: '15s', value: 15 },
-    { label: '30s', value: 30 },
-    { label: '1m', value: 60 },
-    { label: 'Manual', value: 0 },
+    { label: '关闭', value: 'off' },
+    { label: '15秒', value: 15 },
+    { label: '30秒', value: 30 },
+    { label: '1分钟', value: 60 },
   ];
 
   /**
@@ -144,7 +144,11 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
   }
 
   setupAutoRefresh() {
-    if (this.refreshInterval > 0) {
+    // Clear any existing subscription
+    this.destroy$.next();
+    
+    // Only setup if interval is a number (not 'off')
+    if (typeof this.refreshInterval === 'number' && this.refreshInterval > 0) {
       interval(this.refreshInterval * 1000)
         .pipe(
           takeUntil(this.destroy$),
@@ -153,6 +157,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
           // Stop auto-refresh if user is not authenticated (logged out)
           if (!this.authService.isAuthenticated()) {
             this.autoRefresh = false;
+            this.refreshInterval = 'off';
             this.destroy$.next();
             return;
           }
@@ -238,23 +243,24 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
     this.loadOverview();
   }
 
-  onRefreshIntervalChange(interval: number) {
+  // Grafana-style: selecting an interval automatically enables auto-refresh
+  // Selecting 'off' disables auto-refresh
+  onRefreshIntervalChange(interval: number | 'off') {
     this.refreshInterval = interval;
-    this.autoRefresh = interval > 0;
-    // Restart auto-refresh
-    this.destroy$.next();
-    this.setupAutoRefresh();
+    
+    if (interval === 'off') {
+      // Disable auto-refresh
+      this.autoRefresh = false;
+      this.setupAutoRefresh(); // This will clear the interval
+    } else {
+      // Enable auto-refresh with selected interval
+      this.autoRefresh = true;
+      this.setupAutoRefresh();
+    }
   }
 
   onManualRefresh() {
     this.loadOverview();
-  }
-
-  toggleAutoRefresh() {
-    this.autoRefresh = !this.autoRefresh;
-    if (this.autoRefresh) {
-      this.setupAutoRefresh();
-    }
   }
 
   // Navigation methods

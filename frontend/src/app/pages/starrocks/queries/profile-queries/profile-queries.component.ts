@@ -27,8 +27,9 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   loading = true;
   autoRefresh = false; // Default: disabled
   refreshInterval: any;
-  selectedRefreshInterval = 5; // Default 5 seconds
+  selectedRefreshInterval: number | 'off' = 'off'; // Default: off (Grafana style)
   refreshIntervalOptions = [
+    { value: 'off', label: '关闭' },
     { value: 3, label: '3秒' },
     { value: 5, label: '5秒' },
     { value: 10, label: '10秒' },
@@ -128,20 +129,18 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  // Auto refresh methods
-  toggleAutoRefresh(): void {
-    this.autoRefresh = !this.autoRefresh;
-    if (this.autoRefresh) {
-      this.startAutoRefresh();
-    } else {
-      this.stopAutoRefresh();
-    }
-  }
-
-  onRefreshIntervalChange(interval: number): void {
+  // Grafana-style: selecting an interval automatically enables auto-refresh
+  // Selecting 'off' disables auto-refresh
+  onRefreshIntervalChange(interval: number | 'off'): void {
     this.selectedRefreshInterval = interval;
-    if (this.autoRefresh) {
-      // Restart with new interval
+    
+    if (interval === 'off') {
+      // Disable auto-refresh
+      this.autoRefresh = false;
+      this.stopAutoRefresh();
+    } else {
+      // Enable auto-refresh with selected interval
+      this.autoRefresh = true;
       this.stopAutoRefresh();
       this.startAutoRefresh();
     }
@@ -149,14 +148,22 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
   startAutoRefresh(): void {
     this.stopAutoRefresh(); // Clear any existing interval
+    
+    // Only start if interval is a number (not 'off')
+    if (typeof this.selectedRefreshInterval !== 'number') {
+      return;
+    }
+    
     this.refreshInterval = setInterval(() => {
       // Stop auto-refresh if user is not authenticated (logged out)
       if (!this.authService.isAuthenticated()) {
         this.autoRefresh = false;
+        this.selectedRefreshInterval = 'off';
         this.stopAutoRefresh();
         return;
       }
-      this.loadProfiles();
+      // Only update data, don't show loading spinner during auto-refresh
+      this.loadProfilesSilently();
     }, this.selectedRefreshInterval * 1000);
   }
 
@@ -178,6 +185,20 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       error => {
         this.toastrService.danger(ErrorHandler.handleClusterError(error), '加载失败');
         this.loading = false;
+      }
+    );
+  }
+
+  // Load profiles silently (for auto-refresh, no loading spinner)
+  loadProfilesSilently(): void {
+    // Only update data, don't show loading spinner during auto-refresh
+    this.nodeService.listProfiles().subscribe(
+      data => {
+        this.profileSource.load(data);
+      },
+      error => {
+        // Silently handle errors during auto-refresh, don't show toast
+        console.error('[ProfileQueries] Auto-refresh error:', error);
       }
     );
   }

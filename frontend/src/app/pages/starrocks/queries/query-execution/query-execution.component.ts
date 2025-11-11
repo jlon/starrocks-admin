@@ -105,8 +105,9 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   selectedTab = 'realtime'; // 'realtime' or 'running'
   autoRefresh = false; // Default: disabled
   refreshInterval: any;
-  selectedRefreshInterval = 5; // Default 5 seconds
+  selectedRefreshInterval: number | 'off' = 'off'; // Default: off (Grafana style)
   refreshIntervalOptions = [
+    { value: 'off', label: '关闭' },
     { value: 3, label: '3秒' },
     { value: 5, label: '5秒' },
     { value: 10, label: '10秒' },
@@ -3409,20 +3410,18 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.loadCurrentTab();
   }
 
-  // Auto refresh methods
-  toggleAutoRefresh(): void {
-    this.autoRefresh = !this.autoRefresh;
-    if (this.autoRefresh) {
-      this.startAutoRefresh();
-    } else {
-      this.stopAutoRefresh();
-    }
-  }
-
-  onRefreshIntervalChange(interval: number): void {
+  // Grafana-style: selecting an interval automatically enables auto-refresh
+  // Selecting 'off' disables auto-refresh
+  onRefreshIntervalChange(interval: number | 'off'): void {
     this.selectedRefreshInterval = interval;
-    if (this.autoRefresh) {
-      // Restart with new interval
+    
+    if (interval === 'off') {
+      // Disable auto-refresh
+      this.autoRefresh = false;
+      this.stopAutoRefresh();
+    } else {
+      // Enable auto-refresh with selected interval
+      this.autoRefresh = true;
       this.stopAutoRefresh();
       this.startAutoRefresh();
     }
@@ -3430,14 +3429,22 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   startAutoRefresh(): void {
     this.stopAutoRefresh(); // Clear any existing interval
+    
+    // Only start if interval is a number (not 'off')
+    if (typeof this.selectedRefreshInterval !== 'number') {
+      return;
+    }
+    
     this.refreshInterval = setInterval(() => {
       // Stop auto-refresh if user is not authenticated (logged out)
       if (!this.authService.isAuthenticated()) {
         this.autoRefresh = false;
+        this.selectedRefreshInterval = 'off';
         this.stopAutoRefresh();
         return;
       }
-      this.loadCurrentTab();
+      // Only update data, don't show loading spinner during auto-refresh
+      this.loadCurrentTabSilently();
     }, this.selectedRefreshInterval * 1000);
   }
 
@@ -3456,6 +3463,44 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       // realtime tab doesn't need auto-loading
       this.loading = false;
     }
+  }
+
+  // Load data silently (for auto-refresh, no loading spinner)
+  loadCurrentTabSilently(): void {
+    if (this.selectedTab === 'running') {
+      // Only update data, don't show loading spinner during auto-refresh
+      this.loadRunningQueriesSilently();
+    }
+  }
+
+  // Load running queries silently (for auto-refresh)
+  loadRunningQueriesSilently(): void {
+    this.nodeService.listQueries().subscribe({
+      next: (queries) => {
+        // Apply filters
+        let filteredQueries = queries;
+        
+        if (this.runningQueryFilter.slowQueryOnly) {
+          filteredQueries = filteredQueries.filter(q => {
+            const execTime = this.parseExecTime(q.ExecTime);
+            return execTime >= 300000; // 5 minutes
+          });
+        }
+        
+        if (this.runningQueryFilter.highCostOnly) {
+          filteredQueries = filteredQueries.filter(q => {
+            const scanBytes = this.parseBytes(q.ScanBytes);
+            return scanBytes >= 1073741824; // 1GB
+          });
+        }
+        
+        this.runningSource.load(filteredQueries);
+      },
+      error: (error) => {
+        // Silently handle errors during auto-refresh, don't show toast
+        console.error('[QueryExecution] Auto-refresh error:', error);
+      },
+    });
   }
 
   // Load running queries

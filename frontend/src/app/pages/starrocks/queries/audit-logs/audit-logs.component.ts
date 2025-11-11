@@ -30,8 +30,9 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
   loading = true;
   autoRefresh = false; // Default: disabled
   refreshInterval: any;
-  selectedRefreshInterval = 5; // Default 5 seconds
+  selectedRefreshInterval: number | 'off' = 'off'; // Default: off (Grafana style)
   refreshIntervalOptions = [
+    { value: 'off', label: '关闭' },
     { value: 3, label: '3秒' },
     { value: 5, label: '5秒' },
     { value: 10, label: '10秒' },
@@ -136,20 +137,18 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  // Auto refresh methods
-  toggleAutoRefresh(): void {
-    this.autoRefresh = !this.autoRefresh;
-    if (this.autoRefresh) {
-      this.startAutoRefresh();
-    } else {
-      this.stopAutoRefresh();
-    }
-  }
-
-  onRefreshIntervalChange(interval: number): void {
+  // Grafana-style: selecting an interval automatically enables auto-refresh
+  // Selecting 'off' disables auto-refresh
+  onRefreshIntervalChange(interval: number | 'off'): void {
     this.selectedRefreshInterval = interval;
-    if (this.autoRefresh) {
-      // Restart with new interval
+    
+    if (interval === 'off') {
+      // Disable auto-refresh
+      this.autoRefresh = false;
+      this.stopAutoRefresh();
+    } else {
+      // Enable auto-refresh with selected interval
+      this.autoRefresh = true;
       this.stopAutoRefresh();
       this.startAutoRefresh();
     }
@@ -157,14 +156,22 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
 
   startAutoRefresh(): void {
     this.stopAutoRefresh(); // Clear any existing interval
+    
+    // Only start if interval is a number (not 'off')
+    if (typeof this.selectedRefreshInterval !== 'number') {
+      return;
+    }
+    
     this.refreshInterval = setInterval(() => {
       // Stop auto-refresh if user is not authenticated (logged out)
       if (!this.authService.isAuthenticated()) {
         this.autoRefresh = false;
+        this.selectedRefreshInterval = 'off';
         this.stopAutoRefresh();
         return;
       }
-      this.loadHistoryQueries();
+      // Only update data, don't show loading spinner during auto-refresh
+      this.loadHistoryQueriesSilently();
     }, this.selectedRefreshInterval * 1000);
   }
 
@@ -194,6 +201,24 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
           );
           this.historySource.load([]);
           this.loading = false;
+        },
+      });
+  }
+
+  // Load query history silently (for auto-refresh, no loading spinner)
+  loadHistoryQueriesSilently(): void {
+    // Only update data, don't show loading spinner during auto-refresh
+    this.nodeService
+      .listQueryHistory(this.historyPageSize, (this.historyCurrentPage - 1) * this.historyPageSize)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (data) => {
+          this.historySource.load(data.data);
+          this.historyTotalCount = data.total;
+        },
+        error: (error) => {
+          // Silently handle errors during auto-refresh, don't show toast
+          console.error('[AuditLogs] Auto-refresh error:', error);
         },
       });
   }

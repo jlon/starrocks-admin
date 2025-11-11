@@ -19,26 +19,15 @@
             <nb-select 
               [(selected)]="selectedRefreshInterval" 
               size="small" 
-              placeholder="间隔"
+              placeholder="自动刷新"
               (selectedChange)="onRefreshIntervalChange($event)"
               [disabled]="!clusterId"
-              style="min-width: 90px;"
+              style="min-width: 100px;"
             >
               <nb-option *ngFor="let option of refreshIntervalOptions" [value]="option.value">
                 {{ option.label }}
               </nb-option>
             </nb-select>
-            
-            <button 
-              nbButton 
-              [status]="autoRefresh ? 'success' : 'basic'" 
-              size="small" 
-              (click)="toggleAutoRefresh()"
-              [disabled]="!clusterId"
-            >
-              <nb-icon [icon]="autoRefresh ? 'checkmark-circle-2-outline' : 'pause-circle-outline'"></nb-icon>
-              {{ autoRefresh ? '停止' : '自动' }}
-            </button>
           </div>
         </div>
       </nb-card-header>

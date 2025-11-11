@@ -6,23 +6,13 @@
       <nb-select [(selected)]="timeRange" (selectedChange)="onTimeRangeChange($event)" placeholder="时间范围" size="small">
         <nb-option *ngFor="let opt of timeRangeOptions" [value]="opt.value">{{ opt.label }}</nb-option>
       </nb-select>
-      <nb-select [(selected)]="refreshInterval" (selectedChange)="onRefreshIntervalChange($event)" placeholder="刷新间隔" size="small">
+      <button nbButton size="small" status="info" (click)="onManualRefresh()">
+        <nb-icon icon="refresh-outline"></nb-icon>
+        刷新
+      </button>
+      <nb-select [(selected)]="refreshInterval" (selectedChange)="onRefreshIntervalChange($event)" placeholder="自动刷新" size="small">
         <nb-option *ngFor="let opt of refreshIntervalOptions" [value]="opt.value">{{ opt.label }}</nb-option>
       </nb-select>
-      <button nbButton size="small" status="info" (click)="onManualRefresh()">
-            <nb-icon icon="refresh-outline"></nb-icon>
-            刷新
-          </button>
-          <button 
-            nbButton 
-            [status]="autoRefresh ? 'success' : 'basic'" 
-            size="small" 
-            (click)="toggleAutoRefresh()"
-            *ngIf="refreshInterval > 0"
-          >
-            <nb-icon [icon]="autoRefresh ? 'checkmark-circle-2-outline' : 'pause-circle-outline'"></nb-icon>
-            {{ autoRefresh ? '停止' : '自动' }}
-      </button>
     </div>
   </div>
     </nb-card-header>

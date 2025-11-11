@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subject, interval } from 'rxjs';
 import { takeUntil, switchMap, skip } from 'rxjs/operators';
@@ -23,6 +23,7 @@ import { AuthService } from '../../../@core/data/auth.service';
   selector: 'ngx-cluster-overview',
   templateUrl: './cluster-overview.component.html',
   styleUrls: ['./cluster-overview.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewInit {
   overview: ClusterOverview | null = null;
@@ -95,6 +96,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
     private toastr: NbToastrService,
     private themeService: NbThemeService,
     private authService: AuthService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
@@ -114,6 +116,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
           textHint: colors.textHintColor,
           border: colors.borderColor || colors.dividerColor,
         };
+        this.cdr.markForCheck();
       });
 
     // Initialize overview data loading
@@ -130,6 +133,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
         // Active cluster changed, reload overview
         this.loadOverview();
         this.setupAutoRefresh();
+        this.cdr.markForCheck();
       });
   }
 
@@ -171,6 +175,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
   loadOverview(showLoading: boolean = true) {
     if (showLoading) {
       this.loading = true;
+      this.cdr.markForCheck();
     }
 
     // Load data from real API - no clusterId needed, backend will get from active cluster
@@ -196,6 +201,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
           
           // Animate numbers after data is loaded
           setTimeout(() => this.animateNumbers(), 100);
+          this.cdr.markForCheck();
         },
         error: (err) => {
           console.error('[ClusterOverview] Failed to load cluster overview:', err);
@@ -221,6 +227,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
           
           this.toastr.danger(errorMsg, '错误');
           this.loading = false;
+          this.cdr.markForCheck();
         }
       });
     
@@ -229,11 +236,13 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
       .subscribe({
         next: (details) => {
           this.compactionDetails = details;
+          this.cdr.markForCheck();
         },
         error: (err) => {
           console.warn('[ClusterOverview] Failed to load compaction details:', err);
           // Don't show error to user - compaction details are optional
           this.compactionDetails = null;
+          this.cdr.markForCheck();
         }
       });
   }
@@ -296,6 +305,15 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
 
   navigateToMaterializedViews() {
     this.router.navigate(['/pages/starrocks/materialized-views']);
+  }
+
+  // Computed properties for template optimization (avoid repeated array operations)
+  get topTablesBySize(): any[] {
+    return (this.dataStatistics?.topTablesBySize || []).slice(0, 10);
+  }
+
+  get topTablesByAccess(): any[] {
+    return (this.dataStatistics?.topTablesByAccess || []).slice(0, 10);
   }
 
   // Helper methods

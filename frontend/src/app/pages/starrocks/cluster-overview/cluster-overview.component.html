@@ -141,14 +141,14 @@
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let table of (dataStatistics?.topTablesBySize || []).slice(0, 10)">
+                <tr *ngFor="let table of topTablesBySize">
                       <td style="word-break: break-all;">{{ table.database }}.{{ table.table }}</td>
                       <td style="text-align: right; white-space: nowrap;">{{ formatBytes(table.sizeBytes) }}</td>
                       <td style="text-align: right;">{{ table.rowCount ? formatNumber(table.rowCount) : 'N/A' }}</td>
                     </tr>
                   </tbody>
                 </table>
-                <div *ngIf="(dataStatistics?.topTablesBySize || []).length === 0" class="no-data">
+                <div *ngIf="topTablesBySize.length === 0" class="no-data">
                   <p>暂无数据</p>
                 </div>
               </div>
@@ -164,13 +164,13 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr *ngFor="let table of (dataStatistics?.topTablesByAccess || []).slice(0, 10)">
+                    <tr *ngFor="let table of topTablesByAccess">
                       <td style="word-break: break-all;">{{ table.database }}.{{ table.table }}</td>
                       <td style="text-align: right;">{{ formatNumber(table.accessCount) }}</td>
                 </tr>
               </tbody>
             </table>
-                <div *ngIf="(dataStatistics?.topTablesByAccess || []).length === 0" class="no-data">
+                <div *ngIf="topTablesByAccess.length === 0" class="no-data">
                   <p>暂无数据</p>
                 </div>
               </div>

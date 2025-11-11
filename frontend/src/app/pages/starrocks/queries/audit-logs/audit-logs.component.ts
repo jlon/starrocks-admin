@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, TemplateRef, ViewChild, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { NbToastrService, NbDialogService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
@@ -16,6 +16,7 @@ import { AuthService } from '../../../../@core/data/auth.service';
   selector: 'ngx-audit-logs',
   templateUrl: './audit-logs.component.html',
   styleUrls: ['./audit-logs.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AuditLogsComponent implements OnInit, OnDestroy {
   // Data sources
@@ -102,6 +103,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     private clusterContext: ClusterContextService,
     private dialogService: NbDialogService,
     private authService: AuthService,
+    private cdr: ChangeDetectorRef,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);
@@ -125,6 +127,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
           }
         }
         // Backend will handle "no active cluster" case
+        this.cdr.markForCheck();
       });
 
     // Load data - backend will get active cluster automatically
@@ -185,6 +188,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
   // Load query history with pagination
   loadHistoryQueries(): void {
     this.loading = true;
+    this.cdr.markForCheck();
     this.nodeService
       .listQueryHistory(this.historyPageSize, (this.historyCurrentPage - 1) * this.historyPageSize)
       .pipe(takeUntil(this.destroy$))
@@ -193,6 +197,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
           this.historySource.load(data.data);
           this.historyTotalCount = data.total;
           this.loading = false;
+          this.cdr.markForCheck();
         },
         error: (error) => {
           this.toastrService.danger(
@@ -201,6 +206,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
           );
           this.historySource.load([]);
           this.loading = false;
+          this.cdr.markForCheck();
         },
       });
   }
@@ -215,6 +221,7 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
         next: (data) => {
           this.historySource.load(data.data);
           this.historyTotalCount = data.total;
+          this.cdr.markForCheck();
         },
         error: (error) => {
           // Silently handle errors during auto-refresh, don't show toast

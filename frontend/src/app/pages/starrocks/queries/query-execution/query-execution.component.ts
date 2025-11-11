@@ -1,9 +1,9 @@
-import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, HostListener, TemplateRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, HostListener, TemplateRef, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrService, NbThemeService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
-import { Subject, Observable, forkJoin, of } from 'rxjs';
-import { map, catchError, takeUntil } from 'rxjs/operators';
+import { Subject, Observable, forkJoin, of, fromEvent } from 'rxjs';
+import { map, catchError, takeUntil, debounceTime } from 'rxjs/operators';
 import { NodeService, Query, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
@@ -70,6 +70,7 @@ interface NavTreeNode {
   selector: 'ngx-query-execution',
   templateUrl: './query-execution.component.html',
   styleUrls: ['./query-execution.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   animations: [
     trigger('editorCollapse', [
       state('expanded', style({ height: '*', opacity: 1, overflow: 'visible' })),
@@ -434,6 +435,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     private dialogService: NbDialogService,
     private confirmDialogService: ConfirmDialogService,
     private authService: AuthService,
+    private cdr: ChangeDetectorRef,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);
@@ -456,6 +458,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       .subscribe((theme: any) => {
         this.currentTheme = theme.name;
         this.updateEditorTheme();
+        this.cdr.markForCheck();
       });
 
     // Get current theme
@@ -464,13 +467,18 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       .subscribe((theme: any) => {
         this.currentTheme = theme?.name || 'default';
         this.updateEditorTheme();
+        this.cdr.markForCheck();
       });
-    
-  }
-  
-  @HostListener('window:resize', ['$event'])
-  onResize(event: any) {
-    this.calculateEditorHeight();
+
+    // Debounced window resize handler (100ms debounce to prevent excessive calls)
+    fromEvent(window, 'resize')
+      .pipe(
+        debounceTime(100),
+        takeUntil(this.destroy$)
+      )
+      .subscribe(() => {
+        this.calculateEditorHeight();
+      });
   }
 
   @HostListener('document:mousemove', ['$event'])
@@ -3332,6 +3340,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   private loadCatalogs(autoSelectFirst = true): void {
     // Backend will get active cluster automatically - no need to check clusterId
     this.loadingCatalogs = true;
+    this.cdr.markForCheck();
     this.nodeService.getCatalogs().subscribe({
       next: (catalogs) => {
         const catalogList = (catalogs || []).filter((name) => !!name && name.trim().length > 0);
@@ -3346,11 +3355,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           this.onNodeSelect(firstCatalogNode);
           this.toggleNode(firstCatalogNode);
         }
+        this.cdr.markForCheck();
       },
       error: (error) => {
         this.loadingCatalogs = false;
         console.error('Failed to load catalogs:', error);
         this.refreshSqlSchema();
+        this.cdr.markForCheck();
       },
     });
   }
@@ -3375,6 +3386,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             } else {
               this.loading = false;
             }
+            this.cdr.markForCheck();
           }
         }
       });
@@ -3408,6 +3420,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   selectTab(tab: string): void {
     this.selectedTab = tab;
     this.loadCurrentTab();
+    this.cdr.markForCheck();
   }
 
   // Grafana-style: selecting an interval automatically enables auto-refresh
@@ -3495,6 +3508,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         }
         
         this.runningSource.load(filteredQueries);
+        this.cdr.markForCheck();
       },
       error: (error) => {
         // Silently handle errors during auto-refresh, don't show toast
@@ -3506,6 +3520,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   // Load running queries
   loadRunningQueries(): void {
     this.loading = true;
+    this.cdr.markForCheck();
     this.nodeService.listQueries().subscribe({
       next: (queries) => {
         // Apply filters
@@ -3527,10 +3542,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         
         this.runningSource.load(filteredQueries);
         this.loading = false;
+        this.cdr.markForCheck();
       },
       error: (error) => {
         this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
         this.loading = false;
+        this.cdr.markForCheck();
       },
     });
   }

@@ -345,7 +345,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     mode: 'external',
     hideSubHeader: false, // Enable search
     noDataMessage: '当前没有运行中的查询',
-    selectMode: 'multi',
     actions: {
       add: false,
       edit: true,
@@ -419,8 +418,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     highCostOnly?: boolean;
   } = {};
 
-  // Selected query IDs for batch operations
-  selectedQueryIds: string[] = [];
 
   // Query detail dialog state
   currentQueryDetail: Query | null = null;
@@ -3485,8 +3482,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         
         this.runningSource.load(filteredQueries);
         this.loading = false;
-        // Clear selection when data reloads
-        this.selectedQueryIds = [];
       },
       error: (error) => {
         this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
@@ -3618,8 +3613,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         next: () => {
           this.toastrService.success(`查询 ${query.QueryId} 已成功查杀`, '成功');
           event.confirm.resolve();
-          // Remove from selected list if exists
-          this.selectedQueryIds = this.selectedQueryIds.filter(id => id !== query.QueryId);
           this.loadRunningQueries();
         },
         error: (error) => {
@@ -3664,7 +3657,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             completed++;
             if (completed === queryIds.length) {
               this.loading = false;
-              this.selectedQueryIds = []; // Clear selection after batch kill
               if (failCount === 0) {
                 this.toastrService.success(`成功查杀 ${successCount} 个查询`, '成功');
               } else {
@@ -3678,7 +3670,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             completed++;
             if (completed === queryIds.length) {
               this.loading = false;
-              this.selectedQueryIds = []; // Clear selection after batch kill
               if (successCount > 0) {
                 this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
               } else {
@@ -3703,24 +3694,30 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.loadRunningQueries();
   }
 
-  // Handle query row selection
-  onQueryRowSelect(event: any): void {
-    if (event.isSelected) {
-      if (!this.selectedQueryIds.includes(event.data.QueryId)) {
-        this.selectedQueryIds.push(event.data.QueryId);
-      }
-    } else {
-      this.selectedQueryIds = this.selectedQueryIds.filter(id => id !== event.data.QueryId);
-    }
-  }
-
-  // Batch kill selected queries
+  // Batch kill selected queries (from filter bar - kills all currently displayed queries)
   batchKillSelectedQueries(): void {
-    if (this.selectedQueryIds.length === 0) {
-      this.toastrService.warning('请先选择要查杀的查询', '提示');
-      return;
-    }
-    this.batchKillQueries(this.selectedQueryIds);
+    // Get all currently displayed queries (after filtering)
+    this.runningSource.getAll().then((allQueries: Query[]) => {
+      const queryIds = allQueries.map((q: Query) => q.QueryId);
+      
+      if (queryIds.length === 0) {
+        this.toastrService.warning('当前没有可查杀的查询', '提示');
+        return;
+      }
+
+      this.confirmDialogService.confirm(
+        '确认批量查杀',
+        `确定要查杀当前显示的 ${queryIds.length} 个查询吗？`,
+        '查杀',
+        '取消',
+        'danger'
+      ).subscribe(confirmed => {
+        if (!confirmed) {
+          return;
+        }
+        this.batchKillQueries(queryIds);
+      });
+    });
   }
 
   // Show query detail dialog
@@ -3761,7 +3758,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       this.nodeService.killQuery(this.currentQueryDetail!.QueryId).subscribe({
         next: () => {
           this.toastrService.success(`查询 ${this.currentQueryDetail!.QueryId} 已成功查杀`, '成功');
-          this.selectedQueryIds = this.selectedQueryIds.filter(id => id !== this.currentQueryDetail!.QueryId);
           this.loadRunningQueries();
         },
         error: (error) => {

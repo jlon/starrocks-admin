@@ -1212,6 +1212,58 @@
   }
 }
 
+// Running query filters bar - ngx-admin style
+.running-query-filters {
+  padding: 0.75rem 1rem;
+  background-color: nb-theme(background-basic-color-2);
+  border-radius: nb-theme(border-radius);
+  border: 1px solid nb-theme(border-basic-color-3);
+  
+  .filter-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    
+    .filter-options {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 1.5rem;
+      
+      .filter-checkbox {
+        ::ng-deep {
+          .text-hint {
+            font-size: 0.875rem;
+            color: nb-theme(text-hint-color);
+            font-weight: 400;
+          }
+          
+          label {
+            margin-bottom: 0;
+          }
+        }
+      }
+      
+      .clear-filter-btn {
+        ::ng-deep {
+          .text-hint {
+            font-size: 0.875rem;
+            color: nb-theme(text-hint-color);
+          }
+        }
+      }
+    }
+    
+    .filter-actions {
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+  }
+}
+
 // Query detail dialog styles
 .query-detail-dialog {
   min-width: 600px;

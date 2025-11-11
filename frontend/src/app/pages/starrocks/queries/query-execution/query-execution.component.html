@@ -309,37 +309,43 @@
           <!-- Running Queries Tab -->
           <nb-tab tabTitle="运行中" tabId="running" [active]="selectedTab === 'running'">
             <!-- Filter and Actions Bar -->
-            <div class="d-flex justify-content-between align-items-center mb-3" *ngIf="!loading" style="gap: 1rem;">
-              <div class="d-flex align-items-center" style="gap: 1rem;">
-                <nb-checkbox 
-                  [(ngModel)]="runningQueryFilter.slowQueryOnly"
-                  (checkedChange)="applyRunningQueryFilter()">
-                  仅显示慢查询（≥5分钟）
-                </nb-checkbox>
-                <nb-checkbox 
-                  [(ngModel)]="runningQueryFilter.highCostOnly"
-                  (checkedChange)="applyRunningQueryFilter()">
-                  仅显示高消耗查询（≥1GB）
-                </nb-checkbox>
-                <button 
-                  *ngIf="runningQueryFilter.slowQueryOnly || runningQueryFilter.highCostOnly"
-                  nbButton 
-                  ghost 
-                  size="tiny"
-                  (click)="resetRunningQueryFilter()">
-                  清除筛选
-                </button>
-              </div>
-              <div class="d-flex align-items-center" style="gap: 0.5rem;">
-                <button 
-                  nbButton 
-                  status="danger" 
-                  size="small"
-                  (click)="batchKillSelectedQueries()"
-                  [disabled]="selectedQueryIds.length === 0">
-                  <nb-icon icon="trash-2-outline"></nb-icon>
-                  批量查杀 ({{ selectedQueryIds.length }})
-                </button>
+            <div class="running-query-filters mb-3" *ngIf="!loading">
+              <div class="filter-content">
+                <div class="filter-options">
+                  <nb-checkbox 
+                    [(ngModel)]="runningQueryFilter.slowQueryOnly"
+                    (checkedChange)="applyRunningQueryFilter()"
+                    class="filter-checkbox">
+                    <span class="text-hint">仅显示慢查询（≥5分钟）</span>
+                  </nb-checkbox>
+                  <nb-checkbox 
+                    [(ngModel)]="runningQueryFilter.highCostOnly"
+                    (checkedChange)="applyRunningQueryFilter()"
+                    class="filter-checkbox">
+                    <span class="text-hint">仅显示高消耗查询（≥1GB）</span>
+                  </nb-checkbox>
+                  <button 
+                    *ngIf="runningQueryFilter.slowQueryOnly || runningQueryFilter.highCostOnly"
+                    nbButton 
+                    ghost 
+                    size="tiny"
+                    status="basic"
+                    (click)="resetRunningQueryFilter()"
+                    class="clear-filter-btn">
+                    <span class="text-hint">清除筛选</span>
+                  </button>
+                </div>
+                <div class="filter-actions">
+                  <button 
+                    nbButton 
+                    status="danger" 
+                    size="small"
+                    (click)="batchKillSelectedQueries()"
+                    [disabled]="loading">
+                    <nb-icon icon="trash-2-outline"></nb-icon>
+                    批量查杀当前显示
+                  </button>
+                </div>
               </div>
             </div>
             
@@ -349,8 +355,7 @@
               [settings]="runningSettings" 
               [source]="runningSource"
               (delete)="onQueryDeleteConfirm($event)"
-              (edit)="onQueryEdit($event)"
-              (userRowSelect)="onQueryRowSelect($event)">
+              (edit)="onQueryEdit($event)">
             </ng2-smart-table>
           </nb-tab>
           </nb-tabset>

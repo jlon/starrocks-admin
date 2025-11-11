@@ -444,13 +444,14 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   ngAfterViewInit(): void {
     // Initialize CodeMirror editor after view is ready
-    setTimeout(() => {
+    // Use requestAnimationFrame for better performance than setTimeout
+    requestAnimationFrame(() => {
       this.initEditor();
       this.calculateEditorHeight();
       if (this.clusterId && this.clusterId > 0) {
         this.loadCatalogs();
       }
-    }, 100);
+    });
 
     // Subscribe to theme changes
     this.themeService.onThemeChange()
@@ -535,7 +536,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       const restoredWidth = Math.max(this.treeMinWidth, Math.min(this.treeMaxWidth, this.previousTreeWidth));
       this.treePanelWidth = restoredWidth;
     }
-    setTimeout(() => this.calculateEditorHeight(), 0);
+    // Use requestAnimationFrame to wait for DOM update before calculating height
+    requestAnimationFrame(() => {
+      this.calculateEditorHeight();
+    });
   }
   
   // Calculate dynamic editor height based on viewport
@@ -1636,9 +1640,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             });
             
             // Wait for table to render, then ensure tooltips work
-            setTimeout(() => {
-              this.ensureTooltipsWork();
-            }, 300);
+            // Use requestAnimationFrame + setTimeout for better timing
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                this.ensureTooltipsWork();
+              }, 300);
+            });
           }
         },
         error: (error) => {
@@ -2415,9 +2422,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.infoDialogSource.load(data);
 
     // Ensure tooltips work after tab switch
-    setTimeout(() => {
-      this.ensureTooltipsWork();
-    }, 300);
+    // Use requestAnimationFrame + setTimeout for better timing
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        this.ensureTooltipsWork();
+      }, 300);
+    });
   }
 
   private parseTableRows(rows: any[][], columns: string[]): any[] {
@@ -2636,9 +2646,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.infoDialogSource.load(data);
     
     // Wait for table to render after tab switch, then ensure tooltips work
-    setTimeout(() => {
-      this.ensureTooltipsWork();
-    }, 300);
+    // Use requestAnimationFrame + setTimeout for better timing
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        this.ensureTooltipsWork();
+      }, 300);
+    });
   }
 
   // Helper methods for info dialog
@@ -2736,9 +2749,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             this.infoDialogError = null;
 
               // Wait for table to render, then ensure tooltips work
-              setTimeout(() => {
-                this.ensureTooltipsWork();
-              }, 300);
+              // Use requestAnimationFrame + setTimeout for better timing
+              requestAnimationFrame(() => {
+                setTimeout(() => {
+                  this.ensureTooltipsWork();
+                }, 300);
+              });
           } else {
             const error = result.results?.[0]?.error || '查询失败';
             this.infoDialogError = error;
@@ -2770,7 +2786,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   // Ensure tooltips work in ng2-smart-table and add copy functionality
   // This is a workaround for cases where ng2-smart-table doesn't properly render title attributes
-  private ensureTooltipsWork(): void {
+  // Use requestAnimationFrame to wait for DOM update, then setTimeout for table rendering
+  private ensureTooltipsWork(delay: number = 300): void {
     if (!this.infoDialogRef) return;
     
     // Find all spans with title attributes in the dialog
@@ -3064,7 +3081,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.selectedTable = table;
 
     if (this.editorView) {
-      setTimeout(() => this.calculateEditorHeight(), 0);
+      // Use requestAnimationFrame to wait for DOM update before calculating height
+      requestAnimationFrame(() => {
+        this.calculateEditorHeight();
+      });
     }
   }
 
@@ -3844,8 +3864,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     // Recalculate editor dimensions immediately to sync CodeMirror theme height
     this.calculateEditorHeight();
 
-    // When animation completes, recalc again to ensure layout settles
-    setTimeout(() => this.calculateEditorHeight(), 220);
+    // When animation completes (200ms), recalc again to ensure layout settles
+    // Use requestAnimationFrame with a small delay to match animation duration
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        this.calculateEditorHeight();
+      }, 200); // Match animation duration (200ms from CSS)
+    });
   }
 
   // Real-time query methods
@@ -3966,10 +3991,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         }
 
         // Auto-collapse SQL editor after successful query
+        // Use requestAnimationFrame + setTimeout for better timing and smooth UX
         if (result.results.length > 0 && result.results[0].success) {
-          setTimeout(() => {
-            this.toggleSqlEditor(true);
-          }, 300); // Delay for smooth UX
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              this.toggleSqlEditor(true);
+            }, 300);
+          });
         }
       },
       error: (error) => {

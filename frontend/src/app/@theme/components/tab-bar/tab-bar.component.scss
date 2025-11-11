@@ -30,6 +30,31 @@
     margin-bottom: 0; // 确保没有额外的margin
     margin-left: 0; // 确保Tab栏与内容区域左对齐
 
+    // Custom scrollbar style matching table scrollbars
+    // Firefox
+    scrollbar-width: thin;
+    scrollbar-color: rgba(143, 150, 170, 0.45) transparent;
+
+    // Webkit browsers (Chrome, Safari, Edge)
+    &::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba(143, 150, 170, 0.45);
+      border-radius: 4px;
+      transition: background 0.2s ease;
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background: rgba(143, 150, 170, 0.65);
+    }
+
     .tab-container {
       display: flex;
       height: 100%;

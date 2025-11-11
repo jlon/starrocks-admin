@@ -27,11 +27,11 @@ cd "$FRONTEND_DIR"
 npm install
 
 echo -e "${YELLOW}[2/2]${NC} Building Angular frontend (production mode)..."
-# SIMPLIFIED: No need to configure BASE_HREF anymore!
-# The backend auto-injects <base href> based on X-Forwarded-Prefix header
-# This makes the same build work for both root (/) and sub-path (/xxx) deployments
-echo "  Building with auto-detection mode (works for any deployment path)"
-npm run build -- --configuration production
+# Use relative base href (./) to support sub-path deployments
+# This follows Flink's approach: ng build --prod --base-href ./
+# The relative base href allows the same build to work for both root (/) and sub-path (/xxx) deployments
+echo "  Building with relative base href (./) for sub-path deployment support"
+npm run build -- --configuration production --base-href ./
 
 echo ""
 echo -e "${GREEN}✓ Frontend build complete!${NC}"

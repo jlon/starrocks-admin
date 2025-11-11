@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 
 import { NbToastrService, NbDialogService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
@@ -17,7 +17,6 @@ import { AuthService } from '../../../@core/data/auth.service';
   selector: 'ngx-sessions',
   templateUrl: './sessions.component.html',
   styleUrls: ['./sessions.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SessionsComponent implements OnInit, OnDestroy {
   clusterId: number;
@@ -123,7 +122,6 @@ export class SessionsComponent implements OnInit, OnDestroy {
     private clusterContext: ClusterContextService,
     private nodeService: NodeService,
     private authService: AuthService,
-    private cdr: ChangeDetectorRef,
   ) {
     // Try to get clusterId from route first
     // Get clusterId from ClusterContextService
@@ -146,7 +144,6 @@ export class SessionsComponent implements OnInit, OnDestroy {
           }
         }
         // Backend will handle "no active cluster" case
-        this.cdr.markForCheck();
       });
 
     // Load data - backend will get active cluster automatically
@@ -165,12 +162,10 @@ export class SessionsComponent implements OnInit, OnDestroy {
   loadSessions(): void {
     // Backend will get active cluster automatically - no need to check clusterId
     this.loading = true;
-    this.cdr.markForCheck();
     this.nodeService.getSessions().subscribe({
       next: (allSessions) => {
         this.updateSessionsData(allSessions);
         this.loading = false;
-        this.cdr.markForCheck();
       },
       error: (error) => {
         console.error('[Sessions] Error loading sessions:', error);
@@ -181,7 +176,6 @@ export class SessionsComponent implements OnInit, OnDestroy {
         this.sessions = [];
         this.source.load([]);
         this.loading = false;
-        this.cdr.markForCheck();
       },
     });
   }
@@ -192,7 +186,6 @@ export class SessionsComponent implements OnInit, OnDestroy {
     this.nodeService.getSessions().subscribe({
       next: (allSessions) => {
         this.updateSessionsData(allSessions);
-        this.cdr.markForCheck();
       },
       error: (error) => {
         // Silently handle errors during auto-refresh, don't show toast

@@ -83,7 +83,7 @@ export class AuthService {
     this.currentUserSubject.next(null);
     // Clear permissions on logout
     this.permissionService.clearPermissions();
-    this.router.navigate(['/auth/login']);
+    this.router.navigateByUrl('/auth/login', { replaceUrl: true });
   }
 
   isAuthenticated(): boolean {
@@ -98,6 +98,86 @@ export class AuthService {
   updateCurrentUser(user: User): void {
     localStorage.setItem('current_user', JSON.stringify(user));
     this.currentUserSubject.next(user);
+  }
+
+  normalizeReturnUrl(rawUrl?: string | null): string {
+    const fallback = this.getDefaultReturnUrl();
+    if (!rawUrl) {
+      return fallback;
+    }
+    const trimmed = rawUrl.trim();
+    if (!trimmed || trimmed === '/' || trimmed.startsWith('/auth')) {
+      return fallback;
+    }
+    const withoutHost = trimmed.replace(/^https?:\/\/[^/]+/i, '');
+    const [pathPart, queryPart] = withoutHost.split('?');
+    const path = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+    if (path.startsWith('/auth')) {
+      return fallback;
+    }
+    const segments = path.split('/').filter(Boolean);
+    if (!segments.length) {
+      return fallback;
+    }
+    const prefix: string[] = [];
+    let index = 0;
+    while (
+      index < segments.length
+      && segments[index] !== 'pages'
+      && segments[index] !== 'auth'
+    ) {
+      prefix.push(segments[index]);
+      index += 1;
+    }
+    let seenPagesStarrocks = false;
+    const normalized: string[] = [];
+    for (; index < segments.length; index += 1) {
+      const segment = segments[index];
+      const nextSegment = segments[index + 1];
+      if (segment === 'auth') {
+        return fallback;
+      }
+      if (segment === 'pages' && nextSegment === 'starrocks') {
+        if (seenPagesStarrocks) {
+          index += 1;
+          continue;
+        }
+        seenPagesStarrocks = true;
+        normalized.push('pages', 'starrocks');
+        index += 1;
+        continue;
+      }
+      normalized.push(segment);
+    }
+    const finalSegments = [...prefix, ...normalized];
+    if (!finalSegments.length) {
+      return fallback;
+    }
+    const normalizedPath = `/${finalSegments.join('/')}`;
+    if (normalizedPath.startsWith('/auth')) {
+      return fallback;
+    }
+    if (!queryPart) {
+      return normalizedPath;
+    }
+    const params = new URLSearchParams(queryPart);
+    params.delete('returnUrl');
+    const cleanedQuery = params.toString();
+    return cleanedQuery ? `${normalizedPath}?${cleanedQuery}` : normalizedPath;
+  }
+
+  private getDefaultReturnUrl(): string {
+    const path = window.location?.pathname || '';
+    const segments = path.split('/').filter(Boolean);
+    const prefix: string[] = [];
+    for (const segment of segments) {
+      if (segment === 'pages' || segment === 'auth') {
+        break;
+      }
+      prefix.push(segment);
+    }
+    const base = prefix.length ? `/${prefix.join('/')}` : '';
+    return `${base}/pages/starrocks/dashboard`;
   }
 }
 

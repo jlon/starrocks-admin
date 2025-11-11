@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, TemplateRef, ViewChild, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { NbToastrService, NbDialogService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
@@ -16,7 +16,6 @@ import { AuthService } from '../../../../@core/data/auth.service';
   selector: 'ngx-profile-queries',
   templateUrl: './profile-queries.component.html',
   styleUrls: ['./profile-queries.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProfileQueriesComponent implements OnInit, OnDestroy {
   // Data sources
@@ -97,7 +96,6 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     private clusterContext: ClusterContextService,
     private dialogService: NbDialogService,
     private authService: AuthService,
-    private cdr: ChangeDetectorRef,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);
@@ -119,7 +117,6 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
           }
         }
         // Backend will handle "no active cluster" case
-        this.cdr.markForCheck();
       });
 
     // Load data - backend will get active cluster automatically
@@ -180,17 +177,14 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   // Load profiles
   loadProfiles(): void {
     this.loading = true;
-    this.cdr.markForCheck();
     this.nodeService.listProfiles().subscribe(
       data => {
         this.profileSource.load(data);
         this.loading = false;
-        this.cdr.markForCheck();
       },
       error => {
         this.toastrService.danger(ErrorHandler.handleClusterError(error), '加载失败');
         this.loading = false;
-        this.cdr.markForCheck();
       }
     );
   }
@@ -201,7 +195,6 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     this.nodeService.listProfiles().subscribe(
       data => {
         this.profileSource.load(data);
-        this.cdr.markForCheck();
       },
       error => {
         // Silently handle errors during auto-refresh, don't show toast

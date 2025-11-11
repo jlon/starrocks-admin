@@ -6,6 +6,7 @@ import {
   HttpInterceptor,
   HttpErrorResponse,
 } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AuthService } from '../data/auth.service';
@@ -16,6 +17,7 @@ export class JwtInterceptor implements HttpInterceptor {
   constructor(
     private authService: AuthService,
     private toastrService: NbToastrService,
+    private router: Router,
   ) {}
 
   intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
@@ -32,15 +34,35 @@ export class JwtInterceptor implements HttpInterceptor {
     return next.handle(request).pipe(
       catchError((error: HttpErrorResponse) => {
         if (error.status === 401) {
-          // If user is not authenticated (no token), silently ignore the error
-          // This happens when user logs out but components are still running auto-refresh
-          // Only show error if user is authenticated but lacks permission
+          const errorMessage = error.error?.message || 'Unauthorized';
+          // Check if this is an authentication error (missing/invalid token) or permission error
+          const isAuthError = errorMessage.includes('Missing authorization header') ||
+                              errorMessage.includes('Invalid authorization header') ||
+                              errorMessage.includes('JWT verification failed') ||
+                              errorMessage.includes('Token expired') ||
+                              errorMessage.includes('Invalid credentials');
+          
           if (this.authService.isAuthenticated()) {
-            const message =
-              error.error?.message || '没有权限执行此操作';
-            this.toastrService.danger(message, '无权限');
+            if (isAuthError) {
+              // Token is invalid/expired - clear auth and redirect to login
+              this.toastrService.danger('登录已过期，请重新登录', '认证失败');
+              this.authService.logout();
+              // Don't redirect if already on login page
+              if (!this.router.url.includes('/auth/login')) {
+                const safeUrl = this.authService.normalizeReturnUrl(this.router.url);
+                this.router.navigate(['/auth/login'], { 
+                  queryParams: { returnUrl: safeUrl },
+                  replaceUrl: true, 
+                });
+              }
+            } else {
+              // Permission denied - show error message but don't logout
+              this.toastrService.danger(errorMessage, '无权限');
+            }
+          } else {
+            // User not authenticated - silently ignore (user has logged out)
+            // This happens when user logs out but components are still running auto-refresh
           }
-          // If not authenticated, silently ignore (user has logged out)
         }
         return throwError(() => error);
       }),

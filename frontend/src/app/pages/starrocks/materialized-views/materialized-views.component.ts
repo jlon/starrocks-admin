@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, TemplateRef, ViewChild, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, TemplateRef, ViewChild } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { NbToastrService, NbDialogService } from '@nebular/theme';
@@ -17,7 +17,6 @@ import { ActiveToggleRenderComponent } from './active-toggle-render.component';
   selector: 'ngx-materialized-views',
   templateUrl: './materialized-views.component.html',
   styleUrls: ['./materialized-views.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [MaterializedViewService],
 })
 export class MaterializedViewsComponent implements OnInit, OnDestroy {
@@ -236,7 +235,6 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
     private toastrService: NbToastrService,
     private confirmDialogService: ConfirmDialogService,
     private dialogService: NbDialogService,
-    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit() {
@@ -257,7 +255,6 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
           }
         }
         // Backend will handle "no active cluster" case
-        this.cdr.markForCheck();
       });
 
     // Load data - backend will get active cluster automatically
@@ -277,21 +274,18 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (cluster) => {
           this.activeCluster = cluster;
-          this.cdr.markForCheck();
         },
         error: (error) => {
           this.toastrService.danger(
             ErrorHandler.extractErrorMessage(error),
             '加载集群信息失败',
           );
-          this.cdr.markForCheck();
         },
       });
   }
 
   loadMaterializedViews() {
     this.loading = true;
-    this.cdr.markForCheck();
     this.mvService
       .getMaterializedViews()
       .pipe(takeUntil(this.destroy$))
@@ -302,7 +296,6 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
           this.calculateStatistics();
           this.applyFilters();
           this.loading = false;
-          this.cdr.markForCheck();
         },
         error: (error) => {
           this.toastrService.danger(
@@ -310,7 +303,6 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
             '加载物化视图失败',
           );
           this.loading = false;
-          this.cdr.markForCheck();
         },
       });
   }
@@ -404,7 +396,6 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
     this.filteredMaterializedViews = filtered;
     this.filteredCount = filtered.length;
     this.source.load(filtered);
-    this.cdr.markForCheck();
   }
 
   onSearch() {

@@ -29,7 +29,7 @@ export class LoginComponent implements OnInit {
 
   ngOnInit() {
     // Get return URL from route parameters or default to dashboard
-    this.returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/pages/starrocks/dashboard';
+    this.returnUrl = this.authService.normalizeReturnUrl(this.route.snapshot.queryParams['returnUrl']);
     
     // Load saved username if remember me was checked
     const savedUsername = localStorage.getItem('remembered_username');
@@ -40,7 +40,7 @@ export class LoginComponent implements OnInit {
     
     // If already logged in, redirect to return URL
     if (this.authService.isAuthenticated()) {
-      this.router.navigate([this.returnUrl]);
+      this.router.navigateByUrl(this.returnUrl, { replaceUrl: true });
     }
   }
 
@@ -70,7 +70,7 @@ export class LoginComponent implements OnInit {
         this.toastrService.success('Welcome back!', 'Login Successful');
         // Navigate to return URL or dashboard after short delay
         setTimeout(() => {
-          this.router.navigate([this.returnUrl]);
+          this.router.navigateByUrl(this.returnUrl, { replaceUrl: true });
         }, 500);
       },
       error: (error) => {

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { interval, Subject } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { NbToastrService } from '@nebular/theme';
@@ -14,7 +14,6 @@ import { MetricThresholds, renderMetricBadge } from '../../../@core/utils/metric
   selector: 'ngx-backends',
   templateUrl: './backends.component.html',
   styleUrls: ['./backends.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BackendsComponent implements OnInit, OnDestroy {
   source: LocalDataSource = new LocalDataSource();
@@ -136,7 +135,6 @@ export class BackendsComponent implements OnInit, OnDestroy {
               );
               event.confirm.resolve();
               this.loadBackends();
-              this.cdr.markForCheck();
             },
             error: (error) => {
               this.toastrService.danger(
@@ -155,7 +153,6 @@ export class BackendsComponent implements OnInit, OnDestroy {
     private clusterContext: ClusterContextService,
     private toastrService: NbToastrService,
     private confirmDialogService: ConfirmDialogService,
-    private cdr: ChangeDetectorRef,
   ) {
     // Get clusterId from ClusterContextService
     this.clusterId = this.clusterContext.getActiveClusterId() || 0;
@@ -163,11 +160,13 @@ export class BackendsComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     // Subscribe to active cluster changes
+    // activeCluster$ is a BehaviorSubject, so it emits immediately on subscribe
     this.clusterContext.activeCluster$
       .pipe(takeUntil(this.destroy$))
       .subscribe(cluster => {
         this.activeCluster = cluster;
         if (cluster) {
+          // Always use the active cluster (override route parameter)
           const newClusterId = cluster.id;
           if (this.clusterId !== newClusterId) {
             this.clusterId = newClusterId;
@@ -176,10 +175,11 @@ export class BackendsComponent implements OnInit, OnDestroy {
           }
         }
         // Backend will handle "no active cluster" case
-        this.cdr.markForCheck();
+        
       });
 
     // Load data - backend will get active cluster automatically
+    // This ensures data loads even if activeCluster$ hasn't emitted yet
     this.loadClusterInfo();
     this.loadBackends();
   }
@@ -190,35 +190,33 @@ export class BackendsComponent implements OnInit, OnDestroy {
   }
 
   loadClusterInfo(): void {
-    this.clusterService.getCluster(this.clusterId).subscribe({
-      next: (cluster) => {
-        this.clusterName = cluster.name;
-        this.cdr.markForCheck();
-      },
-      error: (error) => {
-        console.error('Load cluster error:', error);
-        this.cdr.markForCheck();
-      },
-    });
+    this.clusterService.getCluster(this.clusterId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (cluster) => {
+          this.clusterName = cluster.name;
+        },
+      });
   }
 
   loadBackends(): void {
     this.loading = true;
-    this.cdr.markForCheck();
-    this.nodeService.listBackends().subscribe({
-      next: (backends) => {
-        this.source.load(backends);
-        this.loading = false;
-        this.cdr.markForCheck();
-      },
-      error: (error) => {
-        this.toastrService.danger(
-          ErrorHandler.handleClusterError(error),
-          '错误',
-        );
-        this.loading = false;
-        this.cdr.markForCheck();
-      },
-    });
+    
+    this.nodeService.listBackends()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (backends) => {
+          this.source.load(backends);
+          this.loading = false;
+        },
+        error: (error) => {
+          this.toastrService.danger(
+            ErrorHandler.handleClusterError(error),
+            '错误',
+          );
+          this.source.load([]);
+          this.loading = false;
+        },
+      });
   }
 }

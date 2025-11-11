@@ -58,29 +58,43 @@ impl StarRocksClient {
             ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
         })?;
 
+        // Log the raw response for debugging
+        tracing::debug!("Raw backends response: {}", serde_json::to_string(&data_be).unwrap_or_default());
+
         // Try new format (direct array) first, then fall back to old format
         let backends_result = if let Ok(backends) = serde_json::from_value::<Vec<Backend>>(data_be.clone()) {
-            tracing::debug!("Retrieved {} backends using new format", backends.len());
             Ok(backends)
         } else {
             // Fallback to old format
             match Self::parse_proc_result::<Backend>(&data_be) {
                 Ok(backends) => {
-                    tracing::debug!("Retrieved {} backends using old format", backends.len());
+                    tracing::info!("Retrieved {} backends using old format", backends.len());
                     Ok(backends)
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to parse backends: {}", e);
-                    Ok(Vec::new())
+                    tracing::error!("Failed to parse backends: {}. Raw response structure: {}", e, 
+                        serde_json::to_string(&data_be).unwrap_or_else(|_| "failed to serialize".to_string()));
+                    // Return error instead of empty vector to help diagnose the issue
+                    Err(ApiError::internal_error(format!(
+                        "Failed to parse backends response. Response format may have changed. Error: {}", e
+                    )))
                 }
             }
         };
 
-        // If backends list is empty, try compute nodes (shared-data architecture)
-        if let Ok(ref backends) = backends_result
-            && !backends.is_empty() {
+        // If backends list is not empty, return it
+        if let Ok(ref backends) = backends_result {
+            if !backends.is_empty() {
                 return backends_result;
+            } else {
+                tracing::warn!("Backends list is empty, trying compute nodes as fallback");
             }
+        } else {
+            // If parsing failed, log the error but continue to try compute nodes
+            if let Err(ref e) = backends_result {
+                tracing::warn!("Backends parsing failed: {}. Will try compute nodes as fallback.", e);
+            }
+        }
 
         // Try shared-data architecture (CN nodes for compute-storage separation)
         tracing::info!("No backends found, trying compute nodes for shared-data architecture");
@@ -98,6 +112,7 @@ impl StarRocksClient {
             Ok(resp) if resp.status().is_success() => {
                 match resp.json::<Value>().await {
                     Ok(data_cn) => {
+                        tracing::debug!("Raw compute nodes response: {}", serde_json::to_string(&data_cn).unwrap_or_default());
                         // Try to parse compute nodes as backends
                         if let Ok(compute_nodes) = serde_json::from_value::<Vec<Backend>>(data_cn.clone()) {
                             tracing::info!("Retrieved {} compute nodes (shared-data mode)", compute_nodes.len());
@@ -105,6 +120,8 @@ impl StarRocksClient {
                         } else if let Ok(compute_nodes) = Self::parse_proc_result::<Backend>(&data_cn) {
                             tracing::info!("Retrieved {} compute nodes using PROC format", compute_nodes.len());
                             return Ok(compute_nodes);
+                        } else {
+                            tracing::warn!("Failed to parse compute nodes response");
                         }
                     }
                     Err(e) => {
@@ -115,13 +132,24 @@ impl StarRocksClient {
             Ok(resp) => {
                 tracing::warn!("Compute nodes API returned error status: {}", resp.status());
             }
-            Err(_) => {
-                // Error already logged above
+            Err(e) => {
+                tracing::debug!("Compute nodes API request failed: {}", e);
             }
         }
 
-        // Return the original BE result (might be empty)
-        backends_result
+        // If we got a successful parse but empty list, return it
+        // If parsing failed, return the error to help diagnose the issue
+        match backends_result {
+            Ok(backends) => {
+                tracing::warn!("No backends or compute nodes found. Returning empty list.");
+                Ok(backends)
+            }
+            Err(e) => {
+                tracing::error!("Failed to retrieve backends: {}. Please check StarRocks API response format.", e);
+                // Return error so frontend can display it
+                Err(e)
+            }
+        }
     }
 
     // Execute SQL command via HTTP API

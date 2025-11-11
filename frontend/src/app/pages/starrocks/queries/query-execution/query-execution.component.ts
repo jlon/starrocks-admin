@@ -38,7 +38,8 @@ type ContextMenuAction =
   | 'triggerCompaction'    // 表级别 - 手动触发Compaction
   | 'cancelCompaction'     // Compaction任务 - 取消任务
   | 'viewMaterializedViewRefreshStatus'  // 物化视图 - 查看刷新状态
-  | 'viewViewQueryPlan';   // 视图 - 查看查询计划
+  | 'viewViewQueryPlan'    // 视图 - 查看查询计划
+  | 'viewBucketAnalysis';  // 表级别 - 查看分桶分析
 
 interface TreeContextMenuItem {
   label: string;
@@ -59,6 +60,7 @@ interface NavTreeNode {
     database?: string;
     table?: string;
     tableType?: TableObjectType;
+    storageType?: string; // Storage type: NORMAL, CLOUD_NATIVE, etc.
     originalName?: string;
     tablesLoaded?: boolean;
     tableCount?: number;
@@ -173,7 +175,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   infoDialogData: any[] = [];
   infoDialogLoading: boolean = false;
   infoDialogError: string | null = null;
-  infoDialogType: 'transactions' | 'compactions' | 'compactionDetails' | 'loads' | 'databaseStats' | 'tableStats' | 'partitions' | 'compactionScore' | 'mvRefreshStatus' | null = null;
+  infoDialogType: 'transactions' | 'compactions' | 'compactionDetails' | 'loads' | 'databaseStats' | 'tableStats' | 'partitions' | 'compactionScore' | 'mvRefreshStatus' | 'bucketAnalysis' | null = null;
   infoDialogSettings: any = {};
   infoDialogSource: LocalDataSource = new LocalDataSource();
   
@@ -217,6 +219,48 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   tableStatsDatabaseName: string = '';
   tableStatsTableName: string = '';
   tableStatsCatalogName: string | undefined = undefined;
+  
+  // Bucket analysis dialog state
+  bucketAnalysisCurrentTab: 'skew' | 'distribution' | 'sortkey' | 'adjust' = 'skew';
+  bucketAnalysisSkewData: any[] = [];
+  bucketAnalysisDistributionData: any[] = [];
+  bucketAnalysisSortKeyData: any[] = [];
+  bucketAnalysisDataLoaded: {
+    skew: boolean;
+    distribution: boolean;
+    sortkey: boolean;
+    adjust: boolean;
+  } = {
+    skew: false,
+    distribution: false,
+    sortkey: false,
+    adjust: false,
+  };
+  bucketAnalysisLoadingState: {
+    skew: boolean;
+    distribution: boolean;
+    sortkey: boolean;
+    adjust: boolean;
+  } = {
+    skew: false,
+    distribution: false,
+    sortkey: false,
+    adjust: false,
+  };
+  bucketAnalysisDatabaseName: string = '';
+  bucketAnalysisTableName: string = '';
+  bucketAnalysisCatalogName: string | undefined = undefined;
+  bucketAnalysisTableId: string | null = null;
+  bucketAnalysisCurrentBuckets: number = 0;
+  bucketAnalysisColumns: any = {};
+  bucketAnalysisTableType: string | null = null; // Store table type (NORMAL, CLOUD_NATIVE, etc.)
+  bucketAnalysisNode: NavTreeNode | null = null; // Store node reference for updating storage type
+  // Bucket adjustment state
+  bucketAdjustmentNewBuckets: number | null = null;
+  bucketAdjustmentAdjusting: boolean = false;
+  // Cache for cardinality analysis: key = "database.table.field"
+  private cardinalityCache: Map<string, { cardinality: number; timestamp: number }> = new Map();
+  private readonly CARDINALITY_CACHE_TTL = 3600000; // 1 hour in milliseconds
   
   // Compaction trigger dialog state
   compactionTriggerDialogRef: NbDialogRef<any> | null = null;
@@ -478,7 +522,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         takeUntil(this.destroy$)
       )
       .subscribe(() => {
-        this.calculateEditorHeight();
+    this.calculateEditorHeight();
       });
   }
 
@@ -1138,6 +1182,11 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           action: 'viewTableStats',
         },
         {
+          label: '查看分桶分析',
+          icon: 'grid-outline',
+          action: 'viewBucketAnalysis',
+        },
+        {
           label: '查看表事务',
           icon: 'activity-outline',
           action: 'viewTransactions',
@@ -1225,6 +1274,19 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           }
         }
         break;
+      case 'viewBucketAnalysis':
+        if (targetNode.type === 'table') {
+          const tableType = targetNode.data?.tableType;
+          // Only regular tables and materialized views support bucket analysis
+          if (tableType === 'VIEW') {
+            this.toastrService.warning('视图是逻辑表，没有分桶信息', '提示');
+            return;
+          }
+          // CLOUD_NATIVE tables are supported, but some analysis may show limited data
+          // The viewBucketAnalysis method will handle CLOUD_NATIVE tables appropriately
+          this.viewBucketAnalysis(targetNode);
+        }
+        break;
       default:
         break;
     }
@@ -1244,14 +1306,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private viewTableSchema(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-    const tableName = node.data?.table || node.name;
-
-    if (!databaseName || !tableName) {
-      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, { 
+      database: '无法识别该表所属的数据库',
+      table: '无法识别表名称'
+    })) {
       return;
     }
+
+    const { catalogName, databaseName, tableName } = info!;
 
     this.schemaDialogTitle = '表结构';
     this.schemaDialogSubtitle = tableName;
@@ -1362,15 +1425,86 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     return parts.join('.');
   }
 
+  /**
+   * Extract catalog, database, and table information from NavTreeNode
+   * Returns null if node is invalid
+   */
+  private extractNodeInfo(node: NavTreeNode | null): {
+    catalogName: string;
+    databaseName: string;
+    tableName: string | null;
+  } | null {
+    if (!node) {
+      return null;
+    }
+
+    const catalogName = (node.data?.catalog || '').trim();
+    const databaseName = node.type === 'database' 
+      ? (node.data?.database || node.name || '').trim()
+      : (node.data?.database || '').trim();
+    const tableName = node.type === 'table'
+      ? (node.data?.table || node.name || '').trim()
+      : null;
+
+    return {
+      catalogName,
+      databaseName,
+      tableName,
+    };
+  }
+
+  /**
+   * Validate extracted node information
+   * @param info - Extracted node info
+   * @param requireTable - Whether table name is required
+   * @param customErrorMessage - Custom error message for missing database/table
+   * @returns true if valid, false otherwise
+   */
+  private validateNodeInfo(
+    info: { catalogName: string; databaseName: string; tableName: string | null } | null,
+    requireTable: boolean = false,
+    customErrorMessage?: { database?: string; table?: string }
+  ): boolean {
+    if (!info) {
+      this.toastrService.warning('节点信息无效', '提示');
+      return false;
+    }
+
+    if (!info.databaseName) {
+      const message = customErrorMessage?.database || '无法识别数据库名称';
+      this.toastrService.warning(message, '提示');
+      return false;
+    }
+
+    if (requireTable && !info.tableName) {
+      const message = customErrorMessage?.table || '无法识别表名称';
+      this.toastrService.warning(message, '提示');
+      return false;
+    }
+
+    return true;
+  }
+
   // Database level view methods
   
   /**
    * Get database ID from cache or query SHOW PROC '/dbs'
    * Returns Observable that emits the database ID or null if not found
+   * @param catalogName - Catalog name
+   * @param databaseName - Database name
+   * @param node - Optional NavTreeNode (can be null)
    */
-  private getDatabaseId(catalogName: string, databaseName: string, node: NavTreeNode): Observable<string | null> {
-    // Try to get database ID from cached node data or cache
-    let dbId: string | null = node.data?.dbId || null;
+  private getDatabaseId(catalogName: string, databaseName: string, node: NavTreeNode | null): Observable<string | null> {
+    // Validate inputs
+    if (!databaseName || databaseName.trim() === '') {
+      return of(null);
+    }
+
+    // Try to get database ID from cached node data (if node is provided)
+    let dbId: string | null = null;
+    if (node && node.data && node.data.dbId) {
+      dbId = node.data.dbId;
+    }
     
     if (!dbId) {
       // Try to get from cache
@@ -1392,20 +1526,38 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             const firstResult = result.results[0];
             let foundDbId: string | null = null;
             
-            // Find database ID by matching DbName
+            // Find column indices (case-insensitive)
+            const dbNameKey = this.findColumnKey(firstResult.columns, ['DbName', 'dbname', 'DB_NAME']);
+            const dbIdKey = this.findColumnKey(firstResult.columns, ['DbId', 'dbid', 'DB_ID']);
+            
+            if (!dbNameKey || !dbIdKey) {
+              console.error('无法识别数据库ID查询结果的列名', firstResult.columns);
+              return null;
+            }
+            
+            const dbNameIdx = firstResult.columns.indexOf(dbNameKey);
+            const dbIdIdx = firstResult.columns.indexOf(dbIdKey);
+            
+            // Find database ID by matching DbName (case-insensitive)
             for (const row of firstResult.rows) {
-              const dbNameIdx = firstResult.columns.findIndex(col => col === 'DbName');
-              const dbIdIdx = firstResult.columns.findIndex(col => col === 'DbId');
-              if (dbNameIdx >= 0 && dbIdIdx >= 0 && row[dbNameIdx] === databaseName) {
-                foundDbId = String(row[dbIdIdx]);
-                // Cache it
-                const dbIdCacheKey = `${catalogName}|${databaseName}`;
-                this.databaseIdCache[dbIdCacheKey] = foundDbId;
-                // Update node data
-                if (node.data) {
-                  node.data.dbId = foundDbId;
+              if (dbNameIdx >= 0 && dbIdIdx >= 0) {
+                const rowDbName = String(row[dbNameIdx] || '').trim();
+                const targetDbName = databaseName.trim();
+                
+                // Case-insensitive comparison
+                if (rowDbName.toLowerCase() === targetDbName.toLowerCase()) {
+                  foundDbId = String(row[dbIdIdx] || '').trim();
+                  if (foundDbId) {
+                    // Cache it
+                    const dbIdCacheKey = `${catalogName}|${databaseName}`;
+                    this.databaseIdCache[dbIdCacheKey] = foundDbId;
+                    // Update node data if node is provided
+                    if (node && node.data) {
+                      node.data.dbId = foundDbId;
+                    }
+                    break;
+                  }
                 }
-                break;
               }
             }
 
@@ -1414,20 +1566,19 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           return null;
         }),
         catchError((error) => {
-          this.toastrService.danger(`获取数据库ID失败: ${ErrorHandler.extractErrorMessage(error)}`, '错误');
+          console.error('获取数据库ID失败:', error);
           return of(null);
         })
       );
   }
 
   private viewDatabaseTransactions(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || node.name;
-
-    if (!databaseName) {
-      this.toastrService.warning('无法识别数据库名称', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, false)) {
       return;
     }
+
+    const { catalogName, databaseName } = info!;
 
     this.getDatabaseId(catalogName, databaseName, node)
       .pipe(takeUntil(this.destroy$))
@@ -1435,7 +1586,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         next: (dbId) => {
           if (!dbId) {
             this.toastrService.warning(`无法找到数据库 ${databaseName} 的ID`, '提示');
-            return;
+      return;
           }
           // Open dialog with tab support for running and finished transactions
           this.openTransactionsDialogWithTabs(databaseName, dbId, catalogName);
@@ -1657,13 +1808,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private viewDatabaseCompactions(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || node.name;
-
-    if (!databaseName) {
-      this.toastrService.warning('无法识别数据库名称', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, false)) {
       return;
     }
+
+    const { catalogName, databaseName } = info!;
 
     // Show Compaction tasks using SHOW PROC '/compactions'
     this.openInfoDialog('Compaction任务', 'compactionDetails', () => {
@@ -1743,13 +1893,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private viewDatabaseLoads(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || node.name;
-
-    if (!databaseName) {
-      this.toastrService.warning('无法识别数据库名称', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, false)) {
       return;
     }
+
+    const { catalogName, databaseName } = info!;
 
     this.openInfoDialog('导入作业', 'loads', () => {
       const sql = `SELECT 
@@ -1804,13 +1953,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private viewDatabaseStats(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || node.name;
-
-    if (!databaseName) {
-      this.toastrService.warning('无法识别数据库名称', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, false)) {
       return;
     }
+
+    const { catalogName, databaseName } = info!;
 
     this.openInfoDialog('数据库统计', 'databaseStats', () => {
       const sql = `SELECT 
@@ -1868,14 +2016,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   // Table level view methods
   private viewTablePartitions(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-    const tableName = node.data?.table || node.name;
-
-    if (!databaseName || !tableName) {
-      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, {
+      database: '无法识别该表所属的数据库',
+      table: '无法识别表名称'
+    })) {
       return;
     }
+
+    const { catalogName, databaseName, tableName } = info!;
 
     // Views don't have partitions
     if (node.data?.tableType === 'VIEW') {
@@ -1945,14 +2094,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private viewTableCompactionScore(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-    const tableName = node.data?.table || node.name;
-
-    if (!databaseName || !tableName) {
-      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, {
+      database: '无法识别该表所属的数据库',
+      table: '无法识别表名称'
+    })) {
       return;
     }
+
+    const { catalogName, databaseName, tableName } = info!;
 
     // Views don't have compaction score
     if (node.data?.tableType === 'VIEW') {
@@ -2005,14 +2155,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private viewTableStats(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-    const tableName = node.data?.table || node.name;
-
-    if (!databaseName || !tableName) {
-      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, {
+      database: '无法识别该表所属的数据库',
+      table: '无法识别表名称'
+    })) {
       return;
     }
+
+    const { catalogName, databaseName, tableName } = info!;
 
     // Views don't have physical partitions
     if (node.data?.tableType === 'VIEW') {
@@ -2212,16 +2363,16 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     switch (tab) {
       case 'partition':
         sql = `SELECT 
-          PARTITION_NAME,
-          PARTITION_ID,
+        PARTITION_NAME,
+        PARTITION_ID,
           PARTITION_KEY,
           PARTITION_VALUE,
-          DATA_SIZE,
-          ROW_COUNT,
-          STORAGE_PATH
-        FROM information_schema.partitions_meta 
-        WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
-        ORDER BY PARTITION_NAME`;
+        DATA_SIZE,
+        ROW_COUNT,
+        STORAGE_PATH
+      FROM information_schema.partitions_meta 
+      WHERE DB_NAME = '${databaseName}' AND TABLE_NAME = '${tableName}'
+      ORDER BY PARTITION_NAME`;
         break;
       case 'compaction':
         sql = `SELECT 
@@ -2442,15 +2593,27 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     });
   }
 
-  private viewMaterializedViewRefreshStatus(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-    const tableName = node.data?.table || node.name;
+  // Find column key from available columns (case-insensitive)
+  private findColumnKey(columns: string[], possibleNames: string[]): string | null {
+    for (const possibleName of possibleNames) {
+      const found = columns.find(col => col.toLowerCase() === possibleName.toLowerCase());
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
 
-    if (!databaseName || !tableName) {
-      this.toastrService.warning('无法识别该物化视图所属的数据库', '提示');
+  private viewMaterializedViewRefreshStatus(node: NavTreeNode): void {
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, {
+      database: '无法识别该物化视图所属的数据库',
+      table: '无法识别物化视图名称'
+    })) {
       return;
     }
+
+    const { catalogName, databaseName, tableName } = info!;
 
     this.openInfoDialog('物化视图刷新状态', 'mvRefreshStatus', () => {
       const sql = `SELECT 
@@ -2552,14 +2715,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private viewViewQueryPlan(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-    const tableName = node.data?.table || node.name;
-
-    if (!databaseName || !tableName) {
-      this.toastrService.warning('无法识别该视图所属的数据库', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, {
+      database: '无法识别该视图所属的数据库',
+      table: '无法识别视图名称'
+    })) {
       return;
     }
+
+    const { catalogName, databaseName, tableName } = info!;
 
     // Show query plan in a dialog
     this.schemaDialogTitle = '视图查询计划';
@@ -2609,15 +2773,1066 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       });
   }
 
-  private viewTableTransactions(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-    const tableName = node.data?.table || node.name;
-
-    if (!databaseName || !tableName) {
-      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+  // Bucket analysis methods
+  private viewBucketAnalysis(node: NavTreeNode): void {
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, {
+      database: '无法识别该表所属的数据库',
+      table: '无法识别表名称'
+    })) {
       return;
     }
+
+    const { catalogName, databaseName, tableName } = info!;
+
+    // Store table info
+    this.bucketAnalysisDatabaseName = databaseName;
+    this.bucketAnalysisTableName = tableName;
+    this.bucketAnalysisCatalogName = catalogName || undefined;
+    this.bucketAnalysisTableId = null;
+    this.bucketAnalysisCurrentBuckets = 0;
+    this.bucketAnalysisTableType = null;
+    this.bucketAnalysisNode = node; // Store node reference for updating storage type
+    this.bucketAdjustmentNewBuckets = null;
+    this.bucketAdjustmentAdjusting = false;
+
+    // Reset state
+    this.bucketAnalysisCurrentTab = 'skew';
+    this.bucketAnalysisSkewData = [];
+    this.bucketAnalysisDistributionData = [];
+    this.bucketAnalysisSortKeyData = [];
+    this.bucketAnalysisDataLoaded = {
+      skew: false,
+      distribution: false,
+      sortkey: false,
+      adjust: false,
+    };
+    this.bucketAnalysisLoadingState = {
+      skew: false,
+      distribution: false,
+      sortkey: false,
+      adjust: false,
+    };
+
+    // Open dialog
+    this.openBucketAnalysisDialog();
+    
+    // Load table ID and current buckets, then load first tab
+    this.loadBucketAnalysisTableInfo();
+  }
+
+  private openBucketAnalysisDialog(): void {
+    this.infoDialogTitle = '分桶分析';
+    this.infoDialogType = 'bucketAnalysis';
+    this.infoDialogPageLoading = true;
+    this.infoDialogError = null;
+    this.infoDialogData = [];
+    this.infoDialogSource.load([]);
+    this.infoDialogSettings = {
+      actions: { add: false, edit: false, delete: false, position: 'left' },
+      pager: { display: true, perPage: 15 },
+      columns: {},
+      noDataMessage: '暂无数据',
+    };
+
+    if (this.infoDialogRef) {
+      this.infoDialogRef.close();
+    }
+
+    this.infoDialogRef = this.dialogService.open(this.infoDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+      context: {},
+    });
+  }
+
+  private loadBucketAnalysisTableInfo(): void {
+    // Validate inputs
+    if (!this.bucketAnalysisDatabaseName || this.bucketAnalysisDatabaseName.trim() === '') {
+      this.infoDialogPageLoading = false;
+      this.infoDialogError = '数据库名称无效';
+      return;
+    }
+
+    if (!this.bucketAnalysisTableName || this.bucketAnalysisTableName.trim() === '') {
+      this.infoDialogPageLoading = false;
+      this.infoDialogError = '表名称无效';
+      return;
+    }
+
+    // First, get database ID
+    this.getDatabaseId(this.bucketAnalysisCatalogName || '', this.bucketAnalysisDatabaseName, null)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (dbId) => {
+          if (!dbId || dbId.trim() === '') {
+            this.infoDialogPageLoading = false;
+            this.infoDialogError = `无法找到数据库 "${this.bucketAnalysisDatabaseName}" 的ID。请确认数据库名称正确。`;
+            return;
+          }
+
+          // Get table ID from SHOW PROC '/dbs/<db_id>'
+          const procSql = `SHOW PROC '/dbs/${dbId}'`;
+          this.nodeService.executeSQL(procSql, 100, this.bucketAnalysisCatalogName || undefined)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+              next: (result) => {
+                if (!result || !result.results || result.results.length === 0) {
+                  this.infoDialogPageLoading = false;
+                  this.infoDialogError = '查询表ID失败：返回结果为空';
+                  return;
+                }
+
+                const queryResult = result.results[0];
+                
+                if (!queryResult) {
+                  this.infoDialogPageLoading = false;
+                  this.infoDialogError = '查询表ID失败：结果格式错误';
+                  return;
+                }
+
+                if (!queryResult.success) {
+                  this.infoDialogPageLoading = false;
+                  const errorMsg = queryResult.error || '查询失败';
+                  this.infoDialogError = `查询表ID失败: ${errorMsg}`;
+                  return;
+                }
+
+                if (!queryResult.rows || queryResult.rows.length === 0) {
+                  this.infoDialogPageLoading = false;
+                  this.infoDialogError = `数据库 "${this.bucketAnalysisDatabaseName}" 中没有找到任何表`;
+                  return;
+                }
+
+                if (!queryResult.columns || queryResult.columns.length === 0) {
+                  this.infoDialogPageLoading = false;
+                  this.infoDialogError = '查询表ID失败：返回结果缺少列信息';
+                  return;
+                }
+
+                const rows = this.parseTableRows(queryResult.rows, queryResult.columns);
+                
+                // Find table row - handle case-insensitive matching and different column name formats
+                const tableNameKey = this.findColumnKey(queryResult.columns, ['TableName', 'tablename', 'TABLE_NAME', 'table_name']);
+                const tableIdKey = this.findColumnKey(queryResult.columns, ['TableId', 'tableid', 'TABLE_ID', 'table_id']);
+                // Try to find table type column (usually 6th column in SHOW PROC '/dbs/<db_id>')
+                const tableTypeKey = this.findColumnKey(queryResult.columns, ['Type', 'type', 'TYPE', 'TableType', 'tabletype']);
+                
+                if (!tableNameKey || !tableIdKey) {
+                  this.infoDialogPageLoading = false;
+                  this.infoDialogError = `无法识别表信息列名。可用列：${queryResult.columns.join(', ')}`;
+                  return;
+                }
+                
+                // Case-insensitive table name matching
+                const targetTableName = this.bucketAnalysisTableName.trim().toLowerCase();
+                const tableRow = rows.find((r: any) => {
+                  const rowTableName = String(r[tableNameKey] || '').trim().toLowerCase();
+                  return rowTableName === targetTableName;
+                });
+                
+                if (tableRow && tableRow[tableIdKey]) {
+                  const tableId = String(tableRow[tableIdKey] || '').trim();
+                  if (tableId && tableId !== '') {
+                    this.bucketAnalysisTableId = tableId;
+                    
+                    // Extract table type if available
+                    // Type is usually the 7th column (index 6) in SHOW PROC '/dbs/<db_id>'
+                    if (tableTypeKey && tableRow[tableTypeKey]) {
+                      this.bucketAnalysisTableType = String(tableRow[tableTypeKey] || '').trim().toUpperCase();
+                    } else {
+                      // Try to infer from column index (usually 7th column, index 6: TableId, TableName, IndexNum, PartitionColumnName, PartitionNum, State, Type)
+                      const typeIndex = 6; // Type is 7th column (0-indexed: 6)
+                      const rowIndex = rows.indexOf(tableRow);
+                      if (rowIndex >= 0 && queryResult.rows && queryResult.rows.length > rowIndex) {
+                        const rawRow = queryResult.rows[rowIndex];
+                        if (Array.isArray(rawRow) && rawRow.length > typeIndex) {
+                          this.bucketAnalysisTableType = String(rawRow[typeIndex] || '').trim().toUpperCase();
+                        }
+                      }
+                    }
+                    
+                    // Store storage type in node data for future use
+                    if (this.bucketAnalysisTableType && this.bucketAnalysisNode) {
+                      if (!this.bucketAnalysisNode.data) {
+                        this.bucketAnalysisNode.data = {};
+                      }
+                      this.bucketAnalysisNode.data.storageType = this.bucketAnalysisTableType;
+                    }
+                    
+                    // Also check if be_tablets is empty - if so, might be CLOUD_NATIVE or external table
+                    // We'll detect this when querying be_tablets
+                    
+                    // Clear any previous errors
+                    this.infoDialogError = null;
+                    
+                    // Get current buckets from partitions_meta, then load first tab
+                    this.loadCurrentBuckets();
+                  } else {
+                    this.infoDialogPageLoading = false;
+                    this.infoDialogError = `找到表 "${this.bucketAnalysisTableName}" 但表ID为空`;
+                  }
+                } else {
+                  this.infoDialogPageLoading = false;
+                  const availableTables = rows
+                    .map((r: any) => String(r[tableNameKey] || '').trim())
+                    .filter(name => name !== '')
+                    .join(', ');
+                  this.infoDialogError = `无法找到表 "${this.bucketAnalysisTableName}" 的ID。${availableTables ? `可用表：${availableTables}` : '数据库中没有表'}`;
+                }
+              },
+              error: (error) => {
+                this.infoDialogPageLoading = false;
+                const errorMsg = ErrorHandler.extractErrorMessage(error);
+                this.infoDialogError = `查询表ID失败: ${errorMsg}`;
+                console.error('查询表ID错误:', error);
+              },
+            });
+        },
+        error: (error) => {
+          this.infoDialogPageLoading = false;
+          const errorMsg = ErrorHandler.extractErrorMessage(error);
+          this.infoDialogError = `获取数据库ID失败: ${errorMsg}`;
+          console.error('获取数据库ID错误:', error);
+        },
+      });
+  }
+
+  private loadCurrentBuckets(): void {
+    // Get current buckets from partitions_meta
+    const sql = `
+      SELECT 
+        AVG(CAST(BUCKETS AS UNSIGNED)) as AVG_BUCKETS,
+        MIN(CAST(BUCKETS AS UNSIGNED)) as MIN_BUCKETS,
+        MAX(CAST(BUCKETS AS UNSIGNED)) as MAX_BUCKETS
+      FROM information_schema.partitions_meta 
+      WHERE DB_NAME = '${this.bucketAnalysisDatabaseName}' 
+        AND TABLE_NAME = '${this.bucketAnalysisTableName}'
+    `;
+
+    this.nodeService.executeSQL(sql, 100, this.bucketAnalysisCatalogName || undefined, this.bucketAnalysisDatabaseName)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => {
+          const queryResult = result.results?.[0];
+          if (queryResult?.success && queryResult.rows && queryResult.rows.length > 0) {
+            const row = this.parseTableRows(queryResult.rows, queryResult.columns)[0];
+            this.bucketAnalysisCurrentBuckets = Math.round(Number(row.AVG_BUCKETS) || 0);
+          }
+          
+          // Load first tab (skew analysis)
+          this.loadBucketAnalysisTabData('skew');
+        },
+        error: (error) => {
+          // Continue even if buckets query fails
+          this.loadBucketAnalysisTabData('skew');
+        },
+      });
+  }
+
+  switchBucketAnalysisTab(tab: 'skew' | 'distribution' | 'sortkey' | 'adjust'): void {
+    this.bucketAnalysisCurrentTab = tab;
+    
+    // Load data if not loaded yet
+    if (!this.bucketAnalysisDataLoaded[tab] && !this.bucketAnalysisLoadingState[tab]) {
+      this.loadBucketAnalysisTabData(tab);
+    } else {
+      // Update display
+      this.updateBucketAnalysisTabDisplay(tab);
+    }
+  }
+
+  private loadBucketAnalysisTabData(tab: 'skew' | 'distribution' | 'sortkey' | 'adjust'): void {
+    this.bucketAnalysisLoadingState[tab] = true;
+    this.infoDialogPageLoading = true;
+    this.infoDialogError = null;
+
+    switch (tab) {
+      case 'skew':
+        this.loadBucketSkewAnalysis();
+        break;
+      case 'distribution':
+        this.loadBucketDistribution();
+        break;
+      case 'sortkey':
+        this.loadSortKeyAnalysis();
+        break;
+      case 'adjust':
+        // Adjust tab doesn't need data loading, just show current info
+        this.bucketAnalysisLoadingState[tab] = false;
+        this.infoDialogPageLoading = false;
+        this.bucketAnalysisDataLoaded[tab] = true;
+        this.updateBucketAnalysisTabDisplay(tab);
+        break;
+    }
+  }
+
+  private loadBucketSkewAnalysis(): void {
+    if (!this.bucketAnalysisTableId) {
+      this.bucketAnalysisLoadingState.skew = false;
+      this.infoDialogPageLoading = false;
+      // Don't set error here - table ID might still be loading
+      // Just show empty data
+      this.bucketAnalysisSkewData = [];
+      this.bucketAnalysisDataLoaded.skew = true;
+      this.updateBucketAnalysisTabDisplay('skew');
+      return;
+    }
+
+    // Query be_tablets to get bucket size distribution
+    // Note: For CLOUD_NATIVE tables, be_tablets might be empty
+    const sql = `
+      SELECT 
+        SHARD_ID as BUCKET_ID,
+        COUNT(DISTINCT TABLET_ID) as TABLET_COUNT,
+        SUM(COALESCE(DATA_SIZE, 0)) as TOTAL_SIZE,
+        SUM(COALESCE(NUM_ROW, 0)) as TOTAL_ROWS,
+        AVG(COALESCE(DATA_SIZE, 0)) as AVG_TABLET_SIZE,
+        MAX(COALESCE(DATA_SIZE, 0)) as MAX_TABLET_SIZE
+      FROM information_schema.be_tablets
+      WHERE TABLE_ID = ${this.bucketAnalysisTableId}
+        AND SHARD_ID IS NOT NULL
+      GROUP BY SHARD_ID
+      ORDER BY TOTAL_SIZE DESC
+    `;
+
+    this.nodeService.executeSQL(sql, 1000, this.bucketAnalysisCatalogName || undefined)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => {
+          this.bucketAnalysisLoadingState.skew = false;
+          this.infoDialogPageLoading = false;
+          this.infoDialogError = null;
+
+          const queryResult = result.results?.[0];
+          
+          if (!queryResult?.success) {
+            const errorMsg = queryResult?.error || '查询失败';
+            this.bucketAnalysisLoadingState.skew = false;
+            this.infoDialogPageLoading = false;
+            this.bucketAnalysisSkewData = [];
+            this.bucketAnalysisDataLoaded.skew = true;
+            this.updateBucketAnalysisTabDisplay('skew');
+            console.error('分桶倾斜分析查询失败:', errorMsg);
+            return;
+          }
+
+          const data = queryResult.rows && queryResult.rows.length > 0
+            ? this.parseTableRows(queryResult.rows, queryResult.columns)
+            : [];
+
+          // If no data, check if it's CLOUD_NATIVE table or external table
+          if (data.length === 0) {
+            this.bucketAnalysisSkewData = [];
+            this.bucketAnalysisDataLoaded.skew = true;
+            // For CLOUD_NATIVE tables or external tables, be_tablets is empty (data stored in object storage)
+            // Check table type or infer from empty be_tablets
+            const isCloudNative = this.bucketAnalysisTableType === 'CLOUD_NATIVE' || 
+                                  this.bucketAnalysisTableType === 'EXTERNAL';
+            
+            // If be_tablets is empty, show informative message
+            if (isCloudNative || this.bucketAnalysisTableId) {
+              // Add a message row to inform user
+              const message = isCloudNative 
+                ? '该表为CLOUD_NATIVE类型，数据存储在对象存储中，be_tablets表无数据，不支持分桶倾斜分析'
+                : '该表在be_tablets中无数据，可能是CLOUD_NATIVE表或外部表，不支持分桶倾斜分析';
+              
+              this.bucketAnalysisSkewData = [{
+                BUCKET_ID: '提示',
+                TABLET_COUNT: '-',
+                TOTAL_SIZE: '-',
+                TOTAL_ROWS: '-',
+                AVG_TABLET_SIZE: '-',
+                MAX_TABLET_SIZE: '-',
+                SKEW_RATIO: '-',
+                SKEW_LEVEL: message,
+              }];
+            }
+            this.updateBucketAnalysisTabDisplay('skew');
+            return;
+          }
+
+          // Calculate skew metrics
+          if (data.length > 0) {
+            const totalSizes = data.map((d: any) => Number(d.TOTAL_SIZE) || 0);
+            const maxSize = Math.max(...totalSizes);
+            const avgSize = totalSizes.reduce((a, b) => a + b, 0) / totalSizes.length;
+            const skewRatio = avgSize > 0 ? ((maxSize - avgSize) / avgSize) * 100 : 0;
+
+            // Add skew metrics to each row
+            data.forEach((row: any) => {
+              row.SKEW_RATIO = avgSize > 0 ? ((Number(row.TOTAL_SIZE) || 0) - avgSize) / avgSize * 100 : 0;
+              row.SKEW_LEVEL = this.getSkewLevel(row.SKEW_RATIO);
+            });
+
+            // Add summary row
+            data.unshift({
+              BUCKET_ID: '汇总',
+              TABLET_COUNT: data.reduce((sum: number, d: any) => sum + (Number(d.TABLET_COUNT) || 0), 0),
+              TOTAL_SIZE: totalSizes.reduce((a, b) => a + b, 0),
+              TOTAL_ROWS: data.reduce((sum: number, d: any) => sum + (Number(d.TOTAL_ROWS) || 0), 0),
+              AVG_TABLET_SIZE: avgSize,
+              MAX_TABLET_SIZE: maxSize,
+              SKEW_RATIO: skewRatio,
+              SKEW_LEVEL: this.getSkewLevel(skewRatio),
+            });
+          }
+
+          this.bucketAnalysisSkewData = data;
+          this.bucketAnalysisDataLoaded.skew = true;
+          this.updateBucketAnalysisTabDisplay('skew');
+        },
+        error: (error) => {
+          this.bucketAnalysisLoadingState.skew = false;
+          this.infoDialogPageLoading = false;
+          const errorMsg = ErrorHandler.extractErrorMessage(error);
+          console.error('分桶倾斜分析查询错误:', error);
+          // Don't set error dialog, just show empty data
+          this.bucketAnalysisSkewData = [];
+          this.bucketAnalysisDataLoaded.skew = true;
+          this.updateBucketAnalysisTabDisplay('skew');
+        },
+      });
+  }
+
+  private loadBucketDistribution(): void {
+    if (!this.bucketAnalysisTableId) {
+      this.bucketAnalysisLoadingState.distribution = false;
+      this.infoDialogPageLoading = false;
+      // Don't set error here - table ID might still be loading
+      // Just show empty data
+      this.bucketAnalysisDistributionData = [];
+      this.bucketAnalysisDataLoaded.distribution = true;
+      this.updateBucketAnalysisTabDisplay('distribution');
+      return;
+    }
+
+    // Query be_tablets to get BE-level distribution
+    // Note: For CLOUD_NATIVE tables, be_tablets might be empty
+    const sql = `
+      SELECT 
+        BE_ID,
+        COUNT(DISTINCT TABLET_ID) as TABLET_COUNT,
+        SUM(COALESCE(DATA_SIZE, 0)) as TOTAL_SIZE,
+        AVG(COALESCE(DATA_SIZE, 0)) as AVG_TABLET_SIZE,
+        MAX(COALESCE(DATA_SIZE, 0)) as MAX_TABLET_SIZE,
+        COUNT(DISTINCT SHARD_ID) as BUCKET_COUNT
+      FROM information_schema.be_tablets
+      WHERE TABLE_ID = ${this.bucketAnalysisTableId}
+        AND BE_ID IS NOT NULL
+      GROUP BY BE_ID
+      ORDER BY TOTAL_SIZE DESC
+    `;
+
+    this.nodeService.executeSQL(sql, 1000, this.bucketAnalysisCatalogName || undefined)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => {
+          this.bucketAnalysisLoadingState.distribution = false;
+          this.infoDialogPageLoading = false;
+          this.infoDialogError = null;
+
+          const queryResult = result.results?.[0];
+          
+          if (!queryResult?.success) {
+            const errorMsg = queryResult?.error || '查询失败';
+            this.bucketAnalysisLoadingState.distribution = false;
+            this.infoDialogPageLoading = false;
+            this.bucketAnalysisDistributionData = [];
+            this.bucketAnalysisDataLoaded.distribution = true;
+            this.updateBucketAnalysisTabDisplay('distribution');
+            console.error('BE级别分布查询失败:', errorMsg);
+            return;
+          }
+
+          let data = queryResult.rows && queryResult.rows.length > 0
+            ? this.parseTableRows(queryResult.rows, queryResult.columns)
+            : [];
+
+          // If no data, check if it's CLOUD_NATIVE table or external table
+          if (data.length === 0) {
+            this.bucketAnalysisDistributionData = [];
+            this.bucketAnalysisDataLoaded.distribution = true;
+            // For CLOUD_NATIVE tables or external tables, be_tablets is empty (data stored in object storage)
+            // Check table type or infer from empty be_tablets
+            const isCloudNative = this.bucketAnalysisTableType === 'CLOUD_NATIVE' || 
+                                  this.bucketAnalysisTableType === 'EXTERNAL';
+            
+            // If be_tablets is empty, show informative message
+            if (isCloudNative || this.bucketAnalysisTableId) {
+              // Add a message row to inform user
+              const message = isCloudNative 
+                ? '该表为CLOUD_NATIVE类型，数据存储在对象存储中，be_tablets表无数据，不支持BE级别分布分析'
+                : '该表在be_tablets中无数据，可能是CLOUD_NATIVE表或外部表，不支持BE级别分布分析';
+              
+              this.bucketAnalysisDistributionData = [{
+                BE_ID: '提示',
+                BE_IP: '-',
+                BE_HOST: '-',
+                TABLET_COUNT: '-',
+                TOTAL_SIZE: '-',
+                AVG_TABLET_SIZE: '-',
+                MAX_TABLET_SIZE: '-',
+                BUCKET_COUNT: '-',
+                BE_SKEW_RATIO: '-',
+                BE_SKEW_LEVEL: message,
+              }];
+            }
+            this.updateBucketAnalysisTabDisplay('distribution');
+            return;
+          }
+
+          // Get BE node info from SHOW PROC '/backends'
+          this.nodeService.executeSQL(`SHOW PROC '/backends'`, 100, this.bucketAnalysisCatalogName || undefined)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+              next: (beResult) => {
+                const beQueryResult = beResult.results?.[0];
+                if (beQueryResult?.success && beQueryResult.rows) {
+                  const beRows = this.parseTableRows(beQueryResult.rows, beQueryResult.columns);
+                  const beMap = new Map(beRows.map((r: any) => [String(r.BackendId), r]));
+
+                  // Enrich data with BE info
+                  data = data.map((row: any) => {
+                    const beId = String(row.BE_ID);
+                    const beInfo = beMap.get(beId);
+                    return {
+                      ...row,
+                      BE_IP: beInfo?.IP || '-',
+                      BE_HOST: beInfo?.IP || '-',
+                    };
+                  });
+
+                  // Calculate BE skew
+                  if (data.length > 0) {
+                    const totalSizes = data.map((d: any) => Number(d.TOTAL_SIZE) || 0);
+                    const maxSize = Math.max(...totalSizes);
+                    const avgSize = totalSizes.reduce((a, b) => a + b, 0) / totalSizes.length;
+                    const beSkewRatio = avgSize > 0 ? ((maxSize - avgSize) / avgSize) * 100 : 0;
+
+                    data.forEach((row: any) => {
+                      row.BE_SKEW_RATIO = avgSize > 0 ? ((Number(row.TOTAL_SIZE) || 0) - avgSize) / avgSize * 100 : 0;
+                      row.BE_SKEW_LEVEL = this.getSkewLevel(row.BE_SKEW_RATIO);
+                    });
+
+                    // Add summary
+                    data.unshift({
+                      BE_ID: '汇总',
+                      BE_IP: '-',
+                      BE_HOST: '-',
+                      TABLET_COUNT: data.reduce((sum: number, d: any) => sum + (Number(d.TABLET_COUNT) || 0), 0),
+                      TOTAL_SIZE: totalSizes.reduce((a, b) => a + b, 0),
+                      AVG_TABLET_SIZE: avgSize,
+                      MAX_TABLET_SIZE: maxSize,
+                      BUCKET_COUNT: data.reduce((sum: number, d: any) => sum + (Number(d.BUCKET_COUNT) || 0), 0),
+                      BE_SKEW_RATIO: beSkewRatio,
+                      BE_SKEW_LEVEL: this.getSkewLevel(beSkewRatio),
+                    });
+                  }
+                }
+
+                this.bucketAnalysisDistributionData = data;
+                this.bucketAnalysisDataLoaded.distribution = true;
+                this.updateBucketAnalysisTabDisplay('distribution');
+              },
+              error: (error) => {
+                // Continue without BE info
+                this.bucketAnalysisDistributionData = data;
+                this.bucketAnalysisDataLoaded.distribution = true;
+                this.updateBucketAnalysisTabDisplay('distribution');
+              },
+            });
+        },
+        error: (error) => {
+          this.bucketAnalysisLoadingState.distribution = false;
+          this.infoDialogPageLoading = false;
+          const errorMsg = ErrorHandler.extractErrorMessage(error);
+          console.error('BE级别分布查询错误:', error);
+          // Don't set error dialog, just show empty data
+          this.bucketAnalysisDistributionData = [];
+          this.bucketAnalysisDataLoaded.distribution = true;
+          this.updateBucketAnalysisTabDisplay('distribution');
+        },
+      });
+  }
+
+  private loadSortKeyAnalysis(): void {
+    // Get table schema
+    const qualifiedTableName = this.buildQualifiedTableName(
+      this.bucketAnalysisCatalogName || '',
+      this.bucketAnalysisDatabaseName,
+      this.bucketAnalysisTableName
+    );
+    const sql = `SHOW CREATE TABLE ${qualifiedTableName}`;
+
+    this.nodeService.executeSQL(sql, 100, this.bucketAnalysisCatalogName || undefined, this.bucketAnalysisDatabaseName)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (result) => {
+          const queryResult = result.results?.[0];
+          if (!queryResult?.success || !queryResult.rows || queryResult.rows.length === 0) {
+            this.bucketAnalysisLoadingState.sortkey = false;
+            this.infoDialogPageLoading = false;
+            this.infoDialogError = '无法获取表结构';
+            return;
+          }
+
+          const createTableSql = queryResult.rows[0][1] || ''; // Second column is CREATE TABLE statement
+          const fields = this.parseSortKeyFields(createTableSql);
+
+          if (fields.length === 0) {
+            this.bucketAnalysisLoadingState.sortkey = false;
+            this.infoDialogPageLoading = false;
+            this.bucketAnalysisSortKeyData = [];
+            this.bucketAnalysisDataLoaded.sortkey = true;
+            this.updateBucketAnalysisTabDisplay('sortkey');
+            return;
+          }
+
+          // Analyze cardinality for each field
+          this.analyzeFieldCardinalities(fields);
+        },
+        error: (error) => {
+          this.bucketAnalysisLoadingState.sortkey = false;
+          this.infoDialogPageLoading = false;
+          this.infoDialogError = ErrorHandler.extractErrorMessage(error);
+        },
+      });
+  }
+
+  private parseSortKeyFields(createTableSql: string): Array<{ name: string; type: string; isDistributedKey: boolean; isDuplicateKey: boolean }> {
+    const fields: Array<{ name: string; type: string; isDistributedKey: boolean; isDuplicateKey: boolean }> = [];
+    
+    // Parse DISTRIBUTED BY HASH(...)
+    const hashMatch = createTableSql.match(/DISTRIBUTED\s+BY\s+HASH\s*\(([^)]+)\)/i);
+    if (hashMatch) {
+      const hashFields = hashMatch[1].split(',').map(f => f.trim().replace(/[`"]/g, ''));
+      hashFields.forEach(fieldName => {
+        // Try to find field type from CREATE TABLE
+        const fieldType = this.extractFieldType(createTableSql, fieldName);
+        fields.push({
+          name: fieldName,
+          type: fieldType,
+          isDistributedKey: true,
+          isDuplicateKey: false,
+        });
+      });
+    }
+
+    // Parse DUPLICATE KEY(...)
+    const duplicateMatch = createTableSql.match(/DUPLICATE\s+KEY\s*\(([^)]+)\)/i);
+    if (duplicateMatch) {
+      const duplicateFields = duplicateMatch[1].split(',').map(f => f.trim().replace(/[`"]/g, ''));
+      duplicateFields.forEach(fieldName => {
+        // Only add if not already added as distributed key
+        if (!fields.find(f => f.name === fieldName)) {
+          const fieldType = this.extractFieldType(createTableSql, fieldName);
+          fields.push({
+            name: fieldName,
+            type: fieldType,
+            isDistributedKey: false,
+            isDuplicateKey: true,
+          });
+        } else {
+          // Mark as duplicate key too
+          const field = fields.find(f => f.name === fieldName);
+          if (field) {
+            field.isDuplicateKey = true;
+          }
+        }
+      });
+    }
+
+    return fields;
+  }
+
+  private extractFieldType(createTableSql: string, fieldName: string): string {
+    const escapedFieldName = fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\`?${escapedFieldName}\`?\\s+([^,\\s(]+)`, 'i');
+    const match = createTableSql.match(regex);
+    return match ? match[1] : 'unknown';
+  }
+
+  private analyzeFieldCardinalities(fields: Array<{ name: string; type: string; isDistributedKey: boolean; isDuplicateKey: boolean }>): void {
+    const qualifiedTableName = this.buildQualifiedTableName(
+      this.bucketAnalysisCatalogName || '',
+      this.bucketAnalysisDatabaseName,
+      this.bucketAnalysisTableName
+    );
+
+    const cardinalityQueries = fields.map(field => {
+      const cacheKey = `${this.bucketAnalysisDatabaseName}.${this.bucketAnalysisTableName}.${field.name}`;
+      const cached = this.cardinalityCache.get(cacheKey);
+      
+      if (cached && (Date.now() - cached.timestamp) < this.CARDINALITY_CACHE_TTL) {
+        // Use cached value
+        return of({ field, cardinality: cached.cardinality, fromCache: true });
+      }
+
+      // Query cardinality
+      const sql = `SELECT COUNT(DISTINCT \`${field.name}\`) as cardinality FROM ${qualifiedTableName} LIMIT 10000`;
+      return this.nodeService.executeSQL(sql, 10000, this.bucketAnalysisCatalogName || undefined, this.bucketAnalysisDatabaseName)
+        .pipe(
+          map(result => {
+            const queryResult = result.results?.[0];
+            let cardinality = 0;
+            if (queryResult?.success && queryResult.rows && queryResult.rows.length > 0) {
+              cardinality = Number(queryResult.rows[0][0]) || 0;
+            }
+            
+            // Cache result
+            this.cardinalityCache.set(cacheKey, { cardinality, timestamp: Date.now() });
+            
+            return { field, cardinality, fromCache: false };
+          }),
+          catchError(error => {
+            console.error(`Cardinality analysis failed for ${field.name}:`, error);
+            return of({ field, cardinality: -1, fromCache: false, error: ErrorHandler.extractErrorMessage(error) });
+          })
+        );
+    });
+
+    forkJoin(cardinalityQueries)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (results) => {
+          this.bucketAnalysisLoadingState.sortkey = false;
+          this.infoDialogPageLoading = false;
+          this.infoDialogError = null;
+
+          const data = results.map(result => {
+            const { field, cardinality, fromCache } = result;
+            const error = (result as any).error;
+            const level = this.getCardinalityLevel(cardinality);
+            const suggestion = this.getCardinalitySuggestion(field, cardinality, level);
+
+            return {
+              FIELD_NAME: field.name,
+              FIELD_TYPE: field.type,
+              IS_DISTRIBUTED_KEY: field.isDistributedKey ? '是' : '否',
+              IS_DUPLICATE_KEY: field.isDuplicateKey ? '是' : '否',
+              CARDINALITY: cardinality >= 0 ? cardinality : (error || '查询失败'),
+              CARDINALITY_LEVEL: level,
+              SUGGESTION: suggestion,
+              FROM_CACHE: fromCache ? '是' : '否',
+            };
+          });
+
+          this.bucketAnalysisSortKeyData = data;
+          this.bucketAnalysisDataLoaded.sortkey = true;
+          this.updateBucketAnalysisTabDisplay('sortkey');
+        },
+        error: (error) => {
+          this.bucketAnalysisLoadingState.sortkey = false;
+          this.infoDialogPageLoading = false;
+          this.infoDialogError = ErrorHandler.extractErrorMessage(error);
+        },
+      });
+  }
+
+  private getCardinalityLevel(cardinality: number): 'low' | 'medium' | 'high' {
+    if (cardinality < 0) return 'low';
+    if (cardinality < 100) return 'low';
+    if (cardinality < 10000) return 'medium';
+    return 'high';
+  }
+
+  private getCardinalitySuggestion(field: { name: string; isDistributedKey: boolean; isDuplicateKey: boolean }, cardinality: number, level: 'low' | 'medium' | 'high'): string {
+    if (cardinality < 0) return '查询失败，无法评估';
+    if (field.isDistributedKey && level === 'low') {
+      return '分桶键基数过低，可能导致分桶倾斜，建议使用高基数字段作为分桶键';
+    }
+    if (field.isDistributedKey && level === 'medium') {
+      return '分桶键基数中等，建议监控分桶倾斜情况';
+    }
+    if (field.isDistributedKey && level === 'high') {
+      return '分桶键基数较高，分布应该较为均匀';
+    }
+    return '正常';
+  }
+
+  private getSkewLevel(skewRatio: number): 'normal' | 'warning' | 'danger' {
+    if (skewRatio < 20) return 'normal';
+    if (skewRatio < 50) return 'warning';
+    return 'danger';
+  }
+
+  private updateBucketAnalysisTabDisplay(tab: 'skew' | 'distribution' | 'sortkey' | 'adjust'): void {
+    let data: any[] = [];
+    let columns: any = {};
+
+    switch (tab) {
+      case 'skew':
+        data = this.bucketAnalysisSkewData;
+        columns = {
+          BUCKET_ID: { title: '分桶ID', type: 'string', width: '12%' },
+          TABLET_COUNT: { title: 'Tablet数量', type: 'string', width: '12%' },
+          TOTAL_SIZE: {
+            title: '总大小',
+            type: 'html',
+            width: '15%',
+            valuePrepareFunction: (value: any) => this.formatBytes(Number(value) || 0).toString(),
+          },
+          TOTAL_ROWS: {
+            title: '总行数',
+            type: 'string',
+            width: '12%',
+            valuePrepareFunction: (value: any) => this.formatNumber(value).toString(),
+          },
+          AVG_TABLET_SIZE: {
+            title: '平均Tablet大小',
+            type: 'html',
+            width: '15%',
+            valuePrepareFunction: (value: any) => this.formatBytes(Number(value) || 0).toString(),
+          },
+          MAX_TABLET_SIZE: {
+            title: '最大Tablet大小',
+            type: 'html',
+            width: '15%',
+            valuePrepareFunction: (value: any) => this.formatBytes(Number(value) || 0).toString(),
+          },
+          SKEW_RATIO: {
+            title: '倾斜度(%)',
+            type: 'html',
+            width: '12%',
+            valuePrepareFunction: (value: any, row: any) => {
+              if (row.BUCKET_ID === '汇总') return '-';
+              const ratio = Number(value) || 0;
+              const level = row.SKEW_LEVEL || this.getSkewLevel(ratio);
+              const badgeClass = level === 'danger' ? 'badge-danger' : level === 'warning' ? 'badge-warning' : 'badge-success';
+              return `<span class="badge ${badgeClass}">${ratio.toFixed(2)}%</span>`;
+            },
+          },
+          SKEW_LEVEL: {
+            title: '倾斜等级',
+            type: 'html',
+            width: '7%',
+            valuePrepareFunction: (value: any, row: any) => {
+              if (row.BUCKET_ID === '汇总') return '-';
+              const level = value || 'normal';
+              const label = level === 'danger' ? '严重' : level === 'warning' ? '轻微' : '正常';
+              const badgeClass = level === 'danger' ? 'badge-danger' : level === 'warning' ? 'badge-warning' : 'badge-success';
+              return `<span class="badge ${badgeClass}">${label}</span>`;
+            },
+          },
+        };
+        break;
+      case 'distribution':
+        data = this.bucketAnalysisDistributionData;
+        columns = {
+          BE_ID: { title: 'BE ID', type: 'string', width: '10%' },
+          BE_IP: { title: 'BE IP', type: 'string', width: '15%' },
+          TABLET_COUNT: { title: 'Tablet数量', type: 'string', width: '12%' },
+          TOTAL_SIZE: {
+            title: '总大小',
+            type: 'html',
+            width: '15%',
+            valuePrepareFunction: (value: any) => this.formatBytes(Number(value) || 0).toString(),
+          },
+          AVG_TABLET_SIZE: {
+            title: '平均Tablet大小',
+            type: 'html',
+            width: '15%',
+            valuePrepareFunction: (value: any) => this.formatBytes(Number(value) || 0).toString(),
+          },
+          MAX_TABLET_SIZE: {
+            title: '最大Tablet大小',
+            type: 'html',
+            width: '15%',
+            valuePrepareFunction: (value: any) => this.formatBytes(Number(value) || 0).toString(),
+          },
+          BUCKET_COUNT: { title: '分桶数', type: 'string', width: '10%' },
+          BE_SKEW_RATIO: {
+            title: 'BE倾斜度(%)',
+            type: 'html',
+            width: '8%',
+            valuePrepareFunction: (value: any, row: any) => {
+              if (row.BE_ID === '汇总') return '-';
+              const ratio = Number(value) || 0;
+              const level = row.BE_SKEW_LEVEL || this.getSkewLevel(ratio);
+              const badgeClass = level === 'danger' ? 'badge-danger' : level === 'warning' ? 'badge-warning' : 'badge-success';
+              return `<span class="badge ${badgeClass}">${ratio.toFixed(2)}%</span>`;
+            },
+          },
+        };
+        break;
+      case 'sortkey':
+        data = this.bucketAnalysisSortKeyData;
+        columns = {
+          FIELD_NAME: { title: '字段名', type: 'string', width: '15%' },
+          FIELD_TYPE: { title: '字段类型', type: 'string', width: '12%' },
+          IS_DISTRIBUTED_KEY: { title: '分桶键', type: 'string', width: '10%' },
+          IS_DUPLICATE_KEY: { title: '排序键', type: 'string', width: '10%' },
+          CARDINALITY: {
+            title: '基数',
+            type: 'html',
+            width: '15%',
+            valuePrepareFunction: (value: any, row: any) => {
+              if (typeof value === 'string' && value.includes('失败')) {
+                return `<span class="text-danger">${value}</span>`;
+              }
+              return this.formatNumber(value).toString();
+            },
+          },
+          CARDINALITY_LEVEL: {
+            title: '基数等级',
+            type: 'html',
+            width: '12%',
+            valuePrepareFunction: (value: any) => {
+              const level = value || 'low';
+              const label = level === 'high' ? '高' : level === 'medium' ? '中' : '低';
+              const badgeClass = level === 'high' ? 'badge-success' : level === 'medium' ? 'badge-warning' : 'badge-danger';
+              return `<span class="badge ${badgeClass}">${label}</span>`;
+            },
+          },
+          SUGGESTION: {
+            title: '建议',
+            type: 'html',
+            width: '20%',
+            valuePrepareFunction: (value: any) => this.renderLongText(value, 50),
+          },
+          FROM_CACHE: { title: '缓存', type: 'string', width: '6%' },
+        };
+        break;
+      case 'adjust':
+        // Adjust tab - disable table display, will use custom form in template
+        data = [];
+        columns = {};
+        // Disable pager for adjust tab
+        this.infoDialogSettings = {
+          ...this.infoDialogSettings,
+          pager: { display: false },
+        };
+        break;
+    }
+
+    this.infoDialogData = data;
+    this.infoDialogSource.load(data);
+    this.infoDialogSettings = {
+      ...this.infoDialogSettings,
+      columns,
+    };
+    this.cdr.markForCheck();
+  }
+
+  private calculateRecommendedBuckets(): number {
+    // Simple recommendation: based on data size
+    // This is a placeholder - can be enhanced with more sophisticated logic
+    if (this.bucketAnalysisSkewData.length > 0) {
+      const summary = this.bucketAnalysisSkewData.find((d: any) => d.BUCKET_ID === '汇总');
+      if (summary) {
+        const totalSize = Number(summary.TOTAL_SIZE) || 0;
+        // Recommend 1 bucket per 10GB (rough estimate)
+        const recommended = Math.max(1, Math.min(128, Math.ceil(totalSize / (10 * 1024 * 1024 * 1024))));
+        return recommended;
+      }
+    }
+    return this.bucketAnalysisCurrentBuckets || 3;
+  }
+
+  // Bucket adjustment methods
+  getBucketAdjustmentRecommendedBuckets(): number {
+    return this.calculateRecommendedBuckets();
+  }
+
+  onBucketAdjustmentInputChange(value: number): void {
+    this.bucketAdjustmentNewBuckets = value;
+    this.cdr.markForCheck();
+  }
+
+  useRecommendedBuckets(): void {
+    this.bucketAdjustmentNewBuckets = this.getBucketAdjustmentRecommendedBuckets();
+    this.cdr.markForCheck();
+  }
+
+  previewBucketAdjustment(): void {
+    if (!this.bucketAdjustmentNewBuckets || this.bucketAdjustmentNewBuckets <= 0) {
+      this.toastrService.warning('请输入有效的分桶数', '提示');
+      return;
+    }
+
+    if (this.bucketAdjustmentNewBuckets === this.bucketAnalysisCurrentBuckets) {
+      this.toastrService.info('新分桶数与当前分桶数相同，无需调整', '提示');
+      return;
+    }
+
+    // Show preview of adjustment SQL
+    const qualifiedTableName = this.buildQualifiedTableName(
+      this.bucketAnalysisCatalogName || '',
+      this.bucketAnalysisDatabaseName,
+      this.bucketAnalysisTableName
+    );
+
+    // Note: StarRocks doesn't support direct ALTER TABLE to change buckets
+    // This requires table rebuild. Show warning and SQL preview
+    const previewMessage = `分桶调整需要重建表，这将执行以下操作：
+1. 创建新表（分桶数为 ${this.bucketAdjustmentNewBuckets}）
+2. 迁移数据
+3. 重命名表
+
+此操作需要 ALTER TABLE 权限，且会锁定表一段时间。
+
+是否继续？`;
+
+    this.confirmDialogService.confirm(
+      '预览分桶调整',
+      previewMessage,
+      '继续',
+      '取消',
+      'warning'
+    ).subscribe(confirmed => {
+      if (confirmed) {
+        this.executeBucketAdjustment();
+      }
+    });
+  }
+
+  executeBucketAdjustment(): void {
+    if (!this.bucketAdjustmentNewBuckets || this.bucketAdjustmentNewBuckets <= 0) {
+      this.toastrService.warning('请输入有效的分桶数', '提示');
+      return;
+    }
+
+    if (this.bucketAdjustmentNewBuckets === this.bucketAnalysisCurrentBuckets) {
+      this.toastrService.info('新分桶数与当前分桶数相同，无需调整', '提示');
+      return;
+    }
+
+    // Note: StarRocks doesn't support direct ALTER TABLE to change buckets
+    // This is a placeholder - actual implementation would require:
+    // 1. CREATE TABLE with new bucket count
+    // 2. INSERT INTO new_table SELECT * FROM old_table
+    // 3. RENAME TABLE
+    // 4. DROP old table
+    // 
+    // This is a complex operation that should be done carefully
+    // For now, we'll show a message that this feature requires manual SQL execution
+
+    this.toastrService.warning(
+      '分桶调整功能需要重建表，这是一个复杂操作。请使用以下SQL手动执行：\n' +
+      `-- 1. 创建新表（分桶数为 ${this.bucketAdjustmentNewBuckets}）\n` +
+      `-- 2. 迁移数据：INSERT INTO new_table SELECT * FROM ${this.bucketAnalysisTableName}\n` +
+      `-- 3. 重命名表：ALTER TABLE ${this.bucketAnalysisTableName} RENAME old_table; ALTER TABLE new_table RENAME ${this.bucketAnalysisTableName}\n` +
+      `-- 4. 删除旧表：DROP TABLE old_table`,
+      '提示',
+      { duration: 10000 }
+    );
+
+    // TODO: Implement actual bucket adjustment when backend API is ready
+    // For now, we provide SQL guidance to users
+  }
+
+  private viewTableTransactions(node: NavTreeNode): void {
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, {
+      database: '无法识别该表所属的数据库',
+      table: '无法识别表名称'
+    })) {
+      return;
+    }
+
+    const { catalogName, databaseName, tableName } = info!;
 
     // Views don't have transactions (they are logical, not physical)
     if (node.data?.tableType === 'VIEW') {
@@ -2751,8 +3966,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
               // Wait for table to render, then ensure tooltips work
               // Use requestAnimationFrame + setTimeout for better timing
               requestAnimationFrame(() => {
-                setTimeout(() => {
-                  this.ensureTooltipsWork();
+              setTimeout(() => {
+                this.ensureTooltipsWork();
                 }, 300);
               });
           } else {
@@ -2917,14 +4132,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   // Compaction trigger dialog
   private openCompactionTriggerDialog(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-    const tableName = node.data?.table || node.name;
-
-    if (!databaseName || !tableName) {
-      this.toastrService.warning('无法识别该表所属的数据库', '提示');
+    const info = this.extractNodeInfo(node);
+    if (!this.validateNodeInfo(info, true, {
+      database: '无法识别该表所属的数据库',
+      table: '无法识别表名称'
+    })) {
       return;
     }
+
+    const { catalogName, databaseName, tableName } = info!;
 
     // Only regular tables can trigger compaction manually
     const tableType = node.data?.tableType;
@@ -2935,6 +4151,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     if (tableType === 'MATERIALIZED_VIEW') {
       this.toastrService.warning('物化视图的Compaction由系统自动管理，不建议手动触发', '提示');
       return;
+    }
+    
+    // Check storage type - CLOUD_NATIVE tables may have different compaction behavior
+    const storageType = node.data?.storageType;
+    if (storageType === 'CLOUD_NATIVE') {
+      // CLOUD_NATIVE tables support compaction, but show a note
+      this.toastrService.info('CLOUD_NATIVE表（存算分离）的Compaction行为可能与普通表不同', '提示', { duration: 3000 });
     }
 
     this.compactionTriggerTable = tableName;
@@ -3101,7 +4324,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private loadDatabasesForCatalog(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
+    const info = this.extractNodeInfo(node);
+    if (!info) {
+      node.children = [];
+      return;
+    }
+
+    const catalogName = info.catalogName;
     const cacheKey = this.getCatalogKey(catalogName);
 
     if (this.databaseCache[cacheKey]) {
@@ -3131,19 +4360,24 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           const dbList = results.databases || [];
         this.databaseCache[cacheKey] = dbList;
           
-          // Parse database IDs from SHOW PROC '/dbs'
+          // Parse database IDs from SHOW PROC '/dbs' using findColumnKey for case-insensitive matching
           if (results.dbIds.results && results.dbIds.results.length > 0 && results.dbIds.results[0].success) {
             const dbIdsResult = results.dbIds.results[0];
-            const dbNameIdx = dbIdsResult.columns.findIndex(col => col === 'DbName');
-            const dbIdIdx = dbIdsResult.columns.findIndex(col => col === 'DbId');
+            const dbNameKey = this.findColumnKey(dbIdsResult.columns, ['DbName', 'dbname', 'DB_NAME']);
+            const dbIdKey = this.findColumnKey(dbIdsResult.columns, ['DbId', 'dbid', 'DB_ID']);
             
-            if (dbNameIdx >= 0 && dbIdIdx >= 0) {
-              for (const row of dbIdsResult.rows) {
-                const dbName = String(row[dbNameIdx] || '');
-                const dbId = String(row[dbIdIdx] || '');
-                if (dbName && dbId) {
-                  const dbIdCacheKey = `${catalogName}|${dbName}`;
-                  this.databaseIdCache[dbIdCacheKey] = dbId;
+            if (dbNameKey && dbIdKey) {
+              const dbNameIdx = dbIdsResult.columns.indexOf(dbNameKey);
+              const dbIdIdx = dbIdsResult.columns.indexOf(dbIdKey);
+              
+              if (dbNameIdx >= 0 && dbIdIdx >= 0) {
+                for (const row of dbIdsResult.rows) {
+                  const dbName = String(row[dbNameIdx] || '').trim();
+                  const dbId = String(row[dbIdIdx] || '').trim();
+                  if (dbName && dbId) {
+                    const dbIdCacheKey = `${catalogName}|${dbName}`;
+                    this.databaseIdCache[dbIdCacheKey] = dbId;
+                  }
                 }
               }
             }
@@ -3179,13 +4413,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   }
 
   private loadTablesForDatabase(node: NavTreeNode): void {
-    const catalogName = node.data?.catalog || '';
-    const databaseName = node.data?.database || '';
-
-    if (!databaseName) {
+    const info = this.extractNodeInfo(node);
+    if (!info || !info.databaseName) {
       node.children = [];
       return;
     }
+
+    const { catalogName, databaseName } = info;
 
     const cacheKey = this.getDatabaseCacheKey(catalogName, databaseName);
 
@@ -3994,8 +5228,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         // Use requestAnimationFrame + setTimeout for better timing and smooth UX
         if (result.results.length > 0 && result.results[0].success) {
           requestAnimationFrame(() => {
-            setTimeout(() => {
-              this.toggleSqlEditor(true);
+          setTimeout(() => {
+            this.toggleSqlEditor(true);
             }, 300);
           });
         }

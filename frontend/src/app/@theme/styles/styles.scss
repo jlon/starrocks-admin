@@ -1,4 +1,29 @@
-@import url('https://fonts.googleapis.com/css?family=Open+Sans:400,600,700&display=swap');
+// Open Sans font - local files
+// Use relative path from SCSS file location for Angular build compatibility
+// Path: src/app/@theme/styles/styles.scss -> src/assets/fonts/ = ../../../assets/fonts/
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../../../assets/fonts/OpenSans-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../../../assets/fonts/OpenSans-SemiBold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../../../assets/fonts/OpenSans-Bold.ttf') format('truetype');
+}
 
 // themes - our custom or/and out of the box themes
 @import 'themes';

@@ -55,15 +55,14 @@ stringData:
   # api-key: "your-api-key"
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: starrocks-admin
   namespace: starrocks-admin
   labels:
     app: starrocks-admin
 spec:
-  serviceName: starrocks-admin
-  replicas: 1  # SQLite only supports single writer, use 1 replica
+  replicas: 1
   selector:
     matchLabels:
       app: starrocks-admin
@@ -117,18 +116,8 @@ spec:
           name: starrocks-admin-config
       - name: logs
         emptyDir: {}
-  
-  volumeClaimTemplates:
-  - metadata:
-      name: data
-      labels:
-        app: starrocks-admin
-    spec:
-      accessModes: 
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: 10Gi
+      - name: data
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -153,14 +142,15 @@ metadata:
   name: starrocks-admin
   namespace: starrocks-admin
   annotations:
-    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
+  ingressClassName: nginx
   rules:
   - host: starrocks-domain.com
     http:
       paths:
-      - pathType: Prefix
+      - pathType: ImplementationSpecific
         path: /starrocks-admin(/|$)(.*)
         backend:
           service:

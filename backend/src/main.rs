@@ -620,6 +620,10 @@ async fn ready_check() -> &'static str {
 ///
 /// Flink-style implementation: backend is path-agnostic,
 /// relies on reverse proxy (Nginx/Traefik) rewrite rules
+///
+/// For sub-path deployments, static assets may be requested with route segments in the path
+/// (e.g., /starrocks-admin/pages/starrocks/runtime.js). This function extracts the filename
+/// from such paths to correctly serve static assets.
 async fn serve_static_files(uri: Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
     
@@ -628,9 +632,27 @@ async fn serve_static_files(uri: Uri) -> impl IntoResponse {
         return (StatusCode::NOT_FOUND, "Not Found").into_response();
     }
     
+    // Check if this is a static asset request (has file extension)
+    // If the path contains route segments but ends with a static file extension,
+    // extract just the filename to serve the correct asset
+    let static_extensions = ["js", "css", "png", "jpg", "jpeg", "gif", "svg", "ico", "woff", "woff2", "ttf", "eot", "otf", "json"];
+    let is_static_asset = static_extensions.iter().any(|ext| path.ends_with(&format!(".{}", ext)));
+    
+    let asset_path = if is_static_asset {
+        // Extract filename from path (handles cases like /starrocks-admin/pages/starrocks/runtime.js)
+        // Find the last segment that looks like a filename (contains a dot)
+        path.split('/')
+            .last()
+            .filter(|s| s.contains('.'))
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| path.to_string())
+    } else {
+        path.to_string()
+    };
+    
     // Try to get the file from embedded assets
-    if let Some(file) = WebAssets::get(path) {
-        let content_type = get_content_type(path);
+    if let Some(file) = WebAssets::get(&asset_path) {
+        let content_type = get_content_type(&asset_path);
         let data: Vec<u8> = file.data.to_vec();
         return Response::builder()
             .status(StatusCode::OK)

@@ -1,0 +1,47 @@
+fix(bucket-analysis): handle CLOUD_NATIVE tables and improve error handling
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+#
+# Date:      Tue Nov 11 15:42:32 2025 +0800
+#
+# On branch main
+# Your branch is up to date with 'origin/main'.
+#
+# Changes to be committed:
+#	deleted:    FRONTEND_PERFORMANCE_REVIEW.md
+#	modified:   Makefile
+#	modified:   backend/src/main.rs
+#	modified:   backend/src/services/data_statistics_service.rs
+#	modified:   backend/src/services/starrocks_client.rs
+#	deleted:    backend/test_permission_extraction
+#	modified:   build/build-frontend.sh
+#	new file:   build/verify-base-href.sh
+#	modified:   deploy/docker/Dockerfile
+#	new file:   deploy/k8s/README_MINIKUBE.md
+#	new file:   deploy/k8s/TEST_REPORT.md
+#	modified:   deploy/k8s/deploy-all.yaml
+#	new file:   deploy/k8s/deploy-test.yaml
+#	new file:   docs/FRONTEND_SECURITY_AUDIT.md
+#	modified:   frontend/src/app/@core/core.module.ts
+#	modified:   frontend/src/app/@core/data/api.service.ts
+#	modified:   frontend/src/app/@core/data/auth.service.ts
+#	modified:   frontend/src/app/@core/guards/auth.guard.ts
+#	modified:   frontend/src/app/@core/interceptors/jwt.interceptor.ts
+#	modified:   frontend/src/app/@core/utils/index.ts
+#	modified:   frontend/src/app/@theme/components/footer/footer.component.ts
+#	modified:   frontend/src/app/@theme/styles/styles.scss
+#	modified:   frontend/src/app/app.component.ts
+#	modified:   frontend/src/app/auth/login/login.component.ts
+#	modified:   frontend/src/app/pages/starrocks/backends/backends.component.ts
+#	modified:   frontend/src/app/pages/starrocks/frontends/frontends.component.ts
+#	modified:   frontend/src/app/pages/starrocks/materialized-views/materialized-views.component.ts
+#	modified:   frontend/src/app/pages/starrocks/queries/audit-logs/audit-logs.component.ts
+#	modified:   frontend/src/app/pages/starrocks/queries/profile-queries/profile-queries.component.ts
+#	modified:   frontend/src/app/pages/starrocks/queries/query-execution/query-execution.component.html
+#	modified:   frontend/src/app/pages/starrocks/queries/query-execution/query-execution.component.ts
+#	modified:   frontend/src/app/pages/starrocks/sessions/sessions.component.ts
+#	new file:   frontend/src/assets/fonts/OpenSans-Bold.ttf
+#	new file:   frontend/src/assets/fonts/OpenSans-Regular.ttf
+#	new file:   frontend/src/assets/fonts/OpenSans-SemiBold.ttf
+#

@@ -6,9 +6,7 @@ import { of as observableOf } from 'rxjs';
 
 import { throwIfAlreadyLoaded } from './module-import-guard';
 import {
-  AnalyticsService,
   LayoutService,
-  PlayerService,
   SeoService,
   StateService,
 } from './utils';
@@ -53,23 +51,8 @@ import { VisitorsAnalyticsService } from './mock/visitors-analytics.service';
 import { SecurityCamerasService } from './mock/security-cameras.service';
 import { MockDataModule } from './mock/mock-data.module';
 
-const socialLinks = [
-  {
-    url: 'https://github.com/John/nebular',
-    target: '_blank',
-    icon: 'github',
-  },
-  {
-    url: 'https://www.facebook.com/John/',
-    target: '_blank',
-    icon: 'facebook',
-  },
-  {
-    url: 'https://twitter.com/John_inc',
-    target: '_blank',
-    icon: 'twitter',
-  },
-];
+// Social links removed - not used in this project
+const socialLinks: any[] = [];
 
 const DATA_SERVICES = [
   { provide: UserData, useClass: UserService },
@@ -138,9 +121,7 @@ export const NB_CORE_PROVIDERS = [
   {
     provide: NbRoleProvider, useClass: NbSimpleRoleProvider,
   },
-  AnalyticsService,
   LayoutService,
-  PlayerService,
   SeoService,
   StateService,
 ];

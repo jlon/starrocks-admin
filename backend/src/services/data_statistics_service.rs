@@ -638,12 +638,22 @@ impl DataStatisticsService {
     }
 
     /// Get schema change statistics using SHOW ALTER TABLE
+    /// Note: This command may not be supported in all StarRocks versions
+    /// Returns default values (0,0,0,0) if the command fails
     async fn get_schema_change_statistics_mysql(
         &self,
         mysql_client: &MySQLClient,
     ) -> ApiResult<(i32, i32, i32, i32)> {
         let sql = "SHOW ALTER TABLE";
-        let (_columns, rows) = mysql_client.query_raw(sql).await.unwrap_or_default();
+        let (_columns, rows) = match mysql_client.query_raw(sql).await {
+            Ok(result) => result,
+            Err(e) => {
+                // SHOW ALTER TABLE may not be supported in all StarRocks versions
+                // Log warning and return default values
+                tracing::warn!("SHOW ALTER TABLE not supported or failed: {}. Returning default values.", e);
+                return Ok((0, 0, 0, 0));
+            }
+        };
 
         let mut running = 0;
         let mut pending = 0;

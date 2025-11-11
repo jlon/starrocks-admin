@@ -258,9 +258,10 @@ export class NodeService {
   }
 
   // Execute SQL API
+  // Use extended timeout (650 seconds) for large queries to match Nginx proxy_read_timeout (600s)
   executeSQL(sql: string, limit?: number, catalog?: string, database?: string): Observable<QueryExecuteResult> {
     const request: QueryExecuteRequest = { sql, limit, catalog, database };
-    return this.api.post<QueryExecuteResult>(`/clusters/queries/execute`, request);
+    return this.api.post<QueryExecuteResult>(`/clusters/queries/execute`, request, 650000);
   }
 
   // Profile APIs

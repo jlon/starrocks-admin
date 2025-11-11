@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { timeout } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
 @Injectable({
@@ -21,8 +22,11 @@ export class ApiService {
     return this.http.get<T>(`${this.baseUrl}${path}`, { params: httpParams });
   }
 
-  post<T>(path: string, body: any = {}): Observable<T> {
-    return this.http.post<T>(`${this.baseUrl}${path}`, body);
+  post<T>(path: string, body: any = {}, customTimeout?: number): Observable<T> {
+    const timeoutMs = customTimeout || 650000; // Default 650 seconds (10.8 minutes), slightly longer than Nginx timeout
+    return this.http.post<T>(`${this.baseUrl}${path}`, body).pipe(
+      timeout(timeoutMs)
+    );
   }
 
   put<T>(path: string, body: any = {}): Observable<T> {

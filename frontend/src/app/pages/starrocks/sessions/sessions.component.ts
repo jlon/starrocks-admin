@@ -26,8 +26,9 @@ export class SessionsComponent implements OnInit, OnDestroy {
   loading = false;
   autoRefresh = false; // Default: disabled
   refreshInterval: any;
-  selectedRefreshInterval = 5; // Default 5 seconds
+  selectedRefreshInterval: number | 'off' = 'off'; // Default: off (Grafana style)
   refreshIntervalOptions = [
+    { value: 'off', label: '关闭' },
     { value: 3, label: '3秒' },
     { value: 5, label: '5秒' },
     { value: 10, label: '10秒' },
@@ -35,7 +36,14 @@ export class SessionsComponent implements OnInit, OnDestroy {
     { value: 60, label: '1分钟' },
   ];
   private destroy$ = new Subject<void>();
+  // Session duration thresholds: 1min(60s)=warn, 5min(300s)=danger
   private readonly sessionDurationThresholds: MetricThresholds = { warn: 60, danger: 300 };
+  
+  // Filter state for sessions
+  sessionFilter: {
+    sleepOnly?: boolean;
+    slowOnly?: boolean;
+  } = {};
 
   settings = {
     hideSubHeader: false, // Enable search
@@ -78,8 +86,9 @@ export class SessionsComponent implements OnInit, OnDestroy {
       },
       command: {
         title: 'Command',
-        type: 'string',
+        type: 'html',
         width: '10%',
+        valuePrepareFunction: (value: string, row: Session) => this.renderCommandBadge(value, row),
       },
       time: {
         title: 'Time (s)',
@@ -89,8 +98,9 @@ export class SessionsComponent implements OnInit, OnDestroy {
       },
       state: {
         title: 'State',
-        type: 'string',
+        type: 'html',
         width: '10%',
+        valuePrepareFunction: (value: string) => this.renderStateBadge(value),
       },
       info: {
         title: 'Info',
@@ -153,9 +163,8 @@ export class SessionsComponent implements OnInit, OnDestroy {
     // Backend will get active cluster automatically - no need to check clusterId
     this.loading = true;
     this.nodeService.getSessions().subscribe({
-      next: (sessions) => {
-        this.sessions = sessions;
-        this.source.load(sessions);
+      next: (allSessions) => {
+        this.updateSessionsData(allSessions);
         this.loading = false;
       },
       error: (error) => {
@@ -169,6 +178,42 @@ export class SessionsComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
     });
+  }
+
+  // Load sessions silently (for auto-refresh, no loading spinner)
+  loadSessionsSilently(): void {
+    // Only update data, don't show loading spinner during auto-refresh
+    this.nodeService.getSessions().subscribe({
+      next: (allSessions) => {
+        this.updateSessionsData(allSessions);
+      },
+      error: (error) => {
+        // Silently handle errors during auto-refresh, don't show toast
+        console.error('[Sessions] Auto-refresh error:', error);
+      },
+    });
+  }
+
+  // Update sessions data (shared logic)
+  private updateSessionsData(allSessions: Session[]): void {
+    // Apply filters
+    let filteredSessions = allSessions;
+    
+    if (this.sessionFilter.sleepOnly) {
+      filteredSessions = filteredSessions.filter(s => 
+        s.command?.toLowerCase() === 'sleep' || s.state?.toLowerCase() === 'sleep'
+      );
+    }
+    
+    if (this.sessionFilter.slowOnly) {
+      filteredSessions = filteredSessions.filter(s => {
+        const time = this.parseTime(s.time);
+        return time >= 60; // 1 minute
+      });
+    }
+    
+    this.sessions = filteredSessions;
+    this.source.load(filteredSessions);
   }
 
   onDeleteConfirm(event: any): void {
@@ -205,19 +250,18 @@ export class SessionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  toggleAutoRefresh(): void {
-    this.autoRefresh = !this.autoRefresh;
-    if (this.autoRefresh) {
-      this.startAutoRefresh();
-    } else {
-      this.stopAutoRefresh();
-    }
-  }
-
-  onRefreshIntervalChange(interval: number): void {
+  // Grafana-style: selecting an interval automatically enables auto-refresh
+  // Selecting 'off' disables auto-refresh
+  onRefreshIntervalChange(interval: number | 'off'): void {
     this.selectedRefreshInterval = interval;
-    if (this.autoRefresh) {
-      // Restart with new interval
+    
+    if (interval === 'off') {
+      // Disable auto-refresh
+      this.autoRefresh = false;
+      this.stopAutoRefresh();
+    } else {
+      // Enable auto-refresh with selected interval
+      this.autoRefresh = true;
       this.stopAutoRefresh();
       this.startAutoRefresh();
     }
@@ -225,14 +269,22 @@ export class SessionsComponent implements OnInit, OnDestroy {
 
   startAutoRefresh(): void {
     this.stopAutoRefresh(); // Clear any existing interval
+    
+    // Only start if interval is a number (not 'off')
+    if (typeof this.selectedRefreshInterval !== 'number') {
+      return;
+    }
+    
     this.refreshInterval = setInterval(() => {
       // Stop auto-refresh if user is not authenticated (logged out)
       if (!this.authService.isAuthenticated()) {
         this.autoRefresh = false;
+        this.selectedRefreshInterval = 'off';
         this.stopAutoRefresh();
         return;
       }
-      this.loadSessions();
+      // Only update data, don't show loading spinner during auto-refresh
+      this.loadSessionsSilently();
     }, this.selectedRefreshInterval * 1000);
   }
 
@@ -245,6 +297,180 @@ export class SessionsComponent implements OnInit, OnDestroy {
 
   refresh(): void {
     this.loadSessions();
+  }
+
+  // Render command badge
+  renderCommandBadge(value: string, row: Session): string {
+    const cmd = (value || '').toLowerCase();
+    if (cmd === 'sleep') {
+      return '<span class="badge badge-secondary">Sleep</span>';
+    } else if (cmd === 'query') {
+      return '<span class="badge badge-primary">Query</span>';
+    } else if (cmd === 'connect') {
+      return '<span class="badge badge-info">Connect</span>';
+    }
+    return value || 'N/A';
+  }
+
+  // Render state badge
+  renderStateBadge(value: string): string {
+    if (!value || value.trim() === '') {
+      return '<span class="text-hint">-</span>';
+    }
+    const state = value.toLowerCase();
+    if (state.includes('sleep')) {
+      return '<span class="badge badge-secondary">Sleep</span>';
+    } else if (state.includes('query')) {
+      return '<span class="badge badge-primary">Query</span>';
+    }
+    return value;
+  }
+
+  // Parse time from string
+  parseTime(value: string | number): number {
+    if (typeof value === 'number') {
+      return value;
+    }
+    const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
+    return isNaN(num) ? 0 : num;
+  }
+
+  // Apply filter
+  applySessionFilter(): void {
+    this.loadSessions();
+  }
+
+  // Reset filter
+  resetSessionFilter(): void {
+    this.sessionFilter = {};
+    this.loadSessions();
+  }
+
+  // Clear sleeping connections
+  clearSleepingConnections(): void {
+    // Get all sessions first (not filtered)
+    this.nodeService.getSessions().subscribe({
+      next: (allSessions) => {
+        const sleepingSessions = allSessions.filter(s => 
+          s.command?.toLowerCase() === 'sleep' || s.state?.toLowerCase() === 'sleep'
+        );
+
+        if (sleepingSessions.length === 0) {
+          this.toastrService.info('当前没有睡眠连接', '提示');
+          return;
+        }
+
+        this.confirmDialogService.confirm(
+          '确认清除睡眠连接',
+          `确定要清除 ${sleepingSessions.length} 个睡眠连接吗？`,
+          '清除',
+          '取消',
+          'warning'
+        ).subscribe(confirmed => {
+          if (!confirmed) {
+            return;
+          }
+
+          this.loading = true;
+          let successCount = 0;
+          let failCount = 0;
+          let completed = 0;
+
+          sleepingSessions.forEach(session => {
+            this.nodeService.killSession(session.id).subscribe({
+              next: () => {
+                successCount++;
+                completed++;
+                if (completed === sleepingSessions.length) {
+                  this.loading = false;
+                  if (failCount === 0) {
+                    this.toastrService.success(`成功清除 ${successCount} 个睡眠连接`, '成功');
+                  } else {
+                    this.toastrService.warning(`成功清除 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+                  }
+                  this.loadSessions();
+                }
+              },
+              error: (error) => {
+                failCount++;
+                completed++;
+                if (completed === sleepingSessions.length) {
+                  this.loading = false;
+                  if (successCount > 0) {
+                    this.toastrService.warning(`成功清除 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+                  } else {
+                    this.toastrService.danger('清除睡眠连接失败', '错误');
+                  }
+                  this.loadSessions();
+                }
+              },
+            });
+          });
+        });
+      },
+      error: (error) => {
+        this.toastrService.danger(
+          ErrorHandler.handleClusterError(error),
+          '获取会话列表失败'
+        );
+      },
+    });
+  }
+
+  // Batch kill all displayed sessions
+  batchKillAllSessions(): void {
+    if (this.sessions.length === 0) {
+      this.toastrService.warning('当前没有可查杀的会话', '提示');
+      return;
+    }
+
+    this.confirmDialogService.confirm(
+      '确认批量查杀',
+      `确定要查杀当前显示的 ${this.sessions.length} 个会话吗？`,
+      '查杀',
+      '取消',
+      'danger'
+    ).subscribe(confirmed => {
+      if (!confirmed) {
+        return;
+      }
+
+      this.loading = true;
+      let successCount = 0;
+      let failCount = 0;
+      let completed = 0;
+
+      this.sessions.forEach(session => {
+        this.nodeService.killSession(session.id).subscribe({
+          next: () => {
+            successCount++;
+            completed++;
+            if (completed === this.sessions.length) {
+              this.loading = false;
+              if (failCount === 0) {
+                this.toastrService.success(`成功查杀 ${successCount} 个会话`, '成功');
+              } else {
+                this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+              }
+              this.loadSessions();
+            }
+          },
+          error: (error) => {
+            failCount++;
+            completed++;
+            if (completed === this.sessions.length) {
+              this.loading = false;
+              if (successCount > 0) {
+                this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+              } else {
+                this.toastrService.danger('批量查杀失败', '错误');
+              }
+              this.loadSessions();
+            }
+          },
+        });
+      });
+    });
   }
 }
 

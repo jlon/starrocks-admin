@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { interval, Subject } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
@@ -20,6 +20,7 @@ interface ClusterCard {
   selector: 'ngx-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   clusters: ClusterCard[] = [];
@@ -46,6 +47,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private router: Router,
     private permissionService: PermissionService,
     private confirmDialogService: ConfirmDialogService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
@@ -54,11 +56,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .subscribe(cluster => {
         this.activeCluster = cluster;
         this.updateActiveStatus();
+        this.cdr.markForCheck();
       });
 
     this.permissionService.permissions$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.applyPermissionState());
+      .subscribe(() => {
+        this.applyPermissionState();
+        this.cdr.markForCheck();
+      });
 
     this.applyPermissionState();
   }
@@ -71,10 +77,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   loadClusters(): void {
     if (!this.canListClusters) {
       this.loading = false;
+      this.cdr.markForCheck();
       return;
     }
 
     this.loading = true;
+    this.cdr.markForCheck();
     this.clusterService.listClusters().subscribe({
       next: (clusters) => {
         // Update clusters, setting isActive based on backend response
@@ -89,10 +97,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
         
         this.loadHealthStatus();
         this.loading = false;
+        this.cdr.markForCheck();
       },
       error: (error) => {
         this.handleError(error);
         this.loading = false;
+        this.cdr.markForCheck();
       },
     });
   }
@@ -104,6 +114,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       loading: false,
       isActive: cluster.is_active,
     }));
+    this.cdr.markForCheck();
   }
 
   updateActiveStatus(): void {
@@ -126,6 +137,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     this.clusterContext.setActiveCluster(clusterCard.cluster);
     this.toastrService.success(`已激活集群: ${clusterCard.cluster.name}`, '成功');
+    this.cdr.markForCheck();
       
       // Reload clusters to update is_active status
       setTimeout(() => this.loadClusters(), 500);
@@ -138,13 +150,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     this.clusters.forEach((clusterCard) => {
       clusterCard.loading = true;
+      this.cdr.markForCheck();
       this.clusterService.getHealth(clusterCard.cluster.id).subscribe({
         next: (health) => {
           clusterCard.health = health;
           clusterCard.loading = false;
+          this.cdr.markForCheck();
         },
         error: () => {
           clusterCard.loading = false;
+          this.cdr.markForCheck();
         },
       });
     });
@@ -230,9 +245,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
           next: () => {
             this.toastrService.success(`集群 "${cluster.name}" 已删除`, '成功');
             this.loadClusters();
+            this.cdr.markForCheck();
           },
           error: (error) => {
             this.handleError(error);
+            this.cdr.markForCheck();
           },
         });
       });
@@ -291,12 +308,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!this.hasClusterAccess) {
       this.loading = false;
       this.clusters = [];
+      this.cdr.markForCheck();
       return;
     }
 
     if (signatureChanged && this.canListClusters) {
       this.loadClusters();
     }
+    this.cdr.markForCheck();
   }
 }
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { interval, Subject } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { NbToastrService } from '@nebular/theme';
@@ -12,6 +12,7 @@ import { ErrorHandler } from '../../../@core/utils/error-handler';
   selector: 'ngx-frontends',
   templateUrl: './frontends.component.html',
   styleUrls: ['./frontends.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FrontendsComponent implements OnInit, OnDestroy {
   source: LocalDataSource = new LocalDataSource();
@@ -99,6 +100,7 @@ export class FrontendsComponent implements OnInit, OnDestroy {
     private clusterService: ClusterService,
     private clusterContext: ClusterContextService,
     private toastrService: NbToastrService,
+    private cdr: ChangeDetectorRef,
   ) {
     this.clusterId = this.clusterContext.getActiveClusterId() || 0;
   }
@@ -119,6 +121,7 @@ export class FrontendsComponent implements OnInit, OnDestroy {
           }
         }
         // Backend will handle "no active cluster" case
+        this.cdr.markForCheck();
       });
 
     // Load data - backend will get active cluster automatically
@@ -133,20 +136,29 @@ export class FrontendsComponent implements OnInit, OnDestroy {
 
   loadClusterInfo(): void {
     this.clusterService.getCluster(this.clusterId).subscribe({
-      next: (cluster) => { this.clusterName = cluster.name; },
+      next: (cluster) => {
+        this.clusterName = cluster.name;
+        this.cdr.markForCheck();
+      },
+      error: (error) => {
+        this.cdr.markForCheck();
+      },
     });
   }
 
   loadFrontends(): void {
     this.loading = true;
+    this.cdr.markForCheck();
     this.nodeService.listFrontends().subscribe({
       next: (frontends) => {
         this.source.load(frontends);
         this.loading = false;
+        this.cdr.markForCheck();
       },
       error: (error) => {
         this.toastrService.danger(ErrorHandler.handleClusterError(error), '加载失败');
         this.loading = false;
+        this.cdr.markForCheck();
       },
     });
   }

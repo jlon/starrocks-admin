@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
-import { Router } from '@angular/router';
-import { BehaviorSubject, Observable } from 'rxjs';
-import { tap, switchMap } from 'rxjs/operators';
+import { NavigationExtras, Router } from '@angular/router';
+import { BehaviorSubject, Observable, of } from 'rxjs';
+import { tap, switchMap, map, catchError } from 'rxjs/operators';
 import { ApiService } from './api.service';
 import { PermissionService } from './permission.service';
 
@@ -65,10 +65,15 @@ export class AuthService {
         localStorage.setItem('current_user', JSON.stringify(response.user));
         this.currentUserSubject.next(response.user);
       }),
-      // Initialize permissions after login
       switchMap((response) => {
-        this.permissionService.initPermissions().subscribe();
-        return [response];
+        return this.permissionService.initPermissions().pipe(
+          map((permissions) => {
+            return response;
+          }),
+          catchError((error) => {
+            return of(response);
+          })
+        );
       }),
     );
   }
@@ -77,13 +82,20 @@ export class AuthService {
     return this.api.post<User>('/auth/register', data);
   }
 
-  logout(): void {
+  logout(options?: { redirect?: boolean; returnUrl?: string }): void {
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem('current_user');
     this.currentUserSubject.next(null);
-    // Clear permissions on logout
     this.permissionService.clearPermissions();
-    this.router.navigateByUrl('/auth/login', { replaceUrl: true });
+    if (options?.redirect === false) {
+      return;
+    }
+    const commands = this.getLoginCommands();
+    const extras: NavigationExtras = { replaceUrl: true };
+    if (options?.returnUrl) {
+      extras.queryParams = { returnUrl: options.returnUrl };
+    }
+    this.router.navigate(commands, extras);
   }
 
   isAuthenticated(): boolean {
@@ -94,7 +106,6 @@ export class AuthService {
     return this.api.get<User>('/auth/me');
   }
 
-  // Update current user info in BehaviorSubject
   updateCurrentUser(user: User): void {
     localStorage.setItem('current_user', JSON.stringify(user));
     this.currentUserSubject.next(user);
@@ -115,7 +126,8 @@ export class AuthService {
     if (path.startsWith('/auth')) {
       return fallback;
     }
-    const segments = path.split('/').filter(Boolean);
+    const toProcess = path.replace(/(\/pages\/starrocks)(?:\/pages\/starrocks)+/g, '$1');
+    const segments = toProcess.split('/').filter(Boolean);
     if (!segments.length) {
       return fallback;
     }
@@ -129,44 +141,63 @@ export class AuthService {
       prefix.push(segments[index]);
       index += 1;
     }
-    let seenPagesStarrocks = false;
     const normalized: string[] = [];
-    for (; index < segments.length; index += 1) {
+    let seenMain = false;
+    while (index < segments.length) {
       const segment = segments[index];
-      const nextSegment = segments[index + 1];
-      if (segment === 'auth') {
-        return fallback;
-      }
-      if (segment === 'pages' && nextSegment === 'starrocks') {
-        if (seenPagesStarrocks) {
-          index += 1;
-          continue;
+      if (segment === 'pages' && segments[index + 1] === 'starrocks') {
+        if (!seenMain) {
+          normalized.push('pages', 'starrocks');
+          seenMain = true;
         }
-        seenPagesStarrocks = true;
-        normalized.push('pages', 'starrocks');
-        index += 1;
+        index += 2;
+        while (segments[index] === 'pages' && segments[index + 1] === 'starrocks') {
+          index += 2;
+        }
         continue;
       }
       normalized.push(segment);
+      index += 1;
     }
     const finalSegments = [...prefix, ...normalized];
     if (!finalSegments.length) {
       return fallback;
     }
     const normalizedPath = `/${finalSegments.join('/')}`;
-    if (normalizedPath.startsWith('/auth')) {
-      return fallback;
-    }
-    if (!queryPart) {
-      return normalizedPath;
-    }
-    const params = new URLSearchParams(queryPart);
-    params.delete('returnUrl');
-    const cleanedQuery = params.toString();
-    return cleanedQuery ? `${normalizedPath}?${cleanedQuery}` : normalizedPath;
+    return normalizedPath;
   }
 
   private getDefaultReturnUrl(): string {
+    const base = this.getBasePath();
+    return `${base}/pages/starrocks/dashboard`;
+  }
+
+  getLoginPath(): string {
+    const base = this.getBasePath();
+    return `${base}/auth/login`;
+  }
+
+  getLoginCommands(): string[] {
+    return ['/', ...this.getBaseSegments(), 'auth', 'login'];
+  }
+
+  /**
+   * DEPRECATED: Use normalizeReturnUrl directly with router.navigateByUrl
+   * This method is kept for backward compatibility but should not be used
+   */
+  getReturnUrlCommands(returnUrl: string): string[] {
+    console.warn('[AuthService.getReturnUrlCommands] DEPRECATED: Use router.navigateByUrl instead');
+    const withoutLeadingSlash = returnUrl.startsWith('/') ? returnUrl.slice(1) : returnUrl;
+    const rawSegments = withoutLeadingSlash.split('/').filter(Boolean);
+    return ['/', ...rawSegments];
+  }
+
+  private getBasePath(): string {
+    const segments = this.getBaseSegments();
+    return segments.length ? `/${segments.join('/')}` : '';
+  }
+
+  private getBaseSegments(): string[] {
     const path = window.location?.pathname || '';
     const segments = path.split('/').filter(Boolean);
     const prefix: string[] = [];
@@ -176,8 +207,7 @@ export class AuthService {
       }
       prefix.push(segment);
     }
-    const base = prefix.length ? `/${prefix.join('/')}` : '';
-    return `${base}/pages/starrocks/dashboard`;
+    return prefix;
   }
 }
 

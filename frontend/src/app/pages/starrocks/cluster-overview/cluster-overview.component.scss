@@ -17,32 +17,51 @@
     }
   }
 
-  .header-section {
+  .overview-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    gap: 1rem;
     flex-wrap: wrap;
 
-    .page-title {
-      margin: 0;
-      color: nb-theme(text-basic-color);
-      font-size: 1.75rem;
-      font-weight: 600;
+    &__info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
     }
 
-    .controls {
-      display: flex;
-      gap: 0.5rem;
+    &__title {
+      display: inline-flex;
       align-items: center;
-      flex-wrap: wrap;
+      gap: 0.75rem;
+      color: nb-theme(text-basic-color);
+      font-size: 1.125rem;
+      font-weight: 600;
 
-      nb-select {
-        min-width: 120px;
+      nb-badge {
+        text-transform: uppercase;
       }
+    }
 
-      nb-toggle {
-        margin-left: 0.5rem;
+    &__timestamp {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: nb-theme(text-hint-color);
+      font-size: 0.75rem;
+
+      nb-icon {
+        font-size: 1rem;
+      }
+    }
+
+    &__actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+
+      nb-action {
+        padding: 0;
       }
     }
   }
@@ -76,100 +95,85 @@
   }
 
   .metric-card {
-    transition: all 0.3s ease;
+    height: 100%;
+    transition: transform 0.2s ease;
     cursor: pointer;
 
-    // 所有卡片都有hover光晕和浮动效果
     &:hover {
       transform: translateY(-4px);
-      
-      nb-card {
-        box-shadow: 0 0 20px rgba(58, 123, 213, 0.3);
-      }
     }
 
-    nb-card {
-      margin-bottom: 0;
-      height: 100%;
-      transition: box-shadow 0.3s ease;
-
-      nb-card-body {
-        display: flex;
-        align-items: center;
-        padding: 0.875rem; // 减少padding (从1rem到0.875rem)
-        min-height: 90px; // 减少最小高度 (从100px到90px)
-      }
+    nb-card-body {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.875rem;
+      min-height: 90px;
     }
 
-    .card-icon {
-      margin-right: 0.75rem; // 减少图标与内容的间距
+    &__icon {
       flex-shrink: 0;
 
       nb-icon {
-        font-size: 1.875rem; // 进一步减小图标 (从2rem到1.875rem = 30px)
+        font-size: 1.875rem;
       }
     }
 
-    .card-content {
-      flex-grow: 1;
+    &__content {
+      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      min-width: 0; // 防止flex子元素溢出
+      gap: 0.25rem;
+      min-width: 0;
+    }
 
-      .card-title {
-        font-size: 0.7rem; // 更小的标题 (从12px到11px)
-        color: nb-theme(text-hint-color);
-        margin: 0 0 0.375rem 0; // 减少margin
-        text-transform: uppercase;
-        letter-spacing: 0.3px; // 减少字间距
-        font-weight: 500;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    &__title {
+      font-size: 0.75rem;
+      color: nb-theme(text-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &__value {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: nb-theme(text-basic-color);
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      margin: 0;
+      line-height: 1.1;
+    }
+
+    &__unit {
+      font-size: 0.875rem;
+      color: nb-theme(text-hint-color);
+      font-weight: 400;
+    }
+
+    &__trend {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      margin-top: auto;
+
+      .trend-success {
+        color: nb-theme(color-success-default);
       }
 
-      .card-value {
-        font-size: 1.5rem; // 轻微减小数值大小 (从26px到24px)
-        font-weight: 600;
-        margin: 0 0 0.125rem 0; // 减少margin
-        color: nb-theme(text-basic-color);
-        display: flex;
-        align-items: baseline;
-        flex-wrap: wrap;
-        line-height: 1.1; // 更紧凑的行高
-
-        .card-unit {
-          font-size: 0.875rem; // 14px
-          font-weight: normal;
-          margin-left: 0.25rem;
-          color: nb-theme(text-hint-color);
-          white-space: nowrap;
-        }
+      .trend-danger {
+        color: nb-theme(color-danger-default);
       }
 
-      .card-trend {
-        display: flex;
-        align-items: center;
-        font-size: 0.75rem; // 12px
-        margin-top: auto;
-
-        nb-icon {
-          font-size: 0.875rem; // 14px
-          margin-right: 0.25rem;
-        }
-
-        .trend-success {
-          color: nb-theme(color-success-default);
-        }
-
-        .trend-danger {
-          color: nb-theme(color-danger-default);
-        }
-
-        .trend-info {
-          color: nb-theme(color-info-default);
-        }
+      .trend-info {
+        color: nb-theme(color-info-default);
       }
     }
   }
@@ -183,7 +187,7 @@
     margin-left: -0.5rem;
     margin-right: -0.5rem;
     
-    > [class*="col-"] {
+    > [class*='col-'] {
       padding-left: 0.5rem;
       padding-right: 0.5rem;
     }
@@ -230,9 +234,8 @@
   }
 
   .no-data {
+    display: block;
     text-align: center;
-    color: nb-theme(text-hint-color);
-    padding: 2rem 0;
     font-size: 0.875rem;
   }
 
@@ -264,6 +267,24 @@
         font-size: 0.875rem;
         color: nb-theme(text-basic-color);
       }
+    }
+  }
+
+  .stats-columns {
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+
+    > [class*='col-'] {
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+  }
+
+  .stats-column {
+    display: block;
+
+    > * + * {
+      margin-top: 0.75rem;
     }
   }
 
@@ -387,8 +408,9 @@
   .top-tables-table,
   .slow-queries-table {
     width: 100%;
+    table-layout: fixed; // Fixed layout for consistent column widths
     border-collapse: collapse;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
 
     thead {
       tr {
@@ -396,12 +418,26 @@
 
         th {
           padding: 0.75rem 0.5rem;
-          text-align: left;
           color: nb-theme(text-hint-color);
           font-weight: 600;
           font-size: 0.75rem;
           text-transform: uppercase;
           letter-spacing: 0.5px;
+
+          &.cell-name {
+            width: 50%;
+            text-align: left;
+          }
+
+          &.cell-name-wide {
+            width: 70%;
+            text-align: left;
+          }
+
+          &.cell-metric {
+            width: 25%;
+            text-align: right;
+          }
         }
       }
     }
@@ -423,6 +459,15 @@
           padding: 0.75rem 0.5rem;
           color: nb-theme(text-basic-color);
 
+            &.cell-break {
+              word-break: normal;
+              overflow-wrap: anywhere;
+            }
+
+            &.cell-nowrap {
+              white-space: nowrap;
+            }
+
           &.query-preview {
             max-width: 300px;
             white-space: nowrap;
@@ -433,6 +478,28 @@
           }
         }
       }
+    }
+  }
+
+  // Compaction table specific column widths (5 columns: 3 text + 2 metrics)
+  .top-tables-table {
+    th.compaction-col-name {
+      width: 26%;
+      text-align: left;
+    }
+
+    th.compaction-col-metric {
+      width: 11%;
+      text-align: right;
+    }
+
+    td.compaction-cell-text {
+      max-width: 0; // Required for text-overflow to work in table cells
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap !important; // Override cell-break's overflow-wrap
+      word-break: normal;
+      overflow-wrap: normal; // Override cell-break's overflow-wrap: anywhere
     }
   }
 
@@ -467,13 +534,14 @@
       grid-template-columns: repeat(2, 1fr);
     }
 
-    .header-section {
+    .overview-toolbar {
       flex-direction: column;
       align-items: flex-start;
       gap: 1rem;
 
-      .controls {
+      &__actions {
         width: 100%;
+        justify-content: flex-start;
       }
     }
 
@@ -516,6 +584,10 @@
 
 .text-info {
   color: nb-theme(color-info-default);
+}
+
+.text-right {
+  text-align: right;
 }
 
 // ==================== Compaction 监控样式 ====================

@@ -28,8 +28,8 @@ export class LoginComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    // Get return URL from route parameters or default to dashboard
-    this.returnUrl = this.authService.normalizeReturnUrl(this.route.snapshot.queryParams['returnUrl']);
+    const rawReturnUrl = this.route.snapshot.queryParams['returnUrl'];
+    this.returnUrl = this.authService.normalizeReturnUrl(rawReturnUrl);
     
     // Load saved username if remember me was checked
     const savedUsername = localStorage.getItem('remembered_username');
@@ -38,7 +38,7 @@ export class LoginComponent implements OnInit {
       this.rememberMe = true;
     }
     
-    // If already logged in, redirect to return URL
+    // If already logged in, redirect to return URL using absolute navigation
     if (this.authService.isAuthenticated()) {
       this.router.navigateByUrl(this.returnUrl, { replaceUrl: true });
     }
@@ -68,7 +68,7 @@ export class LoginComponent implements OnInit {
         
         // Show single toast notification for login success
         this.toastrService.success('Welcome back!', 'Login Successful');
-        // Navigate to return URL or dashboard after short delay
+        // Navigate to return URL using absolute navigation to prevent path duplication
         setTimeout(() => {
           this.router.navigateByUrl(this.returnUrl, { replaceUrl: true });
         }, 500);

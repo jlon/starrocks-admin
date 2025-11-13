@@ -46,15 +46,8 @@ export class JwtInterceptor implements HttpInterceptor {
             if (isAuthError) {
               // Token is invalid/expired - clear auth and redirect to login
               this.toastrService.danger('登录已过期，请重新登录', '认证失败');
-              this.authService.logout();
-              // Don't redirect if already on login page
-              if (!this.router.url.includes('/auth/login')) {
-                const safeUrl = this.authService.normalizeReturnUrl(this.router.url);
-                this.router.navigate(['/auth/login'], { 
-                  queryParams: { returnUrl: safeUrl },
-                  replaceUrl: true, 
-                });
-              }
+              const safeUrl = this.authService.normalizeReturnUrl(this.router.url);
+              this.authService.logout({ returnUrl: safeUrl });
             } else {
               // Permission denied - show error message but don't logout
               this.toastrService.danger(errorMessage, '无权限');

@@ -6,7 +6,7 @@ import { NbToastrService, NbThemeService } from '@nebular/theme';
 import { CountUp } from 'countup.js';
 import {
   OverviewService,
-  ClusterOverview,
+  ExtendedClusterOverview,
   HealthCard,
   PerformanceTrends,
   ResourceTrends,
@@ -26,7 +26,7 @@ import { AuthService } from '../../../@core/data/auth.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewInit {
-  overview: ClusterOverview | null = null;
+  overview: ExtendedClusterOverview | null = null;
   healthCards: HealthCard[] = [];
   performanceTrends: PerformanceTrends | null = null;
   resourceTrends: ResourceTrends | null = null;
@@ -182,6 +182,7 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
     this.overviewService.getExtendedClusterOverview(this.timeRange)
       .subscribe({
         next: (overview) => {
+          this.overview = overview;
           // Transform data using service methods
           this.healthCards = this.overviewService.transformToHealthCards(overview);
           this.performanceTrends = overview.performance_trends;

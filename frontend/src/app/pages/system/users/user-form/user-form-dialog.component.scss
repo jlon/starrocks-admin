@@ -86,7 +86,7 @@
         // Ensure select button has same padding as input with prefix icon
         // nbInput with prefix: padding-left is 2.75rem (2.5rem icon + 0.25rem gap)
         button.select-button,
-        button[class*="button"],
+        button[class*='button'],
         button {
           padding-left: 2.75rem !important;
         }

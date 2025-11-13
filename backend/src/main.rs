@@ -642,7 +642,7 @@ async fn serve_static_files(uri: Uri) -> impl IntoResponse {
         // Extract filename from path (handles cases like /starrocks-admin/pages/starrocks/runtime.js)
         // Find the last segment that looks like a filename (contains a dot)
         path.split('/')
-            .last()
+            .next_back()
             .filter(|s| s.contains('.'))
             .map(|s| s.to_string())
             .unwrap_or_else(|| path.to_string())

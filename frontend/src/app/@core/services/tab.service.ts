@@ -34,48 +34,41 @@ export class TabService {
    */
   addTab(tab: Omit<TabItem, 'active'>, navigate: boolean = true): void {
     const currentTabs = this.tabsSubject.value;
-    const normalizedNewUrl = normalizeUrl(tab.url);
-    const existingTab = currentTabs.find(t => {
-      const normalizedExistingUrl = normalizeUrl(t.url);
-      return normalizedExistingUrl === normalizedNewUrl;
-    });
-
+    // Clean up any duplicated /pages/starrocks segments before processing
+    const cleanedTab = {
+      ...tab,
+      url: tab.url.replace(/(\/pages\/starrocks)(?:\/pages\/starrocks)+/g, '$1')
+    };
+    const cleanedUrl = cleanedTab.url;
+    
+    // Check if tab already exists
+    const existingTab = currentTabs.find(t => t.url === cleanedUrl);
+    
     if (existingTab) {
-      const updatedTabs = currentTabs.map(t => {
-        if (t.id === existingTab.id) {
-          return {
-            ...t,
-            title: tab.title, // 更新标题
-            active: true
-          };
-        }
-        return { ...t, active: false };
-      });
-      
-      this.tabsSubject.next(updatedTabs);
-      this.saveTabs();
-      
-      if (navigate && this.router.url !== tab.url) {
-        const { path, queryParams } = this.parseUrl(tab.url);
-        this.router.navigate(path, { queryParams });
-      }
-    } else {
-      const newTab: TabItem = {
-        ...tab,
-        active: true
-      };
-
-      const updatedTabs = currentTabs.map(t => ({ ...t, active: false }));
-      
-      updatedTabs.push(newTab);
-      
-      this.tabsSubject.next(updatedTabs);
-      this.saveTabs();
-      
-        if (navigate) {
-          const { path, queryParams } = this.parseUrl(tab.url);
-          this.router.navigate(path, { queryParams });
-        }
+      // Activate existing tab
+      this.activateTab(existingTab.id, navigate);
+      return;
+    }
+    
+    // Create new tab
+    const newTab: TabItem = {
+      ...cleanedTab,
+      active: true
+    };
+    
+    // Deactivate all other tabs
+    const updatedTabs = currentTabs.map(t => ({ ...t, active: false }));
+    
+    // Add new tab
+    updatedTabs.push(newTab);
+    
+    // Update tabs
+    this.tabsSubject.next(updatedTabs);
+    this.saveTabs();
+    
+    // Navigate if needed
+    if (navigate) {
+      this.router.navigateByUrl(cleanedUrl);
     }
   }
 
@@ -84,7 +77,7 @@ export class TabService {
    */
   closeTab(tabId: string): void {
     const currentTabs = this.tabsSubject.value;
-    const tabToClose = currentTabs.find(t => t.id === tabId);
+    const tabToClose = currentTabs.find(tab => tab.id === tabId);
     
     if (!tabToClose || !tabToClose.closable) {
       return; // 不能关闭固定Tab
@@ -100,7 +93,7 @@ export class TabService {
       lastTab.active = true;
       
       // 关闭Tab时导航到新激活的Tab（这是需要刷新的场景）
-      this.router.navigate([lastTab.url]);
+      this.router.navigateByUrl(lastTab.url);
     }
     
     this.tabsSubject.next(updatedTabs);
@@ -133,7 +126,7 @@ export class TabService {
     if (!wasActive) {
       const targetTab = updatedTabs.find(tab => tab.id === tabId);
       if (targetTab) {
-        this.router.navigate([targetTab.url]);
+        this.router.navigateByUrl(targetTab.url);
       }
     }
   }
@@ -164,7 +157,7 @@ export class TabService {
     if (!wasActive) {
       const targetTab = updatedTabs.find(tab => tab.id === tabId);
       if (targetTab) {
-        this.router.navigate([targetTab.url]);
+        this.router.navigateByUrl(targetTab.url);
       }
     }
   }
@@ -191,7 +184,7 @@ export class TabService {
     if (!wasActive) {
       const activeTab = updatedTabs.find(tab => tab.id === tabId) || updatedTabs.find(tab => tab.active);
       if (activeTab) {
-        this.router.navigate([activeTab.url]);
+        this.router.navigateByUrl(activeTab.url);
       }
     }
   }
@@ -312,7 +305,6 @@ export class TabService {
     }
   }
 
-
   /**
    * 保存Tab状态到localStorage
    */
@@ -338,11 +330,19 @@ export class TabService {
     try {
       const savedTabs = localStorage.getItem(this.STORAGE_KEY);
       if (savedTabs) {
-        const tabs: TabItem[] = JSON.parse(savedTabs).map((tab: any) => ({
-          ...tab,
-          active: tab.active || false,  // Restore active state from localStorage
-          icon: tab.icon  // Restore icon
-        }));
+        const tabs: TabItem[] = JSON.parse(savedTabs).map((tab: any) => {
+          // Clean up any duplicated /pages/starrocks segments in saved URLs
+          let cleanUrl = tab.url;
+          if (cleanUrl && typeof cleanUrl === 'string') {
+            cleanUrl = cleanUrl.replace(/(\/pages\/starrocks)(?:\/pages\/starrocks)+/g, '$1');
+          }
+          return {
+            ...tab,
+            url: cleanUrl,
+            active: tab.active || false,
+            icon: tab.icon
+          };
+        });
         this.tabsSubject.next(tabs);
       }
     } catch (error) {
@@ -356,7 +356,7 @@ export class TabService {
   private initializeDefaultTab(): void {
     const currentTabs = this.tabsSubject.value;
     
-    // 检查是否已有首页Tab
+    // Check if already has home tab
     const hasHomeTab = currentTabs.some(tab => tab.url === '/pages/starrocks/dashboard');
     
     if (!hasHomeTab) {

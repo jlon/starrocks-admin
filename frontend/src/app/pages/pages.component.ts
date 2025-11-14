@@ -175,6 +175,7 @@ export class PagesComponent implements OnInit {
     // 处理StarRocks相关路由
     if (urlSegments.includes('starrocks')) {
       const lastSegment = urlSegments[urlSegments.length - 1];
+      const prevSegment = urlSegments[urlSegments.length - 2] || '';
       
       // 特殊处理 system 路由，从查询参数中提取功能名称
       if (lastSegment === 'system' && queryString) {
@@ -219,6 +220,11 @@ export class PagesComponent implements OnInit {
         }
       }
       
+      // 当路径为 /pages/starrocks/clusters/:id 时，避免使用数字作为标题
+      if (prevSegment === 'clusters' && /^\d+$/.test(lastSegment)) {
+        return '集群详情';
+      }
+
       // 映射URL段到中文标题
       const titleMap: { [key: string]: string } = {
         'dashboard': '集群列表',

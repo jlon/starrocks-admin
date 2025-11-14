@@ -192,8 +192,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.toastrService.warning('您没有查看 Backend 节点的权限', '提示');
       return;
     }
-    const commands = clusterId ? ['/pages/starrocks/backends', clusterId] : ['/pages/starrocks/backends'];
-    this.router.navigate(commands);
+    // Backends 路由不接收 ID，组件从 ActiveCluster 获取上下文
+    this.router.navigate(['/pages/starrocks/backends']);
   }
 
   navigateToFrontends(clusterId?: number): void {
@@ -201,8 +201,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.toastrService.warning('您没有查看 Frontend 节点的权限', '提示');
       return;
     }
-    const commands = clusterId ? ['/pages/starrocks/frontends', clusterId] : ['/pages/starrocks/frontends'];
-    this.router.navigate(commands);
+    // Frontends 路由不接收 ID，组件从 ActiveCluster 获取上下文
+    this.router.navigate(['/pages/starrocks/frontends']);
   }
 
   navigateToQueries(clusterId?: number): void {
@@ -210,8 +210,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.toastrService.warning('您没有查看查询信息的权限', '提示');
       return;
     }
-    const commands = clusterId ? ['/pages/starrocks/queries/execution', clusterId] : ['/pages/starrocks/queries/execution'];
-    this.router.navigate(commands);
+    // 查询执行页不接收 ID，组件内部会使用 ActiveCluster 或自己解析
+    this.router.navigate(['/pages/starrocks/queries/execution']);
   }
 
   addCluster(): void {

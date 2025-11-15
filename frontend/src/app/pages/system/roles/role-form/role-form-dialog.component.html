@@ -6,10 +6,10 @@
           <div class="dialog-header__icon" [ngClass]="mode === 'create' ? 'icon--create' : 'icon--edit'">
             <nb-icon [icon]="mode === 'create' ? 'plus-outline' : 'edit-2-outline'"></nb-icon>
           </div>
-        <h5>{{ mode === 'create' ? '创建角色' : '编辑角色' }}</h5>
+          <h5>{{ mode === 'create' ? ('roles.create_role' | translate) : ('roles.edit_role' | translate) }}</h5>
         </div>
         <p class="dialog-subtitle">
-          {{ mode === 'create' ? '配置角色基础信息与权限范围' : '调整角色信息与权限映射' }}
+          {{ mode === 'create' ? ('roles.create_role_subtitle' | translate) : ('roles.edit_role_subtitle' | translate) }}
         </p>
       </div>
       <button nbButton ghost status="basic" (click)="cancel()" class="close-btn">
@@ -25,18 +25,18 @@
         <div class="basic-info-section">
           <label class="section-label">
             <nb-icon icon="settings-2-outline"></nb-icon>
-            基本信息
+            {{ 'roles.basic_info' | translate }}
           </label>
 
           <!-- Organization Selection (Super Admin Only) -->
           <div class="form-group" *ngIf="isSuperAdmin">
-            <label class="label" for="input-organization">所属组织</label>
+            <label class="label" for="input-organization">{{ 'roles.organization' | translate }}</label>
             <nb-form-field>
               <nb-icon nbPrefix icon="home-outline"></nb-icon>
               <nb-select
                 formControlName="organizationId"
                 id="input-organization"
-                placeholder="请选择组织"
+                [placeholder]="'roles.select_organization' | translate"
                 fullWidth
               >
                 <nb-option *ngFor="let org of organizations" [value]="org.id">
@@ -49,7 +49,7 @@
 
           <!-- Organization Display (Org Admin) -->
           <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
-            <label class="label">所属组织</label>
+            <label class="label">{{ 'roles.organization' | translate }}</label>
             <nb-form-field>
               <nb-icon nbPrefix icon="home-outline"></nb-icon>
               <input
@@ -60,11 +60,11 @@
                 disabled
               />
             </nb-form-field>
-            <p class="caption status-hint">组织管理员只能在本组织内创建角色</p>
+            <p class="caption status-hint">{{ 'roles.org_admin_hint' | translate }}</p>
           </div>
 
           <div class="form-group">
-            <label class="label" for="input-code">角色代码</label>
+            <label class="label" for="input-code">{{ 'roles.role_code' | translate }}</label>
             <nb-form-field>
               <nb-icon nbPrefix icon="hash-outline"></nb-icon>
               <input
@@ -72,7 +72,7 @@
                 fullWidth
                 id="input-code"
                 formControlName="code"
-                placeholder="请输入角色代码"
+                [placeholder]="'roles.role_code_placeholder' | translate"
                 [readonly]="mode === 'edit'"
                 maxlength="50"
               />
@@ -80,7 +80,7 @@
           </div>
 
           <div class="form-group">
-            <label class="label" for="input-name">角色名称</label>
+            <label class="label" for="input-name">{{ 'roles.role_name' | translate }}</label>
             <nb-form-field>
               <nb-icon nbPrefix icon="shield-outline"></nb-icon>
               <input
@@ -88,21 +88,21 @@
                 fullWidth
                 id="input-name"
                 formControlName="name"
-                placeholder="请输入角色名称"
+                [placeholder]="'roles.role_name_placeholder' | translate"
                 maxlength="50"
               />
             </nb-form-field>
           </div>
 
           <div class="form-group form-group--grow">
-            <label class="label" for="input-description">角色描述</label>
+            <label class="label" for="input-description">{{ 'roles.role_description' | translate }}</label>
             <nb-form-field>
               <textarea
                 nbInput
                 fullWidth
                 id="input-description"
                 formControlName="description"
-                placeholder="请输入角色描述（可选）"
+                [placeholder]="'roles.role_description_placeholder' | translate"
                 rows="3"
                 maxlength="200"
               ></textarea>
@@ -114,7 +114,7 @@
         <div class="permission-section">
           <label class="section-label">
             <nb-icon icon="lock-outline"></nb-icon>
-            菜单权限
+            {{ 'roles.menu_permissions' | translate }}
           </label>
           <div class="permission-tree-container">
             <!-- Simple tree structure (inspired by query-execution) -->
@@ -128,7 +128,7 @@
               <ng-template #emptyTree>
                 <div class="empty-tree">
                   <nb-icon icon="inbox-outline"></nb-icon>
-                  <span>暂无可用权限</span>
+                  <span>{{ 'roles.no_permissions' | translate }}</span>
                 </div>
               </ng-template>
             </div>
@@ -184,8 +184,9 @@
 
   <nb-card-footer>
     <div class="footer-actions">
+      <button nbButton ghost status="basic" (click)="cancel()">{{ 'common.cancel' | translate }}</button>
       <button nbButton status="primary" (click)="submit()" [disabled]="form.invalid">
-        保存
+        {{ 'common.save' | translate }}
       </button>
     </div>
   </nb-card-footer>

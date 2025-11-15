@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRe
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { TabService, TabItem } from '../../../@core/services/tab.service';
+import { TranslateService } from '@ngx-translate/core';
 
 type TabContextMenuAction = 'refresh' | 'close-left' | 'close-right' | 'close-others' | 'toggle-pin';
 
@@ -29,8 +30,17 @@ export class TabBarComponent implements OnInit, OnDestroy {
 
   constructor(
     private tabService: TabService,
-    private cdr: ChangeDetectorRef
-  ) {}
+    private cdr: ChangeDetectorRef,
+    private translate: TranslateService
+  ) {
+    // Update menu labels when language changes
+    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      if (this.contextMenuVisible && this.contextMenuTarget) {
+        this.contextMenuItems = this.buildContextMenuItems(this.contextMenuTarget);
+        this.cdr.markForCheck();
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.tabService.tabs$
@@ -128,30 +138,30 @@ export class TabBarComponent implements OnInit, OnDestroy {
 
     return [
       {
-        label: '刷新',
+        label: this.translate.instant('tabs.refresh'),
         icon: 'refresh-outline',
         action: 'refresh',
       },
       {
-        label: '关闭左侧',
+        label: this.translate.instant('tabs.close_left'),
         icon: 'arrow-back-outline',
         action: 'close-left',
         disabled: !hasLeftClosable,
       },
       {
-        label: '关闭右侧',
+        label: this.translate.instant('tabs.close_right'),
         icon: 'arrow-forward-outline',
         action: 'close-right',
         disabled: !hasRightClosable,
       },
       {
-        label: '关闭其他',
+        label: this.translate.instant('tabs.close_others'),
         icon: 'minus-circle-outline',
         action: 'close-others',
         disabled: !hasOtherClosable,
       },
       {
-        label: isPinned ? '取消固定' : '固定当前',
+        label: isPinned ? this.translate.instant('tabs.unpin') : this.translate.instant('tabs.pin'),
         icon: isPinned ? 'unlock-outline' : 'lock-outline',
         action: 'toggle-pin',
       },

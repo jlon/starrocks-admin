@@ -1,13 +1,14 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TranslateModule } from '@ngx-translate/core';
 import { 
   NbCardModule, 
   NbInputModule, 
   NbButtonModule, 
-  NbAlertModule, 
+  NbIconModule, 
   NbSpinnerModule,
-  NbIconModule,
+  NbAlertModule,
   NbTooltipModule,
   NbRadioModule
 } from '@nebular/theme';
@@ -22,6 +23,7 @@ import { RouterModule } from '@angular/router';
   imports: [
     CommonModule,
     FormsModule,
+    TranslateModule,
     NbCardModule,
     NbInputModule,
     NbButtonModule,

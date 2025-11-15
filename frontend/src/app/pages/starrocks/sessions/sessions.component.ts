@@ -12,6 +12,7 @@ import { MetricThresholds, renderMetricBadge } from '../../../@core/utils/metric
 import { renderLongText } from '../../../@core/utils/text-truncate';
 import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
 import { AuthService } from '../../../@core/data/auth.service';
+import { TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'ngx-sessions',
@@ -28,12 +29,12 @@ export class SessionsComponent implements OnInit, OnDestroy {
   refreshInterval: any;
   selectedRefreshInterval: number | 'off' = 'off'; // Default: off (Grafana style)
   refreshIntervalOptions = [
-    { value: 'off', label: '关闭' },
-    { value: 3, label: '3秒' },
-    { value: 5, label: '5秒' },
-    { value: 10, label: '10秒' },
-    { value: 30, label: '30秒' },
-    { value: 60, label: '1分钟' },
+    { value: 'off', label: 'overview.refresh_off' },
+    { value: 3, label: 'sessions.refresh_3s' },
+    { value: 5, label: 'sessions.refresh_5s' },
+    { value: 10, label: 'sessions.refresh_10s' },
+    { value: 30, label: 'sessions.refresh_30s' },
+    { value: 60, label: 'sessions.refresh_1m' },
   ];
   private destroy$ = new Subject<void>();
   // Session duration thresholds: 1min(60s)=warn, 5min(300s)=danger
@@ -122,7 +123,11 @@ export class SessionsComponent implements OnInit, OnDestroy {
     private clusterContext: ClusterContextService,
     private nodeService: NodeService,
     private authService: AuthService,
+    private translate: TranslateService
   ) {
+    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.updateTableSettings();
+    });
     // Try to get clusterId from route first
     // Get clusterId from ClusterContextService
     this.clusterId = this.clusterContext.getActiveClusterId() || 0;
@@ -484,5 +489,59 @@ export class SessionsComponent implements OnInit, OnDestroy {
       });
     });
   }
-}
 
+  private updateTableSettings(): void {
+    this.settings = {
+      ...this.settings,
+      noDataMessage: this.translate.instant('sessions.no_data'),
+      columns: {
+        id: {
+          title: this.translate.instant('sessions.session_id'),
+          type: 'string',
+          width: '10%',
+        },
+        user: {
+          title: this.translate.instant('sessions.user'),
+          type: 'string',
+          width: '10%',
+        },
+        host: {
+          title: this.translate.instant('sessions.host'),
+          type: 'string',
+          width: '15%',
+        },
+        db: {
+          title: this.translate.instant('sessions.database'),
+          type: 'string',
+          width: '12%',
+          valuePrepareFunction: (value: any) => value || 'N/A',
+        },
+        command: {
+          title: this.translate.instant('sessions.command'),
+          type: 'string',
+          width: '10%',
+          valuePrepareFunction: (value: string, row: Session) => this.renderCommandBadge(value, row),
+        },
+        time: {
+          title: this.translate.instant('sessions.time'),
+          type: 'html',
+          width: '8%',
+          valuePrepareFunction: (value: string) => renderMetricBadge(value, this.sessionDurationThresholds),
+        },
+        state: {
+          title: this.translate.instant('sessions.state'),
+          type: 'string',
+          width: '10%',
+          valuePrepareFunction: (value: string) => this.renderStateBadge(value),
+        },
+        info: {
+          title: this.translate.instant('sessions.info'),
+          type: 'html',
+          width: '25%',
+          valuePrepareFunction: (value: string) => renderLongText(value, 60),
+        },
+      },
+    };
+    this.source.refresh();
+  }
+}

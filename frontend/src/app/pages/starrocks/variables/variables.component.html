@@ -4,16 +4,16 @@
       <nb-card-header>
         <div class="d-flex justify-content-between align-items-center">
           <div class="d-flex align-items-center gap-2">
-            <h5 class="mb-0">变量管理</h5>
+            <h5 class="mb-0">{{ 'variables.title' | translate }}</h5>
             <span class="text-hint">|</span>
             <span class="text-hint" style="font-size: 13px;">
-              集群: <strong>{{ activeCluster?.name || '未选择' }}</strong>
+              {{ 'common.cluster_label' | translate }} <strong>{{ activeCluster?.name || ('common.not_selected' | translate) }}</strong>
             </span>
           </div>
           <div>
             <button nbButton status="primary" size="small" (click)="refresh()" [disabled]="loading || !clusterId">
               <nb-icon icon="refresh-outline"></nb-icon>
-              刷新
+              {{ 'common.refresh' | translate }}
             </button>
           </div>
         </div>
@@ -23,13 +23,13 @@
         <div class="row mb-3">
           <div class="col-md-6">
             <div class="form-group">
-              <label for="search" class="label">搜索变量</label>
+              <label for="search" class="label">{{ 'variables.search_placeholder' | translate }}</label>
               <input
                 type="text"
                 nbInput
                 fullWidth
                 id="search"
-                placeholder="输入变量名..."
+                [placeholder]="'variables.search_placeholder' | translate"
                 [(ngModel)]="searchText"
                 (keyup.enter)="onSearch()"
               />
@@ -37,10 +37,10 @@
           </div>
           <div class="col-md-3">
             <div class="form-group">
-              <label class="label">变量类型</label>
+              <label class="label">{{ 'variables.type_label' | translate }}</label>
               <nb-select fullWidth [(selected)]="variableType" (selectedChange)="onTypeChange()">
-                <nb-option value="global">全局变量</nb-option>
-                <nb-option value="session">会话变量</nb-option>
+                <nb-option value="global">{{ 'variables.type_all' | translate }}</nb-option>
+                <nb-option value="session">{{ 'sessions.no_data' | translate }}</nb-option>
               </nb-select>
             </div>
           </div>
@@ -49,7 +49,7 @@
               <label class="label">&nbsp;</label>
               <button nbButton status="primary" fullWidth (click)="onSearch()" [disabled]="loading || !clusterId">
                 <nb-icon icon="search-outline"></nb-icon>
-                搜索
+                {{ 'common.search' | translate }}
               </button>
             </div>
           </div>
@@ -64,7 +64,7 @@
           <nb-alert status="info">
             <p class="mb-0">
               <nb-icon icon="info-outline"></nb-icon>
-              No variables found. Try adjusting your search criteria.
+              {{ 'variables.no_variables' | translate }}
             </p>
           </nb-alert>
         </div>

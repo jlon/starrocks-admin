@@ -4,12 +4,12 @@
       <nb-card-header>
         <div class="d-flex align-items-center justify-content-between">
           <div>
-            <h5>用户设置</h5>
-            <small class="text-hint">修改您的个人信息和密码</small>
+            <h5>{{ 'user_settings.title' | translate }}</h5>
+            <small class="text-hint">{{ 'user_settings.subtitle' | translate }}</small>
           </div>
           <button nbButton status="basic" size="small" (click)="onCancel()">
             <nb-icon icon="arrow-back-outline"></nb-icon>
-            返回
+            {{ 'user_settings.back' | translate }}
           </button>
         </div>
       </nb-card-header>
@@ -31,7 +31,7 @@
           <div class="row">
             <div class="col-md-4">
               <div class="form-group">
-                <label class="label">头像设置</label>
+                <label class="label">{{ 'user_settings.avatar_label' | translate }}</label>
                 
                 <!-- Current Avatar Preview -->
                 <div class="avatar-preview-section">
@@ -63,7 +63,7 @@
                     size="small"
                     (click)="generateAvatarOptions()">
                     <nb-icon icon="refresh-outline"></nb-icon>
-                    换一批
+                    {{ 'user_settings.regenerate' | translate }}
                   </button>
                 </div>
               </div>
@@ -73,7 +73,7 @@
             <div class="col-md-8">
               <!-- Username -->
               <div class="form-group">
-                <label class="label" for="input-username">用户名</label>
+                <label class="label" for="input-username">{{ 'user_settings.username_label' | translate }}</label>
                 <input 
                   nbInput
                   fullWidth
@@ -81,23 +81,23 @@
                   #username="ngModel"
                   id="input-username"
                   name="username"
-                  placeholder="请输入用户名"
+                  [placeholder]="'user_settings.username_placeholder' | translate"
                   [status]="username.dirty ? (username.invalid ? 'danger' : 'success') : 'basic'"
                   [required]="true"
                   [minlength]="3">
                 <ng-container *ngIf="username.invalid && username.touched">
                   <p class="caption status-danger" *ngIf="username.errors?.['required']">
-                    用户名不能为空
+                    {{ 'user_settings.username_required' | translate }}
                   </p>
                   <p class="caption status-danger" *ngIf="username.errors?.['minlength']">
-                    用户名至少需要3个字符
+                    {{ 'user_settings.username_minlength' | translate }}
                   </p>
                 </ng-container>
               </div>
 
               <!-- Email -->
               <div class="form-group">
-                <label class="label" for="input-email">邮箱地址</label>
+                <label class="label" for="input-email">{{ 'user_settings.email_label' | translate }}</label>
                 <input 
                   nbInput
                   fullWidth
@@ -106,16 +106,16 @@
                   type="email"
                   id="input-email"
                   name="email"
-                  placeholder="请输入邮箱地址"
+                  [placeholder]="'user_settings.email_placeholder' | translate"
                   [status]="email.dirty ? (email.invalid ? 'danger' : 'success') : 'basic'"
                   [required]="true"
                   pattern="^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}$">
                 <ng-container *ngIf="email.invalid && email.touched">
                   <p class="caption status-danger" *ngIf="email.errors?.['required']">
-                    邮箱不能为空
+                    {{ 'user_settings.email_required' | translate }}
                   </p>
                   <p class="caption status-danger" *ngIf="email.errors?.['pattern']">
-                    请输入有效的邮箱地址
+                    {{ 'user_settings.email_invalid' | translate }}
                   </p>
                 </ng-container>
               </div>
@@ -128,7 +128,7 @@
               <nb-card>
                 <nb-card-header>
                   <div class="d-flex align-items-center justify-content-between">
-                    <span>修改密码</span>
+                    <span>{{ 'user_settings.change_password' | translate }}</span>
                     <button 
                       nbButton 
                       type="button"
@@ -136,7 +136,7 @@
                       size="small" 
                       (click)="togglePasswordFields()">
                       <nb-icon [icon]="showPasswordFields ? 'eye-off-outline' : 'edit-outline'"></nb-icon>
-                      {{ showPasswordFields ? '取消修改' : '修改密码' }}
+                      {{ showPasswordFields ? ('user_settings.cancel_change' | translate) : ('user_settings.change_password' | translate) }}
                     </button>
                   </div>
                 </nb-card-header>
@@ -146,7 +146,7 @@
                     <div class="col-md-12">
                       <!-- Current Password -->
                       <div class="form-group">
-                        <label class="label" for="input-current-password">当前密码</label>
+                        <label class="label" for="input-current-password">{{ 'user_settings.current_password' | translate }}</label>
                         <input 
                           nbInput
                           fullWidth
@@ -155,7 +155,7 @@
                           type="password"
                           id="input-current-password"
                           name="currentPassword"
-                          placeholder="请输入当前密码"
+                          [placeholder]="'user_settings.current_password_placeholder' | translate"
                           [status]="currentPassword.dirty ? (currentPassword.invalid ? 'danger' : 'success') : 'basic'">
                       </div>
                     </div>
@@ -163,7 +163,7 @@
                     <div class="col-md-6">
                       <!-- New Password -->
                       <div class="form-group">
-                        <label class="label" for="input-new-password">新密码</label>
+                        <label class="label" for="input-new-password">{{ 'user_settings.new_password' | translate }}</label>
                         <input 
                           nbInput
                           fullWidth
@@ -172,12 +172,12 @@
                           type="password"
                           id="input-new-password"
                           name="newPassword"
-                          placeholder="请输入新密码（至少6个字符）"
+                          [placeholder]="'user_settings.new_password_placeholder' | translate"
                           [status]="newPassword.dirty ? (newPassword.invalid ? 'danger' : 'success') : 'basic'"
                           [minlength]="6">
                         <ng-container *ngIf="newPassword.invalid && newPassword.touched">
                           <p class="caption status-danger" *ngIf="newPassword.errors?.['minlength']">
-                            新密码至少需要6个字符
+                            {{ 'user_settings.new_password_minlength' | translate }}
                           </p>
                         </ng-container>
                       </div>
@@ -186,7 +186,7 @@
                     <div class="col-md-6">
                       <!-- Confirm Password -->
                       <div class="form-group">
-                        <label class="label" for="input-confirm-password">确认新密码</label>
+                        <label class="label" for="input-confirm-password">{{ 'user_settings.confirm_password' | translate }}</label>
                         <input 
                           nbInput
                           fullWidth
@@ -195,11 +195,11 @@
                           type="password"
                           id="input-confirm-password"
                           name="confirmPassword"
-                          placeholder="请再次输入新密码"
+                          [placeholder]="'user_settings.confirm_password_placeholder' | translate"
                           [status]="confirmPassword.dirty ? (confirmPassword.invalid ? 'danger' : 'success') : 'basic'">
                         <ng-container *ngIf="userForm.newPassword !== userForm.confirmPassword && confirmPassword.touched">
                           <p class="caption status-danger">
-                            两次输入的密码不一致
+                            {{ 'user_settings.password_mismatch' | translate }}
                           </p>
                         </ng-container>
                       </div>
@@ -221,7 +221,7 @@
                   class="mr-2"
                   (click)="onCancel()">
                   <nb-icon icon="close-outline"></nb-icon>
-                  取消
+                  {{ 'user_settings.cancel' | translate }}
                 </button>
                 <button 
                   nbButton 
@@ -229,7 +229,7 @@
                   type="submit"
                   [disabled]="submitted || !form.valid">
                   <nb-icon icon="save-outline"></nb-icon>
-                  {{ submitted ? '保存中...' : '保存更改' }}
+                  {{ submitted ? ('user_settings.saving' | translate) : ('user_settings.save_changes' | translate) }}
                 </button>
               </div>
             </div>

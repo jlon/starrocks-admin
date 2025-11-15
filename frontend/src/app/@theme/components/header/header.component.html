@@ -20,8 +20,8 @@
     status="basic" 
     size="small"
     class="theme-switcher"
-    placeholder="主题">
-    <nb-option *ngFor="let theme of themes" [value]="theme.value">{{ theme.name }}</nb-option>
+    [placeholder]="currentThemeLabel | translate">
+    <nb-option *ngFor="let theme of themes" [value]="theme.value">{{ theme.name | translate }}</nb-option>
   </nb-select>
 </div>
 
@@ -29,6 +29,13 @@
   <nb-actions size="small">
     <nb-action class="control-item" icon="email-outline"></nb-action>
     <nb-action class="control-item" icon="bell-outline"></nb-action>
+    <!-- 语言切换器 - 简洁图标样式 -->
+    <nb-action class="control-item language-switcher" 
+               [nbContextMenu]="languageMenu"
+               nbContextMenuTag="language-menu">
+      <nb-icon icon="globe-outline"></nb-icon>
+      <span class="language-text">{{ currentLanguage === 'zh' ? '中' : 'EN' }}</span>
+    </nb-action>
     <nb-action class="user-action" *nbIsGranted="['view', 'user']">
       <nb-user [nbContextMenu]="userMenu"
                nbContextMenuTag="user-context-menu"

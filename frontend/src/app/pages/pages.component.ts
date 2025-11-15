@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
-import { NbMenuService } from '@nebular/theme';
+import { NbMenuService, NbMenuItem } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { filter, map } from 'rxjs/operators';
 
 import { MENU_ITEMS } from './pages-menu';
@@ -28,13 +29,25 @@ export class PagesComponent implements OnInit {
     private router: Router,
     private tabService: TabService,
     private menuFilterService: MenuFilterService,
-    private permissionService: PermissionService
+    private permissionService: PermissionService,
+    private translate: TranslateService
   ) {}
 
   ngOnInit() {
     // Filter menu items based on permissions
     this.permissionService.permissions$.subscribe(() => {
       this.menu = this.menuFilterService.filterMenuItems(MENU_ITEMS);
+      this.translateMenuItems();
+    });
+
+    // Translate menu items when language changes
+    this.translate.onLangChange.subscribe(() => {
+      // Re-filter and translate when language changes
+      this.menu = this.menuFilterService.filterMenuItems(MENU_ITEMS);
+      this.translateMenuItems();
+      
+      // Update tab titles
+      this.updateTabTitles();
     });
 
     // Initialize permissions if not already initialized
@@ -49,7 +62,7 @@ export class PagesComponent implements OnInit {
         map(({ item }) => item)
       )
       .subscribe(item => {
-        if (item.title === '退出登录') {
+        if (item.data?.id === 'logout') {
           this.authService.logout();
         }
       });
@@ -307,9 +320,51 @@ export class PagesComponent implements OnInit {
   }
 
   onMenuClick(event: any) {
-    if (event.item.title === '退出登录') {
+    if (event.item.data?.id === 'logout') {
       event.event.preventDefault();
       this.authService.logout();
     }
+  }
+
+  /**
+   * Translate menu items recursively
+   */
+  private translateMenuItems(): void {
+    this.translateMenuRecursive(this.menu);
+  }
+
+  /**
+   * Recursively translate menu items and their children in place
+   */
+  private translateMenuRecursive(items: NbMenuItem[]): void {
+    items.forEach(item => {
+      // Always store original title on first encounter
+      if (item.title && !(item as any)._i18nKey) {
+        (item as any)._i18nKey = item.title;
+      }
+      
+      // Translate if it's a translation key
+      if ((item as any)._i18nKey && (item as any)._i18nKey.includes('.')) {
+        item.title = this.translate.instant((item as any)._i18nKey);
+      }
+      
+      if (item.children && item.children.length > 0) {
+        this.translateMenuRecursive(item.children);
+      }
+    });
+  }
+
+  /**
+   * Update tab titles when language changes
+   */
+  private updateTabTitles(): void {
+    const tabs = this.tabService.getTabs();
+    tabs.forEach(tab => {
+      // Find menu item by URL to get translation key
+      const menuItem = this.findMenuItemByUrl(tab.url);
+      if (menuItem && (menuItem as any)._i18nKey) {
+        this.tabService.updateTabTitle(tab.id, this.translate.instant((menuItem as any)._i18nKey));
+      }
+    });
   }
 }

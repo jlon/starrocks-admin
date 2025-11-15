@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { NbToastrService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { ClusterService, Cluster } from '../../../@core/data/cluster.service';
 import { ClusterContextService } from '../../../@core/data/cluster-context.service';
 
@@ -22,6 +23,7 @@ export class ClusterSelectorComponent implements OnInit, OnDestroy {
     private clusterContext: ClusterContextService,
     private router: Router,
     private toastr: NbToastrService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -56,7 +58,7 @@ export class ClusterSelectorComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        this.toastr.danger('加载集群列表失败', '错误');
+        this.toastr.danger(this.translate.instant('cluster.load_list_failed'), this.translate.instant('cluster.error'));
         this.loading = false;
       },
     });
@@ -64,7 +66,10 @@ export class ClusterSelectorComponent implements OnInit, OnDestroy {
 
   selectCluster(cluster: Cluster): void {
     this.clusterContext.setActiveCluster(cluster);
-    this.toastr.success(`已切换到集群: ${cluster.name}`, '成功');
+    this.toastr.success(
+      this.translate.instant('cluster.switch_success', { name: cluster.name }),
+      this.translate.instant('cluster.success')
+    );
   }
 
   onClusterChange(cluster: Cluster): void {

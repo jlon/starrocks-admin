@@ -381,14 +381,26 @@ export class TabService {
   /**
    * 获取当前激活的Tab
    */
-  getActiveTab(): TabItem | null {
-    return this.tabsSubject.value.find(tab => tab.active) || null;
+  getActiveTab(): TabItem | undefined {
+    return this.tabsSubject.value.find(tab => tab.active);
   }
 
   /**
-   * 获取所有Tab
+   * 获取所有Tabs
    */
   getTabs(): TabItem[] {
     return this.tabsSubject.value;
+  }
+
+  /**
+   * 更新Tab标题
+   */
+  updateTabTitle(tabId: string, newTitle: string): void {
+    const currentTabs = this.tabsSubject.value;
+    const updatedTabs = currentTabs.map(tab => 
+      tab.id === tabId ? { ...tab, title: newTitle } : tab
+    );
+    this.tabsSubject.next(updatedTabs);
+    this.saveTabs();
   }
 }

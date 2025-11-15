@@ -1,8 +1,8 @@
 <!-- Page-level loading overlay for info dialogs -->
 <div class="info-dialog-loading-overlay" *ngIf="infoDialogPageLoading">
   <div class="loading-content">
-    <nb-spinner status="primary" size="large" [message]="''"></nb-spinner>
-    <p class="mt-3 text-hint">正在加载数据...</p>
+    <nb-spinner status="primary" size="large"></nb-spinner>
+    <p class="mt-3 text-hint">{{ 'queries.loading_data' | translate }}</p>
   </div>
 </div>
 
@@ -15,7 +15,7 @@
           <div class="tab-header-with-toggle">
             <nb-tabset (changeTab)="selectTab($event.tabId)">
               <!-- Real-time Query Tab -->
-              <nb-tab tabTitle="实时查询" tabId="realtime" [active]="selectedTab === 'realtime'">
+              <nb-tab [tabTitle]="'queries.realtime' | translate" tabId="realtime" [active]="selectedTab === 'realtime'">
               <div class="realtime-query-container">
               <div class="query-split-layout">
                 <div class="nav-tree-wrapper" [class.collapsed]="treeCollapsed" [style.width.px]="treePanelWidth">
@@ -24,7 +24,7 @@
                       <nb-card-header>
                         <div class="nav-tree-header">
                           <nb-icon icon="layers-outline"></nb-icon>
-                          <span>Catalog / 数据库</span>
+                          <span>{{ 'queries.catalog_database' | translate }}</span>
                         </div>
                         <button 
                           nbButton 
@@ -33,14 +33,14 @@
                           class="tree-collapse-toggle header-button"
                           type="button"
                           (click)="toggleTreeCollapsed()"
-                          [title]="treeCollapsed ? '展开数据库树' : '收起数据库树'">
+                          [title]="treeCollapsed ? ('queries.expand_tree' | translate) : ('queries.collapse_tree' | translate)">
                           <nb-icon icon="arrow-ios-back-outline"></nb-icon>
                         </button>
                       </nb-card-header>
                       <nb-card-body>
                         <div class="tree-scroll">
                           <div class="tree-loading" *ngIf="loadingCatalogs">
-                            <nb-spinner size="small" status="primary" [message]="''"></nb-spinner>
+                            <nb-spinner size="small" status="primary"></nb-spinner>
                           </div>
                           <ul class="nav-tree" *ngIf="!loadingCatalogs && databaseTree.length > 0; else emptyTree">
                             <ng-container *ngFor="let node of databaseTree; trackBy: trackNodeById">
@@ -50,7 +50,7 @@
                           <ng-template #emptyTree>
                             <div class="empty-tree">
                               <nb-icon icon="alert-circle-outline"></nb-icon>
-                              <span>暂无 Catalog</span>
+                              <span>{{ 'queries.no_catalog' | translate }}</span>
                             </div>
                           </ng-template>
                         </div>
@@ -81,7 +81,7 @@
                     <div class="collapsed-sql-preview">
                       <nb-icon icon="code-outline" status="primary"></nb-icon>
                       <span class="sql-text" *ngIf="sqlInput && sqlInput.length > 0">{{ sqlInput | slice:0:100 }}{{ sqlInput.length > 100 ? '...' : '' }}</span>
-                      <span class="sql-text sql-placeholder" *ngIf="!sqlInput || sqlInput.length === 0">点击展开 SQL 编辑器</span>
+                      <span class="sql-text sql-placeholder" *ngIf="!sqlInput || sqlInput.length === 0">{{ 'queries.click_expand_editor' | translate }}</span>
                     </div>
                   </div>
 
@@ -90,12 +90,12 @@
                     <div class="selection-toolbar d-flex justify-content-between align-items-center">
                       <div class="selection-path d-flex align-items-center">
                         <nb-icon icon="pin-outline" status="primary"></nb-icon>
-                        <span class="path-segment" [class.inactive]="!selectedCatalog">{{ selectedCatalog || '未选择 Catalog' }}</span>
+                        <span class="path-segment" [class.inactive]="!selectedCatalog">{{ selectedCatalog || ('queries.no_catalog_selected' | translate) }}</span>
                         <nb-icon icon="arrow-ios-forward-outline"></nb-icon>
-                        <span class="path-segment" [class.inactive]="!selectedDatabase">{{ selectedDatabase || '未选择数据库' }}</span>
+                        <span class="path-segment" [class.inactive]="!selectedDatabase">{{ selectedDatabase || ('queries.no_database_selected' | translate) }}</span>
                         <nb-icon icon="arrow-ios-forward-outline"></nb-icon>
-                        <span class="path-segment" [class.inactive]="!selectedTable">{{ selectedTable || '未选择表' }}</span>
-                        <nb-spinner *ngIf="loadingDatabases" size="tiny" status="info" class="loading-indicator" [message]="''"></nb-spinner>
+                        <span class="path-segment" [class.inactive]="!selectedTable">{{ selectedTable || ('queries.no_table_selected' | translate) }}</span>
+                        <nb-spinner *ngIf="loadingDatabases" size="tiny" status="info" class="loading-indicator"></nb-spinner>
                       </div>
 
                       <div class="editor-action-buttons d-flex align-items-center gap-2">
@@ -109,7 +109,7 @@
                           (click)="executeSQL()" 
                           [disabled]="executing || !clusterId || !sqlInput">
                           <nb-icon *ngIf="!executing" icon="play-circle-outline"></nb-icon>
-                          {{ executing ? '执行中...' : '执行' }}
+                          {{ executing ? ('queries.executing' | translate) : ('queries.execute' | translate) }}
                         </button>
                         <button 
                           nbButton 
@@ -118,7 +118,7 @@
                           (click)="clearSQL()" 
                           [disabled]="executing">
                           <nb-icon icon="trash-2-outline"></nb-icon>
-                          清空
+                          {{ 'queries.clear' | translate }}
                         </button>
                         <button 
                           nbButton 
@@ -127,19 +127,7 @@
                           (click)="formatSQL()" 
                           [disabled]="executing || !sqlInput">
                           <nb-icon icon="code-outline"></nb-icon>
-                          格式化
-                        </button>
-                        <button 
-                          nbButton 
-                          status="warning" 
-                          size="small"
-                          [nbSpinner]="diagnosing"
-                          nbSpinnerStatus="control"
-                          nbSpinnerSize="small"
-                          (click)="diagnoseSQL()" 
-                          [disabled]="executing || diagnosing || !sqlInput || !clusterId">
-                          <nb-icon *ngIf="!diagnosing" icon="bulb-outline"></nb-icon>
-                          {{ diagnosing ? '诊断中...' : '诊断' }}
+                          {{ 'queries.format' | translate }}
                         </button>
                       </div>
                     </div>
@@ -150,20 +138,17 @@
 
                       <!-- Loading overlay with Nebular spinner -->
                       <div *ngIf="executing" class="loading-overlay">
-                        <nb-spinner size="large" status="primary" [message]="''"></nb-spinner>
-                        <p class="loading-text">正在执行查询...</p>
+                        <nb-spinner size="large" status="primary" [message]="'queries.executing_query' | translate"></nb-spinner>
                       </div>
-
-
 
                       <div class="editor-footer d-flex justify-content-between align-items-center">
                         <small class="hint-text">
                           <nb-icon icon="info-outline"></nb-icon>
-                          SELECT 查询会自动添加 LIMIT 限制（如未指定）
+                          {{ 'queries.limit_hint' | translate }}
                         </small>
 
                         <div class="right-actions">
-                          <span class="limit-label">限制:</span>
+                          <span class="limit-label">{{ 'queries.limit_label' | translate }}</span>
                           <nb-select 
                             [(selected)]="queryLimit" 
                             size="tiny"
@@ -183,16 +168,16 @@
                     <nb-card *ngIf="queryResults.length === 1" class="result-card">
                       <nb-card-header>
                         <div class="result-header">
-                          <h6 class="mb-0">查询结果</h6>
+                          <h6 class="mb-0">{{ 'queries.query_result' | translate }}</h6>
                           <div class="result-actions">
                             <div class="result-stat-item">
                               <nb-icon icon="clock-outline" status="success" class="stat-icon"></nb-icon>
-                              <span class="stat-label">执行耗时:</span>
+                              <span class="stat-label">{{ 'queries.execution_duration' | translate }}</span>
                               <span class="stat-value stat-time">{{ executionTime }}ms</span>
                             </div>
                             <div class="result-stat-item">
                               <nb-icon icon="list-outline" status="info" class="stat-icon"></nb-icon>
-                              <span class="stat-label">返回行数:</span>
+                              <span class="stat-label">{{ 'queries.rows_returned' | translate }}</span>
                               <span class="stat-value stat-count">{{ rowCount | number }}</span>
                             </div>
                             <button 
@@ -203,14 +188,14 @@
                               (click)="exportResults(0)"
                               class="ml-2">
                               <nb-icon icon="download-outline"></nb-icon>
-                              导出 CSV
+                              {{ 'queries.export_csv' | translate }}
                             </button>
                           </div>
                         </div>
                       </nb-card-header>
                       <nb-card-body>
                         <div *ngIf="queryResults[0].error" class="error-message mb-3">
-                          <nb-alert status="danger" [title]="'执行失败'">{{ queryResults[0].error }}</nb-alert>
+                          <nb-alert status="danger" [title]="'queries.execution_failed' | translate">{{ queryResults[0].error }}</nb-alert>
                         </div>
                         <ng2-smart-table 
                           *ngIf="resultSettings[0] && queryResults[0].success" 
@@ -219,7 +204,7 @@
                         </ng2-smart-table>
                         <div *ngIf="queryResults[0].success && rowCount === 0" class="no-data-message">
                           <nb-icon icon="inbox-outline"></nb-icon>
-                          <p>查询未返回任何数据</p>
+                          <p>{{ 'queries.no_data_returned' | translate }}</p>
                         </div>
                       </nb-card-body>
                     </nb-card>
@@ -231,13 +216,13 @@
                           <nb-tabset #tabsetRef class="result-tabset" (changeTab)="currentResultIndex = $event.tabId ? parseInt($event.tabId.split('-')[1]) : 0">
                             <nb-tab 
                               *ngFor="let result of queryResults; let i = index" 
-                              [tabTitle]="'结果' + (i + 1)"
+                              [tabTitle]="('queries.query_result' | translate) + ' ' + (i + 1)"
                               [tabId]="'result-' + i"
                               [active]="i === 0">
                               <div class="tab-content-wrapper">
                                 <!-- Error Message -->
                                 <div *ngIf="result.error" class="error-message mb-3">
-                                  <nb-alert status="danger" [title]="'执行失败'">{{ result.error }}</nb-alert>
+                                  <nb-alert status="danger" [title]="'queries.execution_failed' | translate">{{ result.error }}</nb-alert>
                                 </div>
 
                                 <!-- Result Table -->
@@ -261,7 +246,7 @@
                                 <!-- No Data Message -->
                                 <div *ngIf="result.success && result.row_count === 0" class="no-data-message">
                                   <nb-icon icon="inbox-outline"></nb-icon>
-                                  <p>查询未返回任何数据</p>
+                                  <p>{{ 'queries.no_data_returned' | translate }}</p>
                                 </div>
                               </div>
                             </nb-tab>
@@ -308,7 +293,7 @@
                       <span *ngSwitchCase="'VIEW'" class="node-badge node-badge-view">VIEW</span>
                       <span *ngSwitchCase="'MATERIALIZED_VIEW'" class="node-badge node-badge-mv">MV</span>
                     </ng-container>
-                    <nb-spinner *ngIf="node.loading" size="tiny" status="primary" [message]="''"></nb-spinner>
+                    <nb-spinner *ngIf="node.loading" size="tiny" status="primary"></nb-spinner>
                   </div>
                   <ul class="tree-children" *ngIf="node.children && node.children.length && node.expanded">
                     <ng-container *ngFor="let child of node.children; trackBy: trackNodeById">
@@ -364,7 +349,7 @@
               </div>
             </div>
             
-            <div *ngIf="loading" class="text-center mt-3"><nb-spinner status="primary" [message]="''"></nb-spinner></div>
+            <div *ngIf="loading" class="text-center mt-3"><nb-spinner status="primary"></nb-spinner></div>
             <ng2-smart-table 
               *ngIf="!loading" 
               [settings]="runningSettings" 
@@ -412,7 +397,7 @@
     </nb-card-header>
     <nb-card-body>
       <div class="schema-loading" *ngIf="tableSchemaLoading">
-        <nb-spinner status="primary" size="large" [message]="''"></nb-spinner>
+        <nb-spinner status="primary" size="large"></nb-spinner>
         <p class="mt-2 text-hint">正在获取表结构...</p>
       </div>
       <div class="schema-content" *ngIf="!tableSchemaLoading">
@@ -710,22 +695,6 @@
           <label class="detail-label">CPU时间:</label>
           <span class="detail-value" [innerHTML]="formatTime(currentQueryDetail.CPUTime)"></span>
         </div>
-        <div class="detail-row" *ngIf="currentQueryDetail.StartTime">
-          <label class="detail-label">开始时间:</label>
-          <span class="detail-value">{{ currentQueryDetail.StartTime }}</span>
-        </div>
-        <div class="detail-row" *ngIf="currentQueryDetail.MemoryUsage">
-          <label class="detail-label">内存使用:</label>
-          <span class="detail-value">{{ currentQueryDetail.MemoryUsage }}</span>
-        </div>
-        <div class="detail-row" *ngIf="currentQueryDetail.ResourceGroup">
-          <label class="detail-label">资源组:</label>
-          <span class="detail-value">{{ currentQueryDetail.ResourceGroup }}</span>
-        </div>
-        <div class="detail-row" *ngIf="currentQueryDetail.feIp">
-          <label class="detail-label">FE节点:</label>
-          <span class="detail-value">{{ currentQueryDetail.feIp }}</span>
-        </div>
         <div class="detail-row detail-row-full">
           <label class="detail-label">SQL语句:</label>
           <div class="sql-content">
@@ -739,145 +708,6 @@
         <button nbButton status="danger" (click)="killQueryFromDetail(); ref.close()">
           <nb-icon icon="trash-2-outline"></nb-icon>
           查杀查询
-        </button>
-      </div>
-    </nb-card-footer>
-  </nb-card>
-</ng-template>
-
-<!-- SQL Diagnosis Dialog Template -->
-<ng-template #sqlDiagDialog let-ref="dialogRef">
-  <nb-card class="sql-diag-dialog">
-    <nb-card-header>
-      <div class="d-flex justify-content-between align-items-center w-100">
-        <div class="d-flex align-items-center">
-          <nb-icon icon="bulb-outline" status="warning" class="mr-2"></nb-icon>
-          <h5 class="mb-0">SQL 诊断报告</h5>
-          <nb-badge *ngIf="diagCached" status="info" class="ml-2">缓存</nb-badge>
-        </div>
-        <button nbButton ghost status="basic" size="tiny" (click)="closeDiagDialog()" class="diag-close-btn">
-          <nb-icon icon="close-outline"></nb-icon>
-        </button>
-      </div>
-    </nb-card-header>
-    
-    <nb-card-body>
-      <!-- Loading state -->
-      <div *ngIf="diagnosing" class="text-center py-5">
-        <nb-spinner status="primary" size="large" [message]="''"></nb-spinner>
-        <h6 class="mt-3 mb-2">正在分析 SQL 性能</h6>
-        <p class="text-hint">AI 正在深度分析您的查询语句...</p>
-      </div>
-
-      <!-- Error state -->
-      <nb-alert *ngIf="diagError && !diagnosing" status="danger" closable="false">
-        <strong>诊断失败：</strong>{{ diagError }}
-      </nb-alert>
-
-      <!-- Result state -->
-      <div *ngIf="diagResult && !diagnosing">
-        
-        <!-- 1. 优化后的 SQL (最重要，放在第一位) -->
-        <div *ngIf="diagResult.changed && diagResult.sql" class="mb-3">
-          <nb-card accent="success">
-            <nb-card-header>
-              <div class="d-flex align-items-center">
-                <nb-icon icon="code-outline" status="success" class="mr-2"></nb-icon>
-                <h6 class="mb-0">优化后的 SQL</h6>
-              </div>
-            </nb-card-header>
-            <nb-card-body>
-              <div class="sql-code-box">
-                <pre>{{ formatDiagSQL(diagResult.sql) }}</pre>
-              </div>
-            </nb-card-body>
-          </nb-card>
-        </div>
-
-        <!-- 2. 诊断摘要 + 性能问题（合并显示） -->
-        <div class="mb-3">
-          <nb-card>
-            <nb-card-header>
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                  <nb-icon [icon]="hasIssues() ? 'alert-triangle-outline' : 'checkmark-circle-2-outline'" 
-                           [status]="hasIssues() ? 'warning' : 'success'" class="mr-2"></nb-icon>
-                  <h6 class="mb-0">{{ hasIssues() ? '已应用' + diagResult.perf_issues.length + '个优化项' : '未发现明显问题' }}</h6>
-                </div>
-                <nb-badge [status]="diagResult.confidence > 0.7 ? 'success' : 'warning'">
-                  {{ (diagResult.confidence * 100).toFixed(0) }}%
-                </nb-badge>
-              </div>
-            </nb-card-header>
-            <nb-card-body>
-              <!-- 摘要 -->
-              <p class="text-hint mb-3">{{ diagResult.summary }}</p>
-              
-              <!-- 问题列表 -->
-              <div *ngIf="diagResult.perf_issues?.length > 0">
-                <div *ngFor="let issue of diagResult.perf_issues; let i = index; let last = last" 
-                     class="issue-item" [class.mb-3]="!last">
-                  <div class="d-flex align-items-start">
-                    <nb-badge [status]="getSeverityStatus(issue.severity)" class="mr-2 mt-1">
-                      {{ getSeverityLabel(issue.severity) }}
-                    </nb-badge>
-                    <div class="flex-grow-1">
-                      <strong class="d-block mb-1">{{ issue.type }}</strong>
-                      <p class="text-hint mb-2">{{ issue.desc }}</p>
-                      <div *ngIf="issue.fix" class="fix-box">
-                        <nb-icon icon="lightbulb-outline" status="success" class="mr-1"></nb-icon>
-                        {{ issue.fix }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </nb-card-body>
-          </nb-card>
-        </div>
-
-      </div>
-    </nb-card-body>
-    
-    <nb-card-footer>
-      <div class="d-flex align-items-center text-hint">
-        <nb-icon icon="info-outline" class="mr-1"></nb-icon>
-        <span>由 AI 智能分析生成</span>
-        <span *ngIf="diagElapsedMs > 0" class="ml-2">• 耗时: {{ diagElapsedMs }}ms</span>
-      </div>
-      <button *ngIf="diagResult?.changed && diagResult?.sql" nbButton status="success" size="small" (click)="acceptDiagSQL()">
-        <nb-icon icon="checkmark-outline" class="mr-1"></nb-icon>
-        应用优化
-      </button>
-    </nb-card-footer>
-  </nb-card>
-</ng-template>
-
-<!-- SQL Blacklist Add Dialog -->
-<ng-template #blacklistDialog let-ref="dialogRef">
-  <nb-card class="blacklist-dialog">
-    <nb-card-header>
-      <div class="d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">添加 SQL 黑名单规则</h5>
-        <button nbButton ghost status="basic" size="small" (click)="cancelBlacklistDialog()">
-          <nb-icon icon="close-outline"></nb-icon>
-        </button>
-      </div>
-    </nb-card-header>
-    <nb-card-body>
-      <div class="form-group">
-        <label class="label">正则表达式</label>
-        <textarea nbInput fullWidth rows="4" [(ngModel)]="newBlacklistPattern" 
-          placeholder="例如: SELECT.*FROM.*sensitive_table.*"></textarea>
-        <span class="hint-text">匹配此正则表达式的 SQL 语句将被拒绝执行</span>
-      </div>
-    </nb-card-body>
-    <nb-card-footer>
-      <div class="d-flex justify-content-end gap-2">
-        <button nbButton status="basic" size="small" (click)="cancelBlacklistDialog()">取消</button>
-        <button nbButton status="primary" size="small" (click)="submitBlacklistPattern()" [disabled]="blacklistLoading">
-          <nb-spinner *ngIf="blacklistLoading" size="tiny" status="control"></nb-spinner>
-          添加
         </button>
       </div>
     </nb-card-footer>

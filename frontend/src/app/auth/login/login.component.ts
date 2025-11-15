@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { NbToastrService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../@core/data/auth.service';
 
 @Component({
@@ -19,13 +20,20 @@ export class LoginComponent implements OnInit {
   messages: string[] = [];
   showMessages = false;
   returnUrl: string;
+  currentLanguage = 'zh';
 
   constructor(
     protected router: Router,
     private route: ActivatedRoute,
     private authService: AuthService,
-    private toastrService: NbToastrService
-  ) {}
+    private toastrService: NbToastrService,
+    private translate: TranslateService
+  ) {
+    // Initialize language
+    const savedLanguage = localStorage.getItem('language') || 'zh';
+    this.currentLanguage = savedLanguage;
+    this.translate.use(savedLanguage);
+  }
 
   ngOnInit() {
     const rawReturnUrl = this.route.snapshot.queryParams['returnUrl'];
@@ -83,5 +91,21 @@ export class LoginComponent implements OnInit {
         // this.toastrService.danger(errorMessage, 'Login Failed');
       }
     });
+  }
+
+  changeLanguage(language: string): void {
+    this.currentLanguage = language;
+    this.translate.use(language);
+    localStorage.setItem('language', language);
+  }
+
+  toggleLanguage(): void {
+    const newLanguage = this.currentLanguage === 'zh' ? 'en' : 'zh';
+    this.changeLanguage(newLanguage);
+  }
+
+  goBack(): boolean {
+    this.router.navigate(['/']);
+    return false;
   }
 }

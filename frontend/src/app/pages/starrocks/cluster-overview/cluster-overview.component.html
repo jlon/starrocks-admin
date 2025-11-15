@@ -4,8 +4,8 @@
       <div class="overview-toolbar">
         <div class="overview-toolbar__info">
           <div class="overview-toolbar__title">
-            <span>{{ overview?.cluster_name || 'StarRocks 集群概览' }}</span>
-            <nb-badge *ngIf="overview" text="当前激活" status="success"></nb-badge>
+            <span>{{ overview?.cluster_name || ('overview.title' | translate) }}</span>
+            <nb-badge *ngIf="overview" [text]="'overview.active_badge' | translate" status="success"></nb-badge>
           </div>
           <div *ngIf="overview?.timestamp" class="overview-toolbar__timestamp">
             <nb-icon icon="clock-outline"></nb-icon>
@@ -14,19 +14,19 @@
         </div>
         <nb-actions size="small" class="overview-toolbar__actions">
           <nb-action>
-            <nb-select [(selected)]="timeRange" (selectedChange)="onTimeRangeChange($event)" placeholder="时间范围" size="small">
-              <nb-option *ngFor="let opt of timeRangeOptions" [value]="opt.value">{{ opt.label }}</nb-option>
+            <nb-select [(selected)]="timeRange" (selectedChange)="onTimeRangeChange($event)" [placeholder]="'overview.time_range' | translate" size="small">
+              <nb-option *ngFor="let opt of timeRangeOptions" [value]="opt.value">{{ opt.label | translate }}</nb-option>
             </nb-select>
           </nb-action>
           <nb-action>
             <button nbButton size="small" status="info" (click)="onManualRefresh()">
               <nb-icon icon="refresh-outline"></nb-icon>
-              刷新
+              {{ 'overview.refresh' | translate }}
             </button>
           </nb-action>
           <nb-action>
-            <nb-select [(selected)]="refreshInterval" (selectedChange)="onRefreshIntervalChange($event)" placeholder="自动刷新" size="small">
-              <nb-option *ngFor="let opt of refreshIntervalOptions" [value]="opt.value">{{ opt.label }}</nb-option>
+            <nb-select [(selected)]="refreshInterval" (selectedChange)="onRefreshIntervalChange($event)" [placeholder]="'overview.auto_refresh' | translate" size="small">
+              <nb-option *ngFor="let opt of refreshIntervalOptions" [value]="opt.value">{{ opt.label | translate }}</nb-option>
             </nb-select>
           </nb-action>
         </nb-actions>

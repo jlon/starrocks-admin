@@ -18,6 +18,14 @@
 
           <!-- Right Side - Login Form -->
           <div class="form-section">
+            <!-- 语言切换器 -->
+            <div class="language-switcher-top">
+              <button nbButton ghost size="small" (click)="toggleLanguage()">
+                <nb-icon icon="globe-outline"></nb-icon>
+                <span>{{ currentLanguage === 'zh' ? '中' : 'EN' }}</span>
+              </button>
+            </div>
+
             <div class="form-content">
               <!-- Header -->
               <div class="brand-header">
@@ -27,7 +35,7 @@
                   </div>
                   <h1 class="brand-name">StarRocks Admin</h1>
                 </div>
-                <p class="brand-tagline">A professional StarRocks cluster management Platform</p>
+                <p class="brand-tagline">{{ 'auth.login.tagline' | translate }}</p>
               </div>
 
               <!-- Alert Messages -->
@@ -40,9 +48,9 @@
 
               <!-- Login Form -->
               <form (ngSubmit)="login()" #form="ngForm" class="login-form">
-                <!-- Email Field -->
+                <!-- Username Field -->
                 <div class="form-group">
-                  <label class="form-label" for="input-username">Username</label>
+                  <label class="form-label" for="input-username">{{ 'auth.login.username' | translate }}</label>
                   <input 
                     nbInput
                     fullWidth
@@ -50,21 +58,21 @@
                     #username="ngModel"
                     id="input-username"
                     name="username"
-                    placeholder="Enter your username"
+                    [placeholder]="'auth.login.username' | translate"
                     autofocus
                     [status]="username.dirty ? (username.invalid  ? 'danger' : 'success') : 'basic'"
                     [required]="true"
                     [attr.aria-invalid]="username.invalid && username.touched ? true : null">
                   <ng-container *ngIf="username.invalid && username.touched">
                     <p class="error-message" *ngIf="username.errors?.['required']">
-                      Username is required!
+                      {{ 'auth.login.username_required' | translate }}
                     </p>
                   </ng-container>
                 </div>
 
                 <!-- Password Field -->
                 <div class="form-group">
-                  <label class="form-label" for="input-password">Password</label>
+                  <label class="form-label" for="input-password">{{ 'auth.login.password' | translate }}</label>
                   <input 
                     nbInput
                     fullWidth
@@ -73,13 +81,13 @@
                     type="password"
                     id="input-password"
                     name="password"
-                    placeholder="Enter your password"
+                    [placeholder]="'auth.login.password' | translate"
                     [status]="password.dirty ? (password.invalid  ? 'danger' : 'success') : 'basic'"
                     [required]="true"
                     [attr.aria-invalid]="password.invalid && password.touched ? true : null">
                   <ng-container *ngIf="password.invalid && password.touched">
                     <p class="error-message" *ngIf="password.errors?.['required']">
-                      Password is required!
+                      {{ 'auth.login.password_required' | translate }}
                     </p>
                   </ng-container>
                 </div>
@@ -88,9 +96,9 @@
                 <div class="options-row">
                   <label class="checkbox-label">
                     <input type="checkbox" class="checkbox-input" [(ngModel)]="rememberMe" name="rememberMe">
-                    <span class="checkbox-text">Remember me</span>
+                    <span class="checkbox-text">{{ 'auth.login.remember_me' | translate }}</span>
                   </label>
-                  <a href="#" class="forgot-link">Forget Password?</a>
+                  <a href="#" class="forgot-link">{{ 'auth.login.forgot_password' | translate }}</a>
                 </div>
 
                 <!-- Action Buttons -->
@@ -105,8 +113,8 @@
                     class="login-button">
                     <nb-icon *ngIf="submitted" icon="loader-outline" [options]="{animation: {type: 'pulse'}}"></nb-icon>
                     <nb-icon *ngIf="!submitted" icon="log-in-outline"></nb-icon>
-                    <span *ngIf="!submitted">Login</span>
-                    <span *ngIf="submitted">Logging in...</span>
+                    <span *ngIf="!submitted">{{ 'auth.login.login_button' | translate }}</span>
+                    <span *ngIf="submitted">{{ 'auth.login.logging_in' | translate }}</span>
                   </button>
                   
                   <button 
@@ -116,21 +124,21 @@
                     class="signup-button"
                     routerLink="../register">
                     <nb-icon icon="person-add-outline"></nb-icon>
-                    Sign Up
+                    {{ 'auth.login.signup' | translate }}
                   </button>
                 </div>
 
                 <!-- Social Login -->
                 <div class="social-login">
-                  <p class="social-text">Or login with</p>
+                  <p class="social-text">{{ 'auth.login.or_login_with' | translate }}</p>
                   <div class="social-buttons">
                     <button nbButton status="basic" size="medium" class="social-btn google-btn">
                       <nb-icon icon="google-outline"></nb-icon>
-                      Google
+                      {{ 'auth.login.google' | translate }}
                     </button>
                     <button nbButton status="basic" size="medium" class="social-btn facebook-btn">
                       <nb-icon icon="facebook-outline"></nb-icon>
-                      Facebook
+                      {{ 'auth.login.facebook' | translate }}
                     </button>
                   </div>
                 </div>

@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { interval, Subject } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { NbToastrService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { LocalDataSource } from 'ng2-smart-table';
 import { NodeService } from '../../../@core/data/node.service';
 import { ClusterService, Cluster } from '../../../@core/data/cluster.service';
@@ -99,11 +100,19 @@ export class FrontendsComponent implements OnInit, OnDestroy {
     private clusterService: ClusterService,
     private clusterContext: ClusterContextService,
     private toastrService: NbToastrService,
+    private translate: TranslateService
   ) {
     this.clusterId = this.clusterContext.getActiveClusterId() || 0;
+    // Update table settings when language changes
+    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.updateTableSettings();
+    });
   }
 
   ngOnInit(): void {
+    // Initialize table settings with translations
+    this.updateTableSettings();
+    
     // Subscribe to active cluster changes
     this.clusterContext.activeCluster$
       .pipe(takeUntil(this.destroy$))
@@ -119,7 +128,6 @@ export class FrontendsComponent implements OnInit, OnDestroy {
           }
         }
         // Backend will handle "no active cluster" case
-        
       });
 
     // Load data - backend will get active cluster automatically
@@ -152,5 +160,75 @@ export class FrontendsComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
     });
+  }
+
+  private updateTableSettings(): void {
+    this.settings = {
+      ...this.settings,
+      noDataMessage: this.translate.instant('nodes.frontend.no_data'),
+      columns: {
+        IP: { 
+          title: this.translate.instant('nodes.frontend.ip'), 
+          type: 'string',
+          width: '15%',
+        },
+        HttpPort: { 
+          title: this.translate.instant('nodes.frontend.http_port'), 
+          type: 'string',
+          width: '8%',
+        },
+        QueryPort: { 
+          title: this.translate.instant('nodes.frontend.query_port'), 
+          type: 'string',
+          width: '8%',
+        },
+        Role: { 
+          title: this.translate.instant('nodes.frontend.role'), 
+          type: 'html', 
+          width: '9%',
+          valuePrepareFunction: (value: string) => {
+            if (value === 'LEADER') {
+              return '<span class="badge badge-primary">LEADER</span>';
+            } else if (value === 'FOLLOWER') {
+              return '<span class="badge badge-info">FOLLOWER</span>';
+            } else if (value === 'OBSERVER') {
+              return '<span class="badge badge-warning">OBSERVER</span>';
+            }
+            return `<span class="badge badge-secondary">${value}</span>`;
+          },
+        },
+        Alive: {
+          title: this.translate.instant('nodes.frontend.status'),
+          type: 'html',
+          width: '7%',
+          valuePrepareFunction: (value: string) => {
+            const status = value === 'true' ? 'success' : 'danger';
+            const text = value === 'true' ? this.translate.instant('nodes.frontend.online') : this.translate.instant('nodes.frontend.offline');
+            return `<span class="badge badge-${status}">${text}</span>`;
+          },
+        },
+        ReplayedJournalId: { 
+          title: this.translate.instant('nodes.frontend.journal_id'), 
+          type: 'string',
+          width: '10%',
+        },
+        LastHeartbeat: { 
+          title: this.translate.instant('nodes.frontend.last_heartbeat'), 
+          type: 'string',
+          width: '14%',
+        },
+        StartTime: { 
+          title: this.translate.instant('nodes.frontend.start_time'), 
+          type: 'string',
+          width: '14%',
+        },
+        Version: { 
+          title: this.translate.instant('nodes.frontend.version'), 
+          type: 'string',
+          width: '8%',
+        },
+      },
+    };
+    this.source.refresh();
   }
 }

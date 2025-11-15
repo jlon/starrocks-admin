@@ -3,6 +3,7 @@ import { NbDialogService, NbToastrService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { forkJoin, of, Subject } from 'rxjs';
 import { finalize, map, switchMap, takeUntil } from 'rxjs/operators';
+import { TranslateService } from '@ngx-translate/core';
 
 import {
   CreateUserPayload,
@@ -48,7 +49,12 @@ export class UsersComponent implements OnInit, OnDestroy {
     private dialogService: NbDialogService,
     private confirmDialogService: ConfirmDialogService,
     private toastrService: NbToastrService,
-  ) {}
+    private translate: TranslateService,
+  ) {
+    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.settings = this.buildTableSettings();
+    });
+  }
 
   ngOnInit(): void {
     this.permissionService.permissions$
@@ -246,7 +252,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     return {
       mode: 'external',
       hideSubHeader: false,
-      noDataMessage: this.hasListPermission ? '暂无用户数据' : '您暂无查看用户的权限',
+      noDataMessage: this.hasListPermission ? this.translate.instant('common.no_data') : this.translate.instant('cluster.no_permission'),
       actions: {
         add: false,
         edit: false,
@@ -259,32 +265,32 @@ export class UsersComponent implements OnInit, OnDestroy {
       },
       columns: {
         id: {
-          title: 'ID',
+          title: this.translate.instant('users.id'),
           type: 'number',
           width: '8%',
         },
         username: {
-          title: '用户名',
+          title: this.translate.instant('users.username'),
           type: 'string',
         },
         email: {
-          title: '邮箱',
+          title: this.translate.instant('users.email'),
           type: 'string',
         },
         roles: {
-          title: '角色',
+          title: this.translate.instant('users.role'),
           type: 'custom',
           renderComponent: UsersRoleBadgeCellComponent,
           filter: false,
           sort: false,
         },
         created_at: {
-          title: '创建时间',
+          title: this.translate.instant('users.created_time'),
           type: 'string',
-          valuePrepareFunction: (date: string) => new Date(date).toLocaleString('zh-CN'),
+          valuePrepareFunction: (date: string) => new Date(date).toLocaleString(this.translate.currentLang === 'zh' ? 'zh-CN' : 'en-US'),
         },
         actions: {
-          title: '操作',
+          title: this.translate.instant('users.actions'),
           type: 'custom',
           renderComponent: UsersActionsCellComponent,
           filter: false,

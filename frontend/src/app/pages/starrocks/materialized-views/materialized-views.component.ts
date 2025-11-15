@@ -3,6 +3,7 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { NbToastrService, NbDialogService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
+import { TranslateService } from '@ngx-translate/core';
 import {
   MaterializedViewService,
   MaterializedView,
@@ -235,6 +236,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
     private toastrService: NbToastrService,
     private confirmDialogService: ConfirmDialogService,
     private dialogService: NbDialogService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit() {
@@ -278,7 +280,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
         error: (error) => {
           this.toastrService.danger(
             ErrorHandler.extractErrorMessage(error),
-            '加载集群信息失败',
+            this.translate.instant('materialized_views.load_cluster_failed'),
           );
         },
       });
@@ -300,7 +302,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
         error: (error) => {
           this.toastrService.danger(
             ErrorHandler.handleClusterError(error),
-            '加载物化视图失败',
+            this.translate.instant('materialized_views.load_views_failed'),
           );
           this.loading = false;
         },

@@ -7,10 +7,10 @@
           <div class="header-filters-content">
             <!-- Left: Title and Cluster Info -->
             <div class="header-left">
-              <h5 class="mb-0">会话管理</h5>
+              <h5 class="mb-0">{{ 'sessions.title' | translate }}</h5>
               <span class="text-hint">|</span>
               <span class="text-hint" style="font-size: 13px;">
-                集群: <strong>{{ activeCluster?.name || '未选择' }}</strong>
+                {{ 'common.cluster_label' | translate }} <strong>{{ activeCluster?.name || ('common.not_selected' | translate) }}</strong>
               </span>
             </div>
             
@@ -20,13 +20,13 @@
                 [(ngModel)]="sessionFilter.sleepOnly"
                 (checkedChange)="applySessionFilter()"
                 class="filter-checkbox">
-                <span class="text-hint">仅显示睡眠连接</span>
+                <span class="text-hint">{{ 'sessions.filter_sleep_only' | translate }}</span>
               </nb-checkbox>
               <nb-checkbox 
                 [(ngModel)]="sessionFilter.slowOnly"
                 (checkedChange)="applySessionFilter()"
                 class="filter-checkbox">
-                <span class="text-hint">仅显示慢会话（≥1分钟）</span>
+                <span class="text-hint">{{ 'sessions.filter_slow_only' | translate }}</span>
               </nb-checkbox>
               <button 
                 *ngIf="sessionFilter.sleepOnly || sessionFilter.slowOnly"
@@ -36,7 +36,7 @@
                 status="basic"
                 (click)="resetSessionFilter()"
                 class="clear-filter-btn">
-                <span class="text-hint">清除筛选</span>
+                <span class="text-hint">{{ 'sessions.clear_filter' | translate }}</span>
               </button>
             </div>
             
@@ -49,7 +49,7 @@
                 (click)="clearSleepingConnections()"
                 [disabled]="loading">
                 <nb-icon icon="power-outline"></nb-icon>
-                清除睡眠连接
+                {{ 'sessions.clear_sleeping' | translate }}
               </button>
               <button 
                 nbButton 
@@ -58,25 +58,25 @@
                 (click)="batchKillAllSessions()"
                 [disabled]="loading">
                 <nb-icon icon="trash-2-outline"></nb-icon>
-                批量查杀当前显示
+                {{ 'sessions.batch_kill' | translate }}
               </button>
               
               <div class="refresh-controls">
                 <button nbButton status="primary" size="small" (click)="refresh()" [disabled]="loading || !clusterId">
                   <nb-icon icon="refresh-outline"></nb-icon>
-                  刷新
+                  {{ 'common.refresh' | translate }}
                 </button>
                 
                 <div class="refresh-interval-selector">
                   <nb-select 
                     [(selected)]="selectedRefreshInterval" 
                     size="small" 
-                    placeholder="自动刷新"
+                    [placeholder]="'overview.auto_refresh' | translate"
                     (selectedChange)="onRefreshIntervalChange($event)"
                     [disabled]="!clusterId"
                     class="refresh-interval-select">
                     <nb-option *ngFor="let option of refreshIntervalOptions" [value]="option.value">
-                      {{ option.label }}
+                      {{ option.label | translate }}
                     </nb-option>
                   </nb-select>
                 </div>

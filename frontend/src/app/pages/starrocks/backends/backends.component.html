@@ -8,7 +8,7 @@
             <h5 class="mb-0">{{ pageTitle }}</h5>
             <span class="text-hint">|</span>
             <span class="text-hint" style="font-size: 13px;">
-              集群: <strong>{{ clusterName }}</strong>
+              {{ 'common.cluster_label' | translate }} <strong>{{ clusterName || ('common.not_selected' | translate) }}</strong>
             </span>
           </div>
 

@@ -2,9 +2,9 @@
   <nb-card-header>
     <div class="dialog-header">
       <div>
-        <h5>{{ mode === 'create' ? '创建角色' : '编辑角色' }}</h5>
+        <h5>{{ mode === 'create' ? ('roles.create_role' | translate) : ('roles.edit_role' | translate) }}</h5>
         <p class="dialog-subtitle">
-          {{ mode === 'create' ? '配置角色基础信息与权限范围' : '调整角色信息与权限映射' }}
+          {{ mode === 'create' ? ('roles.create_role_subtitle' | translate) : ('roles.edit_role_subtitle' | translate) }}
         </p>
       </div>
       <button nbButton ghost status="basic" (click)="cancel()">
@@ -52,7 +52,7 @@
           </div>
 
           <div class="form-group">
-            <label class="label" for="input-code">角色代码</label>
+            <label class="label" for="input-code">{{ 'roles.role_code' | translate }}</label>
             <nb-form-field>
               <input
                 nbInput
@@ -66,7 +66,7 @@
           </div>
 
           <div class="form-group">
-            <label class="label" for="input-name">角色名称</label>
+            <label class="label" for="input-name">{{ 'roles.role_name' | translate }}</label>
             <nb-form-field>
               <input
                 nbInput
@@ -79,7 +79,7 @@
           </div>
 
           <div class="form-group">
-            <label class="label" for="input-description">角色描述</label>
+            <label class="label" for="input-description">{{ 'roles.role_description' | translate }}</label>
             <nb-form-field>
               <textarea
                 nbInput
@@ -95,7 +95,7 @@
 
         <!-- Right: Permission Tree Selection -->
         <div class="permission-section">
-          <label class="section-label">菜单权限</label>
+          <label class="section-label">{{ 'roles.menu_permissions' | translate }}</label>
           <div class="permission-tree-container">
             <!-- Simple tree structure (inspired by query-execution) -->
             <div class="tree-scroll">
@@ -108,7 +108,7 @@
               <ng-template #emptyTree>
                 <div class="empty-tree">
                   <nb-icon icon="inbox-outline"></nb-icon>
-                  <span>暂无可用权限</span>
+                  <span>{{ 'roles.no_permissions' | translate }}</span>
                 </div>
               </ng-template>
             </div>
@@ -164,9 +164,9 @@
 
   <nb-card-footer>
     <div class="footer-actions">
-      <button nbButton ghost status="basic" (click)="cancel()">取消</button>
+      <button nbButton ghost status="basic" (click)="cancel()">{{ 'common.cancel' | translate }}</button>
       <button nbButton status="primary" (click)="submit()" [disabled]="form.invalid">
-        {{ mode === 'create' ? '创建角色' : '保存修改' }}
+        {{ mode === 'create' ? ('roles.create_role' | translate) : ('users.save_changes' | translate) }}
       </button>
     </div>
   </nb-card-footer>

@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { NbMediaBreakpointsService, NbMenuService, NbSidebarService, NbThemeService, NbToastrService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 
 import { LayoutService } from '../../../@core/utils';
 import { AuthService } from '../../../@core/data/auth.service';
@@ -21,27 +22,46 @@ export class HeaderComponent implements OnInit, OnDestroy {
   themes = [
     {
       value: 'default',
-      name: '浅色',
+      name: 'theme.default',
     },
     {
       value: 'dark',
-      name: '深色',
+      name: 'theme.dark',
     },
     {
       value: 'cosmic',
-      name: '星空',
+      name: 'theme.cosmic',
     },
     {
       value: 'corporate',
-      name: '企业',
+      name: 'theme.corporate',
     },
   ];
 
   currentTheme = 'default';
+  currentThemeLabel = 'theme.default';
+
+  languages = [
+    {
+      value: 'zh',
+      name: '中文',
+    },
+    {
+      value: 'en',
+      name: 'English',
+    },
+  ];
+
+  currentLanguage = 'zh';
 
   userMenu = [
-    { title: '用户设置', icon: 'settings-outline', data: { id: 'settings' } },
-    { title: '退出登录', icon: 'log-out-outline', data: { id: 'logout' } },
+    { title: this.translate.instant('header.user_settings'), icon: 'settings-outline', data: { id: 'settings' } },
+    { title: this.translate.instant('header.logout'), icon: 'log-out-outline', data: { id: 'logout' } },
+  ];
+
+  languageMenu = [
+    { title: this.translate.instant('header.chinese'), data: { lang: 'zh' } },
+    { title: this.translate.instant('header.english'), data: { lang: 'en' } },
   ];
 
   constructor(
@@ -53,11 +73,26 @@ export class HeaderComponent implements OnInit, OnDestroy {
     private breakpointService: NbMediaBreakpointsService,
     private router: Router,
     private toastr: NbToastrService,
+    private translate: TranslateService,
   ) {
   }
 
   ngOnInit() {
     this.currentTheme = this.themeService.currentTheme;
+    this.updateThemeLabel();
+
+    // Initialize language from localStorage or use default
+    const savedLanguage = localStorage.getItem('language') || 'zh';
+    this.currentLanguage = savedLanguage;
+    
+    // Set default language synchronously first
+    this.translate.setDefaultLang('zh');
+    this.translate.use(savedLanguage);
+
+    // Update theme label when language changes
+    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.updateThemeLabel();
+    });
 
     // Get current user info
     this.authService.currentUser
@@ -97,6 +132,19 @@ export class HeaderComponent implements OnInit, OnDestroy {
         }
       });
 
+    // Handle language menu clicks
+    this.menuService.onItemClick()
+      .pipe(
+        filter(({ tag }) => tag === 'language-menu'),
+        map(({ item }) => item),
+        takeUntil(this.destroy$),
+      )
+      .subscribe(item => {
+        if (item.data && item.data.lang) {
+          this.changeLanguage(item.data.lang);
+        }
+      });
+
     const { xl } = this.breakpointService.getBreakpointsMap();
     this.themeService.onMediaQueryChange()
       .pipe(
@@ -120,6 +168,21 @@ export class HeaderComponent implements OnInit, OnDestroy {
 
   changeTheme(themeName: string) {
     this.themeService.changeTheme(themeName);
+    this.currentTheme = themeName;
+    this.updateThemeLabel();
+  }
+
+  private updateThemeLabel(): void {
+    const theme = this.themes.find(t => t.value === this.currentTheme);
+    if (theme) {
+      this.currentThemeLabel = theme.name;
+    }
+  }
+
+  changeLanguage(language: string) {
+    this.currentLanguage = language;
+    this.translate.use(language);
+    localStorage.setItem('language', language);
   }
 
   toggleSidebar(): boolean {
@@ -135,7 +198,7 @@ export class HeaderComponent implements OnInit, OnDestroy {
   }
 
   logout() {
-    this.toastr.success('退出登录成功', '提示');
+    this.toastr.success(this.translate.instant('header.logout_success'), this.translate.instant('header.hint'));
     setTimeout(() => {
       this.authService.logout();
     }, 500);

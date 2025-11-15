@@ -126,6 +126,34 @@
     }
   }
 
+  // 语言切换器样式 - 简洁图标+文字
+  nb-action.language-switcher {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: nb-theme(background-basic-color-2);
+    }
+
+    nb-icon {
+      font-size: 1.25rem;
+      color: nb-theme(text-hint-color);
+    }
+
+    .language-text {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: nb-theme(text-hint-color);
+      min-width: 20px;
+      text-align: center;
+    }
+  }
+
   @include media-breakpoint-down(sm) {
     .control-item {
       display: none;

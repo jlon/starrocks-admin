@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { interval, Subject } from 'rxjs';
 import { takeUntil, switchMap } from 'rxjs/operators';
 import { NbToastrService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { ClusterService, Cluster, ClusterHealth } from '../../../@core/data/cluster.service';
 import { ClusterContextService } from '../../../@core/data/cluster-context.service';
 import { OrganizationService, Organization } from '../../../@core/data/organization.service';
@@ -56,6 +57,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private confirmDialogService: ConfirmDialogService,
     private authService: AuthService,
     private cdr: ChangeDetectorRef,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {

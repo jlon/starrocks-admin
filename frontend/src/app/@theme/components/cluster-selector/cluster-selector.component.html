@@ -7,7 +7,7 @@
       [(selected)]="activeCluster"
       [compareWith]="compareById"
       (selectedChange)="onClusterChange($event)"
-      placeholder="选择集群"
+      [placeholder]="'cluster.select_cluster' | translate"
       size="small"
       status="primary"
       class="cluster-select">
@@ -20,9 +20,9 @@
     </nb-select>
 
     <div *ngIf="!loading && clusters.length === 0" class="no-clusters">
-      <span class="text-muted">暂无集群</span>
+      <span class="text-muted">{{ 'cluster.no_clusters_short' | translate }}</span>
       <button nbButton size="tiny" status="primary" (click)="goToClusterManagement()">
-        添加集群
+        {{ 'cluster.add_cluster' | translate }}
       </button>
     </div>
 
@@ -33,7 +33,7 @@
       ghost 
       size="small" 
       (click)="refreshClusters()"
-      nbTooltip="刷新集群列表"
+      [nbTooltip]="'cluster.refresh_clusters' | translate"
       class="refresh-btn">
       <nb-icon icon="refresh-outline"></nb-icon>
     </button>
@@ -43,7 +43,7 @@
       ghost 
       size="small" 
       (click)="goToClusterManagement()"
-      nbTooltip="管理集群"
+      [nbTooltip]="'cluster.manage_clusters' | translate"
       class="manage-btn">
       <nb-icon icon="settings-outline"></nb-icon>
     </button>
@@ -51,7 +51,7 @@
 
   <div *ngIf="activeCluster" class="active-cluster-info">
     <nb-icon icon="checkmark-circle" status="success"></nb-icon>
-    <span class="active-text">当前: {{ activeCluster.name }}</span>
+    <span class="active-text">{{ 'cluster.current_prefix' | translate }} {{ activeCluster.name }}</span>
   </div>
 </div>
 

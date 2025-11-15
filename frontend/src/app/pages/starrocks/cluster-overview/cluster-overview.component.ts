@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
+import { TranslateService } from '@ngx-translate/core';
 import { Subject, interval } from 'rxjs';
 import { takeUntil, switchMap, skip } from 'rxjs/operators';
 import { NbToastrService, NbThemeService } from '@nebular/theme';
@@ -65,18 +66,18 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
 
   // Time range options
   timeRangeOptions = [
-    { label: '1 Hour', value: '1h' },
-    { label: '6 Hours', value: '6h' },
-    { label: '24 Hours', value: '24h' },
-    { label: '3 Days', value: '3d' },
+    { label: 'overview.time_1h', value: '1h' },
+    { label: 'overview.time_6h', value: '6h' },
+    { label: 'overview.time_24h', value: '24h' },
   ];
 
   // Refresh interval options (Grafana style)
   refreshIntervalOptions = [
-    { label: '关闭', value: 'off' },
-    { label: '15秒', value: 15 },
-    { label: '30秒', value: 30 },
-    { label: '1分钟', value: 60 },
+    { label: 'overview.refresh_off', value: 'off' },
+    { label: 'overview.refresh_15s', value: 15 },
+    { label: 'overview.refresh_30s', value: 30 },
+    { label: 'overview.refresh_1m', value: 60 },
+    { label: 'overview.refresh_5m', value: 300 },
   ];
 
   /**

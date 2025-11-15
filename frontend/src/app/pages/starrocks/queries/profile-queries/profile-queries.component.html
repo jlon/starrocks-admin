@@ -7,19 +7,19 @@
             <h5 class="mb-0">Profiles</h5>
             <span class="text-hint">|</span>
             <span class="text-hint" style="font-size: 13px;">
-              集群: <strong>{{ activeCluster?.name || '未选择' }}</strong>
+              {{ 'common.cluster_label' | translate }} <strong>{{ activeCluster?.name || ('common.not_selected' | translate) }}</strong>
             </span>
           </div>
           <div class="d-flex align-items-center gap-2">
             <button nbButton status="primary" size="small" (click)="loadProfiles()" [disabled]="loading || !clusterId">
               <nb-icon icon="refresh-outline"></nb-icon>
-              刷新
+              {{ 'common.refresh' | translate }}
             </button>
             
             <nb-select 
               [(selected)]="selectedRefreshInterval" 
               size="small" 
-              placeholder="自动刷新"
+              [placeholder]="'overview.auto_refresh' | translate"
               (selectedChange)="onRefreshIntervalChange($event)"
               [disabled]="!clusterId"
               style="min-width: 100px;"

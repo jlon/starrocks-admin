@@ -3,6 +3,7 @@ use crate::models::{
     UpdateRolePermissionsRequest, UpdateRoleRequest,
 };
 use crate::services::{casbin_service::CasbinService, permission_service::PermissionService};
+use crate::utils::organization_filter::apply_organization_filter;
 use crate::utils::{ApiError, ApiResult};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -25,29 +26,49 @@ impl RoleService {
         Self { pool, casbin_service, permission_service }
     }
 
-    /// List all roles
-    pub async fn list_roles(&self) -> ApiResult<Vec<RoleResponse>> {
-        let roles: Vec<Role> = sqlx::query_as("SELECT * FROM roles ORDER BY is_system DESC, name")
+    /// List all roles (organization-scoped for non-super-admin)
+    pub async fn list_roles(
+        &self,
+        organization_id: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<Vec<RoleResponse>> {
+        let base_query = "SELECT * FROM roles ORDER BY is_system DESC, name";
+        let (filtered_query, _) =
+            apply_organization_filter(base_query, is_super_admin, organization_id);
+        let roles: Vec<Role> = sqlx::query_as(&filtered_query)
             .fetch_all(&self.pool)
             .await?;
-
         Ok(roles.into_iter().map(|r| r.into()).collect())
     }
 
-    /// Get role by ID
-    pub async fn get_role(&self, role_id: i64) -> ApiResult<RoleResponse> {
-        let role: Role = sqlx::query_as("SELECT * FROM roles WHERE id = ?")
+    /// Get role by ID (organization-scoped)
+    pub async fn get_role(
+        &self,
+        role_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<RoleResponse> {
+        let base_query = "SELECT * FROM roles WHERE id = ?";
+        let (filtered_query, _) =
+            apply_organization_filter(base_query, is_super_admin, requestor_org);
+        let role: Role = sqlx::query_as(&filtered_query)
             .bind(role_id)
             .fetch_optional(&self.pool)
             .await?
             .ok_or_else(|| ApiError::not_found("Role not found"))?;
-
         Ok(role.into())
     }
 
-    /// Get role with permissions
-    pub async fn get_role_with_permissions(&self, role_id: i64) -> ApiResult<RoleWithPermissions> {
-        let role = self.get_role(role_id).await?;
+    /// Get role with permissions (organization-scoped)
+    pub async fn get_role_with_permissions(
+        &self,
+        role_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<RoleWithPermissions> {
+        let role = self
+            .get_role(role_id, requestor_org, is_super_admin)
+            .await?;
 
         let permissions: Vec<PermissionResponse> = sqlx::query_as(
             r#"
@@ -68,27 +89,58 @@ impl RoleService {
         Ok(RoleWithPermissions { role, permissions })
     }
 
-    /// Create a new role
-    pub async fn create_role(&self, req: CreateRoleRequest) -> ApiResult<RoleResponse> {
+    /// Create a new role (organization-scoped)
+    pub async fn create_role(
+        &self,
+        req: CreateRoleRequest,
+        organization_id: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<RoleResponse> {
+        // Enforce organization scope for role creation
+        if !is_super_admin && organization_id.is_none() {
+            return Err(ApiError::forbidden("Organization context required for role creation"));
+        }
+
+        let target_org =
+            if is_super_admin { req.organization_id.or(organization_id) } else { organization_id };
+
         // Check if role code already exists
-        let existing: Option<Role> = sqlx::query_as("SELECT * FROM roles WHERE code = ?")
+        let base_query = "SELECT * FROM roles WHERE code = ?";
+        let (filtered_query, _) =
+            apply_organization_filter(base_query, is_super_admin, organization_id);
+        let existing: Option<Role> = sqlx::query_as(&filtered_query)
             .bind(&req.code)
             .fetch_optional(&self.pool)
             .await?;
 
         if existing.is_some() {
-            return Err(ApiError::validation_error("Role code already exists"));
+            return Err(ApiError::validation_error(
+                "Role code already exists in this organization",
+            ));
         }
 
         // Insert new role
-        let result = sqlx::query(
-            "INSERT INTO roles (code, name, description, is_system) VALUES (?, ?, ?, 0)",
-        )
-        .bind(&req.code)
-        .bind(&req.name)
-        .bind(&req.description)
-        .execute(&self.pool)
-        .await?;
+        let result = if is_super_admin && target_org.is_none() {
+            // Super admin can create system-wide roles
+            sqlx::query(
+                "INSERT INTO roles (code, name, description, is_system) VALUES (?, ?, ?, 0)",
+            )
+            .bind(&req.code)
+            .bind(&req.name)
+            .bind(&req.description)
+            .execute(&self.pool)
+            .await?
+        } else {
+            sqlx::query(
+                "INSERT INTO roles (code, name, description, is_system, organization_id) VALUES (?, ?, ?, 0, ?)",
+            )
+            .bind(&req.code)
+            .bind(&req.name)
+            .bind(&req.description)
+            .bind(target_org)
+            .execute(&self.pool)
+            .await?
+        };
 
         let role_id = result.last_insert_rowid();
 
@@ -97,19 +149,29 @@ impl RoleService {
             .fetch_one(&self.pool)
             .await?;
 
-        tracing::info!("Role created: {} (ID: {})", role.name, role.id);
+        tracing::info!(
+            "Role created: {} (ID: {}) in org {:?}",
+            role.name,
+            role.id,
+            role.organization_id
+        );
 
         Ok(role.into())
     }
 
-    /// Update role
+    /// Update role (organization-scoped)
     pub async fn update_role(
         &self,
         role_id: i64,
         req: UpdateRoleRequest,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
     ) -> ApiResult<RoleResponse> {
-        // Check if role exists
-        let role: Role = sqlx::query_as("SELECT * FROM roles WHERE id = ?")
+        // Check if role exists and within org scope
+        let base_query = "SELECT * FROM roles WHERE id = ?";
+        let (filtered_query, _) =
+            apply_organization_filter(base_query, is_super_admin, requestor_org);
+        let role: Role = sqlx::query_as(&filtered_query)
             .bind(role_id)
             .fetch_optional(&self.pool)
             .await?
@@ -138,7 +200,7 @@ impl RoleService {
         }
 
         if update_parts.is_empty() {
-            return self.get_role(role_id).await;
+            return self.get_role(role_id, requestor_org, is_super_admin).await;
         }
 
         // Direct update approach
@@ -169,13 +231,36 @@ impl RoleService {
             .await?;
         }
 
-        self.get_role(role_id).await
+        if let Some(new_org_id) = req.organization_id {
+            if !is_super_admin {
+                return Err(ApiError::forbidden(
+                    "Only super administrators can reassign role organization",
+                ));
+            }
+            sqlx::query(
+                "UPDATE roles SET organization_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
+            .bind(new_org_id)
+            .bind(role_id)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        self.get_role(role_id, requestor_org, is_super_admin).await
     }
 
-    /// Delete role
-    pub async fn delete_role(&self, role_id: i64) -> ApiResult<()> {
-        // Check if role exists and is system role
-        let role: Role = sqlx::query_as("SELECT * FROM roles WHERE id = ?")
+    /// Delete role (organization-scoped)
+    pub async fn delete_role(
+        &self,
+        role_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<()> {
+        // Check if role exists and within org scope
+        let base_query = "SELECT * FROM roles WHERE id = ?";
+        let (filtered_query, _) =
+            apply_organization_filter(base_query, is_super_admin, requestor_org);
+        let role: Role = sqlx::query_as(&filtered_query)
             .bind(role_id)
             .fetch_optional(&self.pool)
             .await?
@@ -201,54 +286,55 @@ impl RoleService {
         Ok(())
     }
 
-    /// Assign permissions to role
+    /// Assign permissions to role (organization-scoped)
     /// Automatically associates API permissions with menu permissions based on parent_id
     pub async fn assign_permissions_to_role(
         &self,
         role_id: i64,
         req: UpdateRolePermissionsRequest,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
     ) -> ApiResult<()> {
-        // Check if role exists
-        let _role = self.get_role(role_id).await?;
+        // Check if role exists and within org scope
+        let _role = self
+            .get_role(role_id, requestor_org, is_super_admin)
+            .await?;
 
         // Get all permissions to build menu->API mapping
-        let all_permissions: Vec<crate::models::Permission> = sqlx::query_as(
-            "SELECT * FROM permissions ORDER BY type, code"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let all_permissions: Vec<crate::models::Permission> =
+            sqlx::query_as("SELECT * FROM permissions ORDER BY type, code")
+                .fetch_all(&self.pool)
+                .await?;
 
         // Build menu->API mapping based on parent_id
         // This ensures that when a menu permission is assigned, its associated API permissions are also assigned
         let mut menu_to_apis: HashMap<i64, Vec<i64>> = HashMap::new();
-        
+
         for api_perm in all_permissions.iter().filter(|p| p.r#type == "api") {
             if let Some(parent_id) = api_perm.parent_id {
-                menu_to_apis
-                    .entry(parent_id)
-                    .or_default()
-                    .push(api_perm.id);
+                menu_to_apis.entry(parent_id).or_default().push(api_perm.id);
             }
         }
 
         // Extend permission list: add associated API permissions for selected menu permissions
         let mut extended_permission_ids = req.permission_ids.clone();
-        
+
         for permission_id in &req.permission_ids {
             // Check if this is a menu permission
             if let Some(perm) = all_permissions.iter().find(|p| p.id == *permission_id)
-                && perm.r#type == "menu" {
-                    // Automatically add associated API permissions
-                    if let Some(api_ids) = menu_to_apis.get(permission_id) {
-                        extended_permission_ids.extend(api_ids.iter());
-                        tracing::debug!(
-                            "Menu permission {} (code: {}) auto-associated with {} API permissions",
-                            permission_id,
-                            perm.code,
-                            api_ids.len()
-                        );
-                    }
+                && perm.r#type == "menu"
+            {
+                // Automatically add associated API permissions
+                if let Some(api_ids) = menu_to_apis.get(permission_id) {
+                    extended_permission_ids.extend(api_ids.iter());
+                    tracing::debug!(
+                        "Menu permission {} (code: {}) auto-associated with {} API permissions",
+                        permission_id,
+                        perm.code,
+                        api_ids.len()
+                    );
                 }
+            }
         }
 
         // Remove duplicates and sort for consistency
@@ -304,8 +390,18 @@ impl RoleService {
         Ok(())
     }
 
-    /// Get role permissions
-    pub async fn get_role_permissions(&self, role_id: i64) -> ApiResult<Vec<PermissionResponse>> {
+    /// Get role permissions (organization-scoped)
+    pub async fn get_role_permissions(
+        &self,
+        role_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<Vec<PermissionResponse>> {
+        // Verify role exists and within org scope
+        let _role = self
+            .get_role(role_id, requestor_org, is_super_admin)
+            .await?;
+
         let permissions: Vec<crate::models::Permission> = sqlx::query_as(
             r#"
             SELECT p.*

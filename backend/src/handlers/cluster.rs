@@ -25,18 +25,28 @@ use serde::Deserialize;
 )]
 pub async fn create_cluster(
     State(state): State<Arc<AppState>>,
-    axum::extract::Extension(user_id): axum::extract::Extension<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(req): Json<CreateClusterRequest>,
 ) -> ApiResult<Json<ClusterResponse>> {
-    tracing::info!("Cluster creation request: name={}, host={}", req.name, req.fe_host);
+    tracing::info!(
+        "Cluster creation request: name={}, host={} by user {} (org: {:?}, super_admin: {})",
+        req.name,
+        req.fe_host,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
     tracing::debug!(
         "Cluster creation details: user_id={}, port={}, ssl={}",
-        user_id,
+        org_ctx.user_id,
         req.fe_http_port,
         req.enable_ssl
     );
 
-    let cluster = state.cluster_service.create_cluster(req, user_id).await?;
+    let cluster = state
+        .cluster_service
+        .create_cluster(req, org_ctx.user_id, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
 
     tracing::info!("Cluster created successfully: {} (ID: {})", cluster.name, cluster.id);
     Ok(Json(cluster.into()))
@@ -56,13 +66,27 @@ pub async fn create_cluster(
 )]
 pub async fn list_clusters(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<Vec<ClusterResponse>>> {
-    tracing::debug!("Listing all clusters");
+    tracing::debug!(
+        "Listing clusters for user {} (org: {:?}, super_admin: {})",
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
 
     let clusters = state.cluster_service.list_clusters().await?;
-    let responses: Vec<ClusterResponse> = clusters.into_iter().map(|c| c.into()).collect();
+    let filtered = if org_ctx.is_super_admin {
+        clusters
+    } else {
+        clusters
+            .into_iter()
+            .filter(|c| c.organization_id == org_ctx.organization_id)
+            .collect()
+    };
+    let responses: Vec<ClusterResponse> = filtered.into_iter().map(|c| c.into()).collect();
 
-    tracing::debug!("Retrieved {} clusters", responses.len());
+    tracing::debug!("Retrieved {} clusters for user {}", responses.len(), org_ctx.user_id);
     Ok(Json(responses))
 }
 
@@ -81,12 +105,30 @@ pub async fn list_clusters(
 )]
 pub async fn get_active_cluster(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<ClusterResponse>> {
-    tracing::debug!("Getting active cluster");
+    tracing::debug!(
+        "Getting active cluster for user {} (org: {:?}, super_admin: {})",
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
 
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
+    };
 
-    tracing::debug!("Active cluster: {} (ID: {})", cluster.name, cluster.id);
+    tracing::debug!(
+        "Active cluster for user {}: {} (ID: {})",
+        org_ctx.user_id,
+        cluster.name,
+        cluster.id
+    );
     Ok(Json(cluster.into()))
 }
 
@@ -109,12 +151,32 @@ pub async fn get_active_cluster(
 pub async fn activate_cluster(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<ClusterResponse>> {
-    tracing::info!("Activating cluster: ID {}", id);
+    tracing::info!(
+        "Activating cluster: ID {} for user {} (org: {:?}, super_admin: {})",
+        id,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
+
+    // Verify user can activate this cluster (org scope or super admin)
+    let target = state.cluster_service.get_cluster(id).await?;
+    if !org_ctx.is_super_admin && target.organization_id != org_ctx.organization_id {
+        return Err(crate::utils::ApiError::forbidden(
+            "You can only activate clusters in your organization",
+        ));
+    }
 
     let cluster = state.cluster_service.set_active_cluster(id).await?;
 
-    tracing::info!("Cluster activated successfully: {} (ID: {})", cluster.name, cluster.id);
+    tracing::info!(
+        "Cluster activated successfully: {} (ID: {}) by user {}",
+        cluster.name,
+        cluster.id,
+        org_ctx.user_id
+    );
     Ok(Json(cluster.into()))
 }
 
@@ -137,8 +199,14 @@ pub async fn activate_cluster(
 pub async fn get_cluster(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<ClusterResponse>> {
     let cluster = state.cluster_service.get_cluster(id).await?;
+    if !org_ctx.is_super_admin && cluster.organization_id != org_ctx.organization_id {
+        return Err(crate::utils::ApiError::forbidden(
+            "You can only view clusters within your organization",
+        ));
+    }
     Ok(Json(cluster.into()))
 }
 
@@ -162,8 +230,21 @@ pub async fn get_cluster(
 pub async fn update_cluster(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(req): Json<UpdateClusterRequest>,
 ) -> ApiResult<Json<ClusterResponse>> {
+    let existing = state.cluster_service.get_cluster(id).await?;
+    if !org_ctx.is_super_admin && existing.organization_id != org_ctx.organization_id {
+        return Err(crate::utils::ApiError::forbidden(
+            "You can only update clusters within your organization",
+        ));
+    }
+    if !org_ctx.is_super_admin && req.organization_id.is_some() {
+        return Err(crate::utils::ApiError::forbidden(
+            "Only super administrators can reassign cluster organization",
+        ));
+    }
+
     let cluster = state.cluster_service.update_cluster(id, req).await?;
     Ok(Json(cluster.into()))
 }
@@ -187,8 +268,16 @@ pub async fn update_cluster(
 pub async fn delete_cluster(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     tracing::warn!("Cluster deletion request for ID: {}", id);
+
+    let existing = state.cluster_service.get_cluster(id).await?;
+    if !org_ctx.is_super_admin && existing.organization_id != org_ctx.organization_id {
+        return Err(crate::utils::ApiError::forbidden(
+            "You can only delete clusters within your organization",
+        ));
+    }
 
     state.cluster_service.delete_cluster(id).await?;
 
@@ -276,6 +365,7 @@ pub async fn get_cluster_health(
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             created_by: None,
+            organization_id: None,
         };
 
         let health = state
@@ -346,6 +436,7 @@ pub async fn test_cluster_connection(
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         created_by: None,
+        organization_id: None,
     };
 
     let health = state

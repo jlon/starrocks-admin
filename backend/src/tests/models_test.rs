@@ -38,6 +38,7 @@ fn test_role_response_from_role() {
         name: "Administrator".to_string(),
         description: Some("Admin role".to_string()),
         is_system: true,
+        organization_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
@@ -60,6 +61,7 @@ fn test_create_role_request_deserialization() {
     assert_eq!(deserialized.code, "test_role");
     assert_eq!(deserialized.name, "Test Role");
     assert_eq!(deserialized.description, Some("Test description".to_string()));
+    assert_eq!(deserialized.organization_id, None);
 }
 
 #[test]
@@ -68,12 +70,14 @@ fn test_update_role_request_deserialization() {
     let deserialized: UpdateRoleRequest = serde_json::from_str(json_str).unwrap();
     assert_eq!(deserialized.name, Some("Updated Name".to_string()));
     assert_eq!(deserialized.description, Some("Updated description".to_string()));
+    assert_eq!(deserialized.organization_id, None);
 
     // Test with null values
     let json_str2 = r#"{}"#;
     let deserialized2: UpdateRoleRequest = serde_json::from_str(json_str2).unwrap();
     assert_eq!(deserialized2.name, None);
     assert_eq!(deserialized2.description, None);
+    assert_eq!(deserialized2.organization_id, None);
 }
 
 #[test]
@@ -135,6 +139,7 @@ fn test_role_response_serialization() {
         name: "Administrator".to_string(),
         description: Some("Admin role".to_string()),
         is_system: true,
+        organization_id: None,
         created_at: Utc::now(),
     };
 

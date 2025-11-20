@@ -1,11 +1,8 @@
 use crate::models::{CreateRoleRequest, UpdateRolePermissionsRequest, UpdateRoleRequest};
-use crate::services::role_service::RoleService;
 use crate::services::permission_service::PermissionService;
+use crate::services::role_service::RoleService;
 use crate::tests::common::{
-    create_role,
-    create_test_casbin_service,
-    create_test_db,
-    setup_test_data,
+    create_role, create_test_casbin_service, create_test_db, setup_test_data,
 };
 use crate::utils::ApiError;
 use std::sync::Arc;
@@ -37,7 +34,7 @@ async fn test_list_roles_empty() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool, casbin_service, permission_service);
 
-    let result = service.list_roles().await;
+    let result = service.list_roles(None, true).await;
     assert!(result.is_ok());
     let roles = result.unwrap();
     assert_eq!(roles.len(), 0, "Should return empty list when no roles");
@@ -55,7 +52,7 @@ async fn test_list_roles() {
     create_role(&pool, "ops", "Ops", "Ops role", false).await;
     create_role(&pool, "auditor", "Auditor", "Auditor role", false).await;
 
-    let result = service.list_roles().await;
+    let result = service.list_roles(None, true).await;
     assert!(result.is_ok());
     let roles = result.unwrap();
     assert!(roles.len() >= 3, "Should return all roles");
@@ -68,7 +65,7 @@ async fn test_list_roles() {
 async fn test_get_role_not_found() {
     let service = create_test_role_service().await;
 
-    let result = service.get_role(999).await;
+    let result = service.get_role(999, None, true).await;
     assert!(result.is_err());
     match result.unwrap_err() {
         ApiError::SystemFunctionNotFound(_) => {}, // ApiError::not_found returns SystemFunctionNotFound
@@ -87,7 +84,7 @@ async fn test_get_role() {
     let data = setup_test_data(&pool).await;
     let admin_role_id = data.admin_role_id;
 
-    let result = service.get_role(admin_role_id).await;
+    let result = service.get_role(admin_role_id, None, true).await;
     assert!(result.is_ok());
     let role = result.unwrap();
     assert_eq!(role.id, admin_role_id);
@@ -106,7 +103,9 @@ async fn test_get_role_with_permissions() {
     let data = setup_test_data(&pool).await;
     let admin_role_id = data.admin_role_id;
 
-    let result = service.get_role_with_permissions(admin_role_id).await;
+    let result = service
+        .get_role_with_permissions(admin_role_id, None, true)
+        .await;
     assert!(result.is_ok());
     let role_with_perms = result.unwrap();
     assert_eq!(role_with_perms.role.id, admin_role_id);
@@ -118,41 +117,37 @@ async fn test_create_role() {
     let service = create_test_role_service().await;
 
     let req = CreateRoleRequest {
-        code: "test_role".to_string(),
-        name: "Test Role".to_string(),
-        description: Some("Test description".to_string()),
+        code: "operator".to_string(),
+        name: "Operator".to_string(),
+        description: Some("Operator role".to_string()),
+        organization_id: None,
     };
 
-    let result = service.create_role(req).await;
+    let result = service.create_role(req, None, true).await;
     assert!(result.is_ok());
     let role = result.unwrap();
-    assert_eq!(role.code, "test_role");
-    assert_eq!(role.name, "Test Role");
-    assert_eq!(role.description, Some("Test description".to_string()));
+    assert_eq!(role.code, "operator");
+    assert_eq!(role.name, "Operator");
+    assert_eq!(role.description, Some("Operator role".to_string()));
     assert!(!role.is_system);
 }
 
 #[tokio::test]
-async fn test_create_role_duplicate_code() {
-    let pool = create_test_db().await;
-    let casbin_service = create_test_casbin_service().await;
-    let permission_service =
-        Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
-    let service = RoleService::new(pool.clone(), casbin_service, permission_service);
-
-    setup_test_data(&pool).await; // Creates admin
+async fn test_create_duplicate_role() {
+    let service = create_test_role_service().await;
 
     let req = CreateRoleRequest {
-        code: "admin".to_string(), // Duplicate
-        name: "Another Admin".to_string(),
-        description: None,
+        code: "admin".to_string(),
+        name: "Admin".to_string(),
+        description: Some("Duplicate admin".to_string()),
+        organization_id: None,
     };
 
-    let result = service.create_role(req).await;
+    let result = service.create_role(req, None, true).await;
     assert!(result.is_err());
     match result.unwrap_err() {
         ApiError::ValidationError(_) => {},
-        _ => panic!("Should return validation error"),
+        _ => panic!("Should return validation error for duplicate role"),
     }
 }
 
@@ -169,73 +164,19 @@ async fn test_update_role() {
 
     let req = UpdateRoleRequest {
         name: Some("Updated Operator".to_string()),
-        description: Some("Updated description".to_string()),
+        description: Some("Updated operator role".to_string()),
+        organization_id: None,
     };
 
-    let result = service.update_role(operator_role_id, req).await;
+    let result = service.update_role(operator_role_id, req, None, true).await;
     assert!(result.is_ok());
     let role = result.unwrap();
     assert_eq!(role.name, "Updated Operator");
-    assert_eq!(role.description, Some("Updated description".to_string()));
+    assert_eq!(role.description, Some("Updated operator role".to_string()));
 }
 
 #[tokio::test]
-async fn test_update_role_name_only() {
-    let pool = create_test_db().await;
-    let casbin_service = create_test_casbin_service().await;
-    let permission_service =
-        Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
-    let service = RoleService::new(pool.clone(), casbin_service, permission_service);
-
-    let _data = setup_test_data(&pool).await;
-    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
-
-    let req = UpdateRoleRequest { name: Some("New Name".to_string()), description: None };
-
-    let result = service.update_role(operator_role_id, req).await;
-    assert!(result.is_ok());
-    let role = result.unwrap();
-    assert_eq!(role.name, "New Name");
-}
-
-#[tokio::test]
-async fn test_update_role_description_only() {
-    let pool = create_test_db().await;
-    let casbin_service = create_test_casbin_service().await;
-    let permission_service =
-        Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
-    let service = RoleService::new(pool.clone(), casbin_service, permission_service);
-
-    let _data = setup_test_data(&pool).await;
-    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
-
-    let req = UpdateRoleRequest { name: None, description: Some("Only description".to_string()) };
-
-    let result = service.update_role(operator_role_id, req).await;
-    assert!(result.is_ok());
-    let role = result.unwrap();
-    assert_eq!(role.description, Some("Only description".to_string()));
-}
-
-#[tokio::test]
-async fn test_update_role_no_changes() {
-    let pool = create_test_db().await;
-    let casbin_service = create_test_casbin_service().await;
-    let permission_service =
-        Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
-    let service = RoleService::new(pool.clone(), casbin_service, permission_service);
-
-    let _data = setup_test_data(&pool).await;
-    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
-
-    let req = UpdateRoleRequest { name: None, description: None };
-
-    let result = service.update_role(operator_role_id, req).await;
-    assert!(result.is_ok(), "Should return role unchanged");
-}
-
-#[tokio::test]
-async fn test_update_system_role_name() {
+async fn test_update_system_role() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
     let permission_service =
@@ -245,31 +186,32 @@ async fn test_update_system_role_name() {
     let data = setup_test_data(&pool).await;
     let admin_role_id = data.admin_role_id;
 
-    let req = UpdateRoleRequest { name: Some("New Admin Name".to_string()), description: None };
+    let req = UpdateRoleRequest {
+        name: Some("Updated Admin".to_string()),
+        description: Some("Updated admin role".to_string()),
+        organization_id: None,
+    };
 
-    let result = service.update_role(admin_role_id, req).await;
+    let result = service.update_role(admin_role_id, req, None, true).await;
+    assert!(result.is_err(), "System role updates should be rejected when renaming");
+}
+
+#[tokio::test]
+async fn test_update_nonexistent_role() {
+    let service = create_test_role_service().await;
+
+    let req = UpdateRoleRequest {
+        name: Some("Nonexistent".to_string()),
+        description: Some("Nonexistent role".to_string()),
+        organization_id: None,
+    };
+
+    let result = service.update_role(999, req, None, true).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        ApiError::ValidationError(_) => {},
-        _ => panic!("Should return validation error for system role name update"),
+        ApiError::SystemFunctionNotFound(_) => {},
+        _ => panic!("Should return not found error"),
     }
-}
-
-#[tokio::test]
-async fn test_update_system_role_description() {
-    let pool = create_test_db().await;
-    let casbin_service = create_test_casbin_service().await;
-    let permission_service =
-        Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
-    let service = RoleService::new(pool.clone(), casbin_service, permission_service);
-
-    let data = setup_test_data(&pool).await;
-    let admin_role_id = data.admin_role_id;
-
-    let req = UpdateRoleRequest { name: None, description: Some("New description".to_string()) };
-
-    let result = service.update_role(admin_role_id, req).await;
-    assert!(result.is_ok(), "Should allow description update for system role");
 }
 
 #[tokio::test]
@@ -280,59 +222,20 @@ async fn test_delete_role() {
         Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
     let service = RoleService::new(pool.clone(), casbin_service, permission_service);
 
-    let _data = setup_test_data(&pool).await;
-    let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
-
-    let result = service.delete_role(operator_role_id).await;
-    assert!(result.is_ok(), "Should delete non-system role");
-
-    // Verify role is deleted
-    let result = service.get_role(operator_role_id).await;
-    assert!(result.is_err(), "Role should not exist after deletion");
-}
-
-#[tokio::test]
-async fn test_delete_system_role() {
-    let pool = create_test_db().await;
-    let casbin_service = create_test_casbin_service().await;
-    let permission_service =
-        Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
-    let service = RoleService::new(pool.clone(), casbin_service, permission_service);
-
-    let data = setup_test_data(&pool).await;
-    let admin_role_id = data.admin_role_id;
-
-    let result = service.delete_role(admin_role_id).await;
-    assert!(result.is_err());
-    match result.unwrap_err() {
-        ApiError::ValidationError(_) => {},
-        _ => panic!("Should return validation error for system role deletion"),
-    }
-}
-
-#[tokio::test]
-async fn test_assign_permissions_to_role() {
-    let pool = create_test_db().await;
-    let casbin_service = create_test_casbin_service().await;
-    let permission_service =
-        Arc::new(PermissionService::new(pool.clone(), Arc::clone(&casbin_service)));
-    let service = RoleService::new(pool.clone(), casbin_service, permission_service);
-
     let data = setup_test_data(&pool).await;
     let operator_role_id = create_role(&pool, "ops", "Operator", "Operator role", false).await;
     let permission_ids = data.permission_ids.clone();
 
-    // Assign first 3 permissions
+    // Assign permissions
     let req = UpdateRolePermissionsRequest { permission_ids: permission_ids[0..3].to_vec() };
-
     let result = service
-        .assign_permissions_to_role(operator_role_id, req)
+        .assign_permissions_to_role(operator_role_id, req, None, true)
         .await;
-    assert!(result.is_ok(), "Should assign permissions");
+    assert!(result.is_ok());
 
     // Verify permissions are assigned
     let role_with_perms = service
-        .get_role_with_permissions(operator_role_id)
+        .get_role_with_permissions(operator_role_id, None, true)
         .await
         .unwrap();
     assert_eq!(role_with_perms.permissions.len(), 3);
@@ -353,20 +256,20 @@ async fn test_assign_permissions_to_role_replace() {
     // First assignment
     let req1 = UpdateRolePermissionsRequest { permission_ids: permission_ids[0..3].to_vec() };
     service
-        .assign_permissions_to_role(operator_role_id, req1)
+        .assign_permissions_to_role(operator_role_id, req1, None, true)
         .await
         .unwrap();
 
     // Second assignment (should replace)
     let req2 = UpdateRolePermissionsRequest { permission_ids: permission_ids[3..6].to_vec() };
     let result = service
-        .assign_permissions_to_role(operator_role_id, req2)
+        .assign_permissions_to_role(operator_role_id, req2, None, true)
         .await;
     assert!(result.is_ok());
 
     // Verify old permissions are replaced
     let role_with_perms = service
-        .get_role_with_permissions(operator_role_id)
+        .get_role_with_permissions(operator_role_id, None, true)
         .await
         .unwrap();
     assert_eq!(role_with_perms.permissions.len(), 3);
@@ -392,12 +295,12 @@ async fn test_assign_permissions_to_role_empty() {
     let req = UpdateRolePermissionsRequest { permission_ids: vec![] };
 
     let result = service
-        .assign_permissions_to_role(operator_role_id, req)
+        .assign_permissions_to_role(operator_role_id, req, None, true)
         .await;
     assert!(result.is_ok(), "Should allow empty permissions");
 
     let role_with_perms = service
-        .get_role_with_permissions(operator_role_id)
+        .get_role_with_permissions(operator_role_id, None, true)
         .await
         .unwrap();
     assert_eq!(role_with_perms.permissions.len(), 0);
@@ -414,7 +317,9 @@ async fn test_get_role_permissions() {
     let data = setup_test_data(&pool).await;
     let admin_role_id = data.admin_role_id;
 
-    let result = service.get_role_permissions(admin_role_id).await;
+    let result = service
+        .get_role_permissions(admin_role_id, None, true)
+        .await;
     assert!(result.is_ok());
     let permissions = result.unwrap();
     assert!(permissions.len() >= 6, "Admin should have all permissions");

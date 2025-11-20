@@ -92,6 +92,11 @@ export const MENU_ITEMS: NbMenuItem[] = [
         link: '/pages/system/roles',
         data: { permission: 'menu:roles' },
       } as NbMenuItem & { data?: { permission: string } },
+      {
+        title: '组织管理',
+        link: '/pages/system/organizations',
+        data: { permission: 'menu:organizations' },
+      } as NbMenuItem & { data?: { permission: string } },
     ],
   } as NbMenuItem & { data?: { permission: string } },
 ];

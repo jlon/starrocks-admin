@@ -9,6 +9,7 @@ use crate::models::{
     AdminCreateUserRequest, AdminUpdateUserRequest, RoleResponse, User, UserWithRolesResponse,
 };
 use crate::services::casbin_service::CasbinService;
+use crate::utils::organization_filter::apply_organization_filter;
 use crate::utils::{ApiError, ApiResult};
 
 #[derive(FromRow)]
@@ -19,6 +20,7 @@ struct UserRoleRecord {
     name: String,
     description: Option<String>,
     is_system: bool,
+    organization_id: Option<i64>,
     created_at: DateTime<Utc>,
 }
 
@@ -33,8 +35,15 @@ impl UserService {
         Self { pool, casbin_service }
     }
 
-    pub async fn list_users(&self) -> ApiResult<Vec<UserWithRolesResponse>> {
-        let users: Vec<User> = sqlx::query_as("SELECT * FROM users ORDER BY created_at DESC")
+    pub async fn list_users(
+        &self,
+        organization_id: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<Vec<UserWithRolesResponse>> {
+        let base_query = "SELECT * FROM users ORDER BY created_at DESC";
+        let (filtered_query, _) =
+            apply_organization_filter(base_query, is_super_admin, organization_id);
+        let users: Vec<User> = sqlx::query_as(&filtered_query)
             .fetch_all(&self.pool)
             .await?;
 
@@ -49,8 +58,15 @@ impl UserService {
             .collect())
     }
 
-    pub async fn get_user(&self, user_id: i64) -> ApiResult<UserWithRolesResponse> {
-        let user = self.fetch_user(user_id).await?;
+    pub async fn get_user(
+        &self,
+        user_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<UserWithRolesResponse> {
+        let user = self
+            .fetch_user(user_id, requestor_org, is_super_admin)
+            .await?;
         let roles = self.fetch_user_roles(user_id).await?;
         Ok(UserWithRolesResponse { user: user.into(), roles })
     }
@@ -58,7 +74,18 @@ impl UserService {
     pub async fn create_user(
         &self,
         req: AdminCreateUserRequest,
+        organization_id: Option<i64>,
+        is_super_admin: bool,
     ) -> ApiResult<UserWithRolesResponse> {
+        // Enforce organization context for non-super admin
+        if !is_super_admin && organization_id.is_none() {
+            return Err(ApiError::forbidden("Organization context required for user creation"));
+        }
+
+        let target_org_id = self
+            .resolve_target_org(req.organization_id, organization_id, is_super_admin)
+            .await?;
+
         let mut tx = self.pool.begin().await?;
 
         self.ensure_username_available(&mut tx, &req.username, None)
@@ -70,35 +97,51 @@ impl UserService {
         let result = {
             let conn = tx.as_mut();
             sqlx::query(
-                "INSERT INTO users (username, password_hash, email, avatar) VALUES (?, ?, ?, ?)",
+                "INSERT INTO users (username, password_hash, email, avatar, organization_id) VALUES (?, ?, ?, ?, ?)",
             )
             .bind(&req.username)
             .bind(&password_hash)
             .bind(&req.email)
             .bind(&req.avatar)
+            .bind(target_org_id)
             .execute(conn)
             .await?
         };
 
         let user_id = result.last_insert_rowid();
 
+        // Assign user to organization
+        self.upsert_user_organization(&mut tx, user_id, target_org_id)
+            .await?;
+
         if let Some(role_ids) = &req.role_ids {
-            self.replace_user_roles(&mut tx, user_id, role_ids).await?;
+            self.replace_user_roles(
+                &mut tx,
+                user_id,
+                role_ids,
+                Some(target_org_id),
+                is_super_admin,
+            )
+            .await?;
         }
 
         tx.commit().await?;
 
-        self.get_user(user_id).await
+        self.get_user(user_id, organization_id, is_super_admin)
+            .await
     }
 
     pub async fn update_user(
         &self,
         user_id: i64,
         req: AdminUpdateUserRequest,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
     ) -> ApiResult<UserWithRolesResponse> {
         let mut tx = self.pool.begin().await?;
 
-        self.fetch_user_in_tx(&mut tx, user_id).await?;
+        self.fetch_user_in_tx(&mut tx, user_id, requestor_org, is_super_admin)
+            .await?;
 
         if let Some(username) = &req.username {
             self.ensure_username_available(&mut tx, username, Some(user_id))
@@ -159,18 +202,68 @@ impl UserService {
         }
 
         if let Some(role_ids) = &req.role_ids {
-            self.replace_user_roles(&mut tx, user_id, role_ids).await?;
+            self.replace_user_roles(&mut tx, user_id, role_ids, requestor_org, is_super_admin)
+                .await?;
+        }
+
+        if let Some(new_org_id) = req.organization_id {
+            if !is_super_admin {
+                return Err(ApiError::forbidden(
+                    "Only super administrators can reassign user organizations",
+                ));
+            }
+            self.ensure_organization_exists(new_org_id).await?;
+            {
+                let conn = tx.as_mut();
+                sqlx::query(
+                    "UPDATE users SET organization_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                )
+                .bind(new_org_id)
+                .bind(user_id)
+                .execute(conn)
+                .await?;
+            }
+
+            self.upsert_user_organization(&mut tx, user_id, new_org_id)
+                .await?;
         }
 
         tx.commit().await?;
 
-        self.get_user(user_id).await
+        self.get_user(user_id, requestor_org, is_super_admin).await
     }
 
-    pub async fn delete_user(&self, user_id: i64) -> ApiResult<()> {
+    async fn upsert_user_organization(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        user_id: i64,
+        org_id: i64,
+    ) -> ApiResult<()> {
+        let conn = tx.as_mut();
+        sqlx::query(
+            r#"
+            INSERT INTO user_organizations (user_id, organization_id)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET organization_id = excluded.organization_id
+            "#,
+        )
+        .bind(user_id)
+        .bind(org_id)
+        .execute(conn)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn delete_user(
+        &self,
+        user_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<()> {
         let mut tx = self.pool.begin().await?;
 
-        self.fetch_user_in_tx(&mut tx, user_id).await?;
+        self.fetch_user_in_tx(&mut tx, user_id, requestor_org, is_super_admin)
+            .await?;
         let current_role_ids = self.collect_user_role_ids(&mut tx, user_id).await?;
 
         {
@@ -205,8 +298,16 @@ impl UserService {
         UserWithRolesResponse { user: user.into(), roles: roles.cloned().unwrap_or_default() }
     }
 
-    async fn fetch_user(&self, user_id: i64) -> ApiResult<User> {
-        sqlx::query_as("SELECT * FROM users WHERE id = ?")
+    async fn fetch_user(
+        &self,
+        user_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<User> {
+        let base_query = "SELECT * FROM users WHERE id = ?";
+        let (filtered_query, _) =
+            apply_organization_filter(base_query, is_super_admin, requestor_org);
+        sqlx::query_as(&filtered_query)
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await?
@@ -217,9 +318,14 @@ impl UserService {
         &self,
         tx: &mut Transaction<'_, Sqlite>,
         user_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
     ) -> ApiResult<User> {
+        let base_query = "SELECT * FROM users WHERE id = ?";
+        let (filtered_query, _) =
+            apply_organization_filter(base_query, is_super_admin, requestor_org);
         let conn = tx.as_mut();
-        sqlx::query_as("SELECT * FROM users WHERE id = ?")
+        sqlx::query_as(&filtered_query)
             .bind(user_id)
             .fetch_optional(conn)
             .await?
@@ -241,9 +347,10 @@ impl UserService {
         };
 
         if let Some((id,)) = existing
-            && current_user.map(|uid| uid != id).unwrap_or(true) {
-                return Err(ApiError::validation_error("Username already exists"));
-            }
+            && current_user.map(|uid| uid != id).unwrap_or(true)
+        {
+            return Err(ApiError::validation_error("Username already exists"));
+        }
 
         Ok(())
     }
@@ -253,9 +360,12 @@ impl UserService {
         tx: &mut Transaction<'_, Sqlite>,
         user_id: i64,
         role_ids: &[i64],
+        organization_id: Option<i64>,
+        is_super_admin: bool,
     ) -> ApiResult<()> {
         let unique_ids: HashSet<i64> = role_ids.iter().copied().collect();
-        self.validate_roles(tx, &unique_ids).await?;
+        self.validate_roles(tx, &unique_ids, organization_id, is_super_admin)
+            .await?;
 
         let current_ids = self.collect_user_role_ids(tx, user_id).await?;
         let current_set: HashSet<i64> = current_ids.iter().copied().collect();
@@ -300,22 +410,30 @@ impl UserService {
         &self,
         tx: &mut Transaction<'_, Sqlite>,
         role_ids: &HashSet<i64>,
+        organization_id: Option<i64>,
+        is_super_admin: bool,
     ) -> ApiResult<()> {
         if role_ids.is_empty() {
             return Ok(());
         }
 
         for role_id in role_ids {
+            let base_query = "SELECT id FROM roles WHERE id = ?";
+            let (filtered_query, _) =
+                apply_organization_filter(base_query, is_super_admin, organization_id);
             let exists: Option<(i64,)> = {
                 let conn = tx.as_mut();
-                sqlx::query_as("SELECT id FROM roles WHERE id = ?")
+                sqlx::query_as(&filtered_query)
                     .bind(role_id)
                     .fetch_optional(conn)
                     .await?
             };
 
             if exists.is_none() {
-                return Err(ApiError::not_found(format!("Role {} not found", role_id)));
+                return Err(ApiError::not_found(format!(
+                    "Role {} not found or not accessible in this organization",
+                    role_id
+                )));
             }
         }
 
@@ -381,7 +499,68 @@ impl UserService {
             name: row.name,
             description: row.description,
             is_system: row.is_system,
+            organization_id: row.organization_id,
             created_at: row.created_at,
         }
+    }
+
+    async fn resolve_target_org(
+        &self,
+        requested_org: Option<i64>,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<i64> {
+        if is_super_admin {
+            if let Some(id) = requested_org.or(requestor_org) {
+                self.ensure_organization_exists(id).await?;
+                return Ok(id);
+            }
+            return self.fetch_default_org_id().await;
+        }
+
+        // For non-super admins, ensure they can only create users in their own organization
+        let current_org = requestor_org
+            .ok_or_else(|| ApiError::forbidden("Organization context required for user creation"))?;
+        
+        // If organization_id is explicitly specified, it must match the requestor's organization
+        if let Some(requested_id) = requested_org {
+            if requested_id != current_org {
+                return Err(ApiError::forbidden(
+                    "Organization administrators cannot create users in other organizations"
+                ));
+            }
+        }
+        
+        Ok(current_org)
+    }
+
+    async fn ensure_organization_exists(&self, org_id: i64) -> ApiResult<()> {
+        let exists: Option<(i64,)> = sqlx::query_as("SELECT id FROM organizations WHERE id = ?")
+            .bind(org_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        if exists.is_none() {
+            return Err(ApiError::not_found("Organization not found"));
+        }
+        Ok(())
+    }
+
+    async fn fetch_default_org_id(&self) -> ApiResult<i64> {
+        if let Some(id) =
+            sqlx::query_scalar("SELECT id FROM organizations WHERE code = 'default_org'")
+                .fetch_optional(&self.pool)
+                .await?
+        {
+            return Ok(id);
+        }
+
+        sqlx::query("INSERT INTO organizations (code, name, description, is_system) VALUES ('default_org', 'Default Organization', 'Auto-created default organization', 1)")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query_scalar("SELECT id FROM organizations WHERE code = 'default_org'")
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| ApiError::not_found("Default organization not found"))
     }
 }

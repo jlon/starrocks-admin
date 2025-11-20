@@ -6,6 +6,7 @@ pub mod materialized_view_service;
 pub mod metrics_collector_service;
 pub mod mysql_client;
 pub mod mysql_pool_manager;
+pub mod organization_service;
 pub mod overview_service;
 pub mod permission_service;
 pub mod role_service;
@@ -24,6 +25,7 @@ pub use materialized_view_service::MaterializedViewService;
 pub use metrics_collector_service::{MetricsCollectorService, MetricsSnapshot};
 pub use mysql_client::MySQLClient;
 pub use mysql_pool_manager::MySQLPoolManager;
+pub use organization_service::OrganizationService;
 pub use overview_service::{
     Alert, AlertLevel, BECompactionScore, CapacityPrediction, ClusterHealth, ClusterOverview,
     CompactionDetailStats, CompactionDurationStats, CompactionStats, CompactionTaskStats,

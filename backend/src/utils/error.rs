@@ -36,6 +36,9 @@ pub enum ApiError {
     ClusterAuthFailed,
 
     // Resource errors 3xxx
+    #[error("Resource not found: {0}")]
+    ResourceNotFound(String),
+
     #[error("Query {query_id} not found")]
     QueryNotFound { query_id: String },
 
@@ -124,7 +127,12 @@ impl ApiError {
 
     /// Helper to create not found error
     pub fn not_found(message: impl Into<String>) -> Self {
-        Self::SystemFunctionNotFound(message.into())
+        Self::ResourceNotFound(message.into())
+    }
+
+    /// Helper to create forbidden error (uses Unauthorized for compatibility)
+    pub fn forbidden(message: impl Into<String>) -> Self {
+        Self::Unauthorized(message.into())
     }
 
     /// Helper to create invalid SQL error
@@ -157,6 +165,7 @@ impl ApiError {
             Self::ClusterAuthFailed => 2004,
 
             // Resource errors 3xxx
+            Self::ResourceNotFound(_) => 3000,
             Self::QueryNotFound { .. } => 3001,
             Self::QueryKillFailed(_) => 3002,
 
@@ -197,7 +206,7 @@ impl IntoResponse for ApiError {
         let status = match code {
             1001..=1999 => StatusCode::UNAUTHORIZED,
             2001..=2999 => StatusCode::BAD_REQUEST,
-            3001..=3999 => StatusCode::NOT_FOUND,
+            3000..=3999 => StatusCode::NOT_FOUND,
             4001..=4999 => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };

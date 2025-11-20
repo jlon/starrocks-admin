@@ -119,9 +119,11 @@ async fn test_casbin_service_reload_policies_from_db() {
 
     // User should have access to admin permissions
     // Based on reload_policies_from_db logic:
-    // - "api:clusters:create" maps to resource="clusters", action="create"
-    // - "menu:dashboard" maps to resource="dashboard", action="view"
-    let has_cluster_permission = service.enforce(user_id, "clusters", "create").await;
+    // - "api:clusters:create" maps to resource="system:clusters", action="create"
+    // - "menu:dashboard" maps to resource="system:dashboard", action="view"
+    let has_cluster_permission = service
+        .enforce(user_id, "system:clusters", "create")
+        .await;
     assert!(has_cluster_permission.is_ok(), "Permission check should succeed");
     assert!(has_cluster_permission.unwrap(), "Admin should have cluster:create permission");
 }

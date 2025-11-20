@@ -20,6 +20,7 @@ import {
   NbTooltipModule,
   NbFormFieldModule,
   NbUserModule,
+  NbRadioModule,
 } from '@nebular/theme';
 
 import { Ng2SmartTableModule } from 'ng2-smart-table';
@@ -36,6 +37,9 @@ import { HasPermissionDirective } from '../../@core/directives/has-permission.di
 import { UserFormDialogComponent } from './users/user-form/user-form-dialog.component';
 import { RoleFormDialogComponent } from './roles/role-form/role-form-dialog.component';
 import { RolesActionsCellComponent } from './roles/table/actions-cell.component';
+import { OrganizationsComponent } from './organizations/organizations.component';
+import { OrganizationsActionsCellComponent } from './organizations/table/actions-cell.component';
+import { OrganizationFormDialogComponent } from './organizations/organization-form/organization-form-dialog.component';
 
 @NgModule({
   declarations: [
@@ -49,6 +53,9 @@ import { RolesActionsCellComponent } from './roles/table/actions-cell.component'
     HasPermissionDirective,
     UserFormDialogComponent,
     RoleFormDialogComponent,
+    OrganizationsComponent,
+    OrganizationsActionsCellComponent,
+    OrganizationFormDialogComponent,
   ],
   imports: [
     CommonModule,
@@ -73,6 +80,7 @@ import { RolesActionsCellComponent } from './roles/table/actions-cell.component'
     NbTooltipModule,
     NbFormFieldModule,
     NbUserModule,
+    NbRadioModule,
     Ng2SmartTableModule,
   ],
 })

@@ -1,8 +1,9 @@
 use axum::{
+    Router,
     body::Body,
-    http::{header, HeaderValue, StatusCode, Uri},
+    http::{HeaderValue, StatusCode, Uri, header},
+    middleware as axum_middleware,
     response::{IntoResponse, Response},
-    Router, middleware as axum_middleware,
     routing::{delete, get, post, put},
 };
 use std::sync::Arc;
@@ -27,8 +28,8 @@ use config::Config;
 use embedded::WebAssets;
 use services::{
     AuthService, CasbinService, ClusterService, DataStatisticsService, MetricsCollectorService,
-    MySQLPoolManager, OverviewService, PermissionService, RoleService, SystemFunctionService,
-    UserRoleService, UserService,
+    MySQLPoolManager, OrganizationService, OverviewService, PermissionService, RoleService,
+    SystemFunctionService, UserRoleService, UserService,
 };
 use sqlx::SqlitePool;
 use utils::{JwtUtil, ScheduledExecutor};
@@ -50,6 +51,7 @@ pub struct AppState {
     // Services (grouped by domain)
     pub auth_service: Arc<AuthService>,
     pub cluster_service: Arc<ClusterService>,
+    pub organization_service: Arc<OrganizationService>,
     pub system_function_service: Arc<SystemFunctionService>,
     pub metrics_collector_service: Arc<MetricsCollectorService>,
     pub data_statistics_service: Arc<DataStatisticsService>,
@@ -77,6 +79,11 @@ pub struct AppState {
         handlers::cluster::update_cluster,
         handlers::cluster::delete_cluster,
         handlers::cluster::activate_cluster,
+        handlers::organization::create_organization,
+        handlers::organization::list_organizations,
+        handlers::organization::get_organization,
+        handlers::organization::update_organization,
+        handlers::organization::delete_organization,
         handlers::cluster::get_cluster_health,
         handlers::backend::list_backends,
         handlers::frontend::list_frontends,
@@ -265,15 +272,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Extract directory and filename prefix from config
-        let log_dir = log_path.parent()
-            .and_then(|p| p.to_str())
-            .unwrap_or("logs");
-        let file_name = log_path.file_name()
+        let log_dir = log_path.parent().and_then(|p| p.to_str()).unwrap_or("logs");
+        let file_name = log_path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("starrocks-admin.log");
         // Remove .log extension if present (rolling appender adds date suffix)
-        let file_prefix = file_name.strip_suffix(".log")
-            .unwrap_or(file_name);
+        let file_prefix = file_name.strip_suffix(".log").unwrap_or(file_name);
 
         let file_appender = tracing_appender::rolling::daily(log_dir, file_prefix);
         let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
@@ -297,6 +302,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auth_service = Arc::new(AuthService::new(pool.clone(), Arc::clone(&jwt_util)));
 
     let cluster_service = Arc::new(ClusterService::new(pool.clone()));
+
+    let organization_service = Arc::new(OrganizationService::new(pool.clone()));
 
     let system_function_service = Arc::new(SystemFunctionService::new(
         Arc::new(pool.clone()),
@@ -362,6 +369,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         jwt_util: Arc::clone(&jwt_util),
         auth_service: Arc::clone(&auth_service),
         cluster_service: Arc::clone(&cluster_service),
+        organization_service: Arc::clone(&organization_service),
         system_function_service: Arc::clone(&system_function_service),
         metrics_collector_service: Arc::clone(&metrics_collector_service),
         data_statistics_service: Arc::clone(&data_statistics_service),
@@ -394,6 +402,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auth_state = middleware::AuthState {
         jwt_util: Arc::clone(&jwt_util),
         casbin_service: Arc::clone(&casbin_service),
+        db: pool.clone(),
     };
 
     // Public routes (no authentication required)
@@ -441,6 +450,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/clusters/:id/health",
             get(handlers::cluster::get_cluster_health).post(handlers::cluster::get_cluster_health),
+        )
+        // Organizations
+        .route(
+            "/api/organizations",
+            post(handlers::organization::create_organization)
+                .get(handlers::organization::list_organizations),
+        )
+        .route(
+            "/api/organizations/:id",
+            get(handlers::organization::get_organization)
+                .put(handlers::organization::update_organization)
+                .delete(handlers::organization::delete_organization),
         )
         // Materialized Views
         .route(
@@ -590,7 +611,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(protected_routes)
         .merge(health_routes)
         .merge(static_routes); // Must be last to serve as fallback for SPA routes
-    
+
     let app = app
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::permissive());
@@ -626,18 +647,23 @@ async fn ready_check() -> &'static str {
 /// from such paths to correctly serve static assets.
 async fn serve_static_files(uri: Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
-    
+
     // Don't serve static files for API routes
     if path.starts_with("api/") || path.starts_with("api-docs/") {
         return (StatusCode::NOT_FOUND, "Not Found").into_response();
     }
-    
+
     // Check if this is a static asset request (has file extension)
     // If the path contains route segments but ends with a static file extension,
     // extract just the filename to serve the correct asset
-    let static_extensions = ["js", "css", "png", "jpg", "jpeg", "gif", "svg", "ico", "woff", "woff2", "ttf", "eot", "otf", "json"];
-    let is_static_asset = static_extensions.iter().any(|ext| path.ends_with(&format!(".{}", ext)));
-    
+    let static_extensions = [
+        "js", "css", "png", "jpg", "jpeg", "gif", "svg", "ico", "woff", "woff2", "ttf", "eot",
+        "otf", "json",
+    ];
+    let is_static_asset = static_extensions
+        .iter()
+        .any(|ext| path.ends_with(&format!(".{}", ext)));
+
     let asset_path = if is_static_asset {
         // Extract filename from path (handles cases like /starrocks-admin/pages/starrocks/runtime.js)
         // Find the last segment that looks like a filename (contains a dot)
@@ -649,7 +675,7 @@ async fn serve_static_files(uri: Uri) -> impl IntoResponse {
     } else {
         path.to_string()
     };
-    
+
     // Try to get the file from embedded assets
     if let Some(file) = WebAssets::get(&asset_path) {
         let content_type = get_content_type(&asset_path);
@@ -661,7 +687,7 @@ async fn serve_static_files(uri: Uri) -> impl IntoResponse {
             .unwrap()
             .into_response();
     }
-    
+
     // For SPA routing, fall back to index.html for any non-API route
     // Frontend uses relative API paths (./api), so it works with any deployment path
     if let Some(index) = WebAssets::get("index.html") {
@@ -673,7 +699,7 @@ async fn serve_static_files(uri: Uri) -> impl IntoResponse {
             .unwrap()
             .into_response();
     }
-    
+
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 

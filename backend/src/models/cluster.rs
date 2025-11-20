@@ -22,6 +22,7 @@ pub struct Cluster {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub created_by: Option<i64>,
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -42,6 +43,8 @@ pub struct CreateClusterRequest {
     pub tags: Option<Vec<String>>,
     #[serde(default = "default_catalog")]
     pub catalog: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -57,6 +60,7 @@ pub struct UpdateClusterRequest {
     pub connection_timeout: Option<i32>,
     pub tags: Option<Vec<String>>,
     pub catalog: Option<String>,
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

@@ -3,6 +3,7 @@ pub mod backend;
 pub mod cluster;
 pub mod frontend;
 pub mod materialized_view;
+pub mod organization;
 pub mod overview;
 pub mod permission;
 pub mod profile;

@@ -23,12 +23,23 @@ use crate::utils::ApiResult;
     ),
     tag = "Roles"
 )]
-pub async fn list_roles(State(state): State<Arc<AppState>>) -> ApiResult<Json<Vec<RoleResponse>>> {
-    tracing::debug!("Listing all roles");
+pub async fn list_roles(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+) -> ApiResult<Json<Vec<RoleResponse>>> {
+    tracing::debug!(
+        "Listing roles for user {} (org: {:?}, super_admin: {})",
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
 
-    let roles = state.role_service.list_roles().await?;
+    let roles = state
+        .role_service
+        .list_roles(org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
 
-    tracing::debug!("Retrieved {} roles", roles.len());
+    tracing::debug!("Retrieved {} roles for user {}", roles.len(), org_ctx.user_id);
     Ok(Json(roles))
 }
 
@@ -48,12 +59,22 @@ pub async fn list_roles(State(state): State<Arc<AppState>>) -> ApiResult<Json<Ve
 pub async fn get_role(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<RoleResponse>> {
-    tracing::debug!("Getting role: ID={}", id);
+    tracing::debug!(
+        "Getting role: ID={} for user {} (org: {:?}, super_admin: {})",
+        id,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
 
-    let role = state.role_service.get_role(id).await?;
+    let role = state
+        .role_service
+        .get_role(id, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
 
-    tracing::debug!("Retrieved role: {} (ID: {})", role.name, role.id);
+    tracing::debug!("Retrieved role: {} (ID: {}) for user {}", role.name, role.id, org_ctx.user_id);
     Ok(Json(role))
 }
 
@@ -73,15 +94,26 @@ pub async fn get_role(
 pub async fn get_role_with_permissions(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<RoleWithPermissions>> {
-    tracing::debug!("Getting role with permissions: ID={}", id);
+    tracing::debug!(
+        "Getting role with permissions: ID={} for user {} (org: {:?}, super_admin: {})",
+        id,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
 
-    let role_with_perms = state.role_service.get_role_with_permissions(id).await?;
+    let role_with_perms = state
+        .role_service
+        .get_role_with_permissions(id, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
 
     tracing::debug!(
-        "Retrieved role {} with {} permissions",
+        "Retrieved role {} with {} permissions for user {}",
         role_with_perms.role.name,
-        role_with_perms.permissions.len()
+        role_with_perms.permissions.len(),
+        org_ctx.user_id
     );
     Ok(Json(role_with_perms))
 }
@@ -102,14 +134,36 @@ pub async fn get_role_with_permissions(
 )]
 pub async fn create_role(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(req): Json<CreateRoleRequest>,
 ) -> ApiResult<Json<RoleResponse>> {
-    tracing::info!("Role creation request: code={}, name={}", req.code, req.name);
+    if !org_ctx.is_super_admin && req.organization_id.is_some() {
+        return Err(crate::utils::ApiError::forbidden(
+            "Organization administrators cannot override organization assignment",
+        ));
+    }
+
+    tracing::info!(
+        "Role creation request: code={}, name={} by user {} (org: {:?}, super_admin: {})",
+        req.code,
+        req.name,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
     tracing::debug!("Role creation details: code={}, description={:?}", req.code, req.description);
 
-    let role = state.role_service.create_role(req).await?;
+    let role = state
+        .role_service
+        .create_role(req, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
 
-    tracing::info!("Role created successfully: {} (ID: {})", role.name, role.id);
+    tracing::info!(
+        "Role created successfully: {} (ID: {}) by user {}",
+        role.name,
+        role.id,
+        org_ctx.user_id
+    );
     Ok(Json(role))
 }
 
@@ -131,14 +185,35 @@ pub async fn create_role(
 pub async fn update_role(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(req): Json<UpdateRoleRequest>,
 ) -> ApiResult<Json<RoleResponse>> {
-    tracing::info!("Role update request: ID={}", id);
+    if !org_ctx.is_super_admin && req.organization_id.is_some() {
+        return Err(crate::utils::ApiError::forbidden(
+            "Organization administrators cannot reassign role organization",
+        ));
+    }
+
+    tracing::info!(
+        "Role update request: ID={} by user {} (org: {:?}, super_admin: {})",
+        id,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
     tracing::debug!("Role update details: name={:?}, description={:?}", req.name, req.description);
 
-    let role = state.role_service.update_role(id, req).await?;
+    let role = state
+        .role_service
+        .update_role(id, req, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
 
-    tracing::info!("Role updated successfully: {} (ID: {})", role.name, role.id);
+    tracing::info!(
+        "Role updated successfully: {} (ID: {}) by user {}",
+        role.name,
+        role.id,
+        org_ctx.user_id
+    );
     Ok(Json(role))
 }
 
@@ -159,12 +234,22 @@ pub async fn update_role(
 pub async fn delete_role(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<()>> {
-    tracing::info!("Role deletion request: ID={}", id);
+    tracing::info!(
+        "Role deletion request: ID={} by user {} (org: {:?}, super_admin: {})",
+        id,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
 
-    state.role_service.delete_role(id).await?;
+    state
+        .role_service
+        .delete_role(id, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
 
-    tracing::info!("Role deleted successfully: ID={}", id);
+    tracing::info!("Role deleted successfully: ID={} by user {}", id, org_ctx.user_id);
     Ok(Json(()))
 }
 
@@ -186,20 +271,24 @@ pub async fn delete_role(
 pub async fn update_role_permissions(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(req): Json<UpdateRolePermissionsRequest>,
 ) -> ApiResult<Json<()>> {
     tracing::info!(
-        "Role permissions update request: ID={}, permission_count={}",
+        "Role permissions update request: ID={}, permission_count={} by user {} (org: {:?}, super_admin: {})",
         id,
-        req.permission_ids.len()
+        req.permission_ids.len(),
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
     );
     tracing::debug!("Permission IDs: {:?}", req.permission_ids);
 
     state
         .role_service
-        .assign_permissions_to_role(id, req)
+        .assign_permissions_to_role(id, req, org_ctx.organization_id, org_ctx.is_super_admin)
         .await?;
 
-    tracing::info!("Role permissions updated successfully: ID={}", id);
+    tracing::info!("Role permissions updated successfully: ID={} by user {}", id, org_ctx.user_id);
     Ok(Json(()))
 }

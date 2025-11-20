@@ -15,6 +15,7 @@ export interface Cluster {
   tags: string[];
   catalog: string;
   is_active: boolean;
+  organization_id?: number;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +32,7 @@ export interface CreateClusterRequest {
   connection_timeout?: number;
   tags?: string[];
   catalog?: string;
+  organization_id?: number;
 }
 
 export interface ClusterHealth {

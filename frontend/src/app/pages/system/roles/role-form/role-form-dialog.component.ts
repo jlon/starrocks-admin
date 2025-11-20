@@ -8,6 +8,8 @@ import {
   RoleSummary,
   UpdateRolePayload,
 } from '../../../../@core/data/role.service';
+import { Organization } from '../../../../@core/data/organization.service';
+import { PermissionService } from '../../../../@core/data/permission.service';
 
 export type RoleFormMode = 'create' | 'edit';
 
@@ -47,9 +49,12 @@ export class RoleFormDialogComponent implements OnInit {
   @Input() mode: RoleFormMode = 'create';
   @Input() role?: RoleSummary;
   @Input() permissions: PermissionDto[] = [];
+  @Input() organizations: Organization[] = [];
+  @Input() currentOrganization?: Organization;
 
   form: FormGroup;
   menuPermissions: MenuPermission[] = [];
+  isSuperAdmin = false;
 
   // Simple tree structure (root nodes only, inspired by query-execution)
   permissionTree: PermissionTreeNode[] = [];
@@ -65,6 +70,7 @@ export class RoleFormDialogComponent implements OnInit {
   constructor(
     private dialogRef: NbDialogRef<RoleFormDialogComponent>,
     private fb: FormBuilder,
+    private permissionService: PermissionService,
   ) {
     this.form = this.fb.group({
       code: ['', [Validators.required, Validators.maxLength(50)]],
@@ -75,6 +81,9 @@ export class RoleFormDialogComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // Determine if current user is super admin
+    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+
     // Build menu-API associations
     this.buildApiAssociations();
 

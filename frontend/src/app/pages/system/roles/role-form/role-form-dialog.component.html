@@ -18,6 +18,41 @@
       <div class="form-layout">
         <!-- Left: Role Basic Information -->
         <div class="basic-info-section">
+          <!-- Organization Selection (Super Admin Only) -->
+          <div class="form-group" *ngIf="isSuperAdmin">
+            <label class="label" for="input-organization">所属组织</label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="building-2-outline"></nb-icon>
+              <nb-select
+                formControlName="organizationId"
+                id="input-organization"
+                placeholder="请选择组织"
+                fullWidth
+              >
+                <nb-option *ngFor="let org of organizations" [value]="org.id">
+                  {{ org.name }}
+                  <span class="org-code" *ngIf="org.code">({{ org.code }})</span>
+                </nb-option>
+              </nb-select>
+            </nb-form-field>
+          </div>
+
+          <!-- Organization Display (Org Admin) -->
+          <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
+            <label class="label">所属组织</label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="building-2-outline"></nb-icon>
+              <input
+                nbInput
+                fullWidth
+                type="text"
+                [value]="currentOrganization.name"
+                disabled
+              />
+            </nb-form-field>
+            <p class="caption status-hint">组织管理员只能在本组织内创建角色</p>
+          </div>
+
           <div class="form-group">
             <label class="label" for="input-code">角色代码</label>
             <nb-form-field>

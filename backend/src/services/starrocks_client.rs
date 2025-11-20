@@ -59,10 +59,15 @@ impl StarRocksClient {
         })?;
 
         // Log the raw response for debugging
-        tracing::debug!("Raw backends response: {}", serde_json::to_string(&data_be).unwrap_or_default());
+        tracing::debug!(
+            "Raw backends response: {}",
+            serde_json::to_string(&data_be).unwrap_or_default()
+        );
 
         // Try new format (direct array) first, then fall back to old format
-        let backends_result = if let Ok(backends) = serde_json::from_value::<Vec<Backend>>(data_be.clone()) {
+        let backends_result = if let Ok(backends) =
+            serde_json::from_value::<Vec<Backend>>(data_be.clone())
+        {
             Ok(backends)
         } else {
             // Fallback to old format
@@ -70,15 +75,20 @@ impl StarRocksClient {
                 Ok(backends) => {
                     tracing::info!("Retrieved {} backends using old format", backends.len());
                     Ok(backends)
-                }
+                },
                 Err(e) => {
-                    tracing::error!("Failed to parse backends: {}. Raw response structure: {}", e, 
-                        serde_json::to_string(&data_be).unwrap_or_else(|_| "failed to serialize".to_string()));
+                    tracing::error!(
+                        "Failed to parse backends: {}. Raw response structure: {}",
+                        e,
+                        serde_json::to_string(&data_be)
+                            .unwrap_or_else(|_| "failed to serialize".to_string())
+                    );
                     // Return error instead of empty vector to help diagnose the issue
                     Err(ApiError::internal_error(format!(
-                        "Failed to parse backends response. Response format may have changed. Error: {}", e
+                        "Failed to parse backends response. Response format may have changed. Error: {}",
+                        e
                     )))
-                }
+                },
             }
         };
 
@@ -92,7 +102,10 @@ impl StarRocksClient {
         } else {
             // If parsing failed, log the error but continue to try compute nodes
             if let Err(ref e) = backends_result {
-                tracing::warn!("Backends parsing failed: {}. Will try compute nodes as fallback.", e);
+                tracing::warn!(
+                    "Backends parsing failed: {}. Will try compute nodes as fallback.",
+                    e
+                );
             }
         }
 
@@ -112,29 +125,42 @@ impl StarRocksClient {
             Ok(resp) if resp.status().is_success() => {
                 match resp.json::<Value>().await {
                     Ok(data_cn) => {
-                        tracing::debug!("Raw compute nodes response: {}", serde_json::to_string(&data_cn).unwrap_or_default());
+                        tracing::debug!(
+                            "Raw compute nodes response: {}",
+                            serde_json::to_string(&data_cn).unwrap_or_default()
+                        );
                         // Try to parse compute nodes as backends
-                        if let Ok(compute_nodes) = serde_json::from_value::<Vec<Backend>>(data_cn.clone()) {
-                            tracing::info!("Retrieved {} compute nodes (shared-data mode)", compute_nodes.len());
+                        if let Ok(compute_nodes) =
+                            serde_json::from_value::<Vec<Backend>>(data_cn.clone())
+                        {
+                            tracing::info!(
+                                "Retrieved {} compute nodes (shared-data mode)",
+                                compute_nodes.len()
+                            );
                             return Ok(compute_nodes);
-                        } else if let Ok(compute_nodes) = Self::parse_proc_result::<Backend>(&data_cn) {
-                            tracing::info!("Retrieved {} compute nodes using PROC format", compute_nodes.len());
+                        } else if let Ok(compute_nodes) =
+                            Self::parse_proc_result::<Backend>(&data_cn)
+                        {
+                            tracing::info!(
+                                "Retrieved {} compute nodes using PROC format",
+                                compute_nodes.len()
+                            );
                             return Ok(compute_nodes);
                         } else {
                             tracing::warn!("Failed to parse compute nodes response");
                         }
-                    }
+                    },
                     Err(e) => {
                         tracing::warn!("Failed to parse compute nodes response: {}", e);
-                    }
+                    },
                 }
-            }
+            },
             Ok(resp) => {
                 tracing::warn!("Compute nodes API returned error status: {}", resp.status());
-            }
+            },
             Err(e) => {
                 tracing::debug!("Compute nodes API request failed: {}", e);
-            }
+            },
         }
 
         // If we got a successful parse but empty list, return it
@@ -143,12 +169,15 @@ impl StarRocksClient {
             Ok(backends) => {
                 tracing::warn!("No backends or compute nodes found. Returning empty list.");
                 Ok(backends)
-            }
+            },
             Err(e) => {
-                tracing::error!("Failed to retrieve backends: {}. Please check StarRocks API response format.", e);
+                tracing::error!(
+                    "Failed to retrieve backends: {}. Please check StarRocks API response format.",
+                    e
+                );
                 // Return error so frontend can display it
                 Err(e)
-            }
+            },
         }
     }
 

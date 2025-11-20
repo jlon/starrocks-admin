@@ -754,7 +754,7 @@ impl MetricsCollectorService {
                 AVG(disk_usage_pct) as avg_disk_usage_pct,
                 MAX(disk_usage_pct) as max_disk_usage_pct,
                 AVG(disk_used_bytes) as avg_disk_used_bytes,
-                MAX(disk_used_bytes) as max_disk_used_bytes
+                CAST(MAX(disk_used_bytes) AS REAL) as max_disk_used_bytes
             FROM metrics_snapshots
             WHERE cluster_id = ?
                 AND collected_at >= ?
@@ -861,15 +861,18 @@ impl MetricsCollectorService {
     ) -> Option<String> {
         // First, try to get column list using SHOW COLUMNS
         let show_columns_query = "SHOW COLUMNS FROM starrocks_audit_db__.starrocks_audit_tbl__";
-        
+
         match mysql_client.query_raw(show_columns_query).await {
             Ok((columns, rows)) => {
                 // Find the column index for "Field" column
-                let field_idx = columns.iter().position(|c| c.eq_ignore_ascii_case("Field"))?;
-                
+                let field_idx = columns
+                    .iter()
+                    .position(|c| c.eq_ignore_ascii_case("Field"))?;
+
                 // Possible column names to look for (in order of likelihood)
-                let possible_columns = vec!["queryTime", "query_time", "duration", "QueryTime", "queryDuration"];
-                
+                let possible_columns =
+                    vec!["queryTime", "query_time", "duration", "QueryTime", "queryDuration"];
+
                 // Check each row for matching column name
                 for row in rows {
                     if let Some(col_name) = row.get(field_idx) {
@@ -886,15 +889,16 @@ impl MetricsCollectorService {
             Err(e) => {
                 tracing::debug!("Failed to get column list, trying fallback method: {}", e);
                 // Fallback: try direct queries with common column names
-                let possible_columns = vec!["queryTime", "query_time", "duration", "QueryTime", "queryDuration"];
-                
+                let possible_columns =
+                    vec!["queryTime", "query_time", "duration", "QueryTime", "queryDuration"];
+
                 for col_name in possible_columns {
                     // Use a safe query that won't fail if column doesn't exist
                     let test_query = format!(
                         "SELECT COUNT(*) as cnt FROM starrocks_audit_db__.starrocks_audit_tbl__ WHERE {} > 0 LIMIT 1",
                         col_name
                     );
-                    
+
                     if mysql_client.query(&test_query).await.is_ok() {
                         tracing::debug!("Detected query time column (fallback): {}", col_name);
                         return Some(col_name.to_string());
@@ -902,8 +906,10 @@ impl MetricsCollectorService {
                 }
             },
         }
-        
-        tracing::warn!("Could not detect query time column in audit log table. Available columns may differ by StarRocks version.");
+
+        tracing::warn!(
+            "Could not detect query time column in audit log table. Available columns may differ by StarRocks version."
+        );
         None
     }
 
@@ -920,7 +926,9 @@ impl MetricsCollectorService {
         let query_time_col = match self.detect_query_time_column(&mysql_client).await {
             Some(col) => col,
             None => {
-                tracing::debug!("Query time column not found, skipping audit log percentile calculation");
+                tracing::debug!(
+                    "Query time column not found, skipping audit log percentile calculation"
+                );
                 return Ok((0.0, 0.0, 0.0)); // Return zeros to fallback to Prometheus
             },
         };

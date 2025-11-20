@@ -155,11 +155,12 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
         })?;
 
         // Load role-permission mappings
-        let role_permissions: Vec<(i64, String, String)> = sqlx::query_as(
+        let role_permissions: Vec<(i64, Option<i64>, String, String)> = sqlx::query_as(
             r#"
-            SELECT rp.role_id, p.code, COALESCE(p.action, '') as action
+            SELECT rp.role_id, r.organization_id, p.code, COALESCE(p.action, '') as action
             FROM role_permissions rp
             JOIN permissions p ON rp.permission_id = p.id
+            JOIN roles r ON r.id = rp.role_id
             "#,
         )
         .fetch_all(pool)
@@ -170,7 +171,7 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
         })?;
 
         // Add policies to Casbin
-        for (role_id, code, action) in role_permissions {
+        for (role_id, org_id, code, action) in role_permissions {
             // Extract resource and action from permission code
             // Format: "api:clusters:create" or "menu:dashboard"
             let parts: Vec<&str> = code.split(':').collect();
@@ -188,8 +189,11 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
                     "view".to_string()
                 };
 
+                let scoped_resource = Self::format_resource_key(org_id, &resource);
+
                 // SECURITY FIX: Use "r:<role_id>" prefix for roles in policies to prevent ID collision
-                let policy_parts = vec![format!("r:{}", role_id), resource.clone(), act.clone()];
+                let policy_parts =
+                    vec![format!("r:{}", role_id), scoped_resource.clone(), act.clone()];
                 let _ = enforcer.add_policy(policy_parts).await;
             }
         }
@@ -212,5 +216,14 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
 
         tracing::info!("Policies reloaded from database successfully");
         Ok(())
+    }
+}
+
+impl CasbinService {
+    pub(crate) fn format_resource_key(org_id: Option<i64>, resource: &str) -> String {
+        match org_id {
+            Some(id) => format!("org:{}:{}", id, resource),
+            None => format!("system:{}", resource),
+        }
     }
 }

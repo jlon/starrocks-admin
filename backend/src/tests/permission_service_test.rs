@@ -1,10 +1,6 @@
 use crate::services::permission_service::PermissionService;
 use crate::tests::common::{
-    create_role,
-    create_test_casbin_service,
-    create_test_db,
-    grant_permissions,
-    setup_test_data,
+    create_role, create_test_casbin_service, create_test_db, grant_permissions, setup_test_data,
 };
 
 #[tokio::test]
@@ -226,7 +222,9 @@ async fn test_check_permission_no_permission() {
     let casbin_service = create_test_casbin_service().await;
     let service = PermissionService::new(pool, casbin_service);
 
-    let result = service.check_permission(1, "clusters", "create").await;
+    let result = service
+        .check_permission(1, "system:clusters", "create")
+        .await;
     assert!(result.is_ok());
     assert!(!result.unwrap(), "Should deny when no permission");
 }
@@ -247,7 +245,7 @@ async fn test_check_permission_with_permission() {
 
     // User should have permission
     let result = service
-        .check_permission(user_id, "clusters", "create")
+        .check_permission(user_id, "system:clusters", "create")
         .await;
     assert!(result.is_ok());
     assert!(result.unwrap(), "Should allow when user has permission");
@@ -268,7 +266,7 @@ async fn test_check_permission_different_action() {
 
     // User has create permission, but not different_action
     let result = service
-        .check_permission(user_id, "clusters", "different_action")
+        .check_permission(user_id, "system:clusters", "different_action")
         .await;
     assert!(result.is_ok());
     // Might be false if action doesn't match

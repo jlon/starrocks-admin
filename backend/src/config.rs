@@ -121,8 +121,7 @@ impl Config {
         let cli_args = CommandLineArgs::parse();
 
         // 1. Load from config file (use CLI --config if provided, otherwise find default)
-        let config_path = cli_args.config.clone()
-            .or_else(Self::find_config_file);
+        let config_path = cli_args.config.clone().or_else(Self::find_config_file);
         let mut config = if let Some(config_path) = config_path {
             Self::from_toml(&config_path)?
         } else {
@@ -359,10 +358,7 @@ impl Config {
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        Self { 
-            host: "0.0.0.0".to_string(), 
-            port: 8080,
-        }
+        Self { host: "0.0.0.0".to_string(), port: 8080 }
     }
 }
 

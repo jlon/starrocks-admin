@@ -68,10 +68,7 @@ impl PermissionService {
                 children: vec![],
             };
 
-            tree_map
-                .entry(perm.parent_id)
-                .or_default()
-                .push(node);
+            tree_map.entry(perm.parent_id).or_default().push(node);
         }
 
         // Second pass: build tree by connecting children

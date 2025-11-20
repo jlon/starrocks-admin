@@ -10,6 +10,7 @@ export interface User {
   username: string;
   email?: string;
   avatar?: string;
+  organization_id?: number;
   created_at: string;
   active_cluster_id?: never;  // Removed field - should never exist
 }
@@ -159,7 +160,11 @@ export class AuthService {
       normalized.push(segment);
       index += 1;
     }
-    const finalSegments = [...prefix, ...normalized];
+    let finalSegments = [...prefix, ...normalized];
+    // In hash mode, router expects pure app routes after #, so strip any base prefix
+    if (this.isHashMode() && prefix.length > 0) {
+      finalSegments = normalized;
+    }
     if (!finalSegments.length) {
       return fallback;
     }
@@ -168,16 +173,26 @@ export class AuthService {
   }
 
   private getDefaultReturnUrl(): string {
+    if (this.isHashMode()) {
+      // In hash mode, do not include base path in router URL
+      return `/pages/starrocks/dashboard`;
+    }
     const base = this.getBasePath();
     return `${base}/pages/starrocks/dashboard`;
   }
 
   getLoginPath(): string {
+    if (this.isHashMode()) {
+      return `/auth/login`;
+    }
     const base = this.getBasePath();
     return `${base}/auth/login`;
   }
 
   getLoginCommands(): string[] {
+    if (this.isHashMode()) {
+      return ['/', 'auth', 'login'];
+    }
     return ['/', ...this.getBaseSegments(), 'auth', 'login'];
   }
 
@@ -208,6 +223,11 @@ export class AuthService {
       prefix.push(segment);
     }
     return prefix;
+  }
+
+  private isHashMode(): boolean {
+    const hash = window.location && window.location.hash;
+    return !!hash && hash.startsWith('#/');
   }
 }
 

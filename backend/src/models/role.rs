@@ -12,6 +12,7 @@ pub struct Role {
     pub name: String,
     pub description: Option<String>,
     pub is_system: bool,
+    pub organization_id: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -21,12 +22,14 @@ pub struct CreateRoleRequest {
     pub code: String,
     pub name: String,
     pub description: Option<String>,
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateRoleRequest {
     pub name: Option<String>,
     pub description: Option<String>,
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema, Clone)]
@@ -36,6 +39,7 @@ pub struct RoleResponse {
     pub name: String,
     pub description: Option<String>,
     pub is_system: bool,
+    pub organization_id: Option<i64>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -47,6 +51,7 @@ impl From<Role> for RoleResponse {
             name: role.name,
             description: role.description,
             is_system: role.is_system,
+            organization_id: role.organization_id,
             created_at: role.created_at,
         }
     }

@@ -13,6 +13,8 @@ import {
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { PermissionService } from '../../../@core/data/permission.service';
 import { RoleService, RoleWithPermissions } from '../../../@core/data/role.service';
+import { OrganizationService, Organization } from '../../../@core/data/organization.service';
+import { AuthService } from '../../../@core/data/auth.service';
 import { UsersRoleBadgeCellComponent } from './table/role-badge-cell.component';
 import { UsersActionsCellComponent } from './table/actions-cell.component';
 import {
@@ -31,6 +33,9 @@ export class UsersComponent implements OnInit, OnDestroy {
   loading = false;
   roleCatalog: RoleWithPermissions[] = [];
   roleCatalogLoading = false;
+  organizations: Organization[] = [];
+  currentOrganization?: Organization;
+  isSuperAdmin = false;
 
   hasListPermission = false;
   canCreateUser = false;
@@ -45,6 +50,8 @@ export class UsersComponent implements OnInit, OnDestroy {
     private userService: UserService,
     private permissionService: PermissionService,
     private roleService: RoleService,
+    private organizationService: OrganizationService,
+    private authService: AuthService,
     private dialogService: NbDialogService,
     private confirmDialogService: ConfirmDialogService,
     private toastrService: NbToastrService,
@@ -114,6 +121,32 @@ export class UsersComponent implements OnInit, OnDestroy {
       });
   }
 
+  private loadOrganizations(): void {
+    this.organizationService.listOrganizations().subscribe({
+      next: (orgs) => {
+        this.organizations = orgs;
+      },
+      error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+    });
+  }
+
+  private loadCurrentOrganization(): void {
+    const currentUser = this.authService.currentUserValue;
+    if (!currentUser) {
+      return;
+    }
+
+    // For org admins, load their organization
+    if (!this.isSuperAdmin && currentUser.organization_id) {
+      this.organizationService.getOrganization(currentUser.organization_id).subscribe({
+        next: (org) => {
+          this.currentOrganization = org;
+        },
+        error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+      });
+    }
+  }
+
   openCreateUser(): void {
     if (!this.canCreateUser) {
       return;
@@ -129,6 +162,8 @@ export class UsersComponent implements OnInit, OnDestroy {
       context: {
         mode: 'create',
         roles: this.roleCatalog,
+        organizations: this.organizations,
+        currentOrganization: this.currentOrganization,
       },
       closeOnBackdropClick: false,
       autoFocus: false,
@@ -157,6 +192,8 @@ export class UsersComponent implements OnInit, OnDestroy {
       context: {
         mode: 'edit',
         roles: this.roleCatalog,
+        organizations: this.organizations,
+        currentOrganization: this.currentOrganization,
         user,
       },
       closeOnBackdropClick: false,
@@ -225,6 +262,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     this.canCreateUser = this.permissionService.hasPermission('api:users:create');
     this.canUpdateUser = this.permissionService.hasPermission('api:users:update');
     this.canDeleteUser = this.permissionService.hasPermission('api:users:delete');
+    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
 
     this.settings = this.buildTableSettings();
 
@@ -240,6 +278,14 @@ export class UsersComponent implements OnInit, OnDestroy {
     if (this.canCreateUser || this.canUpdateUser) {
       this.loadRoleCatalog();
     }
+
+    // Load organizations for super admin
+    if (this.isSuperAdmin) {
+      this.loadOrganizations();
+    }
+
+    // Load current organization for org admin
+    this.loadCurrentOrganization();
   }
 
   private buildTableSettings(): any {

@@ -77,27 +77,6 @@
     flex: 1 1 calc(100% - 6.75rem); // Take remaining space (100% - label width 6rem - padding 0.75rem)
     min-width: 0; // Allow flex item to shrink below its content size
     margin-bottom: 0;
-
-    // Fix nb-select prefix icon spacing to match nbInput (ngx-admin native spacing)
-    // nb-form-field automatically handles prefix spacing for input (2.5rem icon + 0.25rem gap)
-    // but select button needs explicit padding-left adjustment
-    nb-select {
-      ::ng-deep {
-        // Ensure select button has same padding as input with prefix icon
-        // nbInput with prefix: padding-left is 2.75rem (2.5rem icon + 0.25rem gap)
-        button.select-button,
-        button[class*='button'],
-        button {
-          padding-left: 2.75rem !important;
-        }
-        
-        // Ensure select text container has no extra padding
-        .select-placeholder,
-        .select-text {
-          padding-left: 0 !important;
-        }
-      }
-    }
   }
 
   // Captions - align with input field (ng-container wraps them but doesn't render, so we style captions directly)

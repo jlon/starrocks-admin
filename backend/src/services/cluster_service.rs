@@ -410,20 +410,47 @@ impl ClusterService {
         let mut checks = Vec::new();
         let mut overall_status = HealthStatus::Healthy;
 
-        // Check FE availability
-        match client.get_runtime_info().await {
-            Ok(_) => {
-                checks.push(HealthCheck {
-                    name: "FE Availability".to_string(),
-                    status: "ok".to_string(),
-                    message: "FE is reachable and responding".to_string(),
-                });
+        match client.get_frontends().await {
+            Ok(frontends) => {
+                let alive_count = frontends.iter().filter(|f| f.alive == "true").count();
+                let total_count = frontends.len();
+
+                if total_count == 0 {
+                    checks.push(HealthCheck {
+                        name: "Frontend Nodes".to_string(),
+                        status: "critical".to_string(),
+                        message: "No FE nodes found".to_string(),
+                    });
+                    overall_status = HealthStatus::Critical;
+                } else if alive_count == total_count {
+                    checks.push(HealthCheck {
+                        name: "Frontend Nodes".to_string(),
+                        status: "ok".to_string(),
+                        message: format!("All {} FE nodes are online", total_count),
+                    });
+                } else if alive_count > 0 {
+                    checks.push(HealthCheck {
+                        name: "Frontend Nodes".to_string(),
+                        status: "warning".to_string(),
+                        message: format!("{}/{} FE nodes are online", alive_count, total_count),
+                    });
+                    if overall_status == HealthStatus::Healthy {
+                        overall_status = HealthStatus::Warning;
+                    }
+                } else {
+                    checks.push(HealthCheck {
+                        name: "Frontend Nodes".to_string(),
+                        status: "critical".to_string(),
+                        message: "No FE nodes are online".to_string(),
+                    });
+                    overall_status = HealthStatus::Critical;
+                }
             },
             Err(e) => {
                 checks.push(HealthCheck {
-                    name: "FE Availability".to_string(),
+                    name: "Frontend Nodes".to_string(),
                     status: "critical".to_string(),
-                    message: format!("FE is not reachable: {}", e),
+                    message: format!("Failed to check FE nodes: {}", e),
                 });
                 overall_status = HealthStatus::Critical;
             },

@@ -31,6 +31,7 @@ pub struct CreateOrganizationRequest {
 pub struct UpdateOrganizationRequest {
     pub name: Option<String>,
     pub description: Option<String>,
+    pub admin_user_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema, Clone)]

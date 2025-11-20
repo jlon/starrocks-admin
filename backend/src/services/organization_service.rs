@@ -50,23 +50,25 @@ impl OrganizationService {
             .create_org_admin_role(&mut tx, org_id, &req.code, &req.name)
             .await?;
 
-        // Provision administrator (either existing user or newly created)
-        let admin_user_id = match admin_plan {
-            AdminPlan::Create { username, password, email } => {
-                let password_hash = hash(&password, DEFAULT_COST).map_err(|e| {
-                    ApiError::internal_error(format!("Failed to hash admin password: {}", e))
-                })?;
-                self.create_admin_user(&mut tx, &username, &password_hash, email, org_id)
-                    .await?
-            },
-            AdminPlan::Existing(user_id) => {
-                self.assign_existing_admin(&mut tx, user_id, org_id).await?;
-                user_id
-            },
-        };
+        // Provision administrator when requested
+        if let Some(plan) = admin_plan {
+            let admin_user_id = match plan {
+                AdminPlan::Create { username, password, email } => {
+                    let password_hash = hash(&password, DEFAULT_COST).map_err(|e| {
+                        ApiError::internal_error(format!("Failed to hash admin password: {}", e))
+                    })?;
+                    self.create_admin_user(&mut tx, &username, &password_hash, email, org_id)
+                        .await?
+                },
+                AdminPlan::Existing(user_id) => {
+                    self.assign_existing_admin(&mut tx, user_id, org_id).await?;
+                    user_id
+                },
+            };
 
-        self.assign_role_to_user(&mut tx, admin_user_id, role_id)
-            .await?;
+            self.assign_role_to_user(&mut tx, admin_user_id, role_id)
+                .await?;
+        }
 
         tx.commit().await?;
 
@@ -132,6 +134,8 @@ impl OrganizationService {
             .get_organization(id, requestor_org, is_super_admin)
             .await?;
 
+        let mut tx = self.pool.begin().await?;
+
         // Build dynamic update
         let mut updates = Vec::new();
         let mut params: Vec<String> = Vec::new();
@@ -145,22 +149,24 @@ impl OrganizationService {
             params.push(desc.clone());
         }
 
-        if updates.is_empty() {
-            return self
-                .get_organization(id, requestor_org, is_super_admin)
-                .await;
+        if !updates.is_empty() {
+            updates.push("updated_at = CURRENT_TIMESTAMP");
+            let sql = format!("UPDATE organizations SET {} WHERE id = ?", updates.join(", "));
+
+            let mut query = sqlx::query(&sql);
+            for p in params {
+                query = query.bind(p);
+            }
+            query = query.bind(id);
+
+            query.execute(&mut *tx).await?;
         }
 
-        updates.push("updated_at = CURRENT_TIMESTAMP");
-        let sql = format!("UPDATE organizations SET {} WHERE id = ?", updates.join(", "));
-
-        let mut query = sqlx::query(&sql);
-        for p in params {
-            query = query.bind(p);
+        if let Some(admin_user_id) = req.admin_user_id {
+            self.assign_org_admin_user(&mut tx, id, admin_user_id).await?;
         }
-        query = query.bind(id);
 
-        query.execute(&self.pool).await?;
+        tx.commit().await?;
 
         self.get_organization(id, requestor_org, is_super_admin)
             .await
@@ -207,17 +213,15 @@ impl OrganizationService {
         Ok(org_id)
     }
 
-    fn resolve_admin_plan(req: &CreateOrganizationRequest) -> ApiResult<AdminPlan> {
+    fn resolve_admin_plan(req: &CreateOrganizationRequest) -> ApiResult<Option<AdminPlan>> {
         match (req.admin_user_id, req.admin_username.as_ref(), req.admin_password.as_ref()) {
-            (Some(existing_id), None, None) => Ok(AdminPlan::Existing(existing_id)),
-            (None, Some(username), Some(password)) => Ok(AdminPlan::Create {
+            (Some(existing_id), None, None) => Ok(Some(AdminPlan::Existing(existing_id))),
+            (None, Some(username), Some(password)) => Ok(Some(AdminPlan::Create {
                 username: username.clone(),
                 password: password.clone(),
                 email: req.admin_email.clone(),
-            }),
-            (None, None, None) => Err(ApiError::validation_error(
-                "Organization admin is required (existing user or new credentials)",
-            )),
+            })),
+            (None, None, None) => Ok(None),
             _ => Err(ApiError::validation_error(
                 "Provide either admin_user_id or admin_username/admin_password",
             )),
@@ -322,6 +326,57 @@ impl OrganizationService {
         .bind(org_id)
         .execute(&mut **tx)
         .await?;
+        Ok(())
+    }
+
+    async fn assign_org_admin_user(
+        &self,
+        tx: &mut Transaction<'_, sqlx::Sqlite>,
+        org_id: i64,
+        user_id: i64,
+    ) -> ApiResult<()> {
+        let user_org: Option<i64> =
+            sqlx::query_scalar("SELECT organization_id FROM user_organizations WHERE user_id = ?")
+                .bind(user_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+
+        match user_org {
+            Some(existing_org) if existing_org == org_id => {},
+            Some(_) => {
+                return Err(ApiError::validation_error(
+                    "Selected user must belong to this organization",
+                ))
+            },
+            None => {
+                return Err(ApiError::validation_error(
+                    "Selected user is not assigned to any organization",
+                ))
+            },
+        }
+
+        let role_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM roles WHERE organization_id = ? AND code LIKE 'org_admin_%' LIMIT 1",
+        )
+        .bind(org_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        let role_id = role_id.ok_or_else(|| {
+            ApiError::internal_error("Organization admin role is missing for this organization")
+        })?;
+
+        sqlx::query("DELETE FROM user_roles WHERE role_id = ?")
+            .bind(role_id)
+            .execute(&mut **tx)
+            .await?;
+
+        sqlx::query("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)")
+            .bind(user_id)
+            .bind(role_id)
+            .execute(&mut **tx)
+            .await?;
+
         Ok(())
     }
 

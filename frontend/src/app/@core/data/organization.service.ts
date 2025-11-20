@@ -25,6 +25,7 @@ export interface CreateOrganizationRequest {
 export interface UpdateOrganizationRequest {
   name?: string;
   description?: string;
+  admin_user_id?: number;
 }
 
 @Injectable({

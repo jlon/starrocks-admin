@@ -2,9 +2,7 @@
 
 use crate::models::CreateClusterRequest;
 use crate::services::cluster_service::ClusterService;
-use crate::tests::common::{
-    MultiTenantTestData, create_test_casbin_service, create_test_db, setup_multi_tenant_test_data,
-};
+use crate::tests::common::{create_test_db, setup_multi_tenant_test_data};
 
 #[tokio::test]
 async fn test_cluster_organization_filtering() {
@@ -36,7 +34,7 @@ async fn test_cluster_organization_filtering() {
 
     assert_eq!(org1_cluster.name, "org1_cluster");
     assert_eq!(org1_cluster.organization_id, Some(test_data.org1_id));
-    assert_eq!(org1_cluster.is_active, true); // First cluster should be active
+    assert!(org1_cluster.is_active); // First cluster should be active
 
     // Create cluster in org2
     let org2_cluster_req = CreateClusterRequest {
@@ -61,7 +59,7 @@ async fn test_cluster_organization_filtering() {
 
     assert_eq!(org2_cluster.name, "org2_cluster");
     assert_eq!(org2_cluster.organization_id, Some(test_data.org2_id));
-    assert_eq!(org2_cluster.is_active, true); // First cluster should be active
+    assert!(org2_cluster.is_active); // First cluster should be active
 
     // Test: Both clusters exist but in different organizations
     let all_clusters = cluster_service
@@ -201,7 +199,7 @@ async fn test_active_cluster_per_organization() {
         .await
         .expect("Should create first cluster");
 
-    assert_eq!(cluster1.is_active, true);
+    assert!(cluster1.is_active);
 
     // Create second cluster in org1 (should NOT be active)
     let cluster2_req = CreateClusterRequest {
@@ -224,7 +222,7 @@ async fn test_active_cluster_per_organization() {
         .await
         .expect("Should create second cluster");
 
-    assert_eq!(cluster2.is_active, false); // Should not be active
+    assert!(!cluster2.is_active); // Should not be active
 
     // Verify only one active cluster in org1
     let org1_clusters: Vec<_> = sqlx::query_as::<_, (i64, bool)>(
@@ -249,14 +247,14 @@ async fn test_active_cluster_per_organization() {
         .get_cluster(cluster1.id)
         .await
         .expect("Should get cluster1");
-    assert_eq!(cluster1_updated.is_active, false);
+    assert!(!cluster1_updated.is_active);
 
     // Verify second cluster is now active
     let cluster2_updated = cluster_service
         .get_cluster(cluster2.id)
         .await
         .expect("Should get cluster2");
-    assert_eq!(cluster2_updated.is_active, true);
+    assert!(cluster2_updated.is_active);
 
     // Verify still only one active cluster
     let org1_clusters_after: Vec<_> = sqlx::query_as::<_, (i64, bool)>(
@@ -323,8 +321,8 @@ async fn test_active_cluster_organization_isolation() {
         .expect("Should create org2 cluster");
 
     // Both should be active (first cluster in their respective organizations)
-    assert_eq!(org1_cluster.is_active, true);
-    assert_eq!(org2_cluster.is_active, true);
+    assert!(org1_cluster.is_active);
+    assert!(org2_cluster.is_active);
 
     // Get active cluster for org1
     let org1_active = cluster_service
@@ -380,8 +378,8 @@ async fn test_active_cluster_organization_isolation() {
         .await
         .expect("Should get org2 cluster");
 
-    assert_eq!(
-        org2_active_after.is_active, true,
+    assert!(
+        org2_active_after.is_active,
         "Org2's active cluster should remain active"
     );
 
@@ -391,7 +389,10 @@ async fn test_active_cluster_organization_isolation() {
         .await
         .expect("Should get org1 first cluster");
 
-    assert_eq!(org1_cluster1_after.is_active, false, "Org1's first cluster should be inactive");
+    assert!(
+        !org1_cluster1_after.is_active,
+        "Org1's first cluster should be inactive"
+    );
 
     // Verify org1's second cluster is now active
     let org1_cluster2_after = cluster_service
@@ -399,7 +400,10 @@ async fn test_active_cluster_organization_isolation() {
         .await
         .expect("Should get org1 second cluster");
 
-    assert_eq!(org1_cluster2_after.is_active, true, "Org1's second cluster should be active");
+    assert!(
+        org1_cluster2_after.is_active,
+        "Org1's second cluster should be active"
+    );
 }
 
 #[tokio::test]
@@ -431,7 +435,10 @@ async fn test_cluster_first_auto_activation() {
         .expect("Should create first cluster");
 
     // Verify it's automatically activated
-    assert_eq!(first_cluster.is_active, true, "First cluster should be automatically activated");
+    assert!(
+        first_cluster.is_active,
+        "First cluster should be automatically activated"
+    );
 
     // Verify we can get it as the active cluster
     let active_cluster = cluster_service

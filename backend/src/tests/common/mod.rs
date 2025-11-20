@@ -48,7 +48,6 @@ pub struct MultiTenantTestData {
     pub org2_admin_user_id: i64,
     pub org2_regular_user_id: i64,
     pub super_admin_role_id: i64,
-    pub org_admin_role_id: i64,
     pub regular_role_id: i64,
 }
 
@@ -312,7 +311,6 @@ pub async fn setup_multi_tenant_test_data(pool: &SqlitePool) -> MultiTenantTestD
         org2_admin_user_id,
         org2_regular_user_id,
         super_admin_role_id,
-        org_admin_role_id,
         regular_role_id,
     }
 }

@@ -3,8 +3,7 @@
 use crate::models::{CreateRoleRequest, UpdateRolePermissionsRequest, UpdateRoleRequest};
 use crate::services::{permission_service::PermissionService, role_service::RoleService};
 use crate::tests::common::{
-    MultiTenantTestData, create_role, create_test_casbin_service, create_test_db,
-    grant_permissions, setup_multi_tenant_test_data,
+    create_role, create_test_casbin_service, create_test_db, setup_multi_tenant_test_data,
 };
 use std::sync::Arc;
 

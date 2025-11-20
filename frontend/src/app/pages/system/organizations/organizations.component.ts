@@ -139,10 +139,6 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
       code: result.code,
       name: result.name,
       description: result.description,
-      admin_username: result.admin_username,
-      admin_password: result.admin_password,
-      admin_email: result.admin_email,
-      admin_user_id: result.admin_user_id,
     };
 
     this.loading = true;
@@ -162,6 +158,7 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
     const payload: UpdateOrganizationRequest = {
       name: result.name,
       description: result.description,
+      admin_user_id: result.admin_user_id,
     };
 
     this.loading = true;

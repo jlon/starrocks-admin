@@ -1,19 +1,12 @@
 // Multi-tenant middleware tests
 
-use crate::middleware::{AuthState, OrgContext, auth_middleware};
-use crate::services::casbin_service::CasbinService;
-use crate::tests::common::{
-    MultiTenantTestData, assign_role_to_user, assign_user_to_organization,
-    create_test_casbin_service, create_test_db, create_test_user_with_org,
-    setup_multi_tenant_test_data,
-};
+use crate::middleware::{auth_middleware, AuthState, OrgContext};
+use crate::tests::common::{create_test_casbin_service, create_test_db, setup_multi_tenant_test_data};
 use crate::utils::JwtUtil;
 use axum::{
     body::Body,
-    extract::{Request, State},
-    http::{Method, StatusCode, header},
-    middleware::Next,
-    response::Response,
+    extract::Request,
+    http::{header, Method, StatusCode},
 };
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -218,8 +211,6 @@ async fn test_user_without_organization() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
     let jwt_util = Arc::new(JwtUtil::new("test_secret", "24h"));
-
-    let test_data = setup_multi_tenant_test_data(&pool).await;
 
     // Create user without organization assignment
     let no_org_user_id = crate::tests::common::create_test_user(&pool, "no_org_user").await;

@@ -19,6 +19,8 @@ import {
   RoleFormDialogComponent,
   RoleFormDialogResult,
 } from './role-form/role-form-dialog.component';
+import { Organization, OrganizationService } from '../../../@core/data/organization.service';
+import { AuthService } from '../../../@core/data/auth.service';
 
 @Component({
   selector: 'ngx-roles',
@@ -39,6 +41,9 @@ export class RolesComponent implements OnInit, OnDestroy {
   canDeleteRole = false;
 
   settings = this.buildTableSettings();
+  organizations: Organization[] = [];
+  currentOrganization?: Organization;
+  isSuperAdmin = false;
 
   constructor(
     private roleService: RoleService,
@@ -46,6 +51,8 @@ export class RolesComponent implements OnInit, OnDestroy {
     private dialogService: NbDialogService,
     private confirmDialog: ConfirmDialogService,
     private toastrService: NbToastrService,
+    private organizationService: OrganizationService,
+    private authService: AuthService,
   ) {}
 
   ngOnInit(): void {
@@ -66,11 +73,25 @@ export class RolesComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.isSuperAdmin && !this.organizations.length) {
+      this.loadOrganizations();
+      this.toastrService.info('正在加载组织列表，请稍后重试', '提示');
+      return;
+    }
+
+    if (!this.isSuperAdmin && !this.currentOrganization) {
+      this.loadCurrentOrganization();
+      this.toastrService.info('正在获取所属组织，请稍后重试', '提示');
+      return;
+    }
+
     this.ensurePermissions().subscribe((permissions) => {
       const dialogRef = this.dialogService.open(RoleFormDialogComponent, {
         context: {
           mode: 'create',
           permissions,
+          organizations: this.organizations,
+          currentOrganization: this.currentOrganization,
         },
         closeOnBackdropClick: false,
         autoFocus: false,
@@ -107,6 +128,8 @@ export class RolesComponent implements OnInit, OnDestroy {
               mode: 'edit',
               role,
               permissions: prepared,
+              organizations: this.organizations,
+              currentOrganization: this.currentOrganization,
             },
             closeOnBackdropClick: false,
             autoFocus: false,
@@ -201,6 +224,13 @@ export class RolesComponent implements OnInit, OnDestroy {
     this.canCreateRole = this.permissionService.hasPermission('api:roles:create');
     this.canUpdateRole = this.permissionService.hasPermission('api:roles:update');
     this.canDeleteRole = this.permissionService.hasPermission('api:roles:delete');
+    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+
+    if (this.isSuperAdmin) {
+      this.loadOrganizations();
+    } else {
+      this.loadCurrentOrganization();
+    }
 
     this.settings = this.buildTableSettings();
     this.settings.columns.actions.onComponentInitFunction = (
@@ -331,5 +361,32 @@ export class RolesComponent implements OnInit, OnDestroy {
         },
       },
     };
+  }
+
+  private loadOrganizations(): void {
+    if (!this.isSuperAdmin) {
+      return;
+    }
+
+    this.organizationService.listOrganizations().subscribe({
+      next: (orgs) => {
+        this.organizations = orgs;
+      },
+      error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+    });
+  }
+
+  private loadCurrentOrganization(): void {
+    const currentUser = this.authService.currentUserValue;
+    if (!currentUser?.organization_id) {
+      return;
+    }
+
+    this.organizationService.getOrganization(currentUser.organization_id).subscribe({
+      next: (org) => {
+        this.currentOrganization = org;
+      },
+      error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+    });
   }
 }

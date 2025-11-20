@@ -79,6 +79,8 @@ pub struct ClusterResponse {
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -142,6 +144,7 @@ impl From<Cluster> for ClusterResponse {
             is_active: cluster.is_active,
             created_at: cluster.created_at,
             updated_at: cluster.updated_at,
+            organization_id: cluster.organization_id,
         }
     }
 }

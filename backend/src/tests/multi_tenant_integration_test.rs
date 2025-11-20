@@ -6,9 +6,8 @@ use crate::services::{
     role_service::RoleService, user_service::UserService,
 };
 use crate::tests::common::{
-    MultiTenantTestData, assign_role_to_user, assign_user_to_organization, create_role,
-    create_test_casbin_service, create_test_db, create_test_user_with_org, grant_permissions,
-    setup_multi_tenant_test_data,
+    assign_role_to_user, assign_user_to_organization, create_role, create_test_casbin_service,
+    create_test_db, create_test_user_with_org, grant_permissions, setup_multi_tenant_test_data,
 };
 use sqlx::SqlitePool;
 use std::sync::Arc;
@@ -17,12 +16,6 @@ use std::sync::Arc;
 async fn test_complete_multi_tenant_workflow() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service = Arc::new(RoleService::new(
-        pool.clone(),
-        casbin_service.clone(),
-        permission_service.clone(),
-    ));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
     let org_service = Arc::new(OrganizationService::new(pool.clone()));
 
@@ -56,7 +49,7 @@ async fn test_complete_multi_tenant_workflow() {
     .await
     .expect("Failed to fetch org3 admin");
 
-    let (admin_id, admin_username, admin_org_id) = org3_admin_user;
+    let (_admin_id, admin_username, admin_org_id) = org3_admin_user;
     assert_eq!(admin_username, "org3_admin");
     assert_eq!(admin_org_id, Some(new_org.id));
 
@@ -405,12 +398,6 @@ async fn test_permission_inheritance_and_isolation() {
 async fn test_multi_tenant_edge_cases() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service = Arc::new(RoleService::new(
-        pool.clone(),
-        casbin_service.clone(),
-        permission_service.clone(),
-    ));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -498,14 +485,6 @@ async fn test_multi_tenant_edge_cases() {
 #[tokio::test]
 async fn test_concurrent_organization_operations() {
     let pool = create_test_db().await;
-    let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service = Arc::new(RoleService::new(
-        pool.clone(),
-        casbin_service.clone(),
-        permission_service.clone(),
-    ));
-    let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
     let org_service = Arc::new(OrganizationService::new(pool.clone()));
 
     // Test concurrent organization creation

@@ -46,7 +46,10 @@ pub async fn get_system_functions(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     // Create StarRocks client
@@ -85,7 +88,10 @@ pub async fn get_system_function_detail(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     // Create StarRocks client

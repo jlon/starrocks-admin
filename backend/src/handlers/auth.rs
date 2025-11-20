@@ -52,7 +52,7 @@ pub async fn login(
     let (user, token) = state.auth_service.login(req).await?;
     let username = user.username.clone();
     let user_id = user.id;
-    let user_response = state.auth_service.into_user_response(user).await?;
+    let user_response = state.auth_service.to_user_response(user).await?;
 
     tracing::info!("User logged in successfully: {} (ID: {})", username, user_id);
     tracing::debug!("JWT token generated for user: {}", username);
@@ -82,7 +82,7 @@ pub async fn get_me(
     let user = state.auth_service.get_user_by_id(user_id).await?;
     let fetched_username = user.username.clone();
     let fetched_user_id = user.id;
-    let response = state.auth_service.into_user_response(user).await?;
+    let response = state.auth_service.to_user_response(user).await?;
 
     tracing::debug!(
         "User info retrieved successfully: {} (ID: {})",
@@ -123,12 +123,8 @@ pub async fn update_me(
     let user = state.auth_service.update_user(user_id, req).await?;
     let updated_username = user.username.clone();
     let updated_user_id = user.id;
-    let response = state.auth_service.into_user_response(user).await?;
+    let response = state.auth_service.to_user_response(user).await?;
 
-    tracing::info!(
-        "User updated successfully: {} (ID: {})",
-        updated_username,
-        updated_user_id,
-    );
+    tracing::info!("User updated successfully: {} (ID: {})", updated_username, updated_user_id,);
     Ok(Json(response))
 }

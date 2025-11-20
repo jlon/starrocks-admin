@@ -162,10 +162,7 @@ async fn test_organization_creation_without_admin() {
             .fetch_all(&pool)
             .await
             .expect("Failed to fetch assignments");
-    assert!(
-        assignments.is_empty(),
-        "No admin should be assigned automatically"
-    );
+    assert!(assignments.is_empty(), "No admin should be assigned automatically");
 }
 
 #[tokio::test]
@@ -193,11 +190,8 @@ async fn test_assign_admin_during_update() {
     assign_user_to_organization(&pool, user_id, org.id).await;
 
     // Assign admin via update
-    let update_req = UpdateOrganizationRequest {
-        name: None,
-        description: None,
-        admin_user_id: Some(user_id),
-    };
+    let update_req =
+        UpdateOrganizationRequest { name: None, description: None, admin_user_id: Some(user_id) };
 
     org_service
         .update_organization(org.id, update_req, None, true)

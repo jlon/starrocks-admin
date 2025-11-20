@@ -1,46 +1,79 @@
-.PHONY: help build docker-build docker-up docker-down clean
+.PHONY: help build test format clippy run clean ci install docker-build docker-up docker-down
 
-# Project paths
-PROJECT_ROOT := $(shell pwd)
-BACKEND_DIR := $(PROJECT_ROOT)/backend
-FRONTEND_DIR := $(PROJECT_ROOT)/frontend
-BUILD_DIR := $(PROJECT_ROOT)/build
-DIST_DIR := $(BUILD_DIR)/dist
+# ============================================================================
+# NOTE: This Makefile is a compatibility layer for the new cargo xtask system
+# 
+# New users should use: cargo xtask <command>
+# Old users can still use: make <command>
+#
+# See xtask/README.md for detailed documentation
+# ============================================================================
 
 # Default target - show help
 help:
-	@echo "StarRocks Admin - Build Commands:"
+	@echo "StarRocks Admin - Build Commands (Makefile Compatibility Layer)"
 	@echo ""
-	@echo "Build:"
-	@echo "  make build              - Build backend and frontend, then create distribution package"
+	@echo "⚠️  NOTICE: We now use 'cargo xtask' as the primary build system"
+	@echo "   This Makefile is kept for backward compatibility"
+	@echo "   New command: cargo xtask <command>"
+	@echo ""
+	@echo "Build Commands:"
+	@echo "  make build              - Build backend and frontend (calls: cargo xtask build --release)"
+	@echo "  make test               - Run all tests (calls: cargo xtask test)"
+	@echo "  make format             - Format code (calls: cargo xtask format)"
+	@echo "  make clippy             - Run clippy checks (calls: cargo xtask clippy)"
+	@echo "  make run                - Build and run (calls: cargo xtask run)"
+	@echo "  make clean              - Clean build artifacts (calls: cargo xtask clean)"
+	@echo "  make ci                 - Run CI pipeline (calls: cargo xtask ci)"
+	@echo "  make dist               - Create distribution package (calls: cargo xtask dist)"
+	@echo ""
+	@echo "Docker Commands:"
 	@echo "  make docker-build       - Build Docker image"
-	@echo "  make docker-up          - Start Docker container (uses existing image)"
+	@echo "  make docker-up          - Start Docker container"
 	@echo "  make docker-down        - Stop Docker container"
-	@echo "  make clean              - Clean build artifacts"
+	@echo ""
+	@echo "For more options, run: cargo xtask --help"
 	@echo ""
 
-# Build both backend and frontend, then create distribution package
+# Build (delegates to cargo xtask)
 build:
-	@echo "Building StarRocks Admin..."
-	@echo "Step 1: Building frontend (required for embedding)..."
-	@bash build/build-frontend.sh
-	@echo ""
-	@echo "Step 2: Running clippy checks on backend..."
-	@cd $(BACKEND_DIR) && cargo clippy --release --all-targets -- --deny warnings --allow clippy::uninlined-format-args
-	@echo "✓ Clippy checks passed!"
-	@echo ""
-	@echo "Step 3: Building backend (with embedded frontend)..."
-	@bash build/build-backend.sh
-	@echo "Build complete! Output: $(DIST_DIR)"
-	@echo "Creating distribution package..."
-	@TIMESTAMP=$$(date +"%Y%m%d"); \
-	PACKAGE_NAME="starrocks-admin-$$TIMESTAMP.tar.gz"; \
-	PACKAGE_PATH="$(DIST_DIR)/$$PACKAGE_NAME"; \
-	echo "Package name: $$PACKAGE_NAME"; \
-	cd $(DIST_DIR) && tar -czf "$$PACKAGE_NAME" --transform 's,^,starrocks-admin/,' bin conf lib data logs migrations 2>/dev/null || \
-	cd $(DIST_DIR) && tar -czf "$$PACKAGE_NAME" --transform 's,^,starrocks-admin/,' bin conf lib data logs migrations; \
-	echo "Package created: $$PACKAGE_PATH"; \
-	echo "To extract: tar -xzf $$PACKAGE_NAME"
+	@echo "🔄 Delegating to: cargo xtask build --release"
+	@cargo xtask build --release
+
+# Test (delegates to cargo xtask)
+test:
+	@echo "🔄 Delegating to: cargo xtask test"
+	@cargo xtask test
+
+# Format (delegates to cargo xtask)
+format:
+	@echo "🔄 Delegating to: cargo xtask format"
+	@cargo xtask format
+
+# Clippy (delegates to cargo xtask)
+clippy:
+	@echo "🔄 Delegating to: cargo xtask clippy"
+	@cargo xtask clippy
+
+# Run (delegates to cargo xtask)
+run:
+	@echo "🔄 Delegating to: cargo xtask run"
+	@cargo xtask run
+
+# Clean (delegates to cargo xtask)
+clean:
+	@echo "🔄 Delegating to: cargo xtask clean"
+	@cargo xtask clean
+
+# CI pipeline (delegates to cargo xtask)
+ci:
+	@echo "🔄 Delegating to: cargo xtask ci"
+	@cargo xtask ci
+
+# Create distribution package (delegates to cargo xtask)
+dist:
+	@echo "🔄 Delegating to: cargo xtask dist"
+	@cargo xtask dist
 
 # Build Docker image
 docker-build:
@@ -56,11 +89,3 @@ docker-up:
 docker-down:
 	@echo "Stopping Docker container..."
 	@cd deploy/docker && docker compose down
-
-# Clean build artifacts
-clean:
-	@echo "Cleaning build artifacts..."
-	@rm -rf $(BUILD_DIR)
-	@cd $(BACKEND_DIR) && cargo clean
-	@cd $(FRONTEND_DIR) && rm -rf dist node_modules/.cache
-	@echo "Clean complete!"

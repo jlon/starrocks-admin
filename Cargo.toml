@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "backend",
+    "xtask",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/jlon/starrocks-admin"
+
+[profile.release]
+lto = true              # Link Time Optimization for smaller binary
+strip = true            # Strip debug symbols
+codegen-units = 1       # Better optimization at cost of compile time

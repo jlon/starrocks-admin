@@ -96,11 +96,14 @@ pub async fn create_organization(
 
     let org = state.organization_service.create_organization(req).await?;
     tracing::info!("Organization created successfully: {} (ID: {})", org.code, org.id);
-    
+
     // Reload Casbin policies to include new org admin permissions
-    state.casbin_service.reload_policies_from_db(&state.db).await?;
+    state
+        .casbin_service
+        .reload_policies_from_db(&state.db)
+        .await?;
     tracing::info!("Reloaded Casbin policies after organization creation");
-    
+
     Ok(Json(org))
 }
 

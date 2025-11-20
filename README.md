@@ -31,7 +31,7 @@ StarRocks Admin is a professional, enterprise-grade StarRocks database cluster m
 
 ## Quick Start
 
-### Method 1: One-Click Deployment (Recommended)
+### Method 1: Using cargo xtask (Recommended)
 
 ```bash
 # 1. Clone the project
@@ -39,7 +39,7 @@ git clone https://github.com/jlon/starrocks-admin.git
 cd starrocks-admin
 
 # 2. Build and package
-make build
+cargo xtask build --release
 
 # 3. Start the service
 cd build/dist
@@ -48,6 +48,8 @@ cd build/dist
 # 4. Access the application
 open http://localhost:8080
 ```
+
+> **New Build System**: We now use `cargo xtask` for a unified, cross-platform build experience. See [xtask/README.md](xtask/README.md) for details.
 
 ### Method 2: Docker Deployment
 

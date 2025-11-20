@@ -1,6 +1,4 @@
-use crate::models::{
-    CreateUserRequest, LoginRequest, UpdateUserRequest, User, UserResponse,
-};
+use crate::models::{CreateUserRequest, LoginRequest, UpdateUserRequest, User, UserResponse};
 use crate::utils::{ApiError, ApiResult, JwtUtil};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use sqlx::SqlitePool;
@@ -203,12 +201,12 @@ impl AuthService {
         Ok(exists.is_some())
     }
 
-    pub async fn into_user_response(&self, user: User) -> ApiResult<UserResponse> {
+    pub async fn to_user_response(&self, user: User) -> ApiResult<UserResponse> {
         let is_super_admin = self.is_user_super_admin(user.id).await?;
         let is_org_admin = self.is_user_org_admin(user.id).await?;
         Ok(UserResponse::from_user(user, is_super_admin, is_org_admin))
     }
-    
+
     async fn is_user_org_admin(&self, user_id: i64) -> ApiResult<bool> {
         let exists: Option<(i64,)> = sqlx::query_as(
             "SELECT 1 FROM user_roles ur 

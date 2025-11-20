@@ -29,7 +29,10 @@ pub async fn list_profiles(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     tracing::info!("Fetching profile list for cluster {}", cluster.id);
@@ -90,7 +93,10 @@ pub async fn get_profile(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     tracing::info!("Fetching profile detail for query {} in cluster {}", query_id, cluster.id);

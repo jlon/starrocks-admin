@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+  build-release:
+    name: Build Release
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact_name: starrocks-admin-linux-x64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            artifact_name: starrocks-admin-linux-arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: starrocks-admin-macos-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: starrocks-admin-macos-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install musl-tools
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build Release
+        run: cargo xtask build --release
+
+      - name: Get Version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "VERSION=dev-$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Tarball
+        run: |
+          cd build/dist
+          tar czf ../../${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz .
+
+      - name: Generate Checksum
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sha256sum ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz > ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz.sha256
+          else
+            shasum -a 256 ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz > ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz.sha256
+          fi
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz
+          asset_name: ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload Checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz.sha256
+          asset_name: ${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.tar.gz.sha256
+          asset_content_type: text/plain

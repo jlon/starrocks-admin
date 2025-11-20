@@ -20,7 +20,10 @@ pub async fn get_system_functions(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     let functions = state
         .system_function_service
@@ -45,7 +48,10 @@ pub async fn create_system_function(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     let function = state
         .system_function_service
@@ -64,7 +70,10 @@ pub async fn execute_system_function(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     let result = state
         .system_function_service
@@ -83,7 +92,10 @@ pub async fn update_function_orders(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     state
         .system_function_service
@@ -102,7 +114,10 @@ pub async fn toggle_function_favorite(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     let function = state
         .system_function_service
@@ -121,7 +136,10 @@ pub async fn delete_system_function(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     state
         .system_function_service
@@ -146,7 +164,10 @@ pub async fn update_function(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     let function = state
         .system_function_service

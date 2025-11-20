@@ -43,7 +43,7 @@ impl UserService {
         let base_query = "SELECT u.*, o.name as organization_name FROM users u LEFT JOIN organizations o ON u.organization_id = o.id ORDER BY u.created_at DESC";
         let (filtered_query, _) =
             apply_organization_filter(base_query, is_super_admin, organization_id);
-        
+
         // Query with organization name
         #[derive(FromRow)]
         struct UserWithOrgName {
@@ -57,7 +57,7 @@ impl UserService {
             updated_at: DateTime<Utc>,
             organization_name: Option<String>,
         }
-        
+
         let users_with_org: Vec<UserWithOrgName> = sqlx::query_as(&filtered_query)
             .fetch_all(&self.pool)
             .await?;
@@ -319,15 +319,20 @@ impl UserService {
         Ok(())
     }
 
-    fn compose_user_with_org(&self, user: User, organization_name: Option<String>, roles: Option<&Vec<RoleResponse>>) -> UserWithRolesResponse {
+    fn compose_user_with_org(
+        &self,
+        user: User,
+        organization_name: Option<String>,
+        roles: Option<&Vec<RoleResponse>>,
+    ) -> UserWithRolesResponse {
         use crate::models::UserResponse;
-        
+
         // Check if user is organization admin by checking roles
-        let is_org_admin = roles.map_or(false, |r| {
-            r.iter().any(|role| role.code.starts_with("org_admin_"))
-        });
-        
-        let user_response = UserResponse::from_user_with_org(user, organization_name, false, is_org_admin);
+        let is_org_admin =
+            roles.is_some_and(|r| r.iter().any(|role| role.code.starts_with("org_admin_")));
+
+        let user_response =
+            UserResponse::from_user_with_org(user, organization_name, false, is_org_admin);
         UserWithRolesResponse { user: user_response, roles: roles.cloned().unwrap_or_default() }
     }
 
@@ -552,18 +557,19 @@ impl UserService {
         }
 
         // For non-super admins, ensure they can only create users in their own organization
-        let current_org = requestor_org
-            .ok_or_else(|| ApiError::forbidden("Organization context required for user creation"))?;
-        
+        let current_org = requestor_org.ok_or_else(|| {
+            ApiError::forbidden("Organization context required for user creation")
+        })?;
+
         // If organization_id is explicitly specified, it must match the requestor's organization
         if let Some(requested_id) = requested_org
             && requested_id != current_org
         {
             return Err(ApiError::forbidden(
-                "Organization administrators cannot create users in other organizations"
+                "Organization administrators cannot create users in other organizations",
             ));
         }
-        
+
         Ok(current_org)
     }
 

@@ -72,7 +72,10 @@ pub async fn get_cluster_overview(
     let active_cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     let cluster_id = active_cluster.id;
 
@@ -112,7 +115,10 @@ pub async fn get_health_cards(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     tracing::debug!("GET /api/clusters/overview/health");
 
@@ -152,7 +158,10 @@ pub async fn get_performance_trends(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     tracing::debug!("GET /api/clusters/overview/performance?time_range={:?}", params.time_range);
 
@@ -195,7 +204,10 @@ pub async fn get_resource_trends(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     tracing::debug!("GET /api/clusters/overview/resources?time_range={:?}", params.time_range);
 
@@ -241,7 +253,10 @@ pub async fn get_data_statistics(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     let stats = state
         .overview_service
@@ -275,7 +290,10 @@ pub async fn get_capacity_prediction(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     tracing::debug!("GET /api/clusters/overview/capacity-prediction");
 
@@ -320,7 +338,10 @@ pub async fn get_extended_cluster_overview(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     let overview = state
         .overview_service
@@ -361,7 +382,10 @@ pub async fn get_compaction_detail_stats(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let time_range_str = match params.time_range {

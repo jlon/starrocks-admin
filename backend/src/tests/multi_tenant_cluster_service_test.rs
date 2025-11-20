@@ -28,7 +28,12 @@ async fn test_cluster_organization_filtering() {
     };
 
     let org1_cluster = cluster_service
-        .create_cluster(org1_cluster_req, test_data.org1_admin_user_id, Some(test_data.org1_id), false)
+        .create_cluster(
+            org1_cluster_req,
+            test_data.org1_admin_user_id,
+            Some(test_data.org1_id),
+            false,
+        )
         .await
         .expect("Org1 admin should create cluster");
 
@@ -53,7 +58,12 @@ async fn test_cluster_organization_filtering() {
     };
 
     let org2_cluster = cluster_service
-        .create_cluster(org2_cluster_req, test_data.org2_admin_user_id, Some(test_data.org2_id), false)
+        .create_cluster(
+            org2_cluster_req,
+            test_data.org2_admin_user_id,
+            Some(test_data.org2_id),
+            false,
+        )
         .await
         .expect("Org2 admin should create cluster");
 
@@ -106,12 +116,7 @@ async fn test_cluster_creation_organization_scoping() {
     };
 
     let super_cluster = cluster_service
-        .create_cluster(
-            super_admin_cluster_req,
-            test_data.super_admin_user_id,
-            None,
-            true,
-        )
+        .create_cluster(super_admin_cluster_req, test_data.super_admin_user_id, None, true)
         .await
         .expect("Super admin should create cluster with specific org");
 
@@ -165,10 +170,7 @@ async fn test_cluster_creation_organization_scoping() {
         .create_cluster(no_org_cluster_req, test_data.org1_admin_user_id, None, false)
         .await;
 
-    assert!(
-        result.is_err(),
-        "Org admin should not create cluster without organization context"
-    );
+    assert!(result.is_err(), "Org admin should not create cluster without organization context");
 }
 
 #[tokio::test]
@@ -233,7 +235,10 @@ async fn test_active_cluster_per_organization() {
     .await
     .expect("Should fetch org1 clusters");
 
-    let active_count = org1_clusters.iter().filter(|(_, is_active)| *is_active).count();
+    let active_count = org1_clusters
+        .iter()
+        .filter(|(_, is_active)| *is_active)
+        .count();
     assert_eq!(active_count, 1, "Should have exactly one active cluster");
 
     // Activate second cluster
@@ -296,7 +301,12 @@ async fn test_active_cluster_organization_isolation() {
     };
 
     let org1_cluster = cluster_service
-        .create_cluster(org1_cluster_req, test_data.org1_admin_user_id, Some(test_data.org1_id), false)
+        .create_cluster(
+            org1_cluster_req,
+            test_data.org1_admin_user_id,
+            Some(test_data.org1_id),
+            false,
+        )
         .await
         .expect("Should create org1 cluster");
 
@@ -316,7 +326,12 @@ async fn test_active_cluster_organization_isolation() {
     };
 
     let org2_cluster = cluster_service
-        .create_cluster(org2_cluster_req, test_data.org2_admin_user_id, Some(test_data.org2_id), false)
+        .create_cluster(
+            org2_cluster_req,
+            test_data.org2_admin_user_id,
+            Some(test_data.org2_id),
+            false,
+        )
         .await
         .expect("Should create org2 cluster");
 
@@ -378,10 +393,7 @@ async fn test_active_cluster_organization_isolation() {
         .await
         .expect("Should get org2 cluster");
 
-    assert!(
-        org2_active_after.is_active,
-        "Org2's active cluster should remain active"
-    );
+    assert!(org2_active_after.is_active, "Org2's active cluster should remain active");
 
     // Verify org1's first cluster is now inactive
     let org1_cluster1_after = cluster_service
@@ -389,10 +401,7 @@ async fn test_active_cluster_organization_isolation() {
         .await
         .expect("Should get org1 first cluster");
 
-    assert!(
-        !org1_cluster1_after.is_active,
-        "Org1's first cluster should be inactive"
-    );
+    assert!(!org1_cluster1_after.is_active, "Org1's first cluster should be inactive");
 
     // Verify org1's second cluster is now active
     let org1_cluster2_after = cluster_service
@@ -400,10 +409,7 @@ async fn test_active_cluster_organization_isolation() {
         .await
         .expect("Should get org1 second cluster");
 
-    assert!(
-        org1_cluster2_after.is_active,
-        "Org1's second cluster should be active"
-    );
+    assert!(org1_cluster2_after.is_active, "Org1's second cluster should be active");
 }
 
 #[tokio::test]
@@ -435,10 +441,7 @@ async fn test_cluster_first_auto_activation() {
         .expect("Should create first cluster");
 
     // Verify it's automatically activated
-    assert!(
-        first_cluster.is_active,
-        "First cluster should be automatically activated"
-    );
+    assert!(first_cluster.is_active, "First cluster should be automatically activated");
 
     // Verify we can get it as the active cluster
     let active_cluster = cluster_service
@@ -558,7 +561,12 @@ async fn test_super_admin_cross_organization_cluster_access() {
     };
 
     cluster_service
-        .create_cluster(org1_cluster_req, test_data.org1_admin_user_id, Some(test_data.org1_id), false)
+        .create_cluster(
+            org1_cluster_req,
+            test_data.org1_admin_user_id,
+            Some(test_data.org1_id),
+            false,
+        )
         .await
         .expect("Should create org1 cluster");
 
@@ -578,7 +586,12 @@ async fn test_super_admin_cross_organization_cluster_access() {
     };
 
     cluster_service
-        .create_cluster(org2_cluster_req, test_data.org2_admin_user_id, Some(test_data.org2_id), false)
+        .create_cluster(
+            org2_cluster_req,
+            test_data.org2_admin_user_id,
+            Some(test_data.org2_id),
+            false,
+        )
         .await
         .expect("Should create org2 cluster");
 
@@ -588,18 +601,8 @@ async fn test_super_admin_cross_organization_cluster_access() {
         .await
         .expect("Super admin should list all clusters");
 
-    assert!(
-        all_clusters
-            .iter()
-            .any(|c| c.name == "org1_cluster_super"),
-        "Should see org1 cluster"
-    );
-    assert!(
-        all_clusters
-            .iter()
-            .any(|c| c.name == "org2_cluster_super"),
-        "Should see org2 cluster"
-    );
+    assert!(all_clusters.iter().any(|c| c.name == "org1_cluster_super"), "Should see org1 cluster");
+    assert!(all_clusters.iter().any(|c| c.name == "org2_cluster_super"), "Should see org2 cluster");
 
     // Super admin can create cluster for specific organization
     let super_create_req = CreateClusterRequest {
@@ -670,13 +673,12 @@ async fn test_cluster_activation_concurrency() {
         .expect("Should activate last cluster");
 
     // Verify only one cluster is active
-    let clusters_status: Vec<(i64, bool)> = sqlx::query_as(
-        "SELECT id, is_active FROM clusters WHERE organization_id = ? ORDER BY id",
-    )
-    .bind(test_data.org1_id)
-    .fetch_all(&pool)
-    .await
-    .expect("Should fetch clusters");
+    let clusters_status: Vec<(i64, bool)> =
+        sqlx::query_as("SELECT id, is_active FROM clusters WHERE organization_id = ? ORDER BY id")
+            .bind(test_data.org1_id)
+            .fetch_all(&pool)
+            .await
+            .expect("Should fetch clusters");
 
     let active_count = clusters_status
         .iter()
@@ -691,9 +693,5 @@ async fn test_cluster_activation_concurrency() {
         .map(|(id, _)| *id)
         .expect("Should have active cluster");
 
-    assert_eq!(
-        active_cluster_id,
-        *cluster_ids.last().unwrap(),
-        "Last cluster should be active"
-    );
+    assert_eq!(active_cluster_id, *cluster_ids.last().unwrap(), "Last cluster should be active");
 }

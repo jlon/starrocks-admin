@@ -50,8 +50,10 @@ backend/logs/
 # Build artifacts
 /build/dist/
 /build/dist/web
+/build/coverage/
 /web/
 *.tar.gz
+*.sha256
 
 # Environment
 .env
@@ -71,4 +73,13 @@ Thumbs.db
 config.toml
 !config.toml.example
 target
+
+# xtask
+xtask/target/
+
+# Test coverage
+cobertura.xml
+tarpaulin-report.html
+
+# Misc
 .kilocode

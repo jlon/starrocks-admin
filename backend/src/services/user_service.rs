@@ -523,12 +523,12 @@ impl UserService {
             .ok_or_else(|| ApiError::forbidden("Organization context required for user creation"))?;
         
         // If organization_id is explicitly specified, it must match the requestor's organization
-        if let Some(requested_id) = requested_org {
-            if requested_id != current_org {
-                return Err(ApiError::forbidden(
-                    "Organization administrators cannot create users in other organizations"
-                ));
-            }
+        if let Some(requested_id) = requested_org
+            && requested_id != current_org
+        {
+            return Err(ApiError::forbidden(
+                "Organization administrators cannot create users in other organizations"
+            ));
         }
         
         Ok(current_org)

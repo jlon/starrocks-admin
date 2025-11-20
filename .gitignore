@@ -71,3 +71,4 @@ Thumbs.db
 config.toml
 !config.toml.example
 target
+.kilocode

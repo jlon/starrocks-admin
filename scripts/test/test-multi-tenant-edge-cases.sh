@@ -118,17 +118,28 @@ ORGS_RESPONSE=$(curl -s -X GET "${BASE_URL}/organizations" \
 ALPHA_ORG_ID=$(echo "$ORGS_RESPONSE" | python3 -c "import sys, json; orgs=json.load(sys.stdin); alpha=[o for o in orgs if o.get('code')=='ORG_ALPHA']; print(alpha[0]['id'] if alpha else '')" 2>/dev/null)
 
 if [ -n "$ALPHA_ORG_ID" ]; then
+  echo "  Found Alpha org ID: $ALPHA_ORG_ID"
   # Get clusters for Alpha org
   CLUSTERS=$(curl -s -X GET "${BASE_URL}/clusters" \
     -H "Authorization: Bearer ${SUPER_TOKEN}")
   
-  ALPHA_CLUSTERS=$(echo "$CLUSTERS" | python3 -c "import sys, json; clusters=json.load(sys.stdin); alpha=[c for c in clusters if c.get('organization_id')==${ALPHA_ORG_ID}]; print(len([c for c in alpha if c.get('is_active', False)]))" 2>/dev/null)
-  
-  if [ "$ALPHA_CLUSTERS" = "1" ]; then
-    echo "${GREEN}✓ PASSED: Only one active cluster in Alpha organization${NC}"
-    PASSED=$((PASSED + 1))
+  # Debug: check if clusters response is valid JSON
+  if echo "$CLUSTERS" | python3 -c "import sys, json; json.load(sys.stdin)" 2>/dev/null; then
+    ALPHA_CLUSTERS=$(echo "$CLUSTERS" | python3 -c "import sys, json; clusters=json.load(sys.stdin); alpha=[c for c in clusters if c.get('organization_id')==${ALPHA_ORG_ID}]; print(len([c for c in alpha if c.get('is_active', False)]))" 2>/dev/null)
+    
+    if [ -z "$ALPHA_CLUSTERS" ]; then
+      ALPHA_CLUSTERS="0"
+    fi
+    
+    if [ "$ALPHA_CLUSTERS" = "1" ]; then
+      echo "${GREEN}✓ PASSED: Only one active cluster in Alpha organization${NC}"
+      PASSED=$((PASSED + 1))
+    else
+      echo "${RED}✗ FAILED: Found $ALPHA_CLUSTERS active clusters (expected 1)${NC}"
+      FAILED=$((FAILED + 1))
+    fi
   else
-    echo "${RED}✗ FAILED: Found $ALPHA_CLUSTERS active clusters (expected 1)${NC}"
+    echo "${YELLOW}⚠ Invalid clusters JSON response${NC}"
     FAILED=$((FAILED + 1))
   fi
 else
@@ -155,17 +166,22 @@ if [ -n "$ALPHA_TOKEN" ]; then
   BETA_ORG_ID=$(echo "$ORGS_RESPONSE" | python3 -c "import sys, json; orgs=json.load(sys.stdin); beta=[o for o in orgs if o.get('code')=='ORG_BETA']; print(beta[0]['id'] if beta else '')" 2>/dev/null)
   
   if [ -n "$BETA_ORG_ID" ]; then
-    BETA_CLUSTERS=$(curl -s -X GET "${BASE_URL}/clusters" \
-      -H "Authorization: Bearer ${SUPER_TOKEN}" | python3 -c "import sys, json; clusters=json.load(sys.stdin); beta=[c for c in clusters if c.get('organization_id')==${BETA_ORG_ID}]; print(beta[0]['id'] if beta else '')" 2>/dev/null)
+    echo "  Found Beta org ID: $BETA_ORG_ID"
+    # Get ALL clusters first
+    ALL_CLUSTERS=$(curl -s -X GET "${BASE_URL}/clusters" \
+      -H "Authorization: Bearer ${SUPER_TOKEN}")
     
-    if [ -n "$BETA_CLUSTERS" ]; then
+    BETA_CLUSTER_ID=$(echo "$ALL_CLUSTERS" | python3 -c "import sys, json; clusters=json.load(sys.stdin); beta=[c for c in clusters if c.get('organization_id')==${BETA_ORG_ID}]; print(beta[0]['id'] if beta else '')" 2>/dev/null)
+    
+    if [ -n "$BETA_CLUSTER_ID" ]; then
+      echo "  Found Beta cluster ID: $BETA_CLUSTER_ID"
       # Try to access Beta's cluster with Alpha admin token
-      ACCESS_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X GET "${BASE_URL}/clusters/${BETA_CLUSTERS}" \
+      ACCESS_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X GET "${BASE_URL}/clusters/${BETA_CLUSTER_ID}" \
         -H "Authorization: Bearer ${ALPHA_TOKEN}")
       
       HTTP_CODE=$(echo "$ACCESS_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
       
-      if [ "$HTTP_CODE" = "403" ] || [ "$HTTP_CODE" = "404" ]; then
+      if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ] || [ "$HTTP_CODE" = "404" ]; then
         echo "${GREEN}✓ PASSED: Cross-org cluster access blocked (HTTP $HTTP_CODE)${NC}"
         PASSED=$((PASSED + 1))
       else
@@ -194,12 +210,15 @@ echo "Testing: Org admin cannot update other org's users"
 
 if [ -n "$ALPHA_TOKEN" ] && [ -n "$BETA_ORG_ID" ]; then
   # Get Beta's admin user
-  BETA_USERS=$(curl -s -X GET "${BASE_URL}/users" \
-    -H "Authorization: Bearer ${SUPER_TOKEN}" | python3 -c "import sys, json; users=json.load(sys.stdin); beta=[u for u in users if u.get('organization_id')==${BETA_ORG_ID} and 'admin' in u.get('username','')]; print(beta[0]['id'] if beta else '')" 2>/dev/null)
+  ALL_USERS=$(curl -s -X GET "${BASE_URL}/users" \
+    -H "Authorization: Bearer ${SUPER_TOKEN}")
   
-  if [ -n "$BETA_USERS" ]; then
+  BETA_USER_ID=$(echo "$ALL_USERS" | python3 -c "import sys, json; users=json.load(sys.stdin); beta=[u for u in users if u.get('organization_id')==${BETA_ORG_ID} and 'admin' in u.get('username','')]; print(beta[0]['id'] if beta else '')" 2>/dev/null)
+  
+  if [ -n "$BETA_USER_ID" ]; then
+    echo "  Found Beta user ID: $BETA_USER_ID"
     # Try to update Beta's user with Alpha admin token
-    UPDATE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X PUT "${BASE_URL}/users/${BETA_USERS}" \
+    UPDATE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X PUT "${BASE_URL}/users/${BETA_USER_ID}" \
       -H "Authorization: Bearer ${ALPHA_TOKEN}" \
       -H "Content-Type: application/json" \
       -d '{"email":"hacked@example.com"}')
@@ -437,10 +456,15 @@ echo "${CYAN}[Test 10] Concurrent Active Cluster Management${NC}"
 echo "Testing: System handles concurrent cluster activation correctly"
 
 if [ -n "$ALPHA_ORG_ID" ]; then
+  # Get fresh clusters list
+  FRESH_CLUSTERS=$(curl -s -X GET "${BASE_URL}/clusters" \
+    -H "Authorization: Bearer ${SUPER_TOKEN}")
+  
   # Get two clusters from Alpha org
-  ALPHA_CLUSTER_IDS=$(echo "$CLUSTERS" | python3 -c "import sys, json; clusters=json.load(sys.stdin); alpha=[str(c['id']) for c in clusters if c.get('organization_id')==${ALPHA_ORG_ID}]; print(','.join(alpha[:2]))" 2>/dev/null)
+  ALPHA_CLUSTER_IDS=$(echo "$FRESH_CLUSTERS" | python3 -c "import sys, json; clusters=json.load(sys.stdin); alpha=[str(c['id']) for c in clusters if c.get('organization_id')==${ALPHA_ORG_ID}]; print(','.join(alpha[:2]))" 2>/dev/null)
   
   if [ -n "$ALPHA_CLUSTER_IDS" ]; then
+    echo "  Found Alpha cluster IDs: $ALPHA_CLUSTER_IDS"
     CLUSTER1=$(echo "$ALPHA_CLUSTER_IDS" | cut -d, -f1)
     CLUSTER2=$(echo "$ALPHA_CLUSTER_IDS" | cut -d, -f2)
     

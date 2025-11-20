@@ -1,13 +1,10 @@
 // Multi-tenant user service tests
 
 use crate::models::{AdminCreateUserRequest, AdminUpdateUserRequest};
-use crate::services::{
-    permission_service::PermissionService, role_service::RoleService, user_service::UserService,
-};
+use crate::services::user_service::UserService;
 use crate::tests::common::{
-    MultiTenantTestData, assign_role_to_user, assign_user_to_organization,
-    create_test_casbin_service, create_test_db, create_test_user_with_org,
-    setup_multi_tenant_test_data,
+    assign_user_to_organization, create_test_casbin_service, create_test_db,
+    create_test_user_with_org, setup_multi_tenant_test_data,
 };
 use std::sync::Arc;
 
@@ -15,9 +12,6 @@ use std::sync::Arc;
 async fn test_user_organization_filtering() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service =
-        Arc::new(RoleService::new(pool.clone(), casbin_service.clone(), permission_service));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -71,9 +65,6 @@ async fn test_user_organization_filtering() {
 async fn test_user_creation_organization_scoping() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service =
-        Arc::new(RoleService::new(pool.clone(), casbin_service.clone(), permission_service));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -133,9 +124,6 @@ async fn test_user_creation_organization_scoping() {
 async fn test_user_update_organization_validation() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service =
-        Arc::new(RoleService::new(pool.clone(), casbin_service.clone(), permission_service));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -203,9 +191,6 @@ async fn test_user_update_organization_validation() {
 async fn test_user_deletion_organization_validation() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service =
-        Arc::new(RoleService::new(pool.clone(), casbin_service.clone(), permission_service));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -248,9 +233,6 @@ async fn test_user_deletion_organization_validation() {
 async fn test_user_role_assignment_organization_validation() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service =
-        Arc::new(RoleService::new(pool.clone(), casbin_service.clone(), permission_service));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -268,7 +250,7 @@ async fn test_user_role_assignment_organization_validation() {
         role_ids: Some(vec![test_data.regular_role_id]),
         organization_id: None,
     };
-    let result = user_service
+    user_service
         .update_user(org1_user_id, update_req, Some(test_data.org1_id), false)
         .await
         .expect("Org1 admin should assign org1 role to org1 user");
@@ -322,9 +304,6 @@ async fn test_user_role_assignment_organization_validation() {
 async fn test_user_organization_isolation() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service =
-        Arc::new(RoleService::new(pool.clone(), casbin_service.clone(), permission_service));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -386,9 +365,6 @@ async fn test_user_organization_isolation() {
 async fn test_user_cross_organization_access_prevention() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service =
-        Arc::new(RoleService::new(pool.clone(), casbin_service.clone(), permission_service));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -444,9 +420,6 @@ async fn test_user_cross_organization_access_prevention() {
 async fn test_user_organization_membership_consistency() {
     let pool = create_test_db().await;
     let casbin_service = create_test_casbin_service().await;
-    let permission_service = Arc::new(PermissionService::new(pool.clone(), casbin_service.clone()));
-    let role_service =
-        Arc::new(RoleService::new(pool.clone(), casbin_service.clone(), permission_service));
     let user_service = Arc::new(UserService::new(pool.clone(), casbin_service.clone()));
 
     let test_data = setup_multi_tenant_test_data(&pool).await;
@@ -461,7 +434,7 @@ async fn test_user_organization_membership_consistency() {
         .await
         .expect("Should get user with organization");
 
-    // UserResponse doesn't have organization_id field, so we check through the service filtering
+    assert_eq!(user_with_roles.user.id, org1_user_id);
 
     // Test: User appears in organization's user list
     let org1_users = user_service

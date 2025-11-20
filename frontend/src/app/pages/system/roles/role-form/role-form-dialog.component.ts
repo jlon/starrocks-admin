@@ -76,6 +76,7 @@ export class RoleFormDialogComponent implements OnInit {
       code: ['', [Validators.required, Validators.maxLength(50)]],
       name: ['', [Validators.required, Validators.maxLength(50)]],
       description: ['', [Validators.maxLength(200)]],
+      organizationId: [null],
       menuIds: [[], [Validators.required]],
     });
   }
@@ -83,6 +84,19 @@ export class RoleFormDialogComponent implements OnInit {
   ngOnInit(): void {
     // Determine if current user is super admin
     this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+
+    const orgControl = this.form.get('organizationId');
+    if (this.isSuperAdmin) {
+      orgControl?.setValidators([Validators.required]);
+    } else if (this.currentOrganization) {
+      orgControl?.setValue(this.currentOrganization.id);
+      orgControl?.disable();
+    }
+    if (this.mode === 'edit' && this.role?.organization_id) {
+      orgControl?.setValue(this.role.organization_id);
+      orgControl?.disable();
+    }
+    orgControl?.updateValueAndValidity();
 
     // Build menu-API associations
     this.buildApiAssociations();
@@ -358,15 +372,18 @@ export class RoleFormDialogComponent implements OnInit {
   }
 
   private buildPayload(): CreateRolePayload | UpdateRolePayload {
-    const { code, name, description } = this.form.getRawValue();
+    const { code, name, description, organizationId } = this.form.getRawValue();
     const normalizedName = (name ?? '').trim();
     const normalizedDescription = description?.trim() || undefined;
 
     if (this.mode === 'create') {
+      const orgId =
+        this.isSuperAdmin ? organizationId : this.currentOrganization?.id ?? organizationId;
       return {
         code: (code ?? '').trim(),
         name: normalizedName,
         description: normalizedDescription,
+        organization_id: orgId || undefined,
       };
     }
 

@@ -1,15 +1,12 @@
 // Organization service multi-tenant tests
 
 use crate::models::{CreateOrganizationRequest, UpdateOrganizationRequest};
-use crate::services::{
-    organization_service::OrganizationService, permission_service::PermissionService,
-    role_service::RoleService, user_service::UserService,
-};
+use crate::services::organization_service::OrganizationService;
 use crate::tests::common::{
-    MultiTenantTestData, create_test_casbin_service, create_test_db, setup_multi_tenant_test_data,
+    assign_user_to_organization, create_test_db, create_test_user_with_org,
+    setup_multi_tenant_test_data,
 };
 use sqlx::SqlitePool;
-use std::sync::Arc;
 
 #[tokio::test]
 async fn test_organization_crud_operations() {
@@ -58,6 +55,7 @@ async fn test_organization_crud_operations() {
     let update_req = UpdateOrganizationRequest {
         name: Some("Updated Test Organization".to_string()),
         description: Some("Updated description".to_string()),
+        admin_user_id: None,
     };
 
     let updated_org = org_service
@@ -127,6 +125,102 @@ async fn test_organization_with_admin_creation() {
 
     assert!(!user_orgs.is_empty());
     assert_eq!(user_orgs[0].0, created_org.id);
+}
+
+#[tokio::test]
+async fn test_organization_creation_without_admin() {
+    let pool = create_test_db().await;
+    let org_service = OrganizationService::new(pool.clone());
+
+    let create_req = CreateOrganizationRequest {
+        code: "org_without_admin".to_string(),
+        name: "Organization Without Admin".to_string(),
+        description: Some("Org created without admin".to_string()),
+        admin_username: None,
+        admin_password: None,
+        admin_email: None,
+        admin_user_id: None,
+    };
+
+    let created_org = org_service
+        .create_organization(create_req)
+        .await
+        .expect("Failed to create organization without admin");
+
+    // Verify org_admin role exists but no user_role assignment yet
+    let (role_id,): (i64,) = sqlx::query_as(
+        "SELECT id FROM roles WHERE organization_id = ? AND code LIKE 'org_admin_%' LIMIT 1",
+    )
+    .bind(created_org.id)
+    .fetch_one(&pool)
+    .await
+    .expect("org_admin role should exist");
+
+    let assignments: Vec<(i64,)> =
+        sqlx::query_as("SELECT user_id FROM user_roles WHERE role_id = ?")
+            .bind(role_id)
+            .fetch_all(&pool)
+            .await
+            .expect("Failed to fetch assignments");
+    assert!(
+        assignments.is_empty(),
+        "No admin should be assigned automatically"
+    );
+}
+
+#[tokio::test]
+async fn test_assign_admin_during_update() {
+    let pool = create_test_db().await;
+    let org_service = OrganizationService::new(pool.clone());
+
+    // Create org without admin
+    let create_req = CreateOrganizationRequest {
+        code: "org_update_admin".to_string(),
+        name: "Org Update Admin".to_string(),
+        description: None,
+        admin_username: None,
+        admin_password: None,
+        admin_email: None,
+        admin_user_id: None,
+    };
+    let org = org_service
+        .create_organization(create_req)
+        .await
+        .expect("Failed to create organization");
+
+    // Create user inside organization
+    let user_id = create_test_user_with_org(&pool, "deferred_admin", org.id).await;
+    assign_user_to_organization(&pool, user_id, org.id).await;
+
+    // Assign admin via update
+    let update_req = UpdateOrganizationRequest {
+        name: None,
+        description: None,
+        admin_user_id: Some(user_id),
+    };
+
+    org_service
+        .update_organization(org.id, update_req, None, true)
+        .await
+        .expect("Failed to update organization admin");
+
+    let (role_id,): (i64,) = sqlx::query_as(
+        "SELECT id FROM roles WHERE organization_id = ? AND code LIKE 'org_admin_%' LIMIT 1",
+    )
+    .bind(org.id)
+    .fetch_one(&pool)
+    .await
+    .expect("org_admin role missing");
+
+    let assignments: Vec<(i64,)> =
+        sqlx::query_as("SELECT user_id FROM user_roles WHERE role_id = ?")
+            .bind(role_id)
+            .fetch_all(&pool)
+            .await
+            .expect("Failed to fetch user roles");
+
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].0, user_id);
 }
 
 #[tokio::test]
@@ -213,6 +307,7 @@ async fn test_system_organization_protection() {
     let update_req = UpdateOrganizationRequest {
         name: Some("Updated System Organization".to_string()),
         description: Some("Updated system description".to_string()),
+        admin_user_id: None,
     };
 
     let updated_org = org_service
@@ -245,6 +340,7 @@ async fn test_organization_filtering() {
         .create_organization(create_req)
         .await
         .expect("Failed to create additional organization");
+    assert_eq!(additional_org.code, "additional_org");
 
     // Test: Super admin can see all organizations
     let all_orgs = org_service
@@ -271,8 +367,12 @@ async fn test_organization_filtering() {
         .await
         .expect("Non-super-admin with org context should get filtered result");
 
-    // Should return empty since organizations are not organization-scoped in the same way
-    // This tests the filtering logic is working
+    assert!(
+        filtered_orgs
+            .iter()
+            .all(|org| org.id == test_data.org1_id || org.code == "org1"),
+        "Org-scoped listing should only include the requestor's organization"
+    );
 }
 
 #[tokio::test]
@@ -286,6 +386,7 @@ async fn test_organization_update_validation() {
     let update_req = UpdateOrganizationRequest {
         name: Some("Hijacked Organization".to_string()),
         description: Some("This should not work".to_string()),
+        admin_user_id: None,
     };
 
     let result = org_service
@@ -298,6 +399,7 @@ async fn test_organization_update_validation() {
     let update_req = UpdateOrganizationRequest {
         name: Some("Super Admin Updated".to_string()),
         description: Some("Updated by super admin".to_string()),
+        admin_user_id: None,
     };
 
     let updated_org = org_service

@@ -39,10 +39,15 @@ pub struct SystemQueryParams {
 )]
 pub async fn get_system_functions(
     State(state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Query(params): Query<SystemQueryParams>,
 ) -> ApiResult<impl IntoResponse> {
-    // Get cluster info
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     // Create StarRocks client
     let client = StarRocksClient::new(cluster);
@@ -72,11 +77,16 @@ pub async fn get_system_functions(
 )]
 pub async fn get_system_function_detail(
     State(state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Path(function_name): Path<String>,
     Query(params): Query<SystemQueryParams>,
 ) -> ApiResult<impl IntoResponse> {
-    // Get cluster info
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     // Create StarRocks client
     let client = StarRocksClient::new(cluster);

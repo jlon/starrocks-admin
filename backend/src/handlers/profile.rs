@@ -23,8 +23,14 @@ use crate::utils::ApiResult;
 )]
 pub async fn list_profiles(
     State(state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<Vec<ProfileListItem>>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     tracing::info!("Fetching profile list for cluster {}", cluster.id);
 
@@ -77,9 +83,15 @@ pub async fn list_profiles(
 )]
 pub async fn get_profile(
     State(state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Path(query_id): Path<String>,
 ) -> ApiResult<Json<ProfileDetail>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     tracing::info!("Fetching profile detail for query {} in cluster {}", query_id, cluster.id);
 

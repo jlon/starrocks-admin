@@ -19,8 +19,16 @@ use crate::utils::ApiResult;
     ),
     tag = "System"
 )]
-pub async fn get_runtime_info(State(state): State<Arc<AppState>>) -> ApiResult<Json<RuntimeInfo>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+pub async fn get_runtime_info(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+) -> ApiResult<Json<RuntimeInfo>> {
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     let client = StarRocksClient::new(cluster);
     let runtime_info = client.get_runtime_info().await?;
     Ok(Json(runtime_info))

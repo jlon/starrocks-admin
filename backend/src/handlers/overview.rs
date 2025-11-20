@@ -63,12 +63,17 @@ pub struct TrendQueryParams {
 )]
 pub async fn get_cluster_overview(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Query(params): Query<OverviewQueryParams>,
 ) -> ApiResult<Json<ClusterOverview>> {
     tracing::debug!("GET /api/clusters/overview?time_range={:?}", params.time_range);
 
-    // Get the active cluster
-    let active_cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let active_cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     let cluster_id = active_cluster.id;
 
     let overview = state
@@ -101,8 +106,14 @@ pub async fn get_cluster_overview(
 )]
 pub async fn get_health_cards(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<Vec<HealthCard>>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     tracing::debug!("GET /api/clusters/overview/health");
 
     let cards = state.overview_service.get_health_cards(cluster.id).await?;
@@ -134,9 +145,15 @@ pub async fn get_health_cards(
 )]
 pub async fn get_performance_trends(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Query(params): Query<TrendQueryParams>,
 ) -> ApiResult<Json<PerformanceTrends>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     tracing::debug!("GET /api/clusters/overview/performance?time_range={:?}", params.time_range);
 
     let trends = state
@@ -171,9 +188,15 @@ pub async fn get_performance_trends(
 )]
 pub async fn get_resource_trends(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Query(params): Query<TrendQueryParams>,
 ) -> ApiResult<Json<ResourceTrends>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     tracing::debug!("GET /api/clusters/overview/resources?time_range={:?}", params.time_range);
 
     let trends = state
@@ -211,9 +234,15 @@ pub async fn get_resource_trends(
 )]
 pub async fn get_data_statistics(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Query(params): Query<TrendQueryParams>,
 ) -> ApiResult<Json<DataStatistics>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     let stats = state
         .overview_service
         .get_data_statistics(cluster.id, Some(&params.time_range))
@@ -240,8 +269,14 @@ pub async fn get_data_statistics(
 )]
 pub async fn get_capacity_prediction(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<CapacityPrediction>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     tracing::debug!("GET /api/clusters/overview/capacity-prediction");
 
     let prediction = state.overview_service.predict_capacity(cluster.id).await?;
@@ -278,9 +313,15 @@ pub async fn get_capacity_prediction(
 )]
 pub async fn get_extended_cluster_overview(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Query(params): Query<OverviewQueryParams>,
 ) -> ApiResult<Json<ExtendedClusterOverview>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     let overview = state
         .overview_service
         .get_extended_overview(cluster.id, params.time_range)
@@ -313,9 +354,15 @@ pub async fn get_extended_cluster_overview(
 )]
 pub async fn get_compaction_detail_stats(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Query(params): Query<TrendQueryParams>,
 ) -> ApiResult<Json<CompactionDetailStats>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     let time_range_str = match params.time_range {
         TimeRange::Hours1 => "1h",

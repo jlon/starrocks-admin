@@ -22,8 +22,16 @@ use crate::utils::ApiResult;
     ),
     tag = "Backends"
 )]
-pub async fn list_backends(State(state): State<Arc<AppState>>) -> ApiResult<Json<Vec<Backend>>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+pub async fn list_backends(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+) -> ApiResult<Json<Vec<Backend>>> {
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     let client = StarRocksClient::new(cluster);
     let backends = client.get_backends().await?;
     Ok(Json(backends))
@@ -49,9 +57,15 @@ pub async fn list_backends(State(state): State<Arc<AppState>>) -> ApiResult<Json
 )]
 pub async fn delete_backend(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Path((host, port)): Path<(String, String)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     tracing::info!("Deleting backend {}:{} from cluster {}", host, port, cluster.id);
 
     let client = StarRocksClient::new(cluster);

@@ -108,27 +108,35 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Load users for this organization before opening dialog
-    this.userService.listUsers().subscribe({
-      next: (allUsers) => {
-        // Filter users belonging to this organization
-        const organizationUsers = allUsers.filter(u => u.organization_id === organization.id);
-        
-        const dialogRef = this.dialogService.open(OrganizationFormDialogComponent, {
-          context: {
-            mode: 'edit',
-            organization,
-            availableUsers: organizationUsers,
-          },
-          closeOnBackdropClick: false,
-          autoFocus: false,
-        });
+    // First, get the full organization details (including admin_user_id)
+    this.organizationService.getOrganization(organization.id).subscribe({
+      next: (fullOrganization) => {
+        // Then load users for this organization
+        this.userService.listUsers().subscribe({
+          next: (allUsers) => {
+            // Filter users belonging to this organization
+            const organizationUsers = allUsers.filter(u => u.organization_id === fullOrganization.id);
+            
+            const dialogRef = this.dialogService.open(OrganizationFormDialogComponent, {
+              context: {
+                mode: 'edit',
+                organization: fullOrganization,
+                availableUsers: organizationUsers,
+              },
+              closeOnBackdropClick: false,
+              autoFocus: false,
+            });
 
-        dialogRef.onClose.subscribe((result?: OrganizationFormDialogResult) => {
-          if (!result) {
-            return;
+            dialogRef.onClose.subscribe((result?: OrganizationFormDialogResult) => {
+              if (!result) {
+                return;
+              }
+              this.updateOrganization(fullOrganization.id, result);
+            });
+          },
+          error: (error) => {
+            ErrorHandler.handleHttpError(error, this.toastrService);
           }
-          this.updateOrganization(organization.id, result);
         });
       },
       error: (error) => {

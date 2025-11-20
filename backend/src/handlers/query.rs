@@ -146,7 +146,7 @@ pub async fn list_tables(
     let show_tables_sql = match catalog_name.as_deref() {
         Some(catalog) if catalog != "default_catalog" => {
             format!("SHOW TABLES FROM {}.{}", catalog, database_name)
-        }
+        },
         _ => format!("SHOW TABLES FROM {}", database_name),
     };
 
@@ -154,14 +154,14 @@ pub async fn list_tables(
         Ok((_, rows, _)) => rows
             .into_iter()
             .filter_map(|row| {
-                let name = row.first().map(|s| s.trim().to_string()).unwrap_or_default();
+                let name = row
+                    .first()
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default();
                 if name.is_empty() {
                     None
                 } else {
-                    Some(TableMetadata {
-                        name,
-                        object_type: TableObjectType::Table,
-                    })
+                    Some(TableMetadata { name, object_type: TableObjectType::Table })
                 }
             })
             .collect::<Vec<_>>(),
@@ -195,12 +195,17 @@ pub async fn list_tables(
                 Ok((_, rows)) => rows
                     .into_iter()
                     .filter_map(|row| {
-                        let name = row.first().map(|s| s.trim().to_string()).unwrap_or_default();
+                        let name = row
+                            .first()
+                            .map(|s| s.trim().to_string())
+                            .unwrap_or_default();
                         if name.is_empty() {
                             return None;
                         }
-                        let object_type_raw =
-                            row.get(1).map(|s| s.trim().to_uppercase()).unwrap_or_default();
+                        let object_type_raw = row
+                            .get(1)
+                            .map(|s| s.trim().to_uppercase())
+                            .unwrap_or_default();
                         let object_type = match object_type_raw.as_str() {
                             "MATERIALIZED_VIEW" => TableObjectType::MaterializedView,
                             "VIEW" => TableObjectType::View,
@@ -218,9 +223,9 @@ pub async fn list_tables(
                         info_schema_err
                     );
                     Vec::new()
-                }
+                },
             }
-        }
+        },
     };
 
     if !tables.is_empty()
@@ -243,27 +248,27 @@ pub async fn list_tables(
                 (database_name.clone(),),
             )
             .await
-        {
-            let type_map: std::collections::HashMap<_, _> = info_rows
-                .into_iter()
-                .filter_map(|row| {
-                    let name = row.first().map(|s| s.trim().to_string())?;
-                    let object_type_raw = row.get(1).map(|s| s.trim().to_uppercase())?;
-                    let object_type = match object_type_raw.as_str() {
-                        "MATERIALIZED_VIEW" => TableObjectType::MaterializedView,
-                        "VIEW" => TableObjectType::View,
-                        _ => TableObjectType::Table,
-                    };
-                    Some((name, object_type))
-                })
-                .collect();
+    {
+        let type_map: std::collections::HashMap<_, _> = info_rows
+            .into_iter()
+            .filter_map(|row| {
+                let name = row.first().map(|s| s.trim().to_string())?;
+                let object_type_raw = row.get(1).map(|s| s.trim().to_uppercase())?;
+                let object_type = match object_type_raw.as_str() {
+                    "MATERIALIZED_VIEW" => TableObjectType::MaterializedView,
+                    "VIEW" => TableObjectType::View,
+                    _ => TableObjectType::Table,
+                };
+                Some((name, object_type))
+            })
+            .collect();
 
-            for table in tables.iter_mut() {
-                if let Some(object_type) = type_map.get(&table.name) {
-                    table.object_type = *object_type;
-                }
+        for table in tables.iter_mut() {
+            if let Some(object_type) = type_map.get(&table.name) {
+                table.object_type = *object_type;
             }
         }
+    }
 
     tracing::debug!(
         "Database {}{} returned {} tables via MySQL client (with type metadata)",

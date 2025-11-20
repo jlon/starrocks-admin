@@ -7,6 +7,7 @@ export interface UserSummary {
   username: string;
   email?: string;
   avatar?: string;
+  organization_id?: number;
   created_at: string;
 }
 
@@ -29,6 +30,7 @@ export interface CreateUserPayload {
   email?: string;
   avatar?: string;
   role_ids?: number[];
+  organization_id?: number;
 }
 
 export interface UpdateUserPayload {
@@ -37,6 +39,7 @@ export interface UpdateUserPayload {
   email?: string;
   avatar?: string;
   role_ids?: number[];
+  organization_id?: number;
 }
 
 @Injectable({

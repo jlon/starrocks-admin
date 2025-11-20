@@ -102,7 +102,7 @@ fn extract_clusters_id_action(segments: &[&str], method: &str) -> Option<String>
             } else {
                 Some(action.to_string())
             }
-        }
+        },
         _ => None,
     }
 }
@@ -131,9 +131,10 @@ fn extract_clusters_special_paths(segments: &[&str], method: &str) -> Option<Str
             if m == "DELETE" && seg.len() >= 3 && seg.get(1) == Some(&"queries") {
                 // Check if second segment is a special path (history, execute)
                 if let Some(second) = seg.get(2)
-                    && (*second == "history" || *second == "execute") {
-                        return None;
-                    }
+                    && (*second == "history" || *second == "execute")
+                {
+                    return None;
+                }
                 // Path pattern: /clusters/queries/{query_id}
                 // query_id can be any string, not just numbers
                 // When query_id contains colons, it will be split into multiple segments
@@ -151,14 +152,16 @@ fn extract_clusters_special_paths(segments: &[&str], method: &str) -> Option<Str
                 // Check if last segment is "profile" (query_id may contain colons and be split)
                 // Exclude special paths like /queries/history/profile (unlikely but safe)
                 if let Some(last) = seg.last()
-                    && *last == "profile" {
-                        // Check if second segment is not a special path
-                        if let Some(second) = seg.get(2)
-                            && (*second == "history" || *second == "execute") {
-                                return None;
-                            }
-                        return Some("queries:profile".to_string());
+                    && *last == "profile"
+                {
+                    // Check if second segment is not a special path
+                    if let Some(second) = seg.get(2)
+                        && (*second == "history" || *second == "execute")
+                    {
+                        return None;
                     }
+                    return Some("queries:profile".to_string());
+                }
                 None
             } else {
                 None
@@ -225,7 +228,7 @@ fn extract_materialized_views_action(segments: &[&str], method: &str) -> Option<
                 ("cancel", "POST") => Some("materialized_views:cancel".to_string()),
                 _ => None,
             }
-        }
+        },
         _ => None,
     }
 }
@@ -234,11 +237,7 @@ fn extract_materialized_views_action(segments: &[&str], method: &str) -> Option<
 fn extract_variables_action(segments: &[&str], method: &str) -> Option<String> {
     if method == "PUT" && segments.len() == 3 && segments.get(1) == Some(&"variables") {
         segments.get(2).and_then(|third| {
-            if third.parse::<i64>().is_err() {
-                Some("variables:update".to_string())
-            } else {
-                None
-            }
+            if third.parse::<i64>().is_err() { Some("variables:update".to_string()) } else { None }
         })
     } else {
         None
@@ -269,7 +268,7 @@ fn extract_system_functions_action(segments: &[&str], method: &str) -> Option<St
                 ("favorite", "PUT") => Some("system:functions:favorite".to_string()),
                 _ => None,
             }
-        }
+        },
         _ => None,
     }
 }
@@ -287,17 +286,18 @@ fn extract_action_default(resource: &str, segments: &[&str], method: &str) -> Op
     // For other resources, use standard logic
     if segments.len() >= 2 {
         let second = segments.get(1).copied();
-        
+
         // Check if second segment is a numeric ID
         if let Some(second_str) = second
-            && second_str.parse::<i64>().is_ok() {
-                return match method {
-                    "GET" => Some("get".to_string()),
-                    "PUT" => Some("update".to_string()),
-                    "DELETE" => Some("delete".to_string()),
-                    _ => None,
-                };
-            }
+            && second_str.parse::<i64>().is_ok()
+        {
+            return match method {
+                "GET" => Some("get".to_string()),
+                "PUT" => Some("update".to_string()),
+                "DELETE" => Some("delete".to_string()),
+                _ => None,
+            };
+        }
 
         // Non-ID path
         match method {
@@ -313,4 +313,3 @@ fn extract_action_default(resource: &str, segments: &[&str], method: &str) -> Op
         }
     }
 }
-

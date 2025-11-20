@@ -1,16 +1,13 @@
 // Integration tests for Auth Middleware with Permission Checking
 // Tests different users with different roles and permissions
 
-use crate::middleware::{AuthState, auth::auth_middleware, permission_extractor::extract_permission};
+use crate::middleware::{
+    AuthState, auth::auth_middleware, permission_extractor::extract_permission,
+};
 use crate::services::casbin_service::CasbinService;
 use crate::tests::common::{
-    assign_role_to_user,
-    create_role,
-    create_test_casbin_service,
-    create_test_db,
-    create_test_user,
-    grant_permissions,
-    setup_test_data,
+    assign_role_to_user, create_role, create_test_casbin_service, create_test_db, create_test_user,
+    grant_permissions, setup_test_data,
 };
 use crate::utils::JwtUtil;
 use axum::{
@@ -20,6 +17,7 @@ use axum::{
     response::Response,
     routing::get,
 };
+use sqlx::SqlitePool;
 use std::sync::Arc;
 use tower::util::ServiceExt;
 
@@ -32,8 +30,12 @@ async fn mock_handler() -> Response {
 }
 
 /// Create test router with auth middleware
-fn create_test_router(jwt_util: Arc<JwtUtil>, casbin_service: Arc<CasbinService>) -> Router {
-    let auth_state = AuthState { jwt_util, casbin_service };
+fn create_test_router(
+    jwt_util: Arc<JwtUtil>,
+    casbin_service: Arc<CasbinService>,
+    db: SqlitePool,
+) -> Router {
+    let auth_state = AuthState { jwt_util, casbin_service, db };
 
     Router::new()
         .route("/api/roles", get(mock_handler))
@@ -56,15 +58,14 @@ fn generate_token(jwt_util: &JwtUtil, user_id: i64, username: &str) -> String {
 async fn create_menu_only_role(pool: &sqlx::SqlitePool) -> i64 {
     let role_id = create_role(pool, "ops", "Operator", "Operator role", false).await;
 
-    let menu_permission_ids: Vec<i64> = sqlx::query_as::<_, (i64,)>(
-        "SELECT id FROM permissions WHERE code LIKE 'menu:%'",
-    )
-    .fetch_all(pool)
-    .await
-    .expect("Failed to fetch menu permissions")
-    .into_iter()
-    .map(|(id,)| id)
-    .collect();
+    let menu_permission_ids: Vec<i64> =
+        sqlx::query_as::<_, (i64,)>("SELECT id FROM permissions WHERE code LIKE 'menu:%'")
+            .fetch_all(pool)
+            .await
+            .expect("Failed to fetch menu permissions")
+            .into_iter()
+            .map(|(id,)| id)
+            .collect();
 
     grant_permissions(pool, role_id, &menu_permission_ids).await;
 
@@ -95,7 +96,7 @@ async fn test_admin_user_has_all_permissions() {
     let token = generate_token(&jwt_util, admin_user_id, "admin_user");
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Test cases: Admin should have access to all endpoints
     let test_cases = vec![
@@ -161,7 +162,7 @@ async fn test_operator_user_has_limited_permissions() {
     let token = generate_token(&jwt_util, operator_user_id, "operator_user");
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Test cases: Operator should only have menu permissions (no API permissions)
     // Note: Since operator role only has menu permissions, API endpoints should be denied
@@ -228,7 +229,7 @@ async fn test_user_with_no_role_has_no_permissions() {
     let token = generate_token(&jwt_util, user_id, "no_role_user");
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Test cases: User with no role should be denied all API access
     let test_cases = vec![
@@ -325,7 +326,7 @@ async fn test_custom_role_with_specific_permissions() {
     let token = generate_token(&jwt_util, user_id, "custom_user");
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Test cases: User should only have clusters:create permission
     let test_cases = vec![
@@ -417,7 +418,7 @@ async fn test_multiple_users_different_permissions() {
     let no_role_token = generate_token(&jwt_util, no_role_user_id, "norole1");
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Test endpoint: POST /api/roles (requires roles:create permission)
     let test_endpoint = "/api/roles";
@@ -538,7 +539,7 @@ async fn test_permission_check_skipped_for_public_endpoint() {
     let token = generate_token(&jwt_util, user_id, "test_user");
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Test /api/auth/permissions endpoint (should skip permission check)
     let req = Request::builder()
@@ -568,7 +569,7 @@ async fn test_invalid_token_returns_unauthorized() {
     setup_test_data(&pool).await;
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Test with invalid token
     let req = Request::builder()
@@ -597,7 +598,7 @@ async fn test_missing_token_returns_unauthorized() {
     setup_test_data(&pool).await;
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Test without token
     let req = Request::builder()
@@ -639,7 +640,7 @@ async fn test_user_permissions_updated_after_role_change() {
     let token = generate_token(&jwt_util, user_id, "dynamic_user");
 
     // Create test router
-    let app = create_test_router(jwt_util.clone(), casbin_service.clone());
+    let app = create_test_router(jwt_util.clone(), casbin_service.clone(), pool.clone());
 
     // Initially, user should not have access to create roles (only operator has menu permissions)
     let initial_req = Request::builder()

@@ -1720,11 +1720,12 @@ impl OverviewService {
                                     &finish_time_str,
                                     "%Y-%m-%d %H:%M:%S",
                                 ),
-                            ) {
-                                let duration =
-                                    finish_time.signed_duration_since(start_time).num_seconds();
-                                durations.push(duration);
-                            }
+                            )
+                        {
+                            let duration =
+                                finish_time.signed_duration_since(start_time).num_seconds();
+                            durations.push(duration);
+                        }
                     }
                 }
             }

@@ -5,6 +5,7 @@ import { takeUntil, switchMap } from 'rxjs/operators';
 import { NbToastrService } from '@nebular/theme';
 import { ClusterService, Cluster, ClusterHealth } from '../../../@core/data/cluster.service';
 import { ClusterContextService } from '../../../@core/data/cluster-context.service';
+import { OrganizationService, Organization } from '../../../@core/data/organization.service';
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { PermissionService } from '../../../@core/data/permission.service';
 import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
@@ -14,6 +15,7 @@ interface ClusterCard {
   health?: ClusterHealth;
   loading: boolean;
   isActive: boolean;
+  organization?: Organization;
 }
 
 @Component({
@@ -27,6 +29,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   loading = true;
   activeCluster: Cluster | null = null;
   hasClusterAccess = false;
+  organizationsMap = new Map<number, Organization>();
+  isSuperAdmin = false;
   canListClusters = false;
   canCreateCluster = false;
   canUpdateCluster = false;
@@ -43,6 +47,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   constructor(
     private clusterService: ClusterService,
     private clusterContext: ClusterContextService,
+    private organizationService: OrganizationService,
     private toastrService: NbToastrService,
     private router: Router,
     private permissionService: PermissionService,
@@ -67,11 +72,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
       });
 
     this.applyPermissionState();
+    
+    // Load organizations if super admin
+    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+    if (this.isSuperAdmin) {
+      this.loadOrganizations();
+    }
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  private loadOrganizations(): void {
+    this.organizationService.listOrganizations().subscribe({
+      next: (orgs) => {
+        orgs.forEach(org => this.organizationsMap.set(org.id, org));
+        this.cdr.markForCheck();
+      },
+      error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+    });
   }
 
   loadClusters(): void {
@@ -90,6 +111,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           cluster,
           loading: false,
           isActive: cluster.is_active,
+          organization: cluster.organization_id ? this.organizationsMap.get(cluster.organization_id) : undefined,
         }));
         
         // Refresh active cluster from backend

@@ -3,6 +3,9 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NbToastrService } from '@nebular/theme';
 import { ClusterService, Cluster } from '../../../../@core/data/cluster.service';
+import { OrganizationService, Organization } from '../../../../@core/data/organization.service';
+import { PermissionService } from '../../../../@core/data/permission.service';
+import { AuthService } from '../../../../@core/data/auth.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { TabReuseService } from '../../../../@core/services/tab-reuse.service';
 
@@ -18,16 +21,26 @@ export class ClusterFormComponent implements OnInit {
   clusterId: number | null = null;
   connectionTested = false; // Track if connection has been tested
   connectionValid = false;  // Track if connection is valid
+  
+  // Organization support
+  organizations: Organization[] = [];
+  currentOrganization?: Organization;
+  isSuperAdmin = false;
+  organizationsLoading = false;
 
   constructor(
     private fb: FormBuilder,
     private clusterService: ClusterService,
+    private organizationService: OrganizationService,
+    private permissionService: PermissionService,
+    private authService: AuthService,
     private router: Router,
     private route: ActivatedRoute,
     private toastrService: NbToastrService,
     private tabReuseService: TabReuseService,
   ) {
     this.clusterForm = this.fb.group({
+      organization_id: [null],
       name: ['', [Validators.required, Validators.maxLength(100)]],
       description: [''],
       fe_host: ['', [Validators.required]],
@@ -43,11 +56,51 @@ export class ClusterFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // Determine if current user is super admin
+    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+    
+    // Load organizations and current organization
+    this.loadOrganizationData();
+    
     const id = this.route.snapshot.paramMap.get('id');
     if (id && id !== 'new') {
       this.isEditMode = true;
       this.clusterId = parseInt(id, 10);
       this.loadCluster();
+    }
+  }
+  
+  private loadOrganizationData(): void {
+    // Load organizations for super admin
+    if (this.isSuperAdmin) {
+      this.organizationsLoading = true;
+      this.organizationService.listOrganizations().subscribe({
+        next: (orgs) => {
+          this.organizations = orgs;
+          this.organizationsLoading = false;
+          // Set organization_id as required for super admin
+          this.clusterForm.get('organization_id')?.setValidators([Validators.required]);
+          this.clusterForm.get('organization_id')?.updateValueAndValidity();
+        },
+        error: (error) => {
+          ErrorHandler.handleHttpError(error, this.toastrService);
+          this.organizationsLoading = false;
+        },
+      });
+    } else {
+      // Load current organization for org admin
+      const currentUser = this.authService.currentUserValue;
+      if (currentUser?.organization_id) {
+        this.organizationService.getOrganization(currentUser.organization_id).subscribe({
+          next: (org) => {
+            this.currentOrganization = org;
+            // Auto-set organization for org admin
+            this.clusterForm.get('organization_id')?.setValue(org.id);
+            this.clusterForm.get('organization_id')?.disable();
+          },
+          error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+        });
+      }
     }
   }
 
@@ -58,6 +111,7 @@ export class ClusterFormComponent implements OnInit {
     this.clusterService.getCluster(this.clusterId).subscribe({
       next: (cluster) => {
         this.clusterForm.patchValue({
+          organization_id: cluster.organization_id,
           name: cluster.name,
           description: cluster.description,
           fe_host: cluster.fe_host,
@@ -103,6 +157,7 @@ export class ClusterFormComponent implements OnInit {
     const clusterData = {
       ...formValue,
       tags,
+      organization_id: this.clusterForm.get('organization_id')?.value,
     };
 
     // Remove password if in edit mode and password is empty

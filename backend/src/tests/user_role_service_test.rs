@@ -1,10 +1,7 @@
 use crate::models::AssignUserRoleRequest;
 use crate::services::user_role_service::UserRoleService;
 use crate::tests::common::{
-    create_role,
-    create_test_casbin_service,
-    create_test_db,
-    setup_test_data,
+    create_role, create_test_casbin_service, create_test_db, setup_test_data,
 };
 use crate::utils::ApiError;
 

@@ -21,6 +21,8 @@ impl ClusterService {
         &self,
         mut req: CreateClusterRequest,
         user_id: i64,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
     ) -> ApiResult<Cluster> {
         // Clean input data - trim whitespace
         req.name = req.name.trim().to_string();
@@ -52,15 +54,21 @@ impl ClusterService {
             return Err(ApiError::validation_error("Cluster name already exists"));
         }
 
+        let target_org_id = self
+            .resolve_target_org(req.organization_id, requestor_org, is_super_admin)
+            .await?;
+
         // Convert tags to JSON string
         let tags_json = req
             .tags
             .map(|t| serde_json::to_string(&t).unwrap_or_default());
 
-        // Check if this will be the first cluster
-        let existing_cluster_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clusters")
-            .fetch_one(&self.pool)
-            .await?;
+        // Check if this will be the first cluster within the organization
+        let existing_cluster_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM clusters WHERE organization_id = ?")
+                .bind(target_org_id)
+                .fetch_one(&self.pool)
+                .await?;
 
         let is_first_cluster = existing_cluster_count.0 == 0;
 
@@ -68,8 +76,8 @@ impl ClusterService {
         let result = sqlx::query(
             "INSERT INTO clusters (name, description, fe_host, fe_http_port, fe_query_port, 
              username, password_encrypted, enable_ssl, connection_timeout, tags, catalog, 
-             is_active, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             is_active, created_by, organization_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&req.name)
         .bind(&req.description)
@@ -82,29 +90,31 @@ impl ClusterService {
         .bind(req.connection_timeout)
         .bind(&tags_json)
         .bind(&req.catalog)
-        .bind(if is_first_cluster { 1 } else { 0 }) // Set as active if first cluster
+        .bind(if is_first_cluster { 1 } else { 0 }) // Set as active if first cluster in org
         .bind(user_id)
+        .bind(target_org_id)
         .execute(&self.pool)
         .await?;
 
         let cluster_id = result.last_insert_rowid();
 
-        // If this is the first cluster, it's already active
-        // Otherwise, ensure only this cluster is active if no active cluster exists
+        // Ensure each organization always has one active cluster if none exists
         if !is_first_cluster {
-            let active_count: (i64,) =
-                sqlx::query_as("SELECT COUNT(*) FROM clusters WHERE is_active = 1")
-                    .fetch_one(&self.pool)
-                    .await?;
+            let active_count: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM clusters WHERE is_active = 1 AND organization_id = ?",
+            )
+            .bind(target_org_id)
+            .fetch_one(&self.pool)
+            .await?;
 
             if active_count.0 == 0 {
-                // No active cluster exists, activate this new one
                 sqlx::query("UPDATE clusters SET is_active = 1 WHERE id = ?")
                     .bind(cluster_id)
                     .execute(&self.pool)
                     .await?;
                 tracing::info!(
-                    "Automatically activated newly created cluster (no active cluster existed)"
+                    "Automatically activated newly created cluster for organization {} (no active cluster existed)",
+                    target_org_id
                 );
             }
         }
@@ -128,7 +138,7 @@ impl ClusterService {
         Ok(cluster)
     }
 
-    // Get all clusters
+    // Get all clusters (unfiltered, handlers apply org filter)
     pub async fn list_clusters(&self) -> ApiResult<Vec<Cluster>> {
         let clusters: Vec<Cluster> =
             sqlx::query_as("SELECT * FROM clusters ORDER BY created_at DESC")
@@ -148,7 +158,7 @@ impl ClusterService {
         cluster.ok_or_else(|| ApiError::cluster_not_found(cluster_id))
     }
 
-    // Get the currently active cluster
+    // Get the currently active cluster (global)
     pub async fn get_active_cluster(&self) -> ApiResult<Cluster> {
         let cluster: Option<Cluster> =
             sqlx::query_as("SELECT * FROM clusters WHERE is_active = 1 LIMIT 1")
@@ -160,18 +170,47 @@ impl ClusterService {
         })
     }
 
-    // Set a cluster as active (deactivating all others)
+    // Get active cluster scoped by organization
+    pub async fn get_active_cluster_by_org(&self, org_id: Option<i64>) -> ApiResult<Cluster> {
+        let cluster: Option<Cluster> = if let Some(org) = org_id {
+            sqlx::query_as(
+                "SELECT * FROM clusters WHERE is_active = 1 AND organization_id = ? LIMIT 1",
+            )
+            .bind(org)
+            .fetch_optional(&self.pool)
+            .await?
+        } else {
+            None
+        };
+
+        cluster.ok_or_else(|| {
+            ApiError::not_found(
+                "No active cluster found for your organization. Please activate a cluster first.",
+            )
+        })
+    }
+
+    // Set a cluster as active (deactivating all others in the same organization)
     pub async fn set_active_cluster(&self, cluster_id: i64) -> ApiResult<Cluster> {
-        // Check if cluster exists
-        let _cluster = self.get_cluster(cluster_id).await?;
+        // Check if cluster exists and fetch its org
+        let cluster = self.get_cluster(cluster_id).await?;
+        let org_id = cluster.organization_id;
 
         // Start transaction to ensure atomicity
         let mut tx = self.pool.begin().await?;
 
-        // First, deactivate all clusters
-        sqlx::query("UPDATE clusters SET is_active = 0")
-            .execute(&mut *tx)
-            .await?;
+        // First, deactivate all clusters in the same organization
+        if let Some(org) = org_id {
+            sqlx::query("UPDATE clusters SET is_active = 0 WHERE organization_id = ?")
+                .bind(org)
+                .execute(&mut *tx)
+                .await?;
+        } else {
+            // If cluster has no org, deactivate all clusters with NULL org
+            sqlx::query("UPDATE clusters SET is_active = 0 WHERE organization_id IS NULL")
+                .execute(&mut *tx)
+                .await?;
+        }
 
         // Then, activate the target cluster
         sqlx::query(
@@ -184,7 +223,7 @@ impl ClusterService {
         // Commit transaction
         tx.commit().await?;
 
-        tracing::info!("Cluster activated: ID {}", cluster_id);
+        tracing::info!("Cluster activated: ID {} (org: {:?})", cluster_id, org_id);
 
         // Fetch and return the updated cluster
         self.get_cluster(cluster_id).await
@@ -247,6 +286,10 @@ impl ClusterService {
             updates.push("catalog = ?");
             params.push(catalog.clone());
         }
+        if let Some(org_id) = req.organization_id {
+            updates.push("organization_id = ?");
+            params.push(org_id.to_string());
+        }
 
         if updates.is_empty() {
             return self.get_cluster(cluster_id).await;
@@ -271,14 +314,15 @@ impl ClusterService {
 
     // Delete cluster
     pub async fn delete_cluster(&self, cluster_id: i64) -> ApiResult<()> {
-        // Check if this is the active cluster
-        let is_active_result: Option<(bool,)> =
-            sqlx::query_as("SELECT is_active FROM clusters WHERE id = ?")
+        // Check if this is the active cluster and capture organization
+        let cluster_record: Option<(bool, Option<i64>)> =
+            sqlx::query_as("SELECT is_active, organization_id FROM clusters WHERE id = ?")
                 .bind(cluster_id)
                 .fetch_optional(&self.pool)
                 .await?;
 
-        let is_active = is_active_result.map(|r| r.0).unwrap_or(false);
+        let is_active = cluster_record.map(|r| r.0).unwrap_or(false);
+        let cluster_org_id = cluster_record.and_then(|r| r.1);
 
         // Delete the cluster
         let result = sqlx::query("DELETE FROM clusters WHERE id = ?")
@@ -294,10 +338,20 @@ impl ClusterService {
 
         // If we deleted the active cluster, activate another one (first by creation time)
         if is_active {
-            let next_cluster: Option<(i64,)> =
-                sqlx::query_as("SELECT id FROM clusters ORDER BY created_at DESC LIMIT 1")
-                    .fetch_optional(&self.pool)
-                    .await?;
+            let next_cluster: Option<(i64,)> = if let Some(org_id) = cluster_org_id {
+                sqlx::query_as(
+                    "SELECT id FROM clusters WHERE organization_id = ? ORDER BY created_at DESC LIMIT 1",
+                )
+                .bind(org_id)
+                .fetch_optional(&self.pool)
+                .await?
+            } else {
+                sqlx::query_as(
+                    "SELECT id FROM clusters WHERE organization_id IS NULL ORDER BY created_at DESC LIMIT 1",
+                )
+                .fetch_optional(&self.pool)
+                .await?
+            };
 
             if let Some((next_id,)) = next_cluster {
                 sqlx::query("UPDATE clusters SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
@@ -309,6 +363,43 @@ impl ClusterService {
         }
 
         Ok(())
+    }
+
+    async fn resolve_target_org(
+        &self,
+        requested_org: Option<i64>,
+        requestor_org: Option<i64>,
+        is_super_admin: bool,
+    ) -> ApiResult<i64> {
+        if is_super_admin {
+            if let Some(id) = requested_org.or(requestor_org) {
+                return Ok(id);
+            }
+            return self.fetch_default_org_id().await;
+        }
+
+        requestor_org.ok_or_else(|| {
+            ApiError::forbidden("Organization context required for cluster operations")
+        })
+    }
+
+    async fn fetch_default_org_id(&self) -> ApiResult<i64> {
+        if let Some(id) =
+            sqlx::query_scalar("SELECT id FROM organizations WHERE code = 'default_org'")
+                .fetch_optional(&self.pool)
+                .await?
+        {
+            return Ok(id);
+        }
+
+        sqlx::query("INSERT INTO organizations (code, name, description, is_system) VALUES ('default_org', 'Default Organization', 'Auto-created default organization', 1)")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query_scalar("SELECT id FROM organizations WHERE code = 'default_org'")
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| ApiError::not_found("Default organization not found"))
     }
 
     // Get cluster health

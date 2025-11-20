@@ -637,44 +637,76 @@ impl DataStatisticsService {
         Ok(0)
     }
 
-    /// Get schema change statistics using SHOW ALTER TABLE
-    /// Note: This command may not be supported in all StarRocks versions
-    /// Returns default values (0,0,0,0) if the command fails
+    /// Get schema change statistics by iterating all user databases and running
+    /// SHOW ALTER TABLE COLUMN FROM `<db>`
     async fn get_schema_change_statistics_mysql(
         &self,
         mysql_client: &MySQLClient,
     ) -> ApiResult<(i32, i32, i32, i32)> {
-        let sql = "SHOW ALTER TABLE";
-        let (_columns, rows) = match mysql_client.query_raw(sql).await {
-            Ok(result) => result,
-            Err(e) => {
-                // SHOW ALTER TABLE may not be supported in all StarRocks versions
-                // Log warning and return default values
-                tracing::warn!("SHOW ALTER TABLE not supported or failed: {}. Returning default values.", e);
-                return Ok((0, 0, 0, 0));
-            }
-        };
+        let databases = self.list_user_databases(mysql_client).await?;
+
+        if databases.is_empty() {
+            return Ok((0, 0, 0, 0));
+        }
 
         let mut running = 0;
         let mut pending = 0;
         let mut finished = 0;
         let mut failed = 0;
 
-        for row in rows {
-            // Assuming State is typically the second column, but we search for it
-            if !row.is_empty() {
-                let state_str = &row[row.len() - 1]; // Usually the last column
-                match state_str.to_uppercase().as_str() {
-                    "RUNNING" => running += 1,
-                    "PENDING" | "WAITING_TXN" => pending += 1,
-                    "FINISHED" => finished += 1,
-                    "CANCELLED" | "FAILED" => failed += 1,
-                    _ => {},
+        for db in databases {
+            let sql = format!("SHOW ALTER TABLE COLUMN FROM `{}`", db);
+            let (_columns, rows) = match mysql_client.query_raw(&sql).await {
+                Ok(result) => result,
+                Err(e) => {
+                    tracing::warn!(
+                        "SHOW ALTER TABLE COLUMN failed for database {}: {}. Skipping.",
+                        db,
+                        e
+                    );
+                    continue;
+                },
+            };
+
+            for row in rows {
+                if !row.is_empty() {
+                    let state_str = &row[row.len() - 1]; // Usually the last column
+                    match state_str.to_uppercase().as_str() {
+                        "RUNNING" => running += 1,
+                        "PENDING" | "WAITING_TXN" => pending += 1,
+                        "FINISHED" => finished += 1,
+                        "CANCELLED" | "FAILED" => failed += 1,
+                        _ => {},
+                    }
                 }
             }
         }
 
         Ok((running, pending, finished, failed))
+    }
+
+    /// List user databases excluding system schemas
+    async fn list_user_databases(&self, mysql_client: &MySQLClient) -> ApiResult<Vec<String>> {
+        let system_dbs = ["information_schema", "_statistics_", "starrocks_audit_db__", "sys"];
+
+        let mut databases = Vec::new();
+        let (columns, rows) = mysql_client.query_raw("SHOW DATABASES").await?;
+
+        if let Some(db_idx) = columns
+            .iter()
+            .position(|col| col.eq_ignore_ascii_case("Database"))
+        {
+            for row in rows {
+                if let Some(db_name) = row.get(db_idx) {
+                    let db_name_lower = db_name.to_lowercase();
+                    if !system_dbs.contains(&db_name_lower.as_str()) {
+                        databases.push(db_name.clone());
+                    }
+                }
+            }
+        }
+
+        Ok(databases)
     }
 
     /// Get active users using SHOW PROCESSLIST

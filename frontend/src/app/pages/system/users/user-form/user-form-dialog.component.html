@@ -16,6 +16,47 @@
   <nb-card-body>
     <form [formGroup]="form" class="user-form" novalidate>
       <div class="form-container">
+          <!-- Organization Selection (Super Admin Only) -->
+          <div class="form-group" *ngIf="isSuperAdmin">
+            <label class="label" for="input-organization">所属组织</label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="building-2-outline"></nb-icon>
+              <nb-select
+                formControlName="organizationId"
+                id="input-organization"
+                placeholder="请选择组织"
+                [status]="form.get('organizationId')?.invalid && form.get('organizationId')?.touched ? 'danger' : 'basic'"
+                fullWidth
+              >
+                <nb-option *ngFor="let org of organizations" [value]="org.id">
+                  {{ org.name }}
+                  <span class="org-code" *ngIf="org.code">({{ org.code }})</span>
+                </nb-option>
+              </nb-select>
+            </nb-form-field>
+            <ng-container *ngIf="form.get('organizationId')?.invalid && form.get('organizationId')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('organizationId')?.errors?.['required']">
+                请选择组织
+              </p>
+            </ng-container>
+          </div>
+
+          <!-- Organization Display (Org Admin) -->
+          <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
+            <label class="label">所属组织</label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="building-2-outline"></nb-icon>
+              <input
+                nbInput
+                fullWidth
+                type="text"
+                [value]="currentOrganization.name"
+                disabled
+              />
+            </nb-form-field>
+            <p class="caption status-hint">组织管理员只能在本组织内创建用户</p>
+          </div>
+
           <!-- Username -->
           <div class="form-group">
             <label class="label" for="input-username">用户名</label>
@@ -135,7 +176,7 @@
                 multiple
                 fullWidth
               >
-                <nb-option *ngFor="let role of roles" [value]="role.id">
+                <nb-option *ngFor="let role of filteredRoles" [value]="role.id">
                   {{ role.name }}
                   <span class="role-code" *ngIf="role.code">({{ role.code }})</span>
                 </nb-option>
@@ -146,7 +187,7 @@
                 请至少选择一个角色
               </p>
             </ng-container>
-            <p class="caption status-hint" *ngIf="roles.length === 0">
+            <p class="caption status-hint" *ngIf="filteredRoles.length === 0">
               暂无可用角色，请先创建角色
             </p>
           </div>

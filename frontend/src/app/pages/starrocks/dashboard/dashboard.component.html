@@ -94,6 +94,17 @@
                 </div>
 
                 <nb-list *ngIf="!clusterCard.loading">
+                  <!-- 组织信息 (Super Admin Only) -->
+                  <nb-list-item *ngIf="isSuperAdmin && clusterCard.organization">
+                    <div class="d-flex justify-content-between align-items-start w-100">
+                      <span class="text-hint">所属组织</span>
+                      <span class="text-basic text-end">
+                        {{ clusterCard.organization.name }}
+                        <span class="text-hint" *ngIf="clusterCard.organization.code">({{ clusterCard.organization.code }})</span>
+                      </span>
+                    </div>
+                  </nb-list-item>
+                  
                   <!-- FE 地址 -->
                   <nb-list-item>
                     <div class="d-flex justify-content-between align-items-start w-100">

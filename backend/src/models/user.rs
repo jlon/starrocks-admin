@@ -15,6 +15,7 @@ pub struct User {
     pub avatar: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -32,6 +33,7 @@ pub struct AdminCreateUserRequest {
     pub email: Option<String>,
     pub avatar: Option<String>,
     pub role_ids: Option<Vec<i64>>,
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -62,6 +64,7 @@ pub struct AdminUpdateUserRequest {
     pub avatar: Option<String>,
     pub password: Option<String>,
     pub role_ids: Option<Vec<i64>>,
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -71,6 +74,7 @@ pub struct UserResponse {
     pub email: Option<String>,
     pub avatar: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub organization_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -88,6 +92,7 @@ impl From<User> for UserResponse {
             email: user.email,
             avatar: user.avatar,
             created_at: user.created_at,
+            organization_id: user.organization_id,
         }
     }
 }

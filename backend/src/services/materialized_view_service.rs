@@ -131,7 +131,7 @@ impl MaterializedViewService {
         // Try different syntaxes
         let sql1 = format!("SHOW CREATE MATERIALIZED VIEW `{}`.`{}`", mv.database_name, mv_name);
         tracing::info!("Querying async MV DDL (attempt 1): {}", sql1);
-        
+
         let (column_names, rows) = match session.execute(&sql1).await {
             Ok((cols, rows, _)) => (cols, rows),
             Err(_) => {
@@ -140,9 +140,9 @@ impl MaterializedViewService {
                 tracing::info!("Querying async MV DDL (attempt 2): {}", sql2);
                 let (cols, rows, _) = session.execute(&sql2).await?;
                 (cols, rows)
-            }
+            },
         };
-        
+
         // Convert rows to JSON format for consistent processing
         let mut results = Vec::new();
         for row in rows {
@@ -160,13 +160,15 @@ impl MaterializedViewService {
         if let Some(row) = results.first() {
             // Try different possible column names
             if let Some(ddl_val) = row.get("Create Materialized View")
-                && let Some(ddl) = ddl_val.as_str() {
-                    return Ok(ddl.to_string());
-                }
+                && let Some(ddl) = ddl_val.as_str()
+            {
+                return Ok(ddl.to_string());
+            }
             if let Some(ddl_val) = row.get("Create View")
-                && let Some(ddl) = ddl_val.as_str() {
-                    return Ok(ddl.to_string());
-                }
+                && let Some(ddl) = ddl_val.as_str()
+            {
+                return Ok(ddl.to_string());
+            }
             // If column name doesn't match, try to get the first string value from the row
             if let Some(obj) = row.as_object() {
                 for (_key, value) in obj {

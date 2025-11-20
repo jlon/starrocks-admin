@@ -178,11 +178,8 @@ impl MySQLSession {
     where
         P: Into<mysql_async::Params>,
     {
-        let rows: Vec<mysql_async::Row> = self
-            .conn
-            .exec(sql, params.into())
-            .await
-            .map_err(|e| {
+        let rows: Vec<mysql_async::Row> =
+            self.conn.exec(sql, params.into()).await.map_err(|e| {
                 tracing::error!("MySQL query execution failed: {}", e);
                 ApiError::internal_error(format!("SQL execution failed: {}", e))
             })?;

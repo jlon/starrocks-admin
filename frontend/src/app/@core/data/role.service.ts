@@ -9,6 +9,7 @@ export interface RoleSummary {
   name: string;
   description?: string;
   is_system: boolean;
+  organization_id?: number;
   created_at: string;
 }
 
@@ -16,6 +17,7 @@ export interface CreateRolePayload {
   code: string;
   name: string;
   description?: string;
+  organization_id?: number;
 }
 
 export interface UpdateRolePayload {

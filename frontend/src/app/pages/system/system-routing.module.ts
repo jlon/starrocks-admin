@@ -4,6 +4,7 @@ import { PermissionGuard } from '../../@core/guards/permission.guard';
 
 import { UsersComponent } from './users/users.component';
 import { RolesComponent } from './roles/roles.component';
+import { OrganizationsComponent } from './organizations/organizations.component';
 
 const routes: Routes = [
   {
@@ -21,6 +22,12 @@ const routes: Routes = [
     path: 'roles',
     component: RolesComponent,
     data: { permission: 'menu:roles' },
+    canActivate: [PermissionGuard],
+  },
+  {
+    path: 'organizations',
+    component: OrganizationsComponent,
+    data: { permission: 'menu:organizations' },
     canActivate: [PermissionGuard],
   },
 ];

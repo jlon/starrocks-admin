@@ -18,10 +18,19 @@ use crate::utils::ApiResult;
 )]
 pub async fn list_users(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<Vec<UserWithRolesResponse>>> {
-    tracing::debug!("Listing users");
-    let users = state.user_service.list_users().await?;
-    tracing::debug!("Retrieved {} users", users.len());
+    tracing::debug!(
+        "Listing users for user {} (org: {:?}, super_admin: {})",
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
+    let users = state
+        .user_service
+        .list_users(org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
+    tracing::debug!("Retrieved {} users for user {}", users.len(), org_ctx.user_id);
     Ok(Json(users))
 }
 
@@ -39,9 +48,20 @@ pub async fn list_users(
 pub async fn get_user(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<UserWithRolesResponse>> {
-    tracing::debug!("Fetching user_id={}", user_id);
-    let user = state.user_service.get_user(user_id).await?;
+    tracing::debug!(
+        "Fetching user_id={} for user {} (org: {:?}, super_admin: {})",
+        user_id,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
+    let user = state
+        .user_service
+        .get_user(user_id, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
+    tracing::debug!("Retrieved user {} for user {}", user.user.username, org_ctx.user_id);
     Ok(Json(user))
 }
 
@@ -59,11 +79,32 @@ pub async fn get_user(
 )]
 pub async fn create_user(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(payload): Json<AdminCreateUserRequest>,
 ) -> ApiResult<Json<UserWithRolesResponse>> {
-    tracing::info!("Creating user: {}", payload.username);
-    let user = state.user_service.create_user(payload).await?;
-    tracing::info!("Created user: {} (ID: {})", user.user.username, user.user.id);
+    if !org_ctx.is_super_admin && payload.organization_id.is_some() {
+        return Err(crate::utils::ApiError::forbidden(
+            "Organization administrators cannot override organization assignment",
+        ));
+    }
+
+    tracing::info!(
+        "Creating user: {} by user {} (org: {:?}, super_admin: {})",
+        payload.username,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
+    let user = state
+        .user_service
+        .create_user(payload, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
+    tracing::info!(
+        "Created user: {} (ID: {}) by user {}",
+        user.user.username,
+        user.user.id,
+        org_ctx.user_id
+    );
     Ok(Json(user))
 }
 
@@ -83,11 +124,32 @@ pub async fn create_user(
 pub async fn update_user(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(payload): Json<AdminUpdateUserRequest>,
 ) -> ApiResult<Json<UserWithRolesResponse>> {
-    tracing::info!("Updating user_id={}", user_id);
-    let user = state.user_service.update_user(user_id, payload).await?;
-    tracing::info!("Updated user: {} (ID: {})", user.user.username, user.user.id);
+    if !org_ctx.is_super_admin && payload.organization_id.is_some() {
+        return Err(crate::utils::ApiError::forbidden(
+            "Organization administrators cannot reassign user organization",
+        ));
+    }
+
+    tracing::info!(
+        "Updating user_id={} by user {} (org: {:?}, super_admin: {})",
+        user_id,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
+    let user = state
+        .user_service
+        .update_user(user_id, payload, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
+    tracing::info!(
+        "Updated user: {} (ID: {}) by user {}",
+        user.user.username,
+        user.user.id,
+        org_ctx.user_id
+    );
     Ok(Json(user))
 }
 
@@ -105,9 +167,19 @@ pub async fn update_user(
 pub async fn delete_user(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i64>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<()>> {
-    tracing::info!("Deleting user_id={}", user_id);
-    state.user_service.delete_user(user_id).await?;
-    tracing::info!("Deleted user_id={}", user_id);
+    tracing::info!(
+        "Deleting user_id={} by user {} (org: {:?}, super_admin: {})",
+        user_id,
+        org_ctx.user_id,
+        org_ctx.organization_id,
+        org_ctx.is_super_admin
+    );
+    state
+        .user_service
+        .delete_user(user_id, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
+    tracing::info!("Deleted user_id={} by user {}", user_id, org_ctx.user_id);
     Ok(Json(()))
 }

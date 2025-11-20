@@ -6,6 +6,40 @@
       </nb-card-header>
       <nb-card-body>
         <form [formGroup]="clusterForm" (ngSubmit)="onSubmit()">
+          <!-- Organization Selection (Super Admin Only) -->
+          <div class="form-group" *ngIf="isSuperAdmin">
+            <label for="organization" class="label">所属组织 *</label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="briefcase-outline"></nb-icon>
+              <nb-select
+                formControlName="organization_id"
+                id="organization"
+                placeholder="请选择组织"
+                [status]="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched ? 'danger' : 'basic'"
+                fullWidth
+              >
+                <nb-option *ngFor="let org of organizations" [value]="org.id">
+                  {{ org.name }}
+                  <span class="text-hint" *ngIf="org.code"> ({{ org.code }})</span>
+                </nb-option>
+              </nb-select>
+            </nb-form-field>
+            <ng-container *ngIf="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched">
+              <small class="form-text text-danger">
+                请选择组织
+              </small>
+            </ng-container>
+          </div>
+
+          <!-- Organization Display (Org Admin) -->
+          <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
+            <label class="label">所属组织</label>
+            <div class="alert alert-info d-flex align-items-center">
+              <nb-icon icon="info-outline" class="me-2"></nb-icon>
+              <span>{{ currentOrganization.name }} <span class="text-hint">({{ currentOrganization.code }})</span></span>
+            </div>
+          </div>
+
           <div class="row">
             <div class="col-md-6">
               <div class="form-group">

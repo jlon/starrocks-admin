@@ -1,0 +1,38 @@
+<nb-card>
+  <nb-card-header>
+    <div class="header">
+      <div class="header__info">
+        <h5 class="header__title">组织管理</h5>
+        <p class="header__subtitle">管理系统组织，创建和管理多租户组织</p>
+      </div>
+      <button
+        nbButton
+        status="primary"
+        size="small"
+        (click)="openCreateOrganization()"
+        [disabled]="!canCreateOrganization"
+        ngxHasPermission="api:organizations:create"
+      >
+        <nb-icon icon="plus-outline"></nb-icon>
+        创建组织
+      </button>
+    </div>
+  </nb-card-header>
+
+  <nb-card-body>
+    <div *ngIf="loading" class="loading">
+      <nb-spinner size="large" status="primary"></nb-spinner>
+    </div>
+
+    <nb-alert *ngIf="!loading && !hasListPermission" status="warning">
+      您暂无查看组织的权限，请联系管理员获取授权。
+    </nb-alert>
+
+    <ng2-smart-table
+      *ngIf="!loading && hasListPermission"
+      [settings]="settings"
+      [source]="source"
+    ></ng2-smart-table>
+  </nb-card-body>
+</nb-card>
+

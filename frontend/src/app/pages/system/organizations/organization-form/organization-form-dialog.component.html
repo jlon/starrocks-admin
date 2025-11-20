@@ -20,7 +20,6 @@
         <div class="form-group" *ngIf="mode === 'create'">
           <label class="label" for="input-code">组织代码</label>
           <nb-form-field>
-            <nb-icon nbPrefix icon="hash-outline"></nb-icon>
             <input
               nbInput
               fullWidth
@@ -45,7 +44,6 @@
         <div class="form-group">
           <label class="label" for="input-name">组织名称</label>
           <nb-form-field>
-            <nb-icon nbPrefix icon="briefcase-outline"></nb-icon>
             <input
               nbInput
               fullWidth
@@ -67,7 +65,6 @@
         <div class="form-group">
           <label class="label" for="input-description">描述</label>
           <nb-form-field>
-            <nb-icon nbPrefix icon="file-text-outline"></nb-icon>
             <textarea
               nbInput
               fullWidth
@@ -84,22 +81,17 @@
         <div class="form-group" *ngIf="mode === 'edit'">
           <label class="label" for="input-admin-user-id">组织管理员（可选）</label>
           <nb-form-field>
-            <nb-icon nbPrefix icon="people-outline"></nb-icon>
             <nb-select
               formControlName="admin_user_id"
               id="input-admin-user-id"
               placeholder="请选择组织内的用户作为管理员"
               fullWidth
             >
-              <ng-container *ngIf="availableUsers$ | async as users">
-                <nb-option *ngFor="let user of users" [value]="user.id">
-                  {{ user.username }}
-                  <span class="user-email" *ngIf="user.email">({{ user.email }})</span>
-                </nb-option>
-                <ng-container *ngIf="!users.length">
-                  <nb-option disabled>暂无可用用户，请先为组织创建用户</nb-option>
-                </ng-container>
-              </ng-container>
+              <nb-option *ngFor="let user of availableUsers; trackBy: trackByUserId" [value]="user.id">
+                {{ user.username }}
+                <span class="user-email" *ngIf="user.email"> - {{ user.email }}</span>
+              </nb-option>
+              <nb-option *ngIf="availableUsers.length === 0" disabled>暂无该组织的用户</nb-option>
             </nb-select>
           </nb-form-field>
           <p class="caption status-hint">

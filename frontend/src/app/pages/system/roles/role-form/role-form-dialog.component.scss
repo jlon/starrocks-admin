@@ -14,6 +14,12 @@
     flex-direction: column;
   }
 
+  .role-dialog nb-card-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+
   .dialog-header {
     display: flex;
     align-items: center;
@@ -37,6 +43,9 @@
 
   .role-form {
     padding: var(--nb-space-md) 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
   }
 
   // Left-Right Layout
@@ -45,6 +54,7 @@
     grid-template-columns: minmax(14rem, 18rem) minmax(17rem, 1fr);
     gap: 1.25rem;
     align-items: stretch;
+    flex: 1 1 auto;
   }
 
   // Basic Info Section (Left)
@@ -71,6 +81,9 @@
     width: 100%;
     min-width: 17rem;
     max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 
     .section-label {
       display: block;
@@ -140,15 +153,18 @@
     border: 1px solid nb-theme(border-basic-color-3);
     border-radius: nb-theme(radius);
     overflow: hidden;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
   }
 
   // Tree scroll container
   .tree-scroll {
-    max-height: 21rem;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0.5rem;
     width: 100%;
+    flex: 1 1 auto;
 
     &::-webkit-scrollbar {
       width: 6px;
@@ -291,6 +307,32 @@
 
     span {
       font-size: 0.875rem;
+    }
+  }
+
+  .org-code {
+    color: nb-theme(text-hint-color);
+    font-size: 0.813rem;
+    margin-left: var(--nb-space-xs);
+    font-weight: normal;
+  }
+
+  // Fix nb-option left padding - remove checkbox space
+  ::ng-deep {
+    nb-option {
+      padding-left: 1rem !important;
+      
+      .option-content,
+      .option-list-item {
+        padding-left: 0 !important;
+      }
+    }
+    
+    // Remove checkbox/icon space in dropdown
+    .select-button + .options-list {
+      nb-option {
+        padding-left: 1rem !important;
+      }
     }
   }
 

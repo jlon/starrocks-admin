@@ -18,6 +18,8 @@ import {
   OrganizationFormDialogComponent,
   OrganizationFormDialogResult,
 } from './organization-form/organization-form-dialog.component';
+import { AuthService } from '../../../@core/data/auth.service';
+import { UserService } from '../../../@core/data/user.service';
 
 @Component({
   selector: 'ngx-organizations',
@@ -29,6 +31,7 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
   loading = false;
   private destroy$ = new Subject<void>();
 
+  isSuperAdmin = false;
   hasListPermission = false;
   canCreateOrganization = false;
   canUpdateOrganization = false;
@@ -42,6 +45,8 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
     private dialogService: NbDialogService,
     private confirmDialog: ConfirmDialogService,
     private toastrService: NbToastrService,
+    private authService: AuthService,
+    private userService: UserService,
   ) {}
 
   ngOnInit(): void {
@@ -103,20 +108,32 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const dialogRef = this.dialogService.open(OrganizationFormDialogComponent, {
-      context: {
-        mode: 'edit',
-        organization,
-      },
-      closeOnBackdropClick: false,
-      autoFocus: false,
-    });
+    // Load users for this organization before opening dialog
+    this.userService.listUsers().subscribe({
+      next: (allUsers) => {
+        // Filter users belonging to this organization
+        const organizationUsers = allUsers.filter(u => u.organization_id === organization.id);
+        
+        const dialogRef = this.dialogService.open(OrganizationFormDialogComponent, {
+          context: {
+            mode: 'edit',
+            organization,
+            availableUsers: organizationUsers,
+          },
+          closeOnBackdropClick: false,
+          autoFocus: false,
+        });
 
-    dialogRef.onClose.subscribe((result?: OrganizationFormDialogResult) => {
-      if (!result) {
-        return;
+        dialogRef.onClose.subscribe((result?: OrganizationFormDialogResult) => {
+          if (!result) {
+            return;
+          }
+          this.updateOrganization(organization.id, result);
+        });
+      },
+      error: (error) => {
+        ErrorHandler.handleHttpError(error, this.toastrService);
       }
-      this.updateOrganization(organization.id, result);
     });
   }
 
@@ -189,11 +206,18 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
   }
 
   private applyPermissionState(): void {
-    const permissions = this.permissionService.getPermissions();
-    this.hasListPermission = this.permissionService.hasPermission('api:organizations:list');
-    this.canCreateOrganization = this.permissionService.hasPermission('api:organizations:create');
-    this.canUpdateOrganization = this.permissionService.hasPermission('api:organizations:update');
-    this.canDeleteOrganization = this.permissionService.hasPermission('api:organizations:delete');
+    this.isSuperAdmin = this.authService.isSuperAdmin();
+    this.hasListPermission =
+      this.permissionService.hasPermission('api:organizations:list') || this.isSuperAdmin;
+    this.canCreateOrganization =
+      this.permissionService.hasPermission('api:organizations:create') || this.isSuperAdmin;
+    this.canUpdateOrganization =
+      this.permissionService.hasPermission('api:organizations:update') || this.isSuperAdmin;
+    this.canDeleteOrganization =
+      this.permissionService.hasPermission('api:organizations:delete') || this.isSuperAdmin;
+
+    // Refresh table settings so action buttons pick up latest permissions
+    this.settings = this.buildTableSettings();
 
     if (this.hasListPermission) {
       this.loadOrganizations();
@@ -256,10 +280,6 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
             instance.delete.subscribe((organization) => {
               this.deleteOrganization(organization);
             });
-            instance.value = {
-              canEdit: this.canUpdateOrganization,
-              canDelete: this.canDeleteOrganization,
-            };
           },
         },
       },

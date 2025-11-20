@@ -10,6 +10,7 @@ import {
 } from '../../../../@core/data/role.service';
 import { Organization } from '../../../../@core/data/organization.service';
 import { PermissionService } from '../../../../@core/data/permission.service';
+import { AuthService } from '../../../../@core/data/auth.service';
 
 export type RoleFormMode = 'create' | 'edit';
 
@@ -71,6 +72,7 @@ export class RoleFormDialogComponent implements OnInit {
     private dialogRef: NbDialogRef<RoleFormDialogComponent>,
     private fb: FormBuilder,
     private permissionService: PermissionService,
+    private authService: AuthService,
   ) {
     this.form = this.fb.group({
       code: ['', [Validators.required, Validators.maxLength(50)]],
@@ -83,7 +85,7 @@ export class RoleFormDialogComponent implements OnInit {
 
   ngOnInit(): void {
     // Determine if current user is super admin
-    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+    this.isSuperAdmin = this.authService.isSuperAdmin();
 
     const orgControl = this.form.get('organizationId');
     if (this.isSuperAdmin) {

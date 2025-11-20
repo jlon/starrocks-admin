@@ -8,6 +8,7 @@ export interface UserSummary {
   email?: string;
   avatar?: string;
   organization_id?: number;
+  organization_name?: string;
   created_at: string;
 }
 

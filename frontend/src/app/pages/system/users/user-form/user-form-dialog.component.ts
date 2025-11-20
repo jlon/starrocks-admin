@@ -10,7 +10,7 @@ import {
 import { RoleWithPermissions } from '../../../../@core/data/role.service';
 import { DiceBearService } from '../../../../@core/services/dicebear.service';
 import { Organization } from '../../../../@core/data/organization.service';
-import { PermissionService } from '../../../../@core/data/permission.service';
+import { AuthService } from '../../../../@core/data/auth.service';
 
 export type UserFormMode = 'create' | 'edit';
 
@@ -40,7 +40,7 @@ export class UserFormDialogComponent implements OnInit {
     private dialogRef: NbDialogRef<UserFormDialogComponent>,
     private fb: FormBuilder,
     private diceBearService: DiceBearService,
-    private permissionService: PermissionService,
+    private authService: AuthService,
   ) {
     this.form = this.fb.group({
       organizationId: [null],
@@ -54,7 +54,7 @@ export class UserFormDialogComponent implements OnInit {
 
   ngOnInit(): void {
     // Determine if current user is super admin
-    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+    this.isSuperAdmin = this.authService.isSuperAdmin();
     
     // Set up organization field based on user role
     if (this.isSuperAdmin) {

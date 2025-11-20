@@ -21,3 +21,21 @@
   }
 }
 
+// Fix nb-option left padding - remove checkbox space
+::ng-deep {
+  nb-option {
+    padding-left: 1rem !important;
+    
+    .option-content,
+    .option-list-item {
+      padding-left: 0 !important;
+    }
+  }
+  
+  // Remove checkbox/icon space in dropdown
+  .select-button + .options-list {
+    nb-option {
+      padding-left: 1rem !important;
+    }
+  }
+}

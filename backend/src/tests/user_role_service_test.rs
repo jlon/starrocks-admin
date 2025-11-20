@@ -107,7 +107,7 @@ async fn test_assign_role_to_user_role_not_found() {
     let result = service.assign_role_to_user(user_id, req).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        ApiError::SystemFunctionNotFound(_) => {}, // ApiError::not_found
+        ApiError::SystemFunctionNotFound(_) | ApiError::ResourceNotFound(_) => {},
         _ => panic!("Should return not found error"),
     }
 }
@@ -144,7 +144,7 @@ async fn test_remove_role_from_user_not_assigned() {
     let result = service.remove_role_from_user(user_id, admin_role_id).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        ApiError::SystemFunctionNotFound(_) => {}, // ApiError::not_found
+        ApiError::SystemFunctionNotFound(_) | ApiError::ResourceNotFound(_) => {},
         _ => panic!("Should return not found error"),
     }
 }

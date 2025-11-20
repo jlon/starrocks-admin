@@ -12,6 +12,7 @@ export interface User {
   avatar?: string;
   organization_id?: number;
   created_at: string;
+  is_super_admin?: boolean;
   active_cluster_id?: never;  // Removed field - should never exist
 }
 
@@ -57,6 +58,14 @@ export class AuthService {
 
   public get token(): string | null {
     return localStorage.getItem(this.tokenKey);
+  }
+
+  public isSuperAdmin(): boolean {
+    const user = this.currentUserSubject.value;
+    if (user && typeof user.is_super_admin === 'boolean') {
+      return user.is_super_admin;
+    }
+    return this.permissionService.hasPermission('api:organizations:create');
   }
 
   login(credentials: LoginRequest): Observable<LoginResponse> {

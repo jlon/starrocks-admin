@@ -38,7 +38,7 @@ import { UserWithRoles } from '../../../../@core/data/user.service';
       .actions {
         display: flex;
         gap: var(--nb-space-xs);
-        justify-content: flex-end;
+        justify-content: center;
       }
     `,
   ],

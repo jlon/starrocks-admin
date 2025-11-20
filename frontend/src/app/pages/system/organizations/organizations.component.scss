@@ -28,3 +28,15 @@
   min-height: 200px;
 }
 
+:host ::ng-deep ng2-smart-table table {
+  width: 100%;
+  td {
+    .badge {
+      display: inline-block;
+    }
+  }
+  
+  tbody tr td:nth-child(5) {
+    text-align: center;
+  }
+}

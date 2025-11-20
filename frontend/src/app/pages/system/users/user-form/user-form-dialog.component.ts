@@ -208,14 +208,20 @@ export class UserFormDialogComponent implements OnInit {
     }
 
     if (this.mode === 'create') {
-      return {
+      const createPayload: CreateUserPayload = {
         username: trimmedUsername,
         password: password,
         email: trimmedEmail,
         role_ids: roleIds,
         avatar: avatar,
-        organization_id: organizationId,
       };
+      
+      // Only super admin can specify organization_id
+      if (this.isSuperAdmin && organizationId) {
+        createPayload.organization_id = organizationId;
+      }
+      
+      return createPayload;
     }
 
     const updatePayload: UpdateUserPayload = {
@@ -223,8 +229,12 @@ export class UserFormDialogComponent implements OnInit {
       email: trimmedEmail,
       role_ids: roleIds,
       avatar: avatar,
-      organization_id: organizationId,
     };
+    
+    // Only super admin can change organization_id
+    if (this.isSuperAdmin && organizationId) {
+      updatePayload.organization_id = organizationId;
+    }
 
     // Only include password if it's provided
     if (password && password.trim()) {

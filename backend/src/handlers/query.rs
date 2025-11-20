@@ -30,8 +30,16 @@ use crate::utils::ApiResult;
     ),
     tag = "Queries"
 )]
-pub async fn list_catalogs(State(state): State<Arc<AppState>>) -> ApiResult<Json<Vec<String>>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+pub async fn list_catalogs(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+) -> ApiResult<Json<Vec<String>>> {
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     // Use MySQL client to execute SHOW CATALOGS
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -71,9 +79,15 @@ pub async fn list_catalogs(State(state): State<Arc<AppState>>) -> ApiResult<Json
 )]
 pub async fn list_databases(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<Json<Vec<String>>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     // Use MySQL client
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -123,9 +137,15 @@ pub async fn list_databases(
 )]
 pub async fn list_tables(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<Json<Vec<TableMetadata>>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     // Use MySQL client
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -298,8 +318,14 @@ pub async fn list_tables(
 )]
 pub async fn list_catalogs_with_databases(
     State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
 ) -> ApiResult<Json<CatalogsWithDatabasesResponse>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     // Use MySQL client
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -372,8 +398,16 @@ pub async fn list_catalogs_with_databases(
     ),
     tag = "Queries"
 )]
-pub async fn list_queries(State(state): State<Arc<AppState>>) -> ApiResult<Json<Vec<Query>>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+pub async fn list_queries(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+) -> ApiResult<Json<Vec<Query>>> {
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
     let client = StarRocksClient::new(cluster);
     let queries = client.get_queries().await?;
     Ok(Json(queries))
@@ -398,9 +432,15 @@ pub async fn list_queries(State(state): State<Arc<AppState>>) -> ApiResult<Json<
 )]
 pub async fn kill_query(
     State(state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Path(query_id): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
@@ -431,9 +471,15 @@ pub async fn kill_query(
 )]
 pub async fn execute_sql(
     State(state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(request): Json<QueryExecuteRequest>,
 ) -> ApiResult<Json<QueryExecuteResponse>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     // Use pool manager to get cached pool (avoid intermittent failures from creating new pools)
     let pool: mysql_async::Pool = state.mysql_pool_manager.get_pool(&cluster).await?;

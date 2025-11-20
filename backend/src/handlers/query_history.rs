@@ -33,9 +33,15 @@ fn default_offset() -> i64 {
 )]
 pub async fn list_query_history(
     State(state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     axum::extract::Query(params): axum::extract::Query<HistoryQueryParams>,
 ) -> ApiResult<Json<QueryHistoryResponse>> {
-    let cluster = state.cluster_service.get_active_cluster().await?;
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql = MySQLClient::from_pool(pool);

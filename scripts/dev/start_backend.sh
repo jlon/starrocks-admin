@@ -117,6 +117,14 @@ EOF
     echo "  - 工作目录: $BACKEND_DIR"
     echo ""
 
+    # 检查端口是否被占用
+    PORT=8081
+    if lsof -i :$PORT > /dev/null 2>&1; then
+        echo -e "${YELLOW}[WARNING]${NC} 端口 $PORT 已被占用，尝试停止占用进程..."
+        lsof -ti :$PORT | xargs kill -9 2>/dev/null || true
+        sleep 2
+    fi
+
     # 启动后端
     echo -e "${GREEN}[START]${NC} 启动后端服务..."
     cd "$BACKEND_DIR"

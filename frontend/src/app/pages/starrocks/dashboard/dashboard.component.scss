@@ -8,20 +8,79 @@
   gap: 0.5rem;
 }
 
-// 轻量级卡片增强 - 保持ngx-admin原生风格
+// Optimize badge positioning
+::ng-deep nb-badge {
+  &.position-top-left {
+    top: 0.75rem;
+    left: 0.75rem;
+  }
+}
+
+// Use ngx-admin native card style with left border status indicator
 ::ng-deep .cluster-card {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-left: 4px solid var(--border-basic-color-3);
+  
+  // Force remove Nebular status backgrounds with highest priority
+  &.nb-card,
+  &.nb-card.status-success,
+  &.nb-card.status-warning,
+  &.nb-card.status-danger,
+  &.nb-card.status-info,
+  &.nb-card.status-primary,
+  &.nb-card.status-basic {
+    background: var(--background-basic-color-1) !important;
+    background-color: var(--background-basic-color-1) !important;
+    border-color: var(--border-basic-color-3) !important;
+  }
   
   &:hover {
     transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem 0 rgba(44, 51, 73, 0.1);
   }
   
-  // 优化nb-list样式 - 使用ngx-admin原生组件
+  // Remove any Nebular default status background from header
+  nb-card-header,
+  nb-card-header.nb-card-header {
+    background: transparent !important;
+    background-color: transparent !important;
+    border-bottom: 1px solid var(--border-basic-color-3);
+    padding: 1.125rem 1.25rem;
+    
+    h6 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-basic-color);
+      margin: 0;
+    }
+  }
+  
+  nb-card-body {
+    padding: 1.125rem 1.25rem;
+    background: transparent !important;
+  }
+  
+  // Optimize nb-list styles - using ngx-admin native components
   nb-list {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    
     nb-list-item {
-      padding: 0.75rem 0;
+      padding: 0.625rem 0;
+      border-bottom: none;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
       
-      // 标签文字样式（使用ngx-admin的text-hint）
+      // Info icon style
+      .info-icon {
+        color: var(--text-hint-color);
+        font-size: 1.125rem;
+        flex-shrink: 0;
+      }
+      
+      // Label text style (using ngx-admin's text-hint)
       .text-hint {
         font-size: 0.8125rem;
         font-weight: 500;
@@ -29,79 +88,253 @@
         min-width: 70px;
       }
       
-      // 值文字样式（使用ngx-admin的text-basic）
+      // Value text style (using ngx-admin's text-basic)
       .text-basic {
         font-size: 0.875rem;
-        word-break: break-all;
+        word-break: break-word;
+        overflow-wrap: break-word;
       }
       
-      // 健康检查成功文字（使用ngx-admin的text-success）
+      // Health check success text (using ngx-admin's text-success)
       .text-success {
         font-size: 0.8125rem;
       }
     }
   }
   
-  // 使用更柔和的颜色 - success状态
+  // Status indicator via left border - using ngx-admin color variables
   &.status-success {
-    border-color: rgba(0, 214, 143, 0.3) !important; // ngx-admin success色的30%透明度
-    
-    nb-card-header {
-      background: rgba(0, 214, 143, 0.15);
-      border-bottom-color: rgba(0, 214, 143, 0.25);
-    }
+    border-left-color: var(--color-success-default);
+    border-left-width: 4px;
   }
   
-  // warning状态
   &.status-warning {
-    border-color: rgba(255, 170, 0, 0.3) !important; // ngx-admin warning色的30%透明度
-    
-    nb-card-header {
-      background: rgba(255, 170, 0, 0.15);
-      border-bottom-color: rgba(255, 170, 0, 0.25);
-    }
+    border-left-color: var(--color-warning-default);
+    border-left-width: 4px;
   }
   
-  // danger状态
   &.status-danger {
-    border-color: rgba(255, 61, 113, 0.3) !important; // ngx-admin danger色的30%透明度
+    border-left-color: var(--color-danger-default);
+    border-left-width: 4px;
+  }
+  
+  &.status-basic {
+    border-left-color: var(--border-basic-color-4);
+    border-left-width: 4px;
+  }
+}
+
+// Metrics section - key cluster metrics
+.metrics-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-basic-color-3);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  
+  .metric-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.75rem;
+    background: transparent;
+    border: 1px solid var(--border-basic-color-3);
+    border-radius: var(--border-radius);
+    transition: all 0.2s ease;
     
-    nb-card-header {
-      background: rgba(255, 61, 113, 0.15);
-      border-bottom-color: rgba(255, 61, 113, 0.25);
+    &:hover {
+      background: var(--background-basic-color-2);
+      border-color: var(--border-basic-color-4);
+    }
+    
+    // Clickable metric items (FE/BE nodes)
+    &.metric-clickable {
+      cursor: pointer;
+      
+      &:hover:not(.disabled) {
+        background: var(--background-basic-color-2);
+        border-color: var(--color-info-default);
+        transform: translateY(-2px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      
+      &.disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+        
+        &:hover {
+          transform: none;
+          box-shadow: none;
+        }
+      }
+    }
+    
+    nb-icon {
+      font-size: 1.375rem;
+      flex-shrink: 0;
+      opacity: 0.8;
+    }
+    
+    .metric-content {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      
+      .metric-label {
+        font-size: 0.6875rem;
+        color: var(--text-hint-color);
+        line-height: 1.2;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .metric-value {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--text-basic-color);
+        line-height: 1;
+      }
     }
   }
 }
 
-// 弱化按钮边框 - 使用ngx-admin原生outline样式但大幅降低边框透明度
+// Footer buttons - using ngx-admin native ghost style
 ::ng-deep {
   nb-card-footer {
-    button[nbButton][outline] {
-      // 直接降低边框透明度而不是整体透明度
-      border-color: rgba(0, 0, 0, 0.15) !important;
-      
-      &:hover {
-        border-color: currentColor !important;
-        opacity: 0.9;
-      }
-      
-      // 针对不同状态保持文字颜色
-      &.status-info {
-        color: #0095ff;
-      }
-      
-      &.status-success {
-        color: #00d68f;
-      }
-      
-      &.status-warning {
-        color: #ffaa00;
+    padding: var(--nb-card-padding);
+    background: var(--background-basic-color-1);
+    
+    button[nbButton][ghost] {
+      nb-icon {
+        margin-right: var(--nb-space-xs);
       }
     }
   }
 }
 
-// 激活星标按钮微调
+// Health check summary - collapsible
+.health-summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 0.5rem;
+  margin: -0.5rem;
+  border-radius: var(--border-radius);
+  transition: all 0.2s ease;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  
+  &:hover {
+    background: var(--background-basic-color-2);
+  }
+  
+  nb-icon {
+    font-size: 1.125rem;
+    flex-shrink: 0;
+  }
+  
+  .text-hint {
+    font-weight: 500;
+  }
+}
+
+// Health check details - smooth expand/collapse
+.health-details {
+  animation: slideDown 0.3s ease-out;
+  overflow: hidden;
+  width: 100%;
+  
+  .health-check-list {
+    display: flex;
+    flex-direction: column;
+    background: var(--background-basic-color-2);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .health-check-item {
+    padding: 0.875rem 1rem 0.875rem 1.25rem;
+    background: transparent;
+    border-bottom: 1px solid var(--border-basic-color-3);
+    position: relative;
+    transition: all 0.2s ease;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+    
+    // Tab-style status indicator (inspired by ngx-admin tabs)
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 60%;
+      width: 3px;
+      background: var(--border-basic-color-4);
+      border-radius: 0 2px 2px 0;
+      transition: all 0.2s ease;
+    }
+    
+    &:hover {
+      background: var(--background-basic-color-3);
+      
+      &::before {
+        height: 80%;
+        background: var(--color-info-default);
+      }
+    }
+    
+    &:last-child {
+      border-bottom: none;
+    }
+    
+    .check-icon {
+      font-size: 1.125rem;
+      flex-shrink: 0;
+    }
+    
+    .check-name {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-basic-color);
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+    
+    .check-message {
+      font-size: 0.75rem;
+      color: var(--text-hint-color);
+      margin-top: 0.25rem;
+      padding-left: 2rem;
+      line-height: 1.5;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      white-space: normal;
+    }
+  }
+}
+
+@keyframes slideDown {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 500px;
+    opacity: 1;
+  }
+}
+
+// Active star button animation
 .active-star {
   animation: pulse 1.5s ease-in-out infinite;
 }

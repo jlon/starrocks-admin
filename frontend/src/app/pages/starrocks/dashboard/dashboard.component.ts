@@ -17,6 +17,7 @@ interface ClusterCard {
   loading: boolean;
   isActive: boolean;
   organization?: Organization;
+  showHealthDetails?: boolean;
 }
 
 @Component({
@@ -202,6 +203,143 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Get health badge status for nb-badge component
+  getHealthBadgeStatus(clusterCard: ClusterCard): string {
+    if (!clusterCard.health) {
+      return 'basic';
+    }
+    const status = clusterCard.health.status;
+    if (status === 'healthy') {
+      return 'success';
+    }
+    if (status === 'warning') {
+      return 'warning';
+    }
+    return 'danger';
+  }
+
+  // Get health badge text for nb-badge component
+  getHealthBadgeText(clusterCard: ClusterCard): string {
+    if (!clusterCard.health) {
+      return '未知';
+    }
+    const status = clusterCard.health.status;
+    if (status === 'healthy') {
+      return '运行中';
+    }
+    if (status === 'warning') {
+      return '警告';
+    }
+    return '异常';
+  }
+
+  // Get health badge text with last check time
+  getHealthBadgeTextWithTime(clusterCard: ClusterCard): string {
+    const statusText = this.getHealthBadgeText(clusterCard);
+    if (!clusterCard.health?.last_check_time) {
+      return statusText;
+    }
+    
+    try {
+      const checkTime = new Date(clusterCard.health.last_check_time);
+      const now = new Date();
+      const diffMs = now.getTime() - checkTime.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) {
+        return `${statusText} · 刚刚`;
+      } else if (diffMins < 60) {
+        return `${statusText} · ${diffMins}分钟前`;
+      } else {
+        const diffHours = Math.floor(diffMins / 60);
+        return `${statusText} · ${diffHours}小时前`;
+      }
+    } catch (e) {
+      return statusText;
+    }
+  }
+
+  // Toggle health check details visibility
+  toggleHealthDetails(clusterCard: ClusterCard): void {
+    clusterCard.showHealthDetails = !clusterCard.showHealthDetails;
+    this.cdr.markForCheck();
+  }
+
+  // Get health icon based on cluster health status
+  getHealthIcon(clusterCard: ClusterCard): string {
+    if (!clusterCard.health) {
+      return 'question-mark-circle-outline';
+    }
+    const status = clusterCard.health.status;
+    if (status === 'healthy') {
+      return 'checkmark-circle-2-outline';
+    }
+    if (status === 'warning') {
+      return 'alert-triangle-outline';
+    }
+    return 'close-circle-outline';
+  }
+
+  // Get failed health checks count
+  getFailedChecksCount(clusterCard: ClusterCard): number {
+    if (!clusterCard.health?.checks) {
+      return 0;
+    }
+    return clusterCard.health.checks.filter(c => c.status !== 'ok').length;
+  }
+
+  // Get FE node count from health checks
+  getFeCount(clusterCard: ClusterCard): string {
+    if (!clusterCard.health?.checks) {
+      return '—';
+    }
+    
+    // Find Frontend Nodes check (backend now returns real FE count)
+    const feCheck = clusterCard.health.checks.find(c => 
+      c.name.toLowerCase().includes('frontend') || 
+      c.name.toLowerCase().includes('fe')
+    );
+    
+    if (feCheck && feCheck.message) {
+      // Extract number from messages like:
+      // "All 3 FE nodes are online"
+      // "2/3 FE nodes are online"
+      const match = feCheck.message.match(/(\d+)/);
+      if (match) {
+        return match[1];
+      }
+    }
+    
+    return '—';
+  }
+
+  // Get BE node count from health checks
+  getBeCount(clusterCard: ClusterCard): string {
+    if (!clusterCard.health?.checks) {
+      return '—';
+    }
+    const beCheck = clusterCard.health.checks.find(c => 
+      c.name.toLowerCase().includes('be') || 
+      c.name.toLowerCase().includes('backend')
+    );
+    if (beCheck && beCheck.message) {
+      const match = beCheck.message.match(/(\d+)/);
+      return match ? match[1] : '—';
+    }
+    return '—';
+  }
+
+  // Calculate health score based on checks (return string for better display)
+  getHealthScore(clusterCard: ClusterCard): string {
+    if (!clusterCard.health?.checks || clusterCard.health.checks.length === 0) {
+      return '—';
+    }
+    const totalChecks = clusterCard.health.checks.length;
+    const passedChecks = clusterCard.health.checks.filter(c => c.status === 'ok').length;
+    const score = Math.round((passedChecks / totalChecks) * 100);
+    return `${score}`;
+  }
+
   navigateToCluster(clusterId?: number): void {
     if (!this.canViewClusterDetails) {
       this.toastrService.warning('您没有查看集群详情的权限', '提示');
@@ -216,7 +354,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.toastrService.warning('您没有查看 Backend 节点的权限', '提示');
       return;
     }
-    // Backends 路由不接收 ID，组件从 ActiveCluster 获取上下文
+    
+    // Activate cluster first if clicking from a specific cluster card
+    if (clusterId) {
+      const clusterCard = this.clusters.find(c => c.cluster.id === clusterId);
+      if (clusterCard && !clusterCard.isActive) {
+        this.clusterService.activateCluster(clusterId).subscribe({
+          next: () => {
+            this.router.navigate(['/pages/starrocks/backends']);
+          },
+          error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+        });
+        return;
+      }
+    }
+    
+    // Navigate to backends page
     this.router.navigate(['/pages/starrocks/backends']);
   }
 
@@ -225,7 +378,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.toastrService.warning('您没有查看 Frontend 节点的权限', '提示');
       return;
     }
-    // Frontends 路由不接收 ID，组件从 ActiveCluster 获取上下文
+    
+    // Activate cluster first if clicking from a specific cluster card
+    if (clusterId) {
+      const clusterCard = this.clusters.find(c => c.cluster.id === clusterId);
+      if (clusterCard && !clusterCard.isActive) {
+        this.clusterService.activateCluster(clusterId).subscribe({
+          next: () => {
+            this.router.navigate(['/pages/starrocks/frontends']);
+          },
+          error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
+        });
+        return;
+      }
+    }
+    
+    // Navigate to frontends page
     this.router.navigate(['/pages/starrocks/frontends']);
   }
 

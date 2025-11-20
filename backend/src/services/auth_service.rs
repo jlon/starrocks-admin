@@ -205,6 +205,21 @@ impl AuthService {
 
     pub async fn into_user_response(&self, user: User) -> ApiResult<UserResponse> {
         let is_super_admin = self.is_user_super_admin(user.id).await?;
-        Ok(UserResponse::from_user(user, is_super_admin))
+        let is_org_admin = self.is_user_org_admin(user.id).await?;
+        Ok(UserResponse::from_user(user, is_super_admin, is_org_admin))
+    }
+    
+    async fn is_user_org_admin(&self, user_id: i64) -> ApiResult<bool> {
+        let exists: Option<(i64,)> = sqlx::query_as(
+            "SELECT 1 FROM user_roles ur 
+             JOIN roles r ON ur.role_id = r.id 
+             WHERE ur.user_id = ? AND r.code LIKE 'org_admin_%' 
+             LIMIT 1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(exists.is_some())
     }
 }

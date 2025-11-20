@@ -77,6 +77,7 @@ pub struct UserResponse {
     pub organization_id: Option<i64>,
     pub organization_name: Option<String>,
     pub is_super_admin: bool,
+    pub is_org_admin: bool,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -87,7 +88,7 @@ pub struct UserWithRolesResponse {
 }
 
 impl UserResponse {
-    pub fn from_user(user: User, is_super_admin: bool) -> Self {
+    pub fn from_user(user: User, is_super_admin: bool, is_org_admin: bool) -> Self {
         Self {
             id: user.id,
             username: user.username,
@@ -97,10 +98,11 @@ impl UserResponse {
             organization_id: user.organization_id,
             organization_name: None,
             is_super_admin,
+            is_org_admin,
         }
     }
 
-    pub fn from_user_with_org(user: User, organization_name: Option<String>, is_super_admin: bool) -> Self {
+    pub fn from_user_with_org(user: User, organization_name: Option<String>, is_super_admin: bool, is_org_admin: bool) -> Self {
         Self {
             id: user.id,
             username: user.username,
@@ -110,12 +112,13 @@ impl UserResponse {
             organization_id: user.organization_id,
             organization_name,
             is_super_admin,
+            is_org_admin,
         }
     }
 }
 
 impl From<User> for UserResponse {
     fn from(user: User) -> Self {
-        UserResponse::from_user(user, false)
+        UserResponse::from_user(user, false, false)
     }
 }

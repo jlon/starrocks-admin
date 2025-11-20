@@ -321,7 +321,13 @@ impl UserService {
 
     fn compose_user_with_org(&self, user: User, organization_name: Option<String>, roles: Option<&Vec<RoleResponse>>) -> UserWithRolesResponse {
         use crate::models::UserResponse;
-        let user_response = UserResponse::from_user_with_org(user, organization_name, false);
+        
+        // Check if user is organization admin by checking roles
+        let is_org_admin = roles.map_or(false, |r| {
+            r.iter().any(|role| role.code.starts_with("org_admin_"))
+        });
+        
+        let user_response = UserResponse::from_user_with_org(user, organization_name, false, is_org_admin);
         UserWithRolesResponse { user: user_response, roles: roles.cloned().unwrap_or_default() }
     }
 

@@ -9,6 +9,7 @@ export interface UserSummary {
   avatar?: string;
   organization_id?: number;
   organization_name?: string;
+  is_org_admin: boolean;
   created_at: string;
 }
 

@@ -8,8 +8,9 @@ export interface Organization {
   name: string;
   description?: string;
   is_system: boolean;
+  admin_user_id?: number;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface CreateOrganizationRequest {

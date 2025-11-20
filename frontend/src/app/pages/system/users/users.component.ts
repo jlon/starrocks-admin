@@ -307,28 +307,38 @@ export class UsersComponent implements OnInit, OnDestroy {
         id: {
           title: 'ID',
           type: 'number',
-          width: '8%',
+          width: '6%',
         },
         username: {
           title: '用户名',
           type: 'string',
-          width: '15%',
+          width: '12%',
         },
         email: {
           title: '邮箱',
           type: 'string',
-          width: '20%',
+          width: '18%',
         },
         organization_name: {
           title: '所属组织',
           type: 'string',
-          width: '15%',
+          width: '13%',
           valuePrepareFunction: (name: string) => name || '-',
+        },
+        is_org_admin: {
+          title: '管理员',
+          type: 'html',
+          width: '8%',
+          valuePrepareFunction: (isAdmin: boolean) => {
+            return isAdmin
+              ? '<span class="badge badge-success">是</span>'
+              : '<span class="badge badge-basic">否</span>';
+          },
         },
         roles: {
           title: '角色',
           type: 'custom',
-          width: '20%',
+          width: '18%',
           renderComponent: UsersRoleBadgeCellComponent,
           filter: false,
           sort: false,

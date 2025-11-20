@@ -48,9 +48,9 @@ export class OrganizationFormDialogComponent implements OnInit, OnDestroy {
         code: this.organization.code,
         name: this.organization.name,
         description: this.organization.description || '',
+        admin_user_id: this.organization.admin_user_id || null,
       });
       this.form.get('code')?.disable();
-      this.form.get('admin_user_id')?.setValue(null);
     } else {
       this.form.get('admin_user_id')?.disable();
     }

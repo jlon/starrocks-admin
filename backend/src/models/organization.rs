@@ -41,6 +41,7 @@ pub struct OrganizationResponse {
     pub name: String,
     pub description: Option<String>,
     pub is_system: bool,
+    pub admin_user_id: Option<i64>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -52,7 +53,15 @@ impl From<Organization> for OrganizationResponse {
             name: o.name,
             description: o.description,
             is_system: o.is_system,
+            admin_user_id: None, // Will be populated by service layer
             created_at: o.created_at,
         }
+    }
+}
+
+impl OrganizationResponse {
+    pub fn with_admin(mut self, admin_user_id: Option<i64>) -> Self {
+        self.admin_user_id = admin_user_id;
+        self
     }
 }

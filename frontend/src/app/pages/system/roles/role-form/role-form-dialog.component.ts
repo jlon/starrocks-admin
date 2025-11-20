@@ -379,14 +379,20 @@ export class RoleFormDialogComponent implements OnInit {
     const normalizedDescription = description?.trim() || undefined;
 
     if (this.mode === 'create') {
-      const orgId =
-        this.isSuperAdmin ? organizationId : this.currentOrganization?.id ?? organizationId;
-      return {
-        code: (code ?? '').trim(),
-        name: normalizedName,
-        description: normalizedDescription,
-        organization_id: orgId || undefined,
-      };
+      if (this.isSuperAdmin) {
+        return {
+          code: (code ?? '').trim(),
+          name: normalizedName,
+          description: normalizedDescription,
+          organization_id: organizationId || undefined,
+        };
+      } else {
+        return {
+          code: (code ?? '').trim(),
+          name: normalizedName,
+          description: normalizedDescription,
+        };
+      }
     }
 
     return {

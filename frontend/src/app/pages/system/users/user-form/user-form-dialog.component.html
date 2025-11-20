@@ -20,7 +20,6 @@
           <div class="form-group" *ngIf="isSuperAdmin">
             <label class="label" for="input-organization">所属组织</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="building-2-outline"></nb-icon>
               <nb-select
                 formControlName="organizationId"
                 id="input-organization"
@@ -45,7 +44,6 @@
           <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
             <label class="label">所属组织</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="building-2-outline"></nb-icon>
               <input
                 nbInput
                 fullWidth
@@ -61,7 +59,6 @@
           <div class="form-group">
             <label class="label" for="input-username">用户名</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="person-outline"></nb-icon>
               <input
                 nbInput
                 fullWidth
@@ -86,7 +83,6 @@
           <div class="form-group">
             <label class="label" for="input-email">邮箱地址</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="email-outline"></nb-icon>
               <input
                 nbInput
                 fullWidth
@@ -115,7 +111,6 @@
               <span class="label-hint" *ngIf="mode === 'edit'">（留空则不修改）</span>
             </label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="lock-outline"></nb-icon>
               <input
                 nbInput
                 fullWidth
@@ -140,7 +135,6 @@
           <div class="form-group">
             <label class="label" for="input-confirm-password">确认密码</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="lock-outline"></nb-icon>
               <input
                 nbInput
                 fullWidth
@@ -167,7 +161,6 @@
           <div class="form-group">
             <label class="label" for="input-roles">角色</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="people-outline"></nb-icon>
               <nb-select
                 formControlName="roleIds"
                 id="input-roles"

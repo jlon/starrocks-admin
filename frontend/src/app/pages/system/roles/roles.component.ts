@@ -224,7 +224,7 @@ export class RolesComponent implements OnInit, OnDestroy {
     this.canCreateRole = this.permissionService.hasPermission('api:roles:create');
     this.canUpdateRole = this.permissionService.hasPermission('api:roles:update');
     this.canDeleteRole = this.permissionService.hasPermission('api:roles:delete');
-    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+    this.isSuperAdmin = this.authService.isSuperAdmin();
 
     if (this.isSuperAdmin) {
       this.loadOrganizations();

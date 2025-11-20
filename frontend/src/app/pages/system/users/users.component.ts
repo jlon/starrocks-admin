@@ -262,7 +262,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     this.canCreateUser = this.permissionService.hasPermission('api:users:create');
     this.canUpdateUser = this.permissionService.hasPermission('api:users:update');
     this.canDeleteUser = this.permissionService.hasPermission('api:users:delete');
-    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+    this.isSuperAdmin = this.authService.isSuperAdmin();
 
     this.settings = this.buildTableSettings();
 
@@ -312,14 +312,23 @@ export class UsersComponent implements OnInit, OnDestroy {
         username: {
           title: '用户名',
           type: 'string',
+          width: '15%',
         },
         email: {
           title: '邮箱',
           type: 'string',
+          width: '20%',
+        },
+        organization_name: {
+          title: '所属组织',
+          type: 'string',
+          width: '15%',
+          valuePrepareFunction: (name: string) => name || '-',
         },
         roles: {
           title: '角色',
           type: 'custom',
+          width: '20%',
           renderComponent: UsersRoleBadgeCellComponent,
           filter: false,
           sort: false,
@@ -327,11 +336,13 @@ export class UsersComponent implements OnInit, OnDestroy {
         created_at: {
           title: '创建时间',
           type: 'string',
+          width: '12%',
           valuePrepareFunction: (date: string) => new Date(date).toLocaleString('zh-CN'),
         },
         actions: {
           title: '操作',
           type: 'custom',
+          width: '10%',
           renderComponent: UsersActionsCellComponent,
           filter: false,
           sort: false,

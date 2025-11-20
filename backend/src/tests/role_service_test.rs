@@ -64,11 +64,10 @@ async fn test_list_roles() {
 #[tokio::test]
 async fn test_get_role_not_found() {
     let service = create_test_role_service().await;
-
     let result = service.get_role(999, None, true).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        ApiError::SystemFunctionNotFound(_) => {}, // ApiError::not_found returns SystemFunctionNotFound
+        ApiError::SystemFunctionNotFound(_) | ApiError::ResourceNotFound(_) => {},
         _ => panic!("Should return not found error"),
     }
 }
@@ -209,7 +208,7 @@ async fn test_update_nonexistent_role() {
     let result = service.update_role(999, req, None, true).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        ApiError::SystemFunctionNotFound(_) => {},
+        ApiError::SystemFunctionNotFound(_) | ApiError::ResourceNotFound(_) => {},
         _ => panic!("Should return not found error"),
     }
 }

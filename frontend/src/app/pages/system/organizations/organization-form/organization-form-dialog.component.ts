@@ -1,11 +1,10 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnInit, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { NbDialogRef } from '@nebular/theme';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Subject } from 'rxjs';
 
 import { Organization } from '../../../../@core/data/organization.service';
-import { UserService, UserWithRoles } from '../../../../@core/data/user.service';
+import { UserWithRoles } from '../../../../@core/data/user.service';
 
 export type OrganizationFormMode = 'create' | 'edit';
 
@@ -22,17 +21,18 @@ export interface OrganizationFormDialogResult {
   templateUrl: './organization-form-dialog.component.html',
   styleUrls: ['./organization-form-dialog.component.scss'],
 })
-export class OrganizationFormDialogComponent implements OnInit {
+export class OrganizationFormDialogComponent implements OnInit, OnDestroy {
   @Input() mode: OrganizationFormMode = 'create';
   @Input() organization?: Organization;
+  @Input() availableUsers: UserWithRoles[] = [];
 
   form: FormGroup;
-  availableUsers$: Observable<UserWithRoles[]> | null = null;
+  
+  private destroy$ = new Subject<void>();
 
   constructor(
     private dialogRef: NbDialogRef<OrganizationFormDialogComponent>,
     private fb: FormBuilder,
-    private userService: UserService,
   ) {
     this.form = this.fb.group({
       code: ['', [Validators.required, Validators.maxLength(50), Validators.pattern(/^[a-z0-9_]+$/)]],
@@ -50,17 +50,19 @@ export class OrganizationFormDialogComponent implements OnInit {
         description: this.organization.description || '',
       });
       this.form.get('code')?.disable();
-      this.loadOrganizationUsers(this.organization.id);
       this.form.get('admin_user_id')?.setValue(null);
     } else {
       this.form.get('admin_user_id')?.disable();
     }
   }
-
-  private loadOrganizationUsers(orgId: number): void {
-    this.availableUsers$ = this.userService.listUsers().pipe(
-      map((users) => users.filter((u) => u.organization_id === orgId)),
-    );
+  
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+  
+  trackByUserId(index: number, user: UserWithRoles): number {
+    return user.id;
   }
 
   submit(): void {

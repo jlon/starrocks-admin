@@ -1,11 +1,10 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 
 import { Organization } from '../../../../@core/data/organization.service';
-
-export interface OrganizationActionPermissions {
-  canEdit: boolean;
-  canDelete: boolean;
-}
+import { AuthService } from '../../../../@core/data/auth.service';
+import { PermissionService } from '../../../../@core/data/permission.service';
 
 @Component({
   selector: 'ngx-organizations-actions-cell',
@@ -18,7 +17,7 @@ export interface OrganizationActionPermissions {
         status="primary"
         nbTooltip="编辑组织"
         nbTooltipPlacement="top"
-        [disabled]="!value?.canEdit"
+        [disabled]="!canEdit"
         (click)="onEditClick($event)"
       >
         <nb-icon icon="edit-2-outline"></nb-icon>
@@ -30,7 +29,7 @@ export interface OrganizationActionPermissions {
         status="danger"
         nbTooltip="删除组织"
         nbTooltipPlacement="top"
-        [disabled]="!value?.canDelete"
+        [disabled]="!canDelete"
         (click)="onDeleteClick($event)"
       >
         <nb-icon icon="trash-2-outline"></nb-icon>
@@ -47,22 +46,76 @@ export interface OrganizationActionPermissions {
     `,
   ],
 })
-export class OrganizationsActionsCellComponent {
-  @Input() value: OrganizationActionPermissions | null = null;
+export class OrganizationsActionsCellComponent implements OnInit, OnDestroy {
   @Input() rowData!: Organization;
   @Output() edit = new EventEmitter<Organization>();
   @Output() delete = new EventEmitter<Organization>();
 
+  private destroy$ = new Subject<void>();
+
+  constructor(
+    private authService: AuthService,
+    private permissionService: PermissionService,
+    private cdr: ChangeDetectorRef,
+  ) {}
+
+  ngOnInit(): void {
+    // Subscribe to permission changes to trigger change detection
+    this.permissionService.permissions$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.cdr.markForCheck();
+      });
+
+    // Subscribe to user changes to trigger change detection
+    this.authService.currentUser
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.cdr.markForCheck();
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  get canEdit(): boolean {
+    // System organizations cannot be edited
+    if (this.rowData?.is_system) {
+      return false;
+    }
+    // Check super admin first
+    if (this.authService.isSuperAdmin()) {
+      return true;
+    }
+    // Then check specific permission
+    return this.permissionService.hasPermission('api:organizations:update');
+  }
+
+  get canDelete(): boolean {
+    // System organizations cannot be deleted
+    if (this.rowData?.is_system) {
+      return false;
+    }
+    // Check super admin first
+    if (this.authService.isSuperAdmin()) {
+      return true;
+    }
+    // Then check specific permission
+    return this.permissionService.hasPermission('api:organizations:delete');
+  }
+
   onEditClick(event: Event): void {
     event.stopPropagation();
-    if (this.rowData && !this.rowData.is_system && this.value?.canEdit) {
+    if (this.canEdit) {
       this.edit.emit(this.rowData);
     }
   }
 
   onDeleteClick(event: Event): void {
     event.stopPropagation();
-    if (this.rowData && !this.rowData.is_system && this.value?.canDelete) {
+    if (this.canDelete) {
       this.delete.emit(this.rowData);
     }
   }

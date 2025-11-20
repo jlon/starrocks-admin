@@ -4,7 +4,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { NbToastrService } from '@nebular/theme';
 import { ClusterService, Cluster } from '../../../../@core/data/cluster.service';
 import { OrganizationService, Organization } from '../../../../@core/data/organization.service';
-import { PermissionService } from '../../../../@core/data/permission.service';
 import { AuthService } from '../../../../@core/data/auth.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { TabReuseService } from '../../../../@core/services/tab-reuse.service';
@@ -32,7 +31,6 @@ export class ClusterFormComponent implements OnInit {
     private fb: FormBuilder,
     private clusterService: ClusterService,
     private organizationService: OrganizationService,
-    private permissionService: PermissionService,
     private authService: AuthService,
     private router: Router,
     private route: ActivatedRoute,
@@ -57,7 +55,7 @@ export class ClusterFormComponent implements OnInit {
 
   ngOnInit(): void {
     // Determine if current user is super admin
-    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+    this.isSuperAdmin = this.authService.isSuperAdmin();
     
     // Load organizations and current organization
     this.loadOrganizationData();

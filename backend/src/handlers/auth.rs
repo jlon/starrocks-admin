@@ -50,11 +50,14 @@ pub async fn login(
     tracing::debug!("Login request: username={}", req.username);
 
     let (user, token) = state.auth_service.login(req).await?;
+    let username = user.username.clone();
+    let user_id = user.id;
+    let user_response = state.auth_service.into_user_response(user).await?;
 
-    tracing::info!("User logged in successfully: {} (ID: {})", user.username, user.id);
-    tracing::debug!("JWT token generated for user: {}", user.username);
+    tracing::info!("User logged in successfully: {} (ID: {})", username, user_id);
+    tracing::debug!("JWT token generated for user: {}", username);
 
-    Ok(Json(LoginResponse { token, user: user.into() }))
+    Ok(Json(LoginResponse { token, user: user_response }))
 }
 
 // Get current user info
@@ -77,9 +80,16 @@ pub async fn get_me(
     tracing::debug!("Getting user info for user_id: {}", user_id);
 
     let user = state.auth_service.get_user_by_id(user_id).await?;
+    let fetched_username = user.username.clone();
+    let fetched_user_id = user.id;
+    let response = state.auth_service.into_user_response(user).await?;
 
-    tracing::debug!("User info retrieved successfully: {} (ID: {})", user.username, user.id);
-    Ok(Json(user.into()))
+    tracing::debug!(
+        "User info retrieved successfully: {} (ID: {})",
+        fetched_username,
+        fetched_user_id,
+    );
+    Ok(Json(response))
 }
 
 // Update current user info
@@ -111,7 +121,14 @@ pub async fn update_me(
     );
 
     let user = state.auth_service.update_user(user_id, req).await?;
+    let updated_username = user.username.clone();
+    let updated_user_id = user.id;
+    let response = state.auth_service.into_user_response(user).await?;
 
-    tracing::info!("User updated successfully: {} (ID: {})", user.username, user.id);
-    Ok(Json(user.into()))
+    tracing::info!(
+        "User updated successfully: {} (ID: {})",
+        updated_username,
+        updated_user_id,
+    );
+    Ok(Json(response))
 }

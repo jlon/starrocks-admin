@@ -9,6 +9,7 @@ import { OrganizationService, Organization } from '../../../@core/data/organizat
 import { ErrorHandler } from '../../../@core/utils/error-handler';
 import { PermissionService } from '../../../@core/data/permission.service';
 import { ConfirmDialogService } from '../../../@core/services/confirm-dialog.service';
+import { AuthService } from '../../../@core/data/auth.service';
 
 interface ClusterCard {
   cluster: Cluster;
@@ -52,6 +53,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private router: Router,
     private permissionService: PermissionService,
     private confirmDialogService: ConfirmDialogService,
+    private authService: AuthService,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -74,7 +76,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.applyPermissionState();
     
     // Load organizations if super admin
-    this.isSuperAdmin = this.permissionService.hasPermission('api:organizations:create');
+    this.isSuperAdmin = this.authService.isSuperAdmin();
     if (this.isSuperAdmin) {
       this.loadOrganizations();
     }

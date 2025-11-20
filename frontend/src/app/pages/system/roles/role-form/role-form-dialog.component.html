@@ -22,7 +22,6 @@
           <div class="form-group" *ngIf="isSuperAdmin">
             <label class="label" for="input-organization">所属组织</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="building-2-outline"></nb-icon>
               <nb-select
                 formControlName="organizationId"
                 id="input-organization"
@@ -41,7 +40,6 @@
           <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
             <label class="label">所属组织</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="building-2-outline"></nb-icon>
               <input
                 nbInput
                 fullWidth

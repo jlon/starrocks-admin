@@ -40,20 +40,45 @@ impl UserService {
         organization_id: Option<i64>,
         is_super_admin: bool,
     ) -> ApiResult<Vec<UserWithRolesResponse>> {
-        let base_query = "SELECT * FROM users ORDER BY created_at DESC";
+        let base_query = "SELECT u.*, o.name as organization_name FROM users u LEFT JOIN organizations o ON u.organization_id = o.id ORDER BY u.created_at DESC";
         let (filtered_query, _) =
             apply_organization_filter(base_query, is_super_admin, organization_id);
-        let users: Vec<User> = sqlx::query_as(&filtered_query)
+        
+        // Query with organization name
+        #[derive(FromRow)]
+        struct UserWithOrgName {
+            id: i64,
+            username: String,
+            password_hash: String,
+            email: Option<String>,
+            avatar: Option<String>,
+            organization_id: Option<i64>,
+            created_at: DateTime<Utc>,
+            updated_at: DateTime<Utc>,
+            organization_name: Option<String>,
+        }
+        
+        let users_with_org: Vec<UserWithOrgName> = sqlx::query_as(&filtered_query)
             .fetch_all(&self.pool)
             .await?;
 
         let roles_map = self.load_all_user_roles().await?;
 
-        Ok(users
+        Ok(users_with_org
             .into_iter()
-            .map(|user| {
+            .map(|user_with_org| {
+                let user = User {
+                    id: user_with_org.id,
+                    username: user_with_org.username,
+                    password_hash: user_with_org.password_hash,
+                    email: user_with_org.email,
+                    avatar: user_with_org.avatar,
+                    organization_id: user_with_org.organization_id,
+                    created_at: user_with_org.created_at,
+                    updated_at: user_with_org.updated_at,
+                };
                 let roles = roles_map.get(&user.id);
-                self.compose_user(user, roles)
+                self.compose_user_with_org(user, user_with_org.organization_name, roles)
             })
             .collect())
     }
@@ -294,8 +319,10 @@ impl UserService {
         Ok(())
     }
 
-    fn compose_user(&self, user: User, roles: Option<&Vec<RoleResponse>>) -> UserWithRolesResponse {
-        UserWithRolesResponse { user: user.into(), roles: roles.cloned().unwrap_or_default() }
+    fn compose_user_with_org(&self, user: User, organization_name: Option<String>, roles: Option<&Vec<RoleResponse>>) -> UserWithRolesResponse {
+        use crate::models::UserResponse;
+        let user_response = UserResponse::from_user_with_org(user, organization_name, false);
+        UserWithRolesResponse { user: user_response, roles: roles.cloned().unwrap_or_default() }
     }
 
     async fn fetch_user(

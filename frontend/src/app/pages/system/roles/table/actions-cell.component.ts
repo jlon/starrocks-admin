@@ -41,7 +41,7 @@ export interface RoleActionPermissions {
     `
       .actions {
         display: flex;
-        justify-content: flex-end;
+        justify-content: center;
         gap: var(--nb-space-xs);
       }
     `,

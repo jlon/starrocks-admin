@@ -338,10 +338,14 @@ export class RolesComponent implements OnInit, OnDestroy {
         },
         is_system: {
           title: '系统角色',
-          type: 'string',
+          type: 'html',
           filter: false,
           sort: false,
-          valuePrepareFunction: (cell: boolean) => cell ? '是' : '否',
+          valuePrepareFunction: (cell: boolean) => {
+            return cell
+              ? '<span class="badge badge-info">是</span>'
+              : '<span class="badge badge-basic">否</span>';
+          },
         },
         created_at: {
           title: '创建时间',

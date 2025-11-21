@@ -235,7 +235,7 @@ export class PagesComponent implements OnInit {
         'profiles': 'Profiles',
         'audit-logs': '审计日志',
         'materialized-views': '物化视图',
-        'system': '功能卡片',
+        'system': '功能卡片',  // 对应 menu:system-functions
         'sessions': '会话管理',
         'variables': '变量管理',
         'clusters': '集群管理',

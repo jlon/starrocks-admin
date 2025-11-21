@@ -118,7 +118,7 @@ const routes: Routes = [
     path: 'system',
     component: SystemManagementComponent,
     canActivate: [PermissionGuard],
-    data: { permission: 'menu:system', reuse: true },
+    data: { permission: 'menu:system-functions', reuse: true },
   },
   {
     path: 'overview',

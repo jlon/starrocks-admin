@@ -63,7 +63,7 @@ export const MENU_ITEMS: NbMenuItem[] = [
     title: '功能卡片',
     icon: 'grid-outline',
     link: '/pages/starrocks/system',
-    data: { permission: 'menu:system' },
+    data: { permission: 'menu:system-functions' },
   } as NbMenuItem & { data?: { permission: string } },
   {
     title: '会话管理',
@@ -80,22 +80,22 @@ export const MENU_ITEMS: NbMenuItem[] = [
   {
     title: '系统管理',
     icon: 'settings-outline',
-    data: { permission: 'menu:users' }, // Parent menu permission
+    data: { permission: 'menu:system' }, // Parent menu permission
     children: [
       {
         title: '用户管理',
         link: '/pages/system/users',
-        data: { permission: 'menu:users' },
+        data: { permission: 'menu:system:users' },
       } as NbMenuItem & { data?: { permission: string } },
       {
         title: '角色管理',
         link: '/pages/system/roles',
-        data: { permission: 'menu:roles' },
+        data: { permission: 'menu:system:roles' },
       } as NbMenuItem & { data?: { permission: string } },
       {
         title: '组织管理',
         link: '/pages/system/organizations',
-        data: { permission: 'menu:organizations' },
+        data: { permission: 'menu:system:organizations' },
       } as NbMenuItem & { data?: { permission: string } },
     ],
   } as NbMenuItem & { data?: { permission: string } },

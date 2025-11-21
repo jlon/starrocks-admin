@@ -203,7 +203,7 @@ impl AuthService {
         Ok(exists.is_some())
     }
 
-    pub async fn into_user_response(&self, user: User) -> ApiResult<UserResponse> {
+    pub async fn to_user_response(&self, user: User) -> ApiResult<UserResponse> {
         let is_super_admin = self.is_user_super_admin(user.id).await?;
         let is_org_admin = self.is_user_org_admin(user.id).await?;
         Ok(UserResponse::from_user(user, is_super_admin, is_org_admin))

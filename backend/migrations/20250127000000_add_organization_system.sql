@@ -128,4 +128,115 @@ WHERE code IN (
     'api:organizations:delete'
 );
 
+-- ========================================
+-- PART 2: System Menu Hierarchy
+-- ========================================
+-- Purpose: Reorganize system management menus (users, roles, organizations)
+--          to have parent-child hierarchy like nodes and queries menus
+-- Date: 2025-11-21
+
+-- 16. Rename old menu:system (功能卡片) to menu:system-functions to avoid conflict
+-- ========================================
+
+UPDATE permissions 
+SET code = 'menu:system-functions',
+    name = '功能卡片',
+    resource = 'system-functions'
+WHERE code = 'menu:system' AND name = '功能卡片';
+
+-- Update API permissions parent_id from old menu:system to menu:system-functions
+UPDATE permissions
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system-functions')
+WHERE parent_id = (SELECT id FROM permissions WHERE code = 'menu:system' AND name = '功能卡片')
+  AND code LIKE 'api:clusters:system%';
+
+-- 17. Rename existing user/role/org menus to have system: prefix
+-- ========================================
+
+-- Rename menu:users -> menu:system:users
+UPDATE permissions 
+SET code = 'menu:system:users',
+    resource = 'system:users'
+WHERE code = 'menu:users';
+
+-- Rename menu:roles -> menu:system:roles
+UPDATE permissions 
+SET code = 'menu:system:roles',
+    resource = 'system:roles'
+WHERE code = 'menu:roles';
+
+-- Rename menu:organizations -> menu:system:organizations
+UPDATE permissions 
+SET code = 'menu:system:organizations',
+    resource = 'system:organizations'
+WHERE code = 'menu:organizations';
+
+-- 18. Create new parent menu:system permission (系统管理)
+-- ========================================
+
+INSERT OR IGNORE INTO permissions (code, name, type, resource, action, description)
+VALUES ('menu:system', '系统管理', 'menu', 'system', 'view', '系统管理菜单（父级）');
+
+-- 19. Set parent_id for child menus
+-- ========================================
+
+UPDATE permissions
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system')
+WHERE code IN ('menu:system:users', 'menu:system:roles', 'menu:system:organizations');
+
+-- 20. Update API permissions parent_id
+-- ========================================
+
+-- Users API permissions
+UPDATE permissions
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system:users')
+WHERE code IN (
+    'api:users:list',
+    'api:users:get',
+    'api:users:create',
+    'api:users:update',
+    'api:users:delete',
+    'api:users:roles',
+    'api:users:roles:assign',
+    'api:users:roles:remove'
+);
+
+-- Roles API permissions
+UPDATE permissions
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system:roles')
+WHERE code IN (
+    'api:roles:list',
+    'api:roles:get',
+    'api:roles:create',
+    'api:roles:update',
+    'api:roles:delete',
+    'api:roles:permissions',
+    'api:roles:permissions:assign',
+    'api:permissions:list',
+    'api:permissions:menu'
+);
+
+-- Organizations API permissions (update parent from menu:organizations to menu:system:organizations)
+UPDATE permissions
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system:organizations')
+WHERE code IN (
+    'api:organizations:list',
+    'api:organizations:get',
+    'api:organizations:create',
+    'api:organizations:update',
+    'api:organizations:delete',
+    'api:organizations:roles',
+    'api:organizations:users',
+    'api:organizations:clusters'
+);
+
+-- 21. Grant menu:system to roles that have any system child menu
+-- ========================================
+
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+SELECT DISTINCT rp.role_id, (SELECT id FROM permissions WHERE code = 'menu:system')
+FROM role_permissions rp
+JOIN permissions p ON rp.permission_id = p.id
+WHERE p.code IN ('menu:system:users', 'menu:system:roles', 'menu:system:organizations');
+
 -- MIGRATION END

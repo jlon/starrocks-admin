@@ -323,7 +323,7 @@ impl UserService {
         use crate::models::UserResponse;
         
         // Check if user is organization admin by checking roles
-        let is_org_admin = roles.map_or(false, |r| {
+        let is_org_admin = roles.is_some_and(|r| {
             r.iter().any(|role| role.code.starts_with("org_admin_"))
         });
         

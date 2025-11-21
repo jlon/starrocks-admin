@@ -15,19 +15,19 @@ const routes: Routes = [
   {
     path: 'users',
     component: UsersComponent,
-    data: { permission: 'menu:users' },
+    data: { permission: 'menu:system:users' },
     canActivate: [PermissionGuard],
   },
   {
     path: 'roles',
     component: RolesComponent,
-    data: { permission: 'menu:roles' },
+    data: { permission: 'menu:system:roles' },
     canActivate: [PermissionGuard],
   },
   {
     path: 'organizations',
     component: OrganizationsComponent,
-    data: { permission: 'menu:organizations' },
+    data: { permission: 'menu:system:organizations' },
     canActivate: [PermissionGuard],
   },
 ];

@@ -475,9 +475,13 @@ export class RoleFormDialogComponent implements OnInit {
     if (code.includes('materialized-views')) return 'layers-outline';
     if (code.includes('sessions')) return 'people-outline';
     if (code.includes('variables')) return 'code-outline';
-    if (code.includes('system')) return 'settings-2-outline';
+    if (code.includes('system:users')) return 'person-outline';
+    if (code.includes('system:roles')) return 'shield-outline';
+    if (code.includes('system:organizations')) return 'briefcase-outline';
+    if (code.includes('system')) return 'settings-outline';
     if (code.includes('users')) return 'person-outline';
     if (code.includes('roles')) return 'shield-outline';
+    if (code.includes('organizations')) return 'briefcase-outline';
     return 'folder-outline';
   }
 

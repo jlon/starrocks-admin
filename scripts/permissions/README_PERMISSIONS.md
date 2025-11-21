@@ -36,16 +36,19 @@ source setup_starrocks_admin_role.sql
 
 ### 3. 创建监控用户
 
+**选项1: 创建新用户**
 ```sql
--- 创建用户(修改密码和IP限制)
 CREATE USER 'starrocks_monitor'@'%' 
   IDENTIFIED BY 'Your_Strong_Password_Here';
-
--- 授予角色
 GRANT starrocks_admin TO USER 'starrocks_monitor'@'%';
-
--- 设置默认角色
 SET DEFAULT ROLE starrocks_admin TO 'starrocks_monitor'@'%';
+```
+
+**选项2: 使用现有用户**
+```sql
+-- 直接授予角色即可，不影响现有权限
+GRANT starrocks_admin TO USER 'your_existing_user'@'%';
+SET GLOBAL activate_all_roles_on_login = TRUE;
 ```
 
 ### 4. 在项目中配置
@@ -63,8 +66,11 @@ SET DEFAULT ROLE starrocks_admin TO 'starrocks_monitor'@'%';
 
 ```sql
 CREATE ROLE starrocks_admin;
-GRANT SELECT ON DATABASE information_schema TO ROLE starrocks_admin;
-GRANT SELECT ON DATABASE starrocks_audit_db__ TO ROLE starrocks_admin;
+-- 授予查询系统表的权限
+GRANT SELECT ON ALL TABLES IN DATABASE information_schema TO ROLE starrocks_admin;
+-- 授予查询审计日志的权限
+GRANT SELECT ON ALL TABLES IN DATABASE starrocks_audit_db__ TO ROLE starrocks_admin;
+-- 授予系统操作权限(SHOW PROC等命令)
 GRANT OPERATE ON SYSTEM TO ROLE starrocks_admin;
 ```
 
@@ -75,22 +81,22 @@ GRANT OPERATE ON SYSTEM TO ROLE starrocks_admin;
 - ✅ 无法执行DDL/DML操作
 
 **缺点:**
-- ❌ 需要StarRocks 3.0+版本支持
-- ❌ 语法较新,部分旧版本不兼容
+- ❌ 需要StarRocks 3.1+版本支持
+- ❌ 旧版本需使用方案B
 
 **适用场景:**
 - 生产环境
 - 安全要求高的场景
-- StarRocks 3.0+版本
+- StarRocks 3.1+版本
 
-### 方案B: 兼容权限
+### 方案B: 兼容权限(旧版本)
 
 ```sql
 CREATE ROLE starrocks_admin;
-GRANT USAGE ON *.* TO ROLE starrocks_admin;
-GRANT SELECT ON information_schema.* TO ROLE starrocks_admin;
-GRANT SELECT ON starrocks_audit_db__.* TO ROLE starrocks_admin;
-GRANT OPERATE ON *.* TO ROLE starrocks_admin;
+-- StarRocks 2.x 兼容语法
+GRANT SELECT_PRIV ON information_schema.* TO ROLE starrocks_admin;
+GRANT SELECT_PRIV ON starrocks_audit_db__.* TO ROLE starrocks_admin;
+GRANT OPERATE_PRIV ON *.* TO ROLE starrocks_admin;
 ```
 
 **优点:**
@@ -104,8 +110,8 @@ GRANT OPERATE ON *.* TO ROLE starrocks_admin;
 
 **适用场景:**
 - StarRocks 2.x 版本
+- StarRocks 3.0 版本
 - 方案A语法不支持时的备选方案
-- 需要兼容多个版本时
 
 ### 方案C: 内置角色
 
@@ -189,6 +195,21 @@ CREATE USER 'starrocks_monitor'@'192.168.1.%'
 GRANT starrocks_admin TO USER 'starrocks_monitor'@'192.168.1.%';
 SET DEFAULT ROLE starrocks_admin TO 'starrocks_monitor'@'192.168.1.%';
 ```
+
+#### 选项C: 给现有用户授予权限(推荐)
+
+```sql
+-- 如果生产环境已有用户，直接授予角色即可
+GRANT starrocks_admin TO USER 'your_existing_user'@'%';
+
+-- 推荐：全局启用所有角色自动激活
+SET GLOBAL activate_all_roles_on_login = TRUE;
+```
+
+**说明：**
+- ✅ 用户最多可拥有 64 个角色，互不冲突
+- ✅ 不影响用户已有的其他角色和权限
+- ✅ `activate_all_roles_on_login = TRUE` 让所有用户连接时自动激活所有角色
 
 ### 步骤5: 验证配置
 
@@ -463,17 +484,43 @@ DROP USER 'starrocks_monitor'@'%';
 DROP ROLE starrocks_admin;
 ```
 
-### Q8: 不同版本StarRocks语法不兼容
+### Q8: 可以给已有用户添加监控权限吗？
 
-**StarRocks 3.0+ (新版本)**
+**可以！** 用户可以拥有多个角色（最多64个）。
+
 ```sql
-GRANT SELECT ON DATABASE information_schema TO ROLE starrocks_admin;
+-- 1. 直接授予角色（不影响现有角色）
+GRANT starrocks_admin TO USER 'existing_user'@'%';
+
+-- 2. 全局启用所有角色自动激活（推荐）
+SET GLOBAL activate_all_roles_on_login = TRUE;
+
+-- 3. 或者手动设置默认角色（需列出所有角色）
+SET DEFAULT ROLE role1, role2, starrocks_admin TO 'existing_user'@'%';
+
+-- 4. 或在会话中手动激活所有角色
+SET ROLE ALL;
+```
+
+**验证：**
+```sql
+SHOW GRANTS FOR 'existing_user'@'%';
+SELECT CURRENT_ROLE();  -- 查看当前激活的角色
+```
+
+### Q9: 不同版本StarRocks语法不兼容
+
+**StarRocks 3.1+ (推荐)**
+```sql
+GRANT SELECT ON ALL TABLES IN DATABASE information_schema TO ROLE starrocks_admin;
+GRANT SELECT ON ALL TABLES IN DATABASE starrocks_audit_db__ TO ROLE starrocks_admin;
 GRANT OPERATE ON SYSTEM TO ROLE starrocks_admin;
 ```
 
-**StarRocks 2.x (旧版本)**
+**StarRocks 2.x ~ 3.0 (兼容)**
 ```sql
 GRANT SELECT_PRIV ON information_schema.* TO ROLE starrocks_admin;
+GRANT SELECT_PRIV ON starrocks_audit_db__.* TO ROLE starrocks_admin;
 GRANT OPERATE_PRIV ON *.* TO ROLE starrocks_admin;
 ```
 
@@ -610,7 +657,7 @@ GET http://<fe_host>:8030/api/bootstrap
 
 ---
 
-**最后更新:** 2025-11-03  
-**脚本版本:** 1.0.0  
-**适用版本:** StarRocks 3.0+
+**最后更新:** 2025-11-21  
+**脚本版本:** 2.0.0  
+**适用版本:** StarRocks 2.x ~ 3.5+
 

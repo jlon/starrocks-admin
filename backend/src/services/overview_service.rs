@@ -1618,6 +1618,7 @@ impl OverviewService {
         };
 
         // Query 1: Get Top 10 partitions by compaction score
+        // Filter out system databases and tables
         let top_partitions_query = r#"
             SELECT 
                 DB_NAME, 
@@ -1628,6 +1629,7 @@ impl OverviewService {
                 P50_CS as p50_score
             FROM information_schema.partitions_meta
             WHERE MAX_CS > 0 
+              AND DB_NAME NOT IN ('_statistics_', 'information_schema', 'sys', 'starrocks_audit_db__')
               AND TABLE_NAME != 'starrocks_audit_tbl__'
             ORDER BY MAX_CS DESC
             LIMIT 10
@@ -1642,9 +1644,22 @@ impl OverviewService {
             .into_iter()
             .filter_map(|row| {
                 if row.len() >= 6 {
+                    let db_name = row.first().map(|s| s.to_string()).unwrap_or_default();
+                    let table_name = row.get(1).map(|s| s.to_string()).unwrap_or_default();
+                    
+                    // Filter out system databases (double protection)
+                    if db_name == "_statistics_" 
+                        || db_name == "information_schema"
+                        || db_name == "sys"
+                        || db_name == "starrocks_audit_db__"
+                        || table_name == "starrocks_audit_tbl__" {
+                        tracing::debug!("Filtering out system table: {}.{}", db_name, table_name);
+                        return None;
+                    }
+                    
                     Some(TopPartitionByScore {
-                        db_name: row.first().map(|s| s.to_string()).unwrap_or_default(),
-                        table_name: row.get(1).map(|s| s.to_string()).unwrap_or_default(),
+                        db_name,
+                        table_name,
                         partition_name: row.get(2).map(|s| s.to_string()).unwrap_or_default(),
                         max_score: row.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.0),
                         avg_score: row.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0),

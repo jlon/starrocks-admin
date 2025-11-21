@@ -65,20 +65,22 @@ impl AuditLogService {
     ) -> ApiResult<Vec<TopTableByAccess>> {
         let pool = self.mysql_pool_manager.get_pool(cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
-        
-        // Query audit logs from starrocks_audit_db__.starrocks_audit_tbl__
-        // Extract table names from SQL statements
         let query = format!(
             r#"
             SELECT 
-                `db` as `database`,
-                -- Extract table name from stmt (simplified, may not catch all cases)
+                COALESCE(NULLIF(`catalog`, 'default_catalog'), '') as catalog,
+                COALESCE(NULLIF(`db`, ''), '') as database,
+                -- Extract full table reference from stmt (handles catalog.db.table format)
                 TRIM(BOTH '`' FROM 
                     REGEXP_REPLACE(
-                        REGEXP_REPLACE(`stmt`, '.*FROM\\s+(`?[^\\s`]+`?\\.[^\\s`]+`?|`?[^\\s`]+`?).*', '$1'),
+                        REGEXP_REPLACE(
+                            `stmt`, 
+                            '.*\\b(?:FROM|JOIN|INTO|TABLE)\\s+(`?[a-zA-Z0-9_]+`?(?:\\.[a-zA-Z0-9_]+){{1,2}}|`?[a-zA-Z0-9_]+`?).*', 
+                            '$1'
+                        ),
                         '`', ''
                     )
-                ) as `table`,
+                ) as full_table_name,
                 COUNT(*) as access_count,
                 MAX(`timestamp`) as last_access,
                 COUNT(DISTINCT `user`) as unique_users
@@ -87,13 +89,16 @@ impl AuditLogService {
                 AND isQuery = 1
                 AND `state` = 'EOF'
                 AND `queryType` IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
-                AND `db` != 'information_schema'
-                AND `db` != '_statistics_'
-                AND `db` != ''
-            GROUP BY `db`, `table`
-            HAVING `table` != ''
-                AND `table` NOT LIKE '%(%'
-                AND `table` NOT LIKE '%SELECT%'
+                AND `catalog` != ''
+                AND (`db` != 'information_schema' OR `db` IS NULL)
+                AND (`db` != '_statistics_' OR `db` IS NULL)
+                AND LOWER(`stmt`) NOT LIKE '%starrocks_audit_tbl__%'
+            GROUP BY catalog, database, full_table_name
+            HAVING full_table_name != ''
+                AND full_table_name NOT LIKE '%(%'
+                AND full_table_name NOT LIKE '%SELECT%'
+                AND full_table_name NOT LIKE '%WHERE%'
+                AND full_table_name NOT LIKE '%GROUP%'
             ORDER BY access_count DESC
             LIMIT {}
             "#,
@@ -113,9 +118,8 @@ impl AuditLogService {
         
         let mut tables = Vec::new();
         for row in rows {
-            if let (Some(database), Some(table), Some(access_count_str)) = (
-                col_idx.get("database").and_then(|&i| row.get(i)),
-                col_idx.get("table").and_then(|&i| row.get(i)),
+            if let (Some(full_table_name), Some(access_count_str)) = (
+                col_idx.get("full_table_name").and_then(|&i| row.get(i)),
                 col_idx.get("access_count").and_then(|&i| row.get(i)),
             ) {
                 let access_count = access_count_str.parse::<i64>().unwrap_or(0);
@@ -130,13 +134,38 @@ impl AuditLogService {
                     .and_then(|s| s.parse::<i32>().ok())
                     .unwrap_or(0);
                 
-                // Split database.table if present
-                let (final_db, final_table) = if table.contains('.') {
-                    let parts: Vec<&str> = table.splitn(2, '.').collect();
-                    let table_ref: &str = table;
-                    (parts[0].to_string(), parts.get(1).copied().unwrap_or(table_ref).to_string())
-                } else {
-                    (database.to_string(), table.to_string())
+                let catalog = col_idx
+                    .get("catalog")
+                    .and_then(|&i| row.get(i))
+                    .unwrap_or("");
+                
+                let db_field = col_idx
+                    .get("database")
+                    .and_then(|&i| row.get(i))
+                    .unwrap_or("");
+                
+                // Parse full_table_name: could be "table", "db.table", or "catalog.db.table"
+                let parts: Vec<&str> = full_table_name.split('.').collect();
+                let (final_db, final_table) = match parts.len() {
+                    3 => {
+                        // catalog.database.table format (external catalog)
+                        (format!("{}.{}", parts[0], parts[1]), parts[2].to_string())
+                    },
+                    2 => {
+                        // database.table format
+                        if !catalog.is_empty() {
+                            // External catalog: catalog.database
+                            (format!("{}.{}", catalog, parts[0]), parts[1].to_string())
+                        } else {
+                            // Default catalog: database.table
+                            (parts[0].to_string(), parts[1].to_string())
+                        }
+                    },
+                    1 => {
+                        // Just table name, use db field or empty
+                        (db_field.to_string(), parts[0].to_string())
+                    },
+                    _ => continue, // Invalid format, skip
                 };
                 
                 tables.push(TopTableByAccess {

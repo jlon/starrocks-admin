@@ -339,40 +339,49 @@ impl DataStatisticsService {
         let start_time_str = time_range_start.format("%Y-%m-%d %H:%M:%S").to_string();
 
         // First try: Query with table name extraction from stmt
-        // Extract table name after "FROM" keyword, clean and lowercase
+        // Extract table name after "FROM" keyword (simplified for StarRocks compatibility)
+        // Note: External catalogs (hive/iceberg/etc) have empty `db` field
         let query_with_table = format!(
             r#"
             SELECT 
-                db as database_name,
+                `catalog`,
+                `db` as database_name,
                 LOWER(
-                    TRIM(
+                    REPLACE(
                         REPLACE(
-                            REPLACE(
+                            SUBSTRING_INDEX(
                                 SUBSTRING_INDEX(
-                                    SUBSTRING_INDEX(
-                                        SUBSTRING_INDEX(stmt, 'FROM ', -1),
-                                        ' ', 
-                                        1
-                                    ),
-                                    '.',
-                                    -1
+                                    SUBSTRING_INDEX(stmt, 'FROM ', -1),
+                                    ' ', 
+                                    1
                                 ),
-                                '`',
-                                ''
+                                '.',
+                                -1
                             ),
-                            ')',
+                            '`',
                             ''
-                        )
+                        ),
+                        ')',
+                        ''
                     )
                 ) as table_name,
+                SUBSTRING_INDEX(
+                    SUBSTRING_INDEX(stmt, 'FROM ', -1),
+                    ' ', 
+                    1
+                ) as full_table_ref,
                 COUNT(*) as access_count
             FROM starrocks_audit_db__.starrocks_audit_tbl__
             WHERE timestamp >= '{}'
-                AND db NOT IN ('information_schema', '_statistics_', '', 'sys', 'starrocks_audit_db__', 'recycle_dw')
+                AND `catalog` != ''
+                AND (`db` NOT IN ('information_schema', '_statistics_', 'sys', 'starrocks_audit_db__', 'recycle_dw') OR `db` IS NULL OR `db` = '')
                 AND UPPER(stmt) LIKE '%FROM %'
-            GROUP BY db, table_name
+                AND LOWER(stmt) NOT LIKE '%starrocks_audit_tbl__%'
+            GROUP BY `catalog`, database_name, table_name, full_table_ref
             HAVING table_name NOT LIKE '%select%'
                 AND table_name NOT LIKE '%(%'
+                AND table_name NOT LIKE '%where%'
+                AND table_name NOT LIKE '%group%'
                 AND LENGTH(table_name) > 0
                 AND LENGTH(table_name) < 100
             ORDER BY access_count DESC
@@ -388,8 +397,10 @@ impl DataStatisticsService {
                 let tables = results
                     .into_iter()
                     .filter_map(|row| {
-                        let database = row.get("database_name").and_then(|v| v.as_str())?;
-                        let table = row.get("table_name").and_then(|v| v.as_str())?;
+                        let catalog = row.get("catalog").and_then(|v| v.as_str()).unwrap_or("").trim();
+                        let database = row.get("database_name").and_then(|v| v.as_str()).unwrap_or("").trim();
+                        let table = row.get("table_name").and_then(|v| v.as_str())?.trim();
+                        let full_table_ref = row.get("full_table_ref").and_then(|v| v.as_str()).unwrap_or("").trim();
 
                         // Try to parse access_count - could be i64 or string
                         let access_count = row
@@ -401,9 +412,59 @@ impl DataStatisticsService {
                                     .and_then(|s| s.parse::<i64>().ok())
                             })?;
 
+                        // Parse full_table_ref to extract database and table
+                        // Format: table, db.table, or catalog.db.table
+                        let full_ref_clean = full_table_ref.replace('`', "").trim().to_string();
+                        let parts: Vec<&str> = full_ref_clean.split('.').collect();
+                        
+                        let (final_db, final_table) = match parts.len() {
+                            3 => {
+                                // catalog.database.table (external catalog)
+                                (format!("{}.{}", parts[0], parts[1]), parts[2].to_string())
+                            },
+                            2 => {
+                                // database.table
+                                if catalog != "default_catalog" && !catalog.is_empty() {
+                                    // External catalog
+                                    (format!("{}.{}", catalog, parts[0]), parts[1].to_string())
+                                } else {
+                                    // Default catalog
+                                    (parts[0].to_string(), parts[1].to_string())
+                                }
+                            },
+                            1 => {
+                                // Just table name
+                                if !database.is_empty() {
+                                    if catalog != "default_catalog" && !catalog.is_empty() {
+                                        (format!("{}.{}", catalog, database), table.to_string())
+                                    } else {
+                                        (database.to_string(), table.to_string())
+                                    }
+                                } else {
+                                    // No database info, skip
+                                    tracing::debug!("Skipping table with no database info: {}", table);
+                                    return None;
+                                }
+                            },
+                            _ => {
+                                tracing::debug!("Invalid table reference format: {}", full_ref_clean);
+                                return None;
+                            }
+                        };
+
+                        // Filter out system tables
+                        if final_db.contains("information_schema") 
+                            || final_db.contains("_statistics_") 
+                            || final_db.contains("sys")
+                            || final_db.contains("starrocks_audit_db__")
+                            || final_table == "starrocks_audit_tbl__" {
+                            tracing::debug!("Filtering out system table: {}.{}", final_db, final_table);
+                            return None;
+                        }
+
                         Some(TopTableByAccess {
-                            database: database.to_string(),
-                            table: table.to_string(),
+                            database: final_db,
+                            table: final_table,
                             access_count,
                             last_access: None,
                         })

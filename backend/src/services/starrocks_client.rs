@@ -26,159 +26,89 @@ impl StarRocksClient {
         format!("{}://{}:{}", protocol, self.cluster.fe_host, self.cluster.fe_http_port)
     }
 
-    // Get backends via HTTP API
-    // Compatible with both shared-nothing and shared-data (compute-storage separation) architectures
-    // For shared-data mode: tries /backends first, falls back to /compute_nodes if empty
-    pub async fn get_backends(&self) -> ApiResult<Vec<Backend>> {
-        // Try shared-nothing architecture first (traditional BE nodes)
-        let url_be = format!("{}/api/show_proc?path=/backends", self.get_base_url());
-        tracing::debug!("Fetching backends from: {}", url_be);
+    // Generic method to fetch and parse SHOW PROC results
+    async fn fetch_proc_data<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        resource_name: &str,
+    ) -> ApiResult<Vec<T>> {
+        let url = format!("{}/api/show_proc?path={}", self.get_base_url(), path);
+        tracing::debug!("Fetching {} from: {}", resource_name, url);
 
-        let response_be = self
+        let response = self
             .http_client
-            .get(&url_be)
+            .get(&url)
             .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
             .send()
             .await
             .map_err(|e| {
-                tracing::error!("Failed to fetch backends: {}", e);
+                tracing::error!("Failed to fetch {}: {}", resource_name, e);
                 ApiError::cluster_connection_failed(format!("Request failed: {}", e))
             })?;
 
-        if !response_be.status().is_success() {
-            tracing::error!("Backends API returned error status: {}", response_be.status());
+        if !response.status().is_success() {
+            tracing::error!("{} API returned error status: {}", resource_name, response.status());
             return Err(ApiError::cluster_connection_failed(format!(
                 "HTTP status: {}",
-                response_be.status()
+                response.status()
             )));
         }
 
-        let data_be: Value = response_be.json().await.map_err(|e| {
-            tracing::error!("Failed to parse backends response: {}", e);
+        let data: Value = response.json().await.map_err(|e| {
+            tracing::error!("Failed to parse {} response: {}", resource_name, e);
             ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
         })?;
 
-        // Log the raw response for debugging
         tracing::debug!(
-            "Raw backends response: {}",
-            serde_json::to_string(&data_be).unwrap_or_default()
+            "Raw {} response: {}",
+            resource_name,
+            serde_json::to_string(&data).unwrap_or_default()
         );
 
-        // Try new format (direct array) first, then fall back to old format
-        let backends_result = if let Ok(backends) =
-            serde_json::from_value::<Vec<Backend>>(data_be.clone())
-        {
-            Ok(backends)
-        } else {
-            // Fallback to old format
-            match Self::parse_proc_result::<Backend>(&data_be) {
-                Ok(backends) => {
-                    tracing::info!("Retrieved {} backends using old format", backends.len());
-                    Ok(backends)
-                },
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to parse backends: {}. Raw response structure: {}",
-                        e,
-                        serde_json::to_string(&data_be)
-                            .unwrap_or_else(|_| "failed to serialize".to_string())
-                    );
-                    // Return error instead of empty vector to help diagnose the issue
-                    Err(ApiError::internal_error(format!(
-                        "Failed to parse backends response. Response format may have changed. Error: {}",
-                        e
-                    )))
-                },
-            }
-        };
-
-        // If backends list is not empty, return it
-        if let Ok(ref backends) = backends_result {
-            if !backends.is_empty() {
-                return backends_result;
-            } else {
-                tracing::warn!("Backends list is empty, trying compute nodes as fallback");
-            }
-        } else {
-            // If parsing failed, log the error but continue to try compute nodes
-            if let Err(ref e) = backends_result {
-                tracing::warn!(
-                    "Backends parsing failed: {}. Will try compute nodes as fallback.",
-                    e
-                );
-            }
+        // Try new format (direct array) first, then fall back to PROC format
+        if let Ok(items) = serde_json::from_value::<Vec<T>>(data.clone()) {
+            tracing::info!("Retrieved {} {} using direct array format", items.len(), resource_name);
+            return Ok(items);
         }
 
-        // Try shared-data architecture (CN nodes for compute-storage separation)
-        tracing::info!("No backends found, trying compute nodes for shared-data architecture");
-        let url_cn = format!("{}/api/show_proc?path=/compute_nodes", self.get_base_url());
-        tracing::debug!("Fetching compute nodes from: {}", url_cn);
-
-        let response_cn = self
-            .http_client
-            .get(&url_cn)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await;
-
-        match response_cn {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.json::<Value>().await {
-                    Ok(data_cn) => {
-                        tracing::debug!(
-                            "Raw compute nodes response: {}",
-                            serde_json::to_string(&data_cn).unwrap_or_default()
-                        );
-                        // Try to parse compute nodes as backends
-                        if let Ok(compute_nodes) =
-                            serde_json::from_value::<Vec<Backend>>(data_cn.clone())
-                        {
-                            tracing::info!(
-                                "Retrieved {} compute nodes (shared-data mode)",
-                                compute_nodes.len()
-                            );
-                            return Ok(compute_nodes);
-                        } else if let Ok(compute_nodes) =
-                            Self::parse_proc_result::<Backend>(&data_cn)
-                        {
-                            tracing::info!(
-                                "Retrieved {} compute nodes using PROC format",
-                                compute_nodes.len()
-                            );
-                            return Ok(compute_nodes);
-                        } else {
-                            tracing::warn!("Failed to parse compute nodes response");
-                        }
-                    },
-                    Err(e) => {
-                        tracing::warn!("Failed to parse compute nodes response: {}", e);
-                    },
-                }
-            },
-            Ok(resp) => {
-                tracing::warn!("Compute nodes API returned error status: {}", resp.status());
-            },
-            Err(e) => {
-                tracing::debug!("Compute nodes API request failed: {}", e);
-            },
-        }
-
-        // If we got a successful parse but empty list, return it
-        // If parsing failed, return the error to help diagnose the issue
-        match backends_result {
-            Ok(backends) => {
-                tracing::warn!("No backends or compute nodes found. Returning empty list.");
-                Ok(backends)
+        // Fallback to PROC format
+        match Self::parse_proc_result::<T>(&data) {
+            Ok(items) => {
+                tracing::info!("Retrieved {} {} using PROC format", items.len(), resource_name);
+                Ok(items)
             },
             Err(e) => {
                 tracing::error!(
-                    "Failed to retrieve backends: {}. Please check StarRocks API response format.",
-                    e
+                    "Failed to parse {}: {}. Raw response structure: {}",
+                    resource_name,
+                    e,
+                    serde_json::to_string(&data)
+                        .unwrap_or_else(|_| "failed to serialize".to_string())
                 );
-                // Return error so frontend can display it
-                Err(e)
+                Err(ApiError::internal_error(format!(
+                    "Failed to parse {} response. Response format may have changed. Error: {}",
+                    resource_name, e
+                )))
             },
         }
+    }
+
+    // Get backends via HTTP API
+    // Compatible with both shared-nothing and shared-data (compute-storage separation) architectures
+    // Automatically switches query strategy based on cluster deployment mode
+    pub async fn get_backends(&self) -> ApiResult<Vec<Backend>> {
+        if self.cluster.is_shared_data() {
+            tracing::info!("Cluster {} is in shared-data mode, fetching compute nodes", self.cluster.name);
+            return self.get_compute_nodes().await;
+        }
+        
+        tracing::debug!("Cluster {} is in shared-nothing mode, fetching backends", self.cluster.name);
+        self.fetch_proc_data("/backends", "backends").await
+    }
+
+    // Get compute nodes for shared-data architecture (storage-compute separated)
+    async fn get_compute_nodes(&self) -> ApiResult<Vec<Backend>> {
+        self.fetch_proc_data("/compute_nodes", "compute nodes").await
     }
 
     // Execute SQL command via HTTP API
@@ -216,50 +146,30 @@ impl StarRocksClient {
         Ok(())
     }
 
-    // Drop backend node
+    // Drop backend node (BE for shared-nothing, CN for shared-data)
     pub async fn drop_backend(&self, host: &str, heartbeat_port: &str) -> ApiResult<()> {
-        let sql = format!("ALTER SYSTEM DROP backend \"{}:{}\"", host, heartbeat_port);
-        tracing::info!("Dropping backend: {}:{}", host, heartbeat_port);
+        let sql = if self.cluster.is_shared_data() {
+            // Shared-data mode: drop compute node
+            format!("ALTER SYSTEM DROP COMPUTE NODE \"{}:{}\"", host, heartbeat_port)
+        } else {
+            // Shared-nothing mode: drop backend
+            format!("ALTER SYSTEM DROP BACKEND \"{}:{}\"", host, heartbeat_port)
+        };
+        
+        tracing::info!(
+            "Dropping {} node {}:{} from cluster {} (mode: {})",
+            if self.cluster.is_shared_data() { "compute" } else { "backend" },
+            host,
+            heartbeat_port,
+            self.cluster.name,
+            self.cluster.deployment_mode
+        );
         self.execute_sql(&sql).await
     }
 
     // Get frontends via HTTP API
     pub async fn get_frontends(&self) -> ApiResult<Vec<Frontend>> {
-        let url = format!("{}/api/show_proc?path=/frontends", self.get_base_url());
-        tracing::debug!("Fetching frontends from: {}", url);
-
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch frontends: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            tracing::error!("Frontends API returned error status: {}", response.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response.status()
-            )));
-        }
-
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::error!("Failed to parse frontends response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        // Try new format (direct array) first, then fall back to old format
-        if let Ok(frontends) = serde_json::from_value::<Vec<Frontend>>(data.clone()) {
-            return Ok(frontends);
-        }
-
-        // Fallback to old format
-        let frontends = Self::parse_proc_result::<Frontend>(&data)?;
-        Ok(frontends)
+        self.fetch_proc_data("/frontends", "frontends").await
     }
 
     // Get current queries
@@ -908,110 +818,20 @@ impl StarRocksClient {
     /// Get list of databases
     #[allow(dead_code)]
     pub async fn get_databases(&self) -> ApiResult<Vec<Database>> {
-        let url = format!("{}/api/show_proc?path=/dbs", self.get_base_url());
-        tracing::debug!("Fetching databases from: {}", url);
-
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch databases: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            tracing::error!("Databases API returned error status: {}", response.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response.status()
-            )));
-        }
-
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::error!("Failed to parse databases response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        let databases = Self::parse_proc_result::<Database>(&data)?;
-        tracing::debug!("Retrieved {} databases", databases.len());
-        Ok(databases)
+        self.fetch_proc_data("/dbs", "databases").await
     }
 
     /// Get list of tables in a database
     #[allow(dead_code)]
     pub async fn get_tables(&self, database: &str) -> ApiResult<Vec<Table>> {
-        let url = format!(
-            "{}/api/show_proc?path=/dbs/{}/tables",
-            self.get_base_url(),
-            urlencoding::encode(database)
-        );
-        tracing::debug!("Fetching tables from database '{}': {}", database, url);
-
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch tables: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            tracing::error!("Tables API returned error status: {}", response.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response.status()
-            )));
-        }
-
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::error!("Failed to parse tables response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        let tables = Self::parse_proc_result::<Table>(&data)?;
-        tracing::debug!("Retrieved {} tables from database '{}'", tables.len(), database);
-        Ok(tables)
+        let path = format!("/dbs/{}/tables", urlencoding::encode(database));
+        self.fetch_proc_data(&path, "tables").await
     }
 
     /// Get schema changes status
     #[allow(dead_code)]
     pub async fn get_schema_changes(&self) -> ApiResult<Vec<SchemaChange>> {
-        let url = format!("{}/api/show_proc?path=/jobs", self.get_base_url());
-        tracing::debug!("Fetching schema changes from: {}", url);
-
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch schema changes: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            tracing::error!("Schema changes API returned error status: {}", response.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response.status()
-            )));
-        }
-
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::error!("Failed to parse schema changes response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        let changes = Self::parse_proc_result::<SchemaChange>(&data)?;
-        tracing::debug!("Retrieved {} schema changes", changes.len());
-        Ok(changes)
+        self.fetch_proc_data("/jobs", "schema changes").await
     }
 
     /// Get active users from current queries

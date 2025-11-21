@@ -3,6 +3,32 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use utoipa::ToSchema;
 
+/// Deployment mode for StarRocks cluster
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "TEXT", rename_all = "snake_case")]
+pub enum DeploymentMode {
+    /// Shared-nothing architecture: BE nodes handle both storage and compute
+    SharedNothing,
+    /// Shared-data architecture: CN nodes for compute, separate object storage (S3/HDFS)
+    SharedData,
+}
+
+impl Default for DeploymentMode {
+    fn default() -> Self {
+        DeploymentMode::SharedNothing
+    }
+}
+
+impl std::fmt::Display for DeploymentMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeploymentMode::SharedNothing => write!(f, "shared_nothing"),
+            DeploymentMode::SharedData => write!(f, "shared_data"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Cluster {
     pub id: i64,
@@ -23,6 +49,8 @@ pub struct Cluster {
     pub updated_at: DateTime<Utc>,
     pub created_by: Option<i64>,
     pub organization_id: Option<i64>,
+    #[serde(default)]
+    pub deployment_mode: DeploymentMode,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -45,6 +73,8 @@ pub struct CreateClusterRequest {
     pub catalog: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organization_id: Option<i64>,
+    #[serde(default)]
+    pub deployment_mode: DeploymentMode,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -61,6 +91,7 @@ pub struct UpdateClusterRequest {
     pub tags: Option<Vec<String>>,
     pub catalog: Option<String>,
     pub organization_id: Option<i64>,
+    pub deployment_mode: Option<DeploymentMode>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -81,6 +112,7 @@ pub struct ClusterResponse {
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organization_id: Option<i64>,
+    pub deployment_mode: DeploymentMode,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -145,6 +177,19 @@ impl From<Cluster> for ClusterResponse {
             created_at: cluster.created_at,
             updated_at: cluster.updated_at,
             organization_id: cluster.organization_id,
+            deployment_mode: cluster.deployment_mode,
         }
+    }
+}
+
+impl Cluster {
+    /// Check if cluster is using shared-data (storage-compute separated) architecture
+    pub fn is_shared_data(&self) -> bool {
+        self.deployment_mode == DeploymentMode::SharedData
+    }
+
+    /// Check if cluster is using shared-nothing (storage-compute integrated) architecture
+    pub fn is_shared_nothing(&self) -> bool {
+        self.deployment_mode == DeploymentMode::SharedNothing
     }
 }

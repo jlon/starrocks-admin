@@ -47,13 +47,15 @@ export class MenuFilterService {
 
   /**
    * Extract menu code from permission string
-   * Examples: 'menu:dashboard:view' -> 'dashboard'
-   *           'menu:overview' -> 'overview'
+   * Examples: 'menu:dashboard' -> 'dashboard'
+   *           'menu:system:users' -> 'system:users'
+   *           'menu:system:organizations' -> 'system:organizations'
    */
   private extractMenuCodeFromPermission(permission: string): string {
     const parts = permission.split(':');
     if (parts.length >= 2 && parts[0] === 'menu') {
-      return parts[1];
+      // Return everything after 'menu:' to support hierarchical permissions
+      return parts.slice(1).join(':');
     }
     return permission;
   }

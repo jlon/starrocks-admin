@@ -285,7 +285,9 @@ impl RoleService {
     }
 
     /// Assign permissions to role (organization-scoped)
-    /// Automatically associates API permissions with menu permissions based on parent_id
+    /// Automatically:
+    /// 1. Associates API permissions with selected menu permissions (child APIs)
+    /// 2. Grants all parent menu permissions for selected permissions (parent menus)
     pub async fn assign_permissions_to_role(
         &self,
         role_id: i64,
@@ -298,39 +300,76 @@ impl RoleService {
             .get_role(role_id, requestor_org, is_super_admin)
             .await?;
 
-        // Get all permissions to build menu->API mapping
+        // Get all permissions to build relationships
         let all_permissions: Vec<crate::models::Permission> =
             sqlx::query_as("SELECT * FROM permissions ORDER BY type, code")
                 .fetch_all(&self.pool)
                 .await?;
 
-        // Build menu->API mapping based on parent_id
-        // This ensures that when a menu permission is assigned, its associated API permissions are also assigned
-        let mut menu_to_apis: HashMap<i64, Vec<i64>> = HashMap::new();
+        // Build permission_id -> Permission mapping for quick lookup
+        let mut perm_map: HashMap<i64, &crate::models::Permission> = HashMap::new();
+        for perm in &all_permissions {
+            perm_map.insert(perm.id, perm);
+        }
 
+        // Build menu->API mapping (for child API permissions)
+        let mut menu_to_apis: HashMap<i64, Vec<i64>> = HashMap::new();
         for api_perm in all_permissions.iter().filter(|p| p.r#type == "api") {
             if let Some(parent_id) = api_perm.parent_id {
                 menu_to_apis.entry(parent_id).or_default().push(api_perm.id);
             }
         }
 
-        // Extend permission list: add associated API permissions for selected menu permissions
+        // Extend permission list with:
+        // 1. Associated API permissions (children of selected menus)
+        // 2. All parent menu permissions (parents of selected items)
         let mut extended_permission_ids = req.permission_ids.clone();
 
+        // Step 1: Add child API permissions for selected menu permissions
+        let mut api_count = 0;
         for permission_id in &req.permission_ids {
-            // Check if this is a menu permission
-            if let Some(perm) = all_permissions.iter().find(|p| p.id == *permission_id)
+            if let Some(perm) = perm_map.get(permission_id)
                 && perm.r#type == "menu"
+                && let Some(api_ids) = menu_to_apis.get(permission_id)
             {
-                // Automatically add associated API permissions
-                if let Some(api_ids) = menu_to_apis.get(permission_id) {
-                    extended_permission_ids.extend(api_ids.iter());
-                    tracing::debug!(
-                        "Menu permission {} (code: {}) auto-associated with {} API permissions",
-                        permission_id,
-                        perm.code,
-                        api_ids.len()
-                    );
+                extended_permission_ids.extend(api_ids.iter());
+                api_count += api_ids.len();
+                tracing::debug!(
+                    "Menu permission {} (code: {}) auto-associated with {} API permissions",
+                    permission_id,
+                    perm.code,
+                    api_ids.len()
+                );
+            }
+        }
+
+        // Step 2: Add all parent menu permissions recursively
+        let mut parent_count = 0;
+        for permission_id in req.permission_ids.clone() {
+            let mut current_id = permission_id;
+            
+            // Walk up the parent chain
+            while let Some(perm) = perm_map.get(&current_id) {
+                if let Some(parent_id) = perm.parent_id {
+                    // Check if parent is a menu type
+                    if let Some(parent_perm) = perm_map.get(&parent_id) {
+                        if parent_perm.r#type == "menu" && !extended_permission_ids.contains(&parent_id) {
+                            extended_permission_ids.push(parent_id);
+                            parent_count += 1;
+                            tracing::debug!(
+                                "Auto-granting parent menu permission {} (code: {}) for permission {} (code: {})",
+                                parent_id,
+                                parent_perm.code,
+                                current_id,
+                                perm.code
+                            );
+                        }
+                        current_id = parent_id;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break; // No more parents
                 }
             }
         }
@@ -344,12 +383,14 @@ impl RoleService {
             .collect();
         final_permission_ids.sort();
 
-        let added_count = final_permission_ids.len() - req.permission_ids.len();
-        if added_count > 0 {
+        let total_added = final_permission_ids.len() - req.permission_ids.len();
+        if total_added > 0 {
             tracing::info!(
-                "Auto-associated {} API permissions with menu permissions for role ID: {}",
-                added_count,
-                role_id
+                "Auto-granted {} permissions for role ID: {} ({} API permissions, {} parent menus)",
+                total_added,
+                role_id,
+                api_count,
+                parent_count
             );
         }
 
@@ -379,10 +420,10 @@ impl RoleService {
             .await?;
 
         tracing::info!(
-            "Permissions updated for role ID: {} (total: {} permissions, {} auto-associated)",
+            "Permissions updated for role ID: {} (total: {} permissions, {} auto-granted)",
             role_id,
             final_permission_ids.len(),
-            added_count
+            total_added
         );
 
         Ok(())

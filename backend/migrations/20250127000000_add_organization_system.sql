@@ -110,12 +110,13 @@ SELECT 'org_admin_default_org', 'Organization Admin (Default Org)', 'Admin for d
        (SELECT id FROM organizations WHERE code = 'default_org');
 
 -- 14. Grant org_admin permissions (all except organization management)
+-- Exclude both menu:system:organizations and api:organizations:* permissions
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id 
 FROM roles r, permissions p
 WHERE r.code = 'org_admin_default_org' 
-  AND p.code NOT LIKE 'api:organizations:%'
-  AND p.code NOT LIKE 'menu:organizations';
+  AND p.code NOT IN ('menu:system:organizations')
+  AND p.code NOT LIKE 'api:organizations:%';
 
 -- 15. Backfill parent menu for organization APIs (if needed)
 UPDATE permissions
@@ -150,20 +151,10 @@ SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system-functions'
 WHERE parent_id = (SELECT id FROM permissions WHERE code = 'menu:system' AND name = '功能卡片')
   AND code LIKE 'api:clusters:system%';
 
--- 17. Rename existing user/role/org menus to have system: prefix
+-- 17. Rename organization menu to have system: prefix
 -- ========================================
-
--- Rename menu:users -> menu:system:users
-UPDATE permissions 
-SET code = 'menu:system:users',
-    resource = 'system:users'
-WHERE code = 'menu:users';
-
--- Rename menu:roles -> menu:system:roles
-UPDATE permissions 
-SET code = 'menu:system:roles',
-    resource = 'system:roles'
-WHERE code = 'menu:roles';
+-- Note: menu:system:users and menu:system:roles are created with correct names
+-- in the RBAC migration file, so no rename needed here
 
 -- Rename menu:organizations -> menu:system:organizations
 UPDATE permissions 
@@ -230,13 +221,28 @@ WHERE code IN (
     'api:organizations:clusters'
 );
 
--- 21. Grant menu:system to roles that have any system child menu
+-- 21. Auto-grant parent menu permissions for roles with child menus
 -- ========================================
+-- Purpose: Ensure that when a role has child menu permissions, 
+--          it automatically gets the parent menu permission
 
+-- Grant menu:system to roles that have any system child menu (users/roles/organizations)
 INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
 SELECT DISTINCT rp.role_id, (SELECT id FROM permissions WHERE code = 'menu:system')
 FROM role_permissions rp
 JOIN permissions p ON rp.permission_id = p.id
 WHERE p.code IN ('menu:system:users', 'menu:system:roles', 'menu:system:organizations');
 
--- MIGRATION END
+-- Grant menu:nodes to roles that have any child menu permissions (frontends/backends)
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+SELECT DISTINCT rp.role_id, (SELECT id FROM permissions WHERE code = 'menu:nodes')
+FROM role_permissions rp
+JOIN permissions p ON rp.permission_id = p.id
+WHERE p.code IN ('menu:nodes:frontends', 'menu:nodes:backends');
+
+-- Grant menu:queries to roles that have any child menu permissions (execution/profiles/audit-logs)
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+SELECT DISTINCT rp.role_id, (SELECT id FROM permissions WHERE code = 'menu:queries')
+FROM role_permissions rp
+JOIN permissions p ON rp.permission_id = p.id
+WHERE p.code IN ('menu:queries:execution', 'menu:queries:profiles', 'menu:queries:audit-logs');

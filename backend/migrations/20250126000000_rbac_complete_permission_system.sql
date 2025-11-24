@@ -104,9 +104,9 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 ('menu:sessions', '会话管理', 'menu', 'sessions', 'view', '查看会话管理'),
 -- Variables
 ('menu:variables', '变量管理', 'menu', 'variables', 'view', '查看变量管理'),
--- System Management
-('menu:users', '用户管理', 'menu', 'users', 'view', '查看用户管理'),
-('menu:roles', '角色管理', 'menu', 'roles', 'view', '查看角色管理');
+-- System Management (using correct hierarchical names from the start)
+('menu:system:users', '用户管理', 'menu', 'system:users', 'view', '查看用户管理'),
+('menu:system:roles', '角色管理', 'menu', 'system:roles', 'view', '查看角色管理');
 
 -- ==============================================
 -- 7. Insert API Permissions - Core Cluster Operations
@@ -498,10 +498,10 @@ WHERE role_id IN (
 DELETE FROM roles WHERE code IN ('operator', 'viewer');
 
 -- ==============================================
--- 18. Remove Non-existent Permissions
+-- 18. Clean Up - Removed (No longer needed in unified migration)
 -- ==============================================
--- Delete api:clusters:frontends:delete permission (does not exist in code)
-DELETE FROM permissions WHERE code = 'api:clusters:frontends:delete';
+-- Note: In unified migration, permissions are created correctly from the start
+-- No cleanup of non-existent permissions is needed
 
 -- ==============================================
 -- 19. Set Parent_ID for All Unmatched API Permissions
@@ -552,9 +552,9 @@ SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:materialized-view
 WHERE code LIKE 'api:clusters:materialized_views%';
 
 -- 19.5 Roles Menu - Permissions API
--- menu:roles (path: "roles") cannot match api:permissions:* (path: "permissions:*")
+-- menu:system:roles (path: "system:roles") cannot match api:permissions:* (path: "permissions:*")
 UPDATE permissions 
-SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:roles')
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system:roles')
 WHERE code IN (
     'api:permissions:list',
     'api:permissions:menu',
@@ -716,27 +716,27 @@ WHERE code IN (
 
 -- 19.7.8 Roles Menu - All Role Management APIs
 UPDATE permissions 
-SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:roles')
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system:roles')
 WHERE code IN (
     'api:roles:list',
     'api:roles:get',
     'api:roles:create',
     'api:roles:update',
     'api:roles:delete',
-    'api:roles:permissions:get',
-    'api:roles:permissions:update'
+    'api:roles:permissions',
+    'api:roles:permissions:assign'
 );
 
 -- 19.7.9 Users Menu - All User Management APIs
 UPDATE permissions 
-SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:users')
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system:users')
 WHERE code IN (
     'api:users:list',
     'api:users:get',
     'api:users:create',
     'api:users:update',
     'api:users:delete',
-    'api:users:roles:get',
+    'api:users:roles',
     'api:users:roles:assign',
     'api:users:roles:remove'
 );

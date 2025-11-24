@@ -81,7 +81,9 @@ pub async fn setup_test_data(pool: &SqlitePool) -> TestData {
         VALUES 
         ('menu:dashboard', 'Dashboard', 'menu', 'dashboard', NULL, 'Dashboard menu'),
         ('menu:overview', 'Overview', 'menu', 'overview', NULL, 'Overview menu'),
-        ('menu:users', 'Users', 'menu', 'users', NULL, 'Users menu'),
+        ('menu:system', 'System Management', 'menu', 'system', NULL, 'System management parent menu'),
+        ('menu:system:users', 'Users', 'menu', 'system:users', NULL, 'Users menu'),
+        ('menu:system:roles', 'Roles', 'menu', 'system:roles', NULL, 'Roles menu'),
         ('api:clusters:create', 'Create Cluster', 'api', 'clusters', 'create', 'Create cluster API'),
         ('api:clusters:delete', 'Delete Cluster', 'api', 'clusters', 'delete', 'Delete cluster API'),
         ('api:clusters:update', 'Update Cluster', 'api', 'clusters', 'update', 'Update cluster API'),

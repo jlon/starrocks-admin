@@ -267,11 +267,18 @@ impl OrganizationService {
         let role_id = role_result.last_insert_rowid();
 
         // Grant all permissions except organization management
+        // Exclude:
+        // 1. menu:system:organizations - Organization management menu
+        // 2. api:organizations:* - All organization management APIs
         let perms = sqlx::query_as::<_, (i64,)>(
-            "SELECT id FROM permissions WHERE code NOT LIKE 'api:organizations:%'",
+            "SELECT id FROM permissions 
+             WHERE code NOT IN ('menu:system:organizations')
+               AND code NOT LIKE 'api:organizations:%'",
         )
         .fetch_all(&mut **tx)
         .await?;
+        
+        let perm_count = perms.len();
         for (pid,) in perms {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
                 .bind(role_id)
@@ -279,6 +286,13 @@ impl OrganizationService {
                 .execute(&mut **tx)
                 .await?;
         }
+        
+        tracing::info!(
+            "Created org_admin role for organization {} with {} permissions (excluding organization management)",
+            org_code,
+            perm_count
+        );
+        
         Ok(role_id)
     }
 

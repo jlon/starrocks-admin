@@ -13,17 +13,15 @@ use std::sync::Arc;
 pub struct RoleService {
     pool: SqlitePool,
     casbin_service: Arc<CasbinService>,
-    #[allow(dead_code)] // Reserved for future use (e.g., permission validation)
-    permission_service: Arc<PermissionService>,
 }
 
 impl RoleService {
     pub fn new(
         pool: SqlitePool,
         casbin_service: Arc<CasbinService>,
-        permission_service: Arc<PermissionService>,
+        _permission_service: Arc<PermissionService>,
     ) -> Self {
-        Self { pool, casbin_service, permission_service }
+        Self { pool, casbin_service }
     }
 
     /// List all roles (organization-scoped for non-super-admin)

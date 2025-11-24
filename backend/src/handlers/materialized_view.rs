@@ -19,8 +19,6 @@ use crate::utils::ApiResult;
 #[derive(Debug, Deserialize)]
 pub struct ListMVParams {
     pub database: Option<String>,
-    #[allow(dead_code)]
-    pub name_filter: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

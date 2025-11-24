@@ -30,10 +30,7 @@ struct MetricsAggregation {
     max_memory_usage: Option<f64>,
     avg_disk_usage_pct: Option<f64>,
     max_disk_usage_pct: Option<f64>,
-    #[allow(dead_code)]
-    avg_disk_used_bytes: Option<f64>, // AVG() returns REAL, not INTEGER
-    #[allow(dead_code)]
-    max_disk_used_bytes: Option<f64>, // MAX() may return REAL for large values
+    max_disk_used_bytes: Option<f64>,
 }
 
 /// Metrics snapshot stored in database
@@ -101,7 +98,6 @@ pub struct MetricsSnapshot {
 }
 
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct MetricsCollectorService {
     db: SqlitePool,
     cluster_service: Arc<ClusterService>,
@@ -609,8 +605,6 @@ impl MetricsCollectorService {
             io_write_bytes_total: i64,
             io_read_rate: f64,
             io_write_rate: f64,
-            #[allow(dead_code)]
-            raw_metrics: Option<String>,
         }
 
         let row: Option<SnapshotRow> = sqlx::query_as(
@@ -753,7 +747,6 @@ impl MetricsCollectorService {
                 MAX(avg_memory_usage) as max_memory_usage,
                 AVG(disk_usage_pct) as avg_disk_usage_pct,
                 MAX(disk_usage_pct) as max_disk_usage_pct,
-                AVG(disk_used_bytes) as avg_disk_used_bytes,
                 CAST(MAX(disk_used_bytes) AS REAL) as max_disk_used_bytes
             FROM metrics_snapshots
             WHERE cluster_id = ?
@@ -1034,9 +1027,5 @@ impl MetricsCollectorService {
 impl ScheduledTask for MetricsCollectorService {
     fn run(&self) -> Pin<Box<dyn Future<Output = Result<(), anyhow::Error>> + Send + '_>> {
         Box::pin(async move { self.collect_once().await })
-    }
-
-    fn name(&self) -> &str {
-        "metrics-collector"
     }
 }

@@ -697,65 +697,6 @@ impl OverviewService {
     // Internal helper methods
     // ========================================
 
-    /// Get real data size from information_schema.tables (data stored in object storage)
-    #[allow(dead_code)]
-    async fn get_real_data_size(&self, cluster_id: i64) -> ApiResult<i64> {
-        use crate::services::mysql_client::MySQLClient;
-
-        // Get cluster info
-        let cluster: crate::models::cluster::Cluster = sqlx::query_as(
-            "SELECT id, name, description, fe_host, fe_http_port, fe_query_port, username, password_encrypted, enable_ssl, connection_timeout, tags, catalog, created_at, updated_at, created_by FROM clusters WHERE id = ?"
-        )
-        .bind(cluster_id)
-        .fetch_one(&self.db)
-        .await?;
-
-        // Get MySQL connection pool
-        let pool = self.mysql_pool_manager.get_pool(&cluster).await?;
-        let mysql_client = MySQLClient::from_pool(pool);
-
-        // Query DATA_LENGTH from information_schema.tables and sum by database
-        let sql = r#"
-            SELECT 
-                TABLE_SCHEMA,
-                SUM(COALESCE(DATA_LENGTH, 0)) as db_size 
-            FROM information_schema.tables 
-            WHERE TABLE_SCHEMA NOT IN ('information_schema', '_statistics_', 'sys', 'mysql')
-            GROUP BY TABLE_SCHEMA
-        "#;
-
-        let (columns, rows) = mysql_client.query_raw(sql).await?;
-        let mut total_size: i64 = 0;
-
-        // Find column indices
-        let schema_idx = columns
-            .iter()
-            .position(|col| col.to_lowercase() == "table_schema");
-        let size_idx = columns
-            .iter()
-            .position(|col| col.to_lowercase() == "db_size");
-
-        if let (Some(schema_idx), Some(size_idx)) = (schema_idx, size_idx) {
-            for row in rows {
-                if let Some(size_str) = row.get(size_idx)
-                    && let Ok(size) = size_str.parse::<i64>()
-                {
-                    if let Some(db_name) = row.get(schema_idx) {
-                        tracing::debug!("Database {} size: {} bytes", db_name, size);
-                    }
-                    total_size += size;
-                }
-            }
-        }
-
-        tracing::debug!(
-            "Real data size from information_schema: {} bytes ({} GB)",
-            total_size,
-            total_size as f64 / (1024.0 * 1024.0 * 1024.0)
-        );
-        Ok(total_size)
-    }
-
     /// Get the latest snapshot for a cluster
     async fn get_latest_snapshot(&self, cluster_id: i64) -> ApiResult<Option<MetricsSnapshot>> {
         #[derive(sqlx::FromRow)]
@@ -1933,29 +1874,4 @@ impl OverviewService {
             Ok("Unknown".to_string())
         }
     }
-}
-
-/// Parse data size string from SHOW DATA command
-/// Example: "33.402 GB" -> bytes
-#[allow(dead_code)]
-fn parse_data_size(size_str: &str) -> Option<i64> {
-    let parts: Vec<&str> = size_str.split_whitespace().collect();
-    if parts.len() != 2 {
-        return None;
-    }
-
-    let value: f64 = parts[0].parse().ok()?;
-    let unit = parts[1].to_uppercase();
-
-    let bytes = match unit.as_str() {
-        "B" | "BYTES" => value,
-        "KB" => value * 1024.0,
-        "MB" => value * 1024.0 * 1024.0,
-        "GB" => value * 1024.0 * 1024.0 * 1024.0,
-        "TB" => value * 1024.0 * 1024.0 * 1024.0 * 1024.0,
-        "PB" => value * 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0,
-        _ => return None,
-    };
-
-    Some(bytes as i64)
 }

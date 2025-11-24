@@ -9,7 +9,6 @@ pub mod permission;
 pub mod profile;
 pub mod query;
 pub mod query_history;
-pub mod query_profile;
 pub mod role;
 pub mod sessions;
 pub mod system;

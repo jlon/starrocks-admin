@@ -21,10 +21,6 @@ pub trait ScheduledTask: Send + Sync + 'static {
     fn should_terminate(&self) -> bool {
         false
     }
-
-    /// Get task name for logging
-    #[allow(dead_code)]
-    fn name(&self) -> &str;
 }
 
 /// Blanket implementation for Arc<T> where T: ScheduledTask
@@ -36,10 +32,6 @@ impl<T: ScheduledTask> ScheduledTask for Arc<T> {
 
     fn should_terminate(&self) -> bool {
         (**self).should_terminate()
-    }
-
-    fn name(&self) -> &str {
-        (**self).name()
     }
 }
 
@@ -58,11 +50,6 @@ impl ScheduledExecutor {
     /// * `interval` - Interval between executions
     pub fn new(task_name: impl Into<String>, interval: Duration) -> Self {
         Self { task_name: task_name.into(), interval, shutdown: Arc::new(AtomicBool::new(false)) }
-    }
-
-    /// Get a handle to trigger shutdown
-    pub fn shutdown_handle(&self) -> ScheduledExecutorHandle {
-        ScheduledExecutorHandle { shutdown: self.shutdown.clone() }
     }
 
     /// Start the scheduled task
@@ -134,45 +121,6 @@ impl ScheduledExecutor {
 
         tracing::info!("Scheduled task '{}' stopped", task_name);
     }
-
-    /// Start the scheduled task in a background tokio task
-    ///
-    /// This is a non-blocking version that spawns the task and returns immediately.
-    ///
-    /// # Returns
-    /// A handle that can be used to shutdown the task
-    pub fn spawn<T>(self, task: T) -> ScheduledExecutorHandle
-    where
-        T: ScheduledTask,
-    {
-        let handle = self.shutdown_handle();
-
-        tokio::spawn(async move {
-            self.start(task).await;
-        });
-
-        handle
-    }
-}
-
-/// Handle to control a scheduled executor
-#[derive(Clone)]
-#[allow(dead_code)]
-pub struct ScheduledExecutorHandle {
-    shutdown: Arc<AtomicBool>,
-}
-
-#[allow(dead_code)]
-impl ScheduledExecutorHandle {
-    /// Signal the executor to shutdown
-    pub fn shutdown(&self) {
-        self.shutdown.store(true, Ordering::Relaxed);
-    }
-
-    /// Check if shutdown has been requested
-    pub fn is_shutdown(&self) -> bool {
-        self.shutdown.load(Ordering::Relaxed)
-    }
 }
 
 // =============================================================================
@@ -237,10 +185,6 @@ mod tests {
         fn should_terminate(&self) -> bool {
             self.counter.load(Ordering::Relaxed) >= self.max_runs
         }
-
-        fn name(&self) -> &str {
-            "test-task"
-        }
     }
 
     #[tokio::test]
@@ -252,34 +196,5 @@ mod tests {
         executor.start(task).await;
 
         assert_eq!(counter.load(Ordering::Relaxed), 3);
-    }
-
-    #[tokio::test]
-    async fn test_scheduled_executor_shutdown() {
-        let counter = Arc::new(AtomicU32::new(0));
-        let task = TestTask {
-            counter: counter.clone(),
-            max_runs: 1000, // Won't reach this
-        };
-
-        let executor = ScheduledExecutor::new("test-shutdown", Duration::from_millis(50));
-        let handle = executor.shutdown_handle();
-
-        // Spawn in background
-        tokio::spawn(async move {
-            executor.start(task).await;
-        });
-
-        // Let it run a few times
-        tokio::time::sleep(Duration::from_millis(250)).await;
-
-        // Shutdown
-        handle.shutdown();
-
-        // Wait for shutdown
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        let final_count = counter.load(Ordering::Relaxed);
-        assert!(final_count > 0 && final_count < 1000);
     }
 }

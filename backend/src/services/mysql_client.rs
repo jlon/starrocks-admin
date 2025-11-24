@@ -285,9 +285,3 @@ fn value_to_string_optimized(value: &mysql_async::Value) -> String {
         },
     }
 }
-
-// Legacy function for backward compatibility (unused but kept for reference)
-#[allow(dead_code)]
-fn value_to_string(value: &mysql_async::Value, _row_idx: usize, _col_idx: usize) -> String {
-    value_to_string_optimized(value)
-}

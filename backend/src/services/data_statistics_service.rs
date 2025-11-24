@@ -3,9 +3,7 @@
 // Design Ref: CLUSTER_OVERVIEW_PLAN.md
 
 use crate::models::Cluster;
-use crate::services::{
-    ClusterService, MaterializedViewService, MySQLClient, MySQLPoolManager, StarRocksClient,
-};
+use crate::services::{ClusterService, MaterializedViewService, MySQLClient, MySQLPoolManager};
 use crate::utils::ApiResult;
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -595,25 +593,6 @@ impl DataStatisticsService {
         );
 
         Ok((mv_total, mv_running, mv_failed, mv_success))
-    }
-
-    /// Get schema change statistics
-    #[allow(dead_code)]
-    async fn get_schema_change_statistics(
-        &self,
-        client: &StarRocksClient,
-    ) -> ApiResult<(i32, i32, i32, i32)> {
-        let changes = client.get_schema_changes().await?;
-
-        let running = changes.iter().filter(|c| c.state == "RUNNING").count() as i32;
-        let pending = changes.iter().filter(|c| c.state == "PENDING").count() as i32;
-        let finished = changes.iter().filter(|c| c.state == "FINISHED").count() as i32;
-        let failed = changes
-            .iter()
-            .filter(|c| c.state == "CANCELLED" || c.state == "FAILED")
-            .count() as i32;
-
-        Ok((running, pending, finished, failed))
     }
 
     /// Save statistics to cache

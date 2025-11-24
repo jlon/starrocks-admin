@@ -232,83 +232,6 @@ pub struct RuntimeInfo {
     pub thread_cnt: i32,
 }
 
-// Database information
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-#[allow(dead_code)]
-pub struct Database {
-    #[serde(rename = "DbName", alias = "database")]
-    pub database: String,
-    #[serde(rename = "DbId", default)]
-    pub db_id: Option<String>,
-    #[serde(rename = "TableNum", default)]
-    pub table_num: Option<String>,
-    #[serde(rename = "Quota", default)]
-    pub quota: Option<String>,
-    #[serde(rename = "LastConsistencyCheckTime", default)]
-    pub last_consistency_check_time: Option<String>,
-    #[serde(rename = "ReplicaQuota", default)]
-    pub replica_quota: Option<String>,
-}
-
-// Table information
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-#[allow(dead_code)]
-pub struct Table {
-    pub table_name: String,
-    pub table_type: String,
-    pub engine: Option<String>,
-}
-
-// Detailed table information (from information_schema.tables)
-#[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
-#[allow(dead_code)]
-pub struct TableInfo {
-    pub table_schema: String,
-    pub table_name: String,
-    pub table_type: String,
-    pub engine: String,
-    pub table_rows: Option<i64>,
-    pub data_length: Option<i64>,
-    pub index_length: Option<i64>,
-    pub create_time: Option<String>,
-    pub update_time: Option<String>,
-}
-
-// Schema change information
-#[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
-#[allow(dead_code)]
-pub struct SchemaChange {
-    #[serde(rename = "JobId")]
-    pub job_id: String,
-    #[serde(rename = "TableName")]
-    pub table_name: String,
-    #[serde(rename = "CreateTime")]
-    pub create_time: String,
-    #[serde(rename = "FinishTime", default)]
-    pub finish_time: Option<String>,
-    #[serde(rename = "State")]
-    pub state: String,
-    #[serde(rename = "Msg", default)]
-    pub msg: Option<String>,
-    // Additional fields from SHOW PROC '/jobs/{db_id}/schema_change'
-    #[serde(rename = "IndexName", default)]
-    pub index_name: Option<String>,
-    #[serde(rename = "IndexId", default)]
-    pub index_id: Option<String>,
-    #[serde(rename = "OriginIndexId", default)]
-    pub origin_index_id: Option<String>,
-    #[serde(rename = "SchemaVersion", default)]
-    pub schema_version: Option<String>,
-    #[serde(rename = "TransactionId", default)]
-    pub transaction_id: Option<String>,
-    #[serde(rename = "Progress", default)]
-    pub progress: Option<String>,
-    #[serde(rename = "Timeout", default)]
-    pub timeout: Option<String>,
-    #[serde(rename = "Warehouse", default)]
-    pub warehouse: Option<String>,
-}
-
 // Metrics summary
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct MetricsSummary {
@@ -352,24 +275,6 @@ pub struct MetricsSummary {
     // Load metrics
     pub load_finished: i64,
     pub routine_load_rows: i64,
-}
-
-// Time series data point
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-#[allow(dead_code)]
-pub struct MetricDataPoint {
-    pub timestamp: i64,
-    pub value: f64,
-}
-
-// Time series query request
-#[derive(Debug, Deserialize, ToSchema)]
-#[allow(dead_code)]
-pub struct TimeSeriesQuery {
-    pub metric_name: String,
-    pub start_time: Option<i64>,
-    pub end_time: Option<i64>,
-    pub step: Option<i32>,
 }
 
 // Query execute request

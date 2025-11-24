@@ -108,7 +108,6 @@ pub struct AppState {
         handlers::variables::update_variable,
         handlers::profile::list_profiles,
         handlers::profile::get_profile,
-        handlers::query_profile::get_query_profile,
         handlers::system_management::get_system_functions,
         handlers::system_management::get_system_function_detail,
         handlers::system::get_runtime_info,
@@ -391,7 +390,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             config.metrics.retention_days
         );
         let executor = ScheduledExecutor::new("metrics-collector", interval);
-        executor.spawn(Arc::clone(&metrics_collector_service));
+        let service = Arc::clone(&metrics_collector_service);
+        tokio::spawn(async move {
+            executor.start(service).await;
+        });
     } else {
         tracing::warn!("Metrics collector disabled by configuration");
     }
@@ -439,10 +441,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/clusters/queries/execute", post(handlers::query::execute_sql))
         .route("/api/clusters/queries/:query_id", delete(handlers::query::kill_query))
         .route("/api/clusters/queries/history", get(handlers::query_history::list_query_history))
-        .route(
-            "/api/clusters/queries/:query_id/profile",
-            get(handlers::query_profile::get_query_profile),
-        )
         // Cluster detail routes (placed after specific query routes to avoid path conflicts)
         .route("/api/clusters/:id", get(handlers::cluster::get_cluster))
         .route("/api/clusters/:id", put(handlers::cluster::update_cluster))

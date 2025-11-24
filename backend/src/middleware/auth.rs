@@ -21,7 +21,6 @@ pub struct AuthState {
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct OrgContext {
     pub user_id: i64,
-    #[allow(dead_code)]
     pub username: String,
     pub organization_id: Option<i64>,
     pub is_super_admin: bool,

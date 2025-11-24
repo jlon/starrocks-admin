@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS clusters (
     connection_timeout INTEGER DEFAULT 10,
     tags TEXT,
     catalog VARCHAR(100) DEFAULT 'default_catalog',
+    deployment_mode VARCHAR(20) DEFAULT 'shared_nothing' NOT NULL,
     is_active BOOLEAN DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS clusters (
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_clusters_name ON clusters(name);
 CREATE INDEX IF NOT EXISTS idx_clusters_is_active ON clusters(is_active);
+CREATE INDEX IF NOT EXISTS idx_clusters_deployment_mode ON clusters(deployment_mode);
 
 -- ==============================================
 -- 1.3 Monitor History Table

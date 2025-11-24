@@ -2,6 +2,8 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 
+export type DeploymentMode = 'shared_nothing' | 'shared_data';
+
 export interface Cluster {
   id: number;
   name: string;
@@ -16,6 +18,7 @@ export interface Cluster {
   catalog: string;
   is_active: boolean;
   organization_id?: number;
+  deployment_mode: DeploymentMode;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +36,7 @@ export interface CreateClusterRequest {
   tags?: string[];
   catalog?: string;
   organization_id?: number;
+  deployment_mode?: DeploymentMode;
 }
 
 export interface ClusterHealth {

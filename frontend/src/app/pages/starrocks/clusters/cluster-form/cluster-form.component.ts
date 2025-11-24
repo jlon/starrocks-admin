@@ -49,6 +49,7 @@ export class ClusterFormComponent implements OnInit {
       enable_ssl: [false],
       connection_timeout: [10, [Validators.min(1), Validators.max(300)]],
       catalog: ['default_catalog'],
+      deployment_mode: ['shared_nothing', [Validators.required]],
       tags: [''],
     });
   }

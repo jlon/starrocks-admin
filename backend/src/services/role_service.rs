@@ -288,6 +288,9 @@ impl RoleService {
     /// Automatically:
     /// 1. Associates API permissions with selected menu permissions (child APIs)
     /// 2. Grants all parent menu permissions for selected permissions (parent menus)
+    /// Automatically:
+    /// 1. Associates API permissions with selected menu permissions (child APIs)
+    /// 2. Grants all parent menu permissions for selected permissions (parent menus)
     pub async fn assign_permissions_to_role(
         &self,
         role_id: i64,
@@ -300,6 +303,7 @@ impl RoleService {
             .get_role(role_id, requestor_org, is_super_admin)
             .await?;
 
+        // Get all permissions to build relationships
         // Get all permissions to build relationships
         let all_permissions: Vec<crate::models::Permission> =
             sqlx::query_as("SELECT * FROM permissions ORDER BY type, code")
@@ -323,13 +327,20 @@ impl RoleService {
         // Extend permission list with:
         // 1. Associated API permissions (children of selected menus)
         // 2. All parent menu permissions (parents of selected items)
+        // Extend permission list with:
+        // 1. Associated API permissions (children of selected menus)
+        // 2. All parent menu permissions (parents of selected items)
         let mut extended_permission_ids = req.permission_ids.clone();
 
         // Step 1: Add child API permissions for selected menu permissions
         let mut api_count = 0;
+        // Step 1: Add child API permissions for selected menu permissions
+        let mut api_count = 0;
         for permission_id in &req.permission_ids {
             if let Some(perm) = perm_map.get(permission_id)
+            if let Some(perm) = perm_map.get(permission_id)
                 && perm.r#type == "menu"
+                && let Some(api_ids) = menu_to_apis.get(permission_id)
                 && let Some(api_ids) = menu_to_apis.get(permission_id)
             {
                 extended_permission_ids.extend(api_ids.iter());

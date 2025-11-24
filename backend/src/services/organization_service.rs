@@ -270,6 +270,9 @@ impl OrganizationService {
         // Exclude:
         // 1. menu:system:organizations - Organization management menu
         // 2. api:organizations:* - All organization management APIs
+        // Exclude:
+        // 1. menu:system:organizations - Organization management menu
+        // 2. api:organizations:* - All organization management APIs
         let perms = sqlx::query_as::<_, (i64,)>(
             "SELECT id FROM permissions 
              WHERE code NOT IN ('menu:system:organizations')
@@ -278,6 +281,8 @@ impl OrganizationService {
         .fetch_all(&mut **tx)
         .await?;
         
+        let perm_count = perms.len();
+
         let perm_count = perms.len();
         for (pid,) in perms {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
@@ -293,6 +298,13 @@ impl OrganizationService {
             perm_count
         );
         
+
+        tracing::info!(
+            "Created org_admin role for organization {} with {} permissions (excluding organization management)",
+            org_code,
+            perm_count
+        );
+
         Ok(role_id)
     }
 

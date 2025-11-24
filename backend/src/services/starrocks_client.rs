@@ -1,24 +1,28 @@
 use crate::models::{
     Backend, Cluster, Database, Frontend, MaterializedView, Query, RuntimeInfo, SchemaChange, Table,
 };
+use crate::services::{mysql_client::MySQLClient, mysql_pool_manager::MySQLPoolManager};
 use crate::utils::{ApiError, ApiResult};
 use reqwest::Client;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub struct StarRocksClient {
     pub http_client: Client,
     pub cluster: Cluster,
+    mysql_pool_manager: Arc<MySQLPoolManager>,
 }
 
 impl StarRocksClient {
-    pub fn new(cluster: Cluster) -> Self {
+    pub fn new(cluster: Cluster, mysql_pool_manager: Arc<MySQLPoolManager>) -> Self {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(cluster.connection_timeout as u64))
             .build()
             .unwrap_or_default();
 
-        Self { http_client, cluster }
+        Self { http_client, cluster, mysql_pool_manager }
     }
 
     pub fn get_base_url(&self) -> String {
@@ -26,159 +30,87 @@ impl StarRocksClient {
         format!("{}://{}:{}", protocol, self.cluster.fe_host, self.cluster.fe_http_port)
     }
 
-    // Get backends via HTTP API
-    // Compatible with both shared-nothing and shared-data (compute-storage separation) architectures
-    // For shared-data mode: tries /backends first, falls back to /compute_nodes if empty
-    pub async fn get_backends(&self) -> ApiResult<Vec<Backend>> {
-        // Try shared-nothing architecture first (traditional BE nodes)
-        let url_be = format!("{}/api/show_proc?path=/backends", self.get_base_url());
-        tracing::debug!("Fetching backends from: {}", url_be);
+    async fn mysql_client(&self) -> ApiResult<MySQLClient> {
+        let pool = self.mysql_pool_manager.get_pool(&self.cluster).await?;
+        Ok(MySQLClient::from_pool(pool))
+    }
 
-        let response_be = self
-            .http_client
-            .get(&url_be)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch backends: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
-
-        if !response_be.status().is_success() {
-            tracing::error!("Backends API returned error status: {}", response_be.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response_be.status()
-            )));
-        }
-
-        let data_be: Value = response_be.json().await.map_err(|e| {
-            tracing::error!("Failed to parse backends response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        // Log the raw response for debugging
-        tracing::debug!(
-            "Raw backends response: {}",
-            serde_json::to_string(&data_be).unwrap_or_default()
-        );
-
-        // Try new format (direct array) first, then fall back to old format
-        let backends_result = if let Ok(backends) =
-            serde_json::from_value::<Vec<Backend>>(data_be.clone())
-        {
-            Ok(backends)
+    fn normalize_proc_path(path: &str) -> String {
+        if path.is_empty() {
+            "/".to_string()
+        } else if path.starts_with('/') {
+            path.to_string()
         } else {
-            // Fallback to old format
-            match Self::parse_proc_result::<Backend>(&data_be) {
-                Ok(backends) => {
-                    tracing::info!("Retrieved {} backends using old format", backends.len());
-                    Ok(backends)
-                },
+            format!("/{}", path)
+        }
+    }
+
+    fn escape_proc_path(path: &str) -> String {
+        path.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+
+    fn build_show_proc_sql(path: &str) -> String {
+        let normalized = Self::normalize_proc_path(path);
+        let escaped = Self::escape_proc_path(&normalized);
+        format!("SHOW PROC \"{}\"", escaped)
+    }
+
+    pub async fn show_proc_raw(&self, path: &str) -> ApiResult<Vec<Value>> {
+        let sql = Self::build_show_proc_sql(path);
+        let mysql_client = self.mysql_client().await?;
+        mysql_client.query(&sql).await
+    }
+
+    async fn show_proc_entities<T>(&self, path: &str) -> ApiResult<Vec<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let rows = self.show_proc_raw(path).await?;
+        let mut entities = Vec::with_capacity(rows.len());
+
+        for row in rows {
+            match serde_json::from_value::<T>(row) {
+                Ok(value) => entities.push(value),
                 Err(e) => {
-                    tracing::error!(
-                        "Failed to parse backends: {}. Raw response structure: {}",
-                        e,
-                        serde_json::to_string(&data_be)
-                            .unwrap_or_else(|_| "failed to serialize".to_string())
-                    );
-                    // Return error instead of empty vector to help diagnose the issue
-                    Err(ApiError::internal_error(format!(
-                        "Failed to parse backends response. Response format may have changed. Error: {}",
-                        e
-                    )))
+                    tracing::warn!("Failed to deserialize SHOW PROC '{}' row: {}", path, e);
                 },
             }
-        };
+        }
 
-        // If backends list is not empty, return it
-        if let Ok(ref backends) = backends_result {
-            if !backends.is_empty() {
-                return backends_result;
-            } else {
-                tracing::warn!("Backends list is empty, trying compute nodes as fallback");
-            }
-        } else {
-            // If parsing failed, log the error but continue to try compute nodes
-            if let Err(ref e) = backends_result {
+        Ok(entities)
+    }
+
+    pub async fn get_backends(&self) -> ApiResult<Vec<Backend>> {
+        tracing::debug!("Fetching backends via MySQL SHOW PROC");
+
+        match self.show_proc_entities::<Backend>("/backends").await {
+            Ok(backends) if !backends.is_empty() => {
+                tracing::debug!("Retrieved {} backend entries", backends.len());
+                return Ok(backends);
+            },
+            Ok(_) => {
                 tracing::warn!(
-                    "Backends parsing failed: {}. Will try compute nodes as fallback.",
-                    e
+                    "SHOW PROC /backends returned empty result, falling back to /compute_nodes"
                 );
-            }
-        }
-
-        // Try shared-data architecture (CN nodes for compute-storage separation)
-        tracing::info!("No backends found, trying compute nodes for shared-data architecture");
-        let url_cn = format!("{}/api/show_proc?path=/compute_nodes", self.get_base_url());
-        tracing::debug!("Fetching compute nodes from: {}", url_cn);
-
-        let response_cn = self
-            .http_client
-            .get(&url_cn)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await;
-
-        match response_cn {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.json::<Value>().await {
-                    Ok(data_cn) => {
-                        tracing::debug!(
-                            "Raw compute nodes response: {}",
-                            serde_json::to_string(&data_cn).unwrap_or_default()
-                        );
-                        // Try to parse compute nodes as backends
-                        if let Ok(compute_nodes) =
-                            serde_json::from_value::<Vec<Backend>>(data_cn.clone())
-                        {
-                            tracing::info!(
-                                "Retrieved {} compute nodes (shared-data mode)",
-                                compute_nodes.len()
-                            );
-                            return Ok(compute_nodes);
-                        } else if let Ok(compute_nodes) =
-                            Self::parse_proc_result::<Backend>(&data_cn)
-                        {
-                            tracing::info!(
-                                "Retrieved {} compute nodes using PROC format",
-                                compute_nodes.len()
-                            );
-                            return Ok(compute_nodes);
-                        } else {
-                            tracing::warn!("Failed to parse compute nodes response");
-                        }
-                    },
-                    Err(e) => {
-                        tracing::warn!("Failed to parse compute nodes response: {}", e);
-                    },
-                }
-            },
-            Ok(resp) => {
-                tracing::warn!("Compute nodes API returned error status: {}", resp.status());
             },
             Err(e) => {
-                tracing::debug!("Compute nodes API request failed: {}", e);
+                tracing::warn!(
+                    "Failed to retrieve /backends via MySQL interface: {}. Falling back to /compute_nodes",
+                    e
+                );
             },
         }
 
-        // If we got a successful parse but empty list, return it
-        // If parsing failed, return the error to help diagnose the issue
-        match backends_result {
-            Ok(backends) => {
-                tracing::warn!("No backends or compute nodes found. Returning empty list.");
-                Ok(backends)
-            },
-            Err(e) => {
-                tracing::error!(
-                    "Failed to retrieve backends: {}. Please check StarRocks API response format.",
-                    e
-                );
-                // Return error so frontend can display it
-                Err(e)
-            },
+        let compute_nodes = self.show_proc_entities::<Backend>("/compute_nodes").await?;
+        if compute_nodes.is_empty() {
+            tracing::warn!("No backends or compute nodes found via SHOW PROC");
+        } else {
+            tracing::info!(
+                "Retrieved {} compute nodes via SHOW PROC /compute_nodes",
+                compute_nodes.len()
+            );
         }
+        Ok(compute_nodes)
     }
 
     // Execute SQL command via HTTP API
@@ -223,98 +155,21 @@ impl StarRocksClient {
         self.execute_sql(&sql).await
     }
 
-    // Get frontends via HTTP API
     pub async fn get_frontends(&self) -> ApiResult<Vec<Frontend>> {
-        let url = format!("{}/api/show_proc?path=/frontends", self.get_base_url());
-        tracing::debug!("Fetching frontends from: {}", url);
-
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch frontends: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            tracing::error!("Frontends API returned error status: {}", response.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response.status()
-            )));
-        }
-
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::error!("Failed to parse frontends response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        // Try new format (direct array) first, then fall back to old format
-        if let Ok(frontends) = serde_json::from_value::<Vec<Frontend>>(data.clone()) {
-            return Ok(frontends);
-        }
-
-        // Fallback to old format
-        let frontends = Self::parse_proc_result::<Frontend>(&data)?;
-        Ok(frontends)
+        tracing::debug!("Fetching frontends via MySQL SHOW PROC");
+        self.show_proc_entities::<Frontend>("/frontends").await
     }
 
     // Get current queries
     pub async fn get_queries(&self) -> ApiResult<Vec<Query>> {
-        let url = format!("{}/api/show_proc?path=/current_queries", self.get_base_url());
-
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| ApiError::cluster_connection_failed(format!("Request failed: {}", e)))?;
-
-        if !response.status().is_success() {
-            tracing::warn!("Failed to fetch current_queries, HTTP status: {}", response.status());
-            return Ok(Vec::new()); // Return empty list on HTTP errors
-        }
-
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::warn!("Failed to parse current_queries response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        tracing::debug!("StarRocks /current_queries response: {}", data);
-
-        // Handle empty array response (no running queries)
-        if data.is_array() {
-            match serde_json::from_value::<Vec<Query>>(data.clone()) {
-                Ok(queries) => {
-                    tracing::debug!("Parsed {} running queries from direct array", queries.len());
-                    return Ok(queries);
-                },
-                Err(e) => tracing::debug!("Failed to parse array format: {}", e),
-            }
-        }
-
-        // Handle empty object {} response
-        if data.is_object() && data.as_object().map(|o| o.is_empty()).unwrap_or(false) {
-            tracing::debug!("StarRocks returned empty object, no running queries");
-            return Ok(Vec::new());
-        }
-
-        // Try fallback format parsing, but tolerate errors
-        match Self::parse_proc_result::<Query>(&data) {
-            Ok(queries) => {
-                tracing::debug!("Parsed {} running queries from PROC format", queries.len());
-                Ok(queries)
-            },
+        match self.show_proc_entities::<Query>("/current_queries").await {
+            Ok(queries) => Ok(queries),
             Err(e) => {
                 tracing::warn!(
-                    "Failed to parse PROC format for current_queries: {}. Returning empty list.",
+                    "Failed to retrieve /current_queries via SHOW PROC: {}. Returning empty list.",
                     e
                 );
-                Ok(Vec::new()) // Return empty list instead of failing
+                Ok(Vec::new())
             },
         }
     }
@@ -369,61 +224,6 @@ impl StarRocksClient {
         })?;
 
         Ok(metrics_text)
-    }
-
-    // Parse PROC result format
-    fn parse_proc_result<T: serde::de::DeserializeOwned>(data: &Value) -> ApiResult<Vec<T>> {
-        // StarRocks PROC result format: {"columnNames": [...], "rows": [[...]]} or {"columns": [...], "rows": [...]}
-
-        // Try to extract column names (support both "columnNames" and "columns" keys)
-        let column_names = if let Some(cols) = data["columnNames"].as_array() {
-            cols
-        } else if let Some(cols) = data["columns"].as_array() {
-            cols
-        } else {
-            // Log the actual data structure for debugging
-            tracing::warn!(
-                "Invalid PROC result format. Keys: {:?}, Data: {}",
-                data.as_object().map(|o| o.keys().collect::<Vec<_>>()),
-                data
-            );
-            return Err(ApiError::internal_error(format!(
-                "Invalid PROC result format. Expected 'columnNames' or 'columns' field. Got: {}",
-                data.as_object()
-                    .map(|o| o.keys().map(|k| k.as_str()).collect::<Vec<_>>())
-                    .unwrap_or_default()
-                    .join(", ")
-            )));
-        };
-
-        let rows = data["rows"].as_array().ok_or_else(|| {
-            ApiError::internal_error("Invalid PROC result format: missing 'rows' field")
-        })?;
-
-        let mut results = Vec::new();
-
-        for row in rows {
-            let row_array = row
-                .as_array()
-                .ok_or_else(|| ApiError::internal_error("Invalid row format"))?;
-
-            // Create a JSON object from column names and row values
-            let mut obj = serde_json::Map::new();
-            for (i, col_name) in column_names.iter().enumerate() {
-                if let Some(col_name_str) = col_name.as_str()
-                    && let Some(value) = row_array.get(i)
-                {
-                    obj.insert(col_name_str.to_string(), value.clone());
-                }
-            }
-
-            let item: T = serde_json::from_value(Value::Object(obj))
-                .map_err(|e| ApiError::internal_error(format!("Failed to parse item: {}", e)))?;
-
-            results.push(item);
-        }
-
-        Ok(results)
     }
 
     // Parse Prometheus metrics format
@@ -908,110 +708,160 @@ impl StarRocksClient {
     /// Get list of databases
     #[allow(dead_code)]
     pub async fn get_databases(&self) -> ApiResult<Vec<Database>> {
-        let url = format!("{}/api/show_proc?path=/dbs", self.get_base_url());
-        tracing::debug!("Fetching databases from: {}", url);
-
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch databases: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            tracing::error!("Databases API returned error status: {}", response.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response.status()
-            )));
-        }
-
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::error!("Failed to parse databases response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        let databases = Self::parse_proc_result::<Database>(&data)?;
+        tracing::debug!("Fetching databases via SHOW PROC /dbs");
+        let databases = self.show_proc_entities::<Database>("/dbs").await?;
         tracing::debug!("Retrieved {} databases", databases.len());
         Ok(databases)
     }
 
     /// Get list of tables in a database
+    /// Note: Path /dbs/{db_name}/tables doesn't exist. Two options:
+    /// 1. Use SHOW TABLES FROM {db} (simple, fast)
+    /// 2. Use /dbs/{db_id} (requires finding db_id first, but returns more details)
     #[allow(dead_code)]
     pub async fn get_tables(&self, database: &str) -> ApiResult<Vec<Table>> {
-        let url = format!(
-            "{}/api/show_proc?path=/dbs/{}/tables",
-            self.get_base_url(),
-            urlencoding::encode(database)
-        );
-        tracing::debug!("Fetching tables from database '{}': {}", database, url);
+        tracing::debug!("Fetching tables from database '{}'", database);
 
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch tables: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
+        // Try method 1: Use SHOW TABLES (simpler and faster)
+        let mysql_client = self.mysql_client().await?;
+        let sql = format!("SHOW TABLES FROM `{}`", database);
 
-        if !response.status().is_success() {
-            tracing::error!("Tables API returned error status: {}", response.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response.status()
-            )));
+        match mysql_client.query(&sql).await {
+            Ok(rows) => {
+                let mut tables = Vec::new();
+                for row in rows {
+                    if let serde_json::Value::Object(obj) = row {
+                        // SHOW TABLES returns a single column with table name
+                        // Column name varies: "Tables_in_{db}" or first key
+                        let table_name = obj
+                            .values()
+                            .next()
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_string();
+
+                        if !table_name.is_empty() {
+                            tables.push(Table {
+                                table_name: table_name.clone(),
+                                table_type: "BASE TABLE".to_string(), // Default type
+                                engine: None,
+                            });
+                        }
+                    }
+                }
+                tracing::debug!(
+                    "Retrieved {} tables from database '{}' via SHOW TABLES",
+                    tables.len(),
+                    database
+                );
+                return Ok(tables);
+            },
+            Err(e) => {
+                tracing::warn!(
+                    "SHOW TABLES failed for database '{}': {}. Trying PROC method.",
+                    database,
+                    e
+                );
+            },
         }
 
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::error!("Failed to parse tables response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
+        // Fallback method 2: Use /dbs/{db_id} (requires finding db_id first)
+        // First, get all databases to find the db_id
+        let databases = self.show_proc_entities::<Database>("/dbs").await?;
+        let db_id = databases
+            .iter()
+            .find(|db| db.database == database)
+            .and_then(|db| db.db_id.as_ref())
+            .ok_or_else(|| ApiError::not_found(format!("Database '{}' not found", database)))?;
 
-        let tables = Self::parse_proc_result::<Table>(&data)?;
-        tracing::debug!("Retrieved {} tables from database '{}'", tables.len(), database);
+        // Now get tables using /dbs/{db_id}
+        let path = format!("/dbs/{}", db_id);
+        let table_rows = self.show_proc_raw(&path).await?;
+
+        let mut tables = Vec::new();
+        for row in table_rows {
+            if let serde_json::Value::Object(obj) = row {
+                let table_name = obj
+                    .get("TableName")
+                    .or_else(|| obj.get("table_name"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+
+                if !table_name.is_empty() {
+                    let table_type = obj
+                        .get("Type")
+                        .or_else(|| obj.get("type"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("BASE TABLE")
+                        .to_string();
+
+                    tables.push(Table { table_name, table_type, engine: None });
+                }
+            }
+        }
+
+        tracing::debug!(
+            "Retrieved {} tables from database '{}' via PROC /dbs/{}",
+            tables.len(),
+            database,
+            db_id
+        );
         Ok(tables)
     }
 
     /// Get schema changes status
+    /// Note: SHOW PROC '/jobs' returns database list. To get schema change jobs:
+    /// 1. Get all databases from /jobs (returns DbId, DbName)
+    /// 2. For each database, query /jobs/{db_id}/schema_change
     #[allow(dead_code)]
     pub async fn get_schema_changes(&self) -> ApiResult<Vec<SchemaChange>> {
-        let url = format!("{}/api/show_proc?path=/jobs", self.get_base_url());
-        tracing::debug!("Fetching schema changes from: {}", url);
+        tracing::debug!("Fetching schema change jobs from all databases");
 
-        let response = self
-            .http_client
-            .get(&url)
-            .basic_auth(&self.cluster.username, Some(&self.cluster.password_encrypted))
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch schema changes: {}", e);
-                ApiError::cluster_connection_failed(format!("Request failed: {}", e))
-            })?;
+        // Step 1: Get all databases from /jobs (returns DbId, DbName)
+        let databases = self.show_proc_raw("/jobs").await?;
 
-        if !response.status().is_success() {
-            tracing::error!("Schema changes API returned error status: {}", response.status());
-            return Err(ApiError::cluster_connection_failed(format!(
-                "HTTP status: {}",
-                response.status()
-            )));
+        let mut all_changes = Vec::new();
+
+        // Step 2: For each database, query schema change jobs
+        for db_row in databases {
+            if let serde_json::Value::Object(db_obj) = db_row {
+                // Extract DbId
+                let db_id = db_obj
+                    .get("DbId")
+                    .or_else(|| db_obj.get("db_id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+
+                if db_id.is_empty() {
+                    continue;
+                }
+
+                // Query schema change jobs for this database
+                let path = format!("/jobs/{}/schema_change", db_id);
+                match self.show_proc_entities::<SchemaChange>(&path).await {
+                    Ok(changes) => {
+                        tracing::debug!(
+                            "Found {} schema change jobs in database {}",
+                            changes.len(),
+                            db_id
+                        );
+                        all_changes.extend(changes);
+                    },
+                    Err(e) => {
+                        // Ignore errors for databases with no schema change jobs
+                        tracing::debug!(
+                            "No schema change jobs in database {} or error: {}",
+                            db_id,
+                            e
+                        );
+                    },
+                }
+            }
         }
 
-        let data: Value = response.json().await.map_err(|e| {
-            tracing::error!("Failed to parse schema changes response: {}", e);
-            ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-        })?;
-
-        let changes = Self::parse_proc_result::<SchemaChange>(&data)?;
-        tracing::debug!("Retrieved {} schema changes", changes.len());
-        Ok(changes)
+        tracing::debug!("Retrieved {} total schema change jobs", all_changes.len());
+        Ok(all_changes)
     }
 
     /// Get active users from current queries

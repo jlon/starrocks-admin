@@ -6,10 +6,7 @@ use axum::{
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::{
-    services::starrocks_client::StarRocksClient,
-    utils::error::{ApiError, ApiResult},
-};
+use crate::{services::starrocks_client::StarRocksClient, utils::error::ApiResult};
 
 #[derive(Debug, Deserialize)]
 pub struct SystemQueryParams {
@@ -46,13 +43,16 @@ pub async fn get_system_functions(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
-    // Create StarRocks client
-    let client = StarRocksClient::new(cluster);
+    // Create StarRocks client (reserved for future extensions)
+    let client = StarRocksClient::new(cluster, state.mysql_pool_manager.clone());
 
-    // Get all system functions using HTTP REST API
+    // Get all system functions using SHOW PROC (currently static list)
     let functions = get_all_system_functions(&client, &params).await?;
 
     Ok(Json(functions))
@@ -85,11 +85,14 @@ pub async fn get_system_function_detail(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     // Create StarRocks client
-    let client = StarRocksClient::new(cluster);
+    let client = StarRocksClient::new(cluster, state.mysql_pool_manager.clone());
 
     // Build complete PROC path
     let proc_path = if let Some(nested_path) = params.path {
@@ -299,38 +302,15 @@ async fn get_function_details(
     client: &StarRocksClient,
     proc_path: &str,
 ) -> ApiResult<SystemFunctionDetail> {
-    let url = format!("{}/api/show_proc?path={}", client.get_base_url(), proc_path);
-
-    let response = client
-        .http_client
-        .get(&url)
-        .basic_auth(&client.cluster.username, Some(&client.cluster.password_encrypted))
-        .send()
-        .await
-        .map_err(|e| ApiError::cluster_connection_failed(format!("Request failed: {}", e)))?;
-
-    if !response.status().is_success() {
-        return Err(ApiError::cluster_connection_failed(format!(
-            "HTTP status: {}",
-            response.status()
-        )));
-    }
-
-    let data: serde_json::Value = response.json().await.map_err(|e| {
-        ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-    })?;
-
-    // Convert JSON array to our detail structure
     let mut detail_data = Vec::new();
-    if let Some(array) = data.as_array() {
-        for item in array {
-            if let Some(obj) = item.as_object() {
-                let mut row_data = std::collections::HashMap::new();
-                for (key, value) in obj {
-                    row_data.insert(key.clone(), value.as_str().unwrap_or("").to_string());
-                }
-                detail_data.push(row_data);
+    let rows = client.show_proc_raw(proc_path).await?;
+    for value in rows {
+        if let serde_json::Value::Object(obj) = value {
+            let mut row_data = std::collections::HashMap::new();
+            for (key, val) in obj {
+                row_data.insert(key.clone(), val.as_str().unwrap_or("").to_string());
             }
+            detail_data.push(row_data);
         }
     }
 

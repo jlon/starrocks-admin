@@ -1,19 +1,21 @@
 use crate::models::{
     Cluster, ClusterHealth, CreateClusterRequest, HealthCheck, HealthStatus, UpdateClusterRequest,
 };
-use crate::services::StarRocksClient;
+use crate::services::{MySQLPoolManager, StarRocksClient};
 use crate::utils::{ApiError, ApiResult};
 use chrono::Utc;
 use sqlx::SqlitePool;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct ClusterService {
     pool: SqlitePool,
+    mysql_pool_manager: Arc<MySQLPoolManager>,
 }
 
 impl ClusterService {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, mysql_pool_manager: Arc<MySQLPoolManager>) -> Self {
+        Self { pool, mysql_pool_manager }
     }
 
     // Create a new cluster
@@ -405,7 +407,7 @@ impl ClusterService {
     // Get cluster health
     pub async fn get_cluster_health(&self, cluster_id: i64) -> ApiResult<ClusterHealth> {
         let cluster = self.get_cluster(cluster_id).await?;
-        let client = StarRocksClient::new(cluster);
+        let client = StarRocksClient::new(cluster, self.mysql_pool_manager.clone());
 
         let mut checks = Vec::new();
         let mut overall_status = HealthStatus::Healthy;
@@ -505,7 +507,6 @@ impl ClusterService {
     pub async fn get_cluster_health_for_cluster(
         &self,
         cluster: &Cluster,
-        pool_manager: &crate::services::MySQLPoolManager,
     ) -> ApiResult<ClusterHealth> {
         use crate::services::MySQLClient;
 
@@ -513,7 +514,7 @@ impl ClusterService {
         let mut overall_status = HealthStatus::Healthy;
 
         // Check connection by getting pool
-        match pool_manager.get_pool(cluster).await {
+        match self.mysql_pool_manager.get_pool(cluster).await {
             Ok(pool) => {
                 let mysql_client = MySQLClient::from_pool(pool);
 
@@ -527,7 +528,8 @@ impl ClusterService {
                         });
 
                         // Try to check FE availability via HTTP
-                        let client = StarRocksClient::new(cluster.clone());
+                        let client =
+                            StarRocksClient::new(cluster.clone(), self.mysql_pool_manager.clone());
                         match client.get_runtime_info().await {
                             Ok(_) => {
                                 checks.push(HealthCheck {

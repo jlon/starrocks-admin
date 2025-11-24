@@ -30,9 +30,12 @@ pub async fn list_backends(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
-    let client = StarRocksClient::new(cluster);
+    let client = StarRocksClient::new(cluster, state.mysql_pool_manager.clone());
     let backends = client.get_backends().await?;
     Ok(Json(backends))
 }
@@ -64,11 +67,14 @@ pub async fn delete_backend(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
     tracing::info!("Deleting backend {}:{} from cluster {}", host, port, cluster.id);
 
-    let client = StarRocksClient::new(cluster);
+    let client = StarRocksClient::new(cluster, state.mysql_pool_manager.clone());
     client.drop_backend(&host, &port).await?;
 
     Ok(Json(serde_json::json!({

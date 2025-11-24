@@ -124,19 +124,19 @@ impl OrganizationService {
 
         Ok(OrganizationResponse::from(org).with_admin(admin_user_id))
     }
-    
+
     async fn get_org_admin_user_id(&self, org_id: i64) -> ApiResult<Option<i64>> {
         let admin_user_id: Option<(i64,)> = sqlx::query_as(
             "SELECT ur.user_id 
              FROM user_roles ur
              JOIN roles r ON ur.role_id = r.id
              WHERE r.organization_id = ? AND r.code LIKE 'org_admin_%'
-             LIMIT 1"
+             LIMIT 1",
         )
         .bind(org_id)
         .fetch_optional(&self.pool)
         .await?;
-        
+
         Ok(admin_user_id.map(|(id,)| id))
     }
 
@@ -181,7 +181,8 @@ impl OrganizationService {
         }
 
         if let Some(admin_user_id) = req.admin_user_id {
-            self.assign_org_admin_user(&mut tx, id, admin_user_id).await?;
+            self.assign_org_admin_user(&mut tx, id, admin_user_id)
+                .await?;
         }
 
         tx.commit().await?;
@@ -364,12 +365,12 @@ impl OrganizationService {
             Some(_) => {
                 return Err(ApiError::validation_error(
                     "Selected user must belong to this organization",
-                ))
+                ));
             },
             None => {
                 return Err(ApiError::validation_error(
                     "Selected user is not assigned to any organization",
-                ))
+                ));
             },
         }
 

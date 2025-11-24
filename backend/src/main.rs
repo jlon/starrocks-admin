@@ -301,7 +301,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let auth_service = Arc::new(AuthService::new(pool.clone(), Arc::clone(&jwt_util)));
 
-    let cluster_service = Arc::new(ClusterService::new(pool.clone()));
+    let cluster_service =
+        Arc::new(ClusterService::new(pool.clone(), Arc::clone(&mysql_pool_manager)));
 
     let organization_service = Arc::new(OrganizationService::new(pool.clone()));
 

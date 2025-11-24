@@ -183,7 +183,7 @@ impl MetricsCollectorService {
     async fn collect_cluster_metrics(&self, cluster: &Cluster) -> ApiResult<()> {
         tracing::debug!("Collecting metrics for cluster: {} ({})", cluster.id, cluster.name);
 
-        let client = StarRocksClient::new(cluster.clone());
+        let client = StarRocksClient::new(cluster.clone(), self.mysql_pool_manager.clone());
 
         // Collect data from StarRocks
         let (metrics_text, backends, frontends, runtime_info) = tokio::try_join!(

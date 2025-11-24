@@ -2,14 +2,16 @@
 // Tests to verify that all handlers properly enforce organization-level data isolation
 
 use crate::models::CreateClusterRequest;
-use crate::services::cluster_service::ClusterService;
+use crate::services::{cluster_service::ClusterService, mysql_pool_manager::MySQLPoolManager};
 use crate::tests::common::{create_test_db, setup_multi_tenant_test_data};
+use std::sync::Arc;
 
 /// Test: get_active_cluster_by_org returns correct cluster for each organization
 #[tokio::test]
 async fn test_get_active_cluster_by_org_isolation() {
     let pool = create_test_db().await;
-    let cluster_service = ClusterService::new(pool.clone());
+    let mysql_pool_manager = Arc::new(MySQLPoolManager::new());
+    let cluster_service = ClusterService::new(pool.clone(), mysql_pool_manager);
     let test_data = setup_multi_tenant_test_data(&pool).await;
 
     // Create cluster for org1
@@ -70,19 +72,13 @@ async fn test_get_active_cluster_by_org_isolation() {
         .await
         .expect("Should get org1 active cluster");
 
-    assert_eq!(
-        org1_active.id, org1_cluster.id,
-        "Org1 should get its own active cluster"
-    );
+    assert_eq!(org1_active.id, org1_cluster.id, "Org1 should get its own active cluster");
     assert_eq!(
         org1_active.organization_id,
         Some(test_data.org1_id),
         "Returned cluster should belong to org1"
     );
-    assert_eq!(
-        org1_active.name, "org1_test_cluster",
-        "Should return org1's cluster"
-    );
+    assert_eq!(org1_active.name, "org1_test_cluster", "Should return org1's cluster");
 
     // Test: Org2 user gets org2's active cluster
     let org2_active = cluster_service
@@ -90,19 +86,13 @@ async fn test_get_active_cluster_by_org_isolation() {
         .await
         .expect("Should get org2 active cluster");
 
-    assert_eq!(
-        org2_active.id, org2_cluster.id,
-        "Org2 should get its own active cluster"
-    );
+    assert_eq!(org2_active.id, org2_cluster.id, "Org2 should get its own active cluster");
     assert_eq!(
         org2_active.organization_id,
         Some(test_data.org2_id),
         "Returned cluster should belong to org2"
     );
-    assert_eq!(
-        org2_active.name, "org2_test_cluster",
-        "Should return org2's cluster"
-    );
+    assert_eq!(org2_active.name, "org2_test_cluster", "Should return org2's cluster");
 
     // Test: Clusters are isolated - org1 cannot see org2's cluster
     assert_ne!(
@@ -115,7 +105,8 @@ async fn test_get_active_cluster_by_org_isolation() {
 #[tokio::test]
 async fn test_get_active_cluster_by_org_no_cluster() {
     let pool = create_test_db().await;
-    let cluster_service = ClusterService::new(pool.clone());
+    let mysql_pool_manager = Arc::new(MySQLPoolManager::new());
+    let cluster_service = ClusterService::new(pool.clone(), mysql_pool_manager);
     let test_data = setup_multi_tenant_test_data(&pool).await;
 
     // Test: Getting active cluster for org with no clusters should fail
@@ -123,10 +114,7 @@ async fn test_get_active_cluster_by_org_no_cluster() {
         .get_active_cluster_by_org(Some(test_data.org1_id))
         .await;
 
-    assert!(
-        result.is_err(),
-        "Should fail when organization has no active cluster"
-    );
+    assert!(result.is_err(), "Should fail when organization has no active cluster");
 
     let error_msg = result.unwrap_err().to_string();
     assert!(
@@ -140,22 +128,21 @@ async fn test_get_active_cluster_by_org_no_cluster() {
 #[tokio::test]
 async fn test_get_active_cluster_by_org_none_org_id() {
     let pool = create_test_db().await;
-    let cluster_service = ClusterService::new(pool.clone());
+    let mysql_pool_manager = Arc::new(MySQLPoolManager::new());
+    let cluster_service = ClusterService::new(pool.clone(), mysql_pool_manager);
 
     // Test: Calling with None org_id should fail
     let result = cluster_service.get_active_cluster_by_org(None).await;
 
-    assert!(
-        result.is_err(),
-        "Should fail when organization_id is None"
-    );
+    assert!(result.is_err(), "Should fail when organization_id is None");
 }
 
 /// Test: Super admin can use get_active_cluster (global) while regular users must use get_active_cluster_by_org
 #[tokio::test]
 async fn test_super_admin_vs_regular_user_cluster_access() {
     let pool = create_test_db().await;
-    let cluster_service = ClusterService::new(pool.clone());
+    let mysql_pool_manager = Arc::new(MySQLPoolManager::new());
+    let cluster_service = ClusterService::new(pool.clone(), mysql_pool_manager);
     let test_data = setup_multi_tenant_test_data(&pool).await;
 
     // Create cluster for org1
@@ -190,10 +177,7 @@ async fn test_super_admin_vs_regular_user_cluster_access() {
         .await
         .expect("Super admin should get active cluster globally");
 
-    assert_eq!(
-        global_active.id, org1_cluster.id,
-        "Global query should return the active cluster"
-    );
+    assert_eq!(global_active.id, org1_cluster.id, "Global query should return the active cluster");
 
     // Test: Regular user should use get_active_cluster_by_org
     let org_scoped_active = cluster_service
@@ -211,7 +195,8 @@ async fn test_super_admin_vs_regular_user_cluster_access() {
 #[tokio::test]
 async fn test_multiple_orgs_multiple_active_clusters() {
     let pool = create_test_db().await;
-    let cluster_service = ClusterService::new(pool.clone());
+    let mysql_pool_manager = Arc::new(MySQLPoolManager::new());
+    let cluster_service = ClusterService::new(pool.clone(), mysql_pool_manager);
     let test_data = setup_multi_tenant_test_data(&pool).await;
 
     // Create multiple clusters for org1
@@ -297,10 +282,7 @@ async fn test_multiple_orgs_multiple_active_clusters() {
         .await
         .expect("Should get org1 active cluster");
 
-    assert_eq!(
-        org1_active.id, org1_cluster1.id,
-        "Org1 should have first cluster active"
-    );
+    assert_eq!(org1_active.id, org1_cluster1.id, "Org1 should have first cluster active");
 
     // Test: Org2 has its cluster active
     let org2_active = cluster_service
@@ -308,10 +290,7 @@ async fn test_multiple_orgs_multiple_active_clusters() {
         .await
         .expect("Should get org2 active cluster");
 
-    assert_eq!(
-        org2_active.id, org2_cluster.id,
-        "Org2 should have its cluster active"
-    );
+    assert_eq!(org2_active.id, org2_cluster.id, "Org2 should have its cluster active");
 
     // Test: Both organizations can have active clusters simultaneously
     assert!(org1_active.is_active, "Org1 cluster should be active");
@@ -326,7 +305,8 @@ async fn test_multiple_orgs_multiple_active_clusters() {
 #[tokio::test]
 async fn test_switching_active_cluster_isolation() {
     let pool = create_test_db().await;
-    let cluster_service = ClusterService::new(pool.clone());
+    let mysql_pool_manager = Arc::new(MySQLPoolManager::new());
+    let cluster_service = ClusterService::new(pool.clone(), mysql_pool_manager);
     let test_data = setup_multi_tenant_test_data(&pool).await;
 
     // Create 2 clusters for org1
@@ -445,17 +425,15 @@ async fn test_switching_active_cluster_isolation() {
         org2_active_after.id, org2_cluster.id,
         "Org2 active cluster should remain unchanged"
     );
-    assert!(
-        org2_active_after.is_active,
-        "Org2 cluster should still be active"
-    );
+    assert!(org2_active_after.is_active, "Org2 cluster should still be active");
 }
 
 /// Test: Data isolation - verify SQL queries include organization_id filter
 #[tokio::test]
 async fn test_sql_query_organization_filter() {
     let pool = create_test_db().await;
-    let cluster_service = ClusterService::new(pool.clone());
+    let mysql_pool_manager = Arc::new(MySQLPoolManager::new());
+    let cluster_service = ClusterService::new(pool.clone(), mysql_pool_manager);
     let test_data = setup_multi_tenant_test_data(&pool).await;
 
     // Create clusters for both orgs

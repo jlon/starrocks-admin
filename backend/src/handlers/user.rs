@@ -127,7 +127,17 @@ pub async fn update_user(
     axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Json(payload): Json<AdminUpdateUserRequest>,
 ) -> ApiResult<Json<UserWithRolesResponse>> {
-    if !org_ctx.is_super_admin && payload.organization_id.is_some() {
+    // Get existing user to check organization_id
+    let existing = state
+        .user_service
+        .get_user(user_id, org_ctx.organization_id, org_ctx.is_super_admin)
+        .await?;
+
+    // Only check if organization_id is being changed (not just present)
+    if !org_ctx.is_super_admin
+        && payload.organization_id.is_some()
+        && payload.organization_id != existing.user.organization_id
+    {
         return Err(crate::utils::ApiError::forbidden(
             "Organization administrators cannot reassign user organization",
         ));

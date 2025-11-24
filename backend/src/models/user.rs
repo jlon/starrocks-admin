@@ -102,7 +102,12 @@ impl UserResponse {
         }
     }
 
-    pub fn from_user_with_org(user: User, organization_name: Option<String>, is_super_admin: bool, is_org_admin: bool) -> Self {
+    pub fn from_user_with_org(
+        user: User,
+        organization_name: Option<String>,
+        is_super_admin: bool,
+        is_org_admin: bool,
+    ) -> Self {
         Self {
             id: user.id,
             username: user.username,

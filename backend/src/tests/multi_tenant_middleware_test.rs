@@ -1,12 +1,14 @@
 // Multi-tenant middleware tests
 
-use crate::middleware::{auth_middleware, AuthState, OrgContext};
-use crate::tests::common::{create_test_casbin_service, create_test_db, setup_multi_tenant_test_data};
+use crate::middleware::{AuthState, OrgContext, auth_middleware};
+use crate::tests::common::{
+    create_test_casbin_service, create_test_db, setup_multi_tenant_test_data,
+};
 use crate::utils::JwtUtil;
 use axum::{
     body::Body,
     extract::Request,
-    http::{header, Method, StatusCode},
+    http::{Method, StatusCode, header},
 };
 use std::sync::Arc;
 use tower::ServiceExt;

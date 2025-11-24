@@ -239,7 +239,11 @@ pub async fn update_cluster(
             "You can only update clusters within your organization",
         ));
     }
-    if !org_ctx.is_super_admin && req.organization_id.is_some() {
+    // Only check if organization_id is being changed (not just present)
+    if !org_ctx.is_super_admin
+        && req.organization_id.is_some()
+        && req.organization_id != existing.organization_id
+    {
         return Err(crate::utils::ApiError::forbidden(
             "Only super administrators can reassign cluster organization",
         ));
@@ -370,7 +374,7 @@ pub async fn get_cluster_health(
 
         let health = state
             .cluster_service
-            .get_cluster_health_for_cluster(&temp_cluster, &state.mysql_pool_manager)
+            .get_cluster_health_for_cluster(&temp_cluster)
             .await?;
         return Ok(Json(health));
     }
@@ -441,7 +445,7 @@ pub async fn test_cluster_connection(
 
     let health = state
         .cluster_service
-        .get_cluster_health_for_cluster(&temp_cluster, &state.mysql_pool_manager)
+        .get_cluster_health_for_cluster(&temp_cluster)
         .await?;
 
     tracing::debug!("Connection test result: status={:?}", health.status);

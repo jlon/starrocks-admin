@@ -58,7 +58,10 @@ pub async fn list_materialized_views(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -95,7 +98,10 @@ pub async fn get_materialized_view(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -129,7 +135,10 @@ pub async fn get_materialized_view_ddl(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -161,7 +170,10 @@ pub async fn create_materialized_view(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -198,7 +210,10 @@ pub async fn delete_materialized_view(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -233,7 +248,10 @@ pub async fn refresh_materialized_view(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -276,7 +294,10 @@ pub async fn cancel_refresh_materialized_view(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
@@ -311,7 +332,10 @@ pub async fn alter_materialized_view(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;

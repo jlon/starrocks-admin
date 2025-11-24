@@ -35,11 +35,14 @@ pub async fn get_query_profile(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     // Create StarRocks client
-    let client = StarRocksClient::new(cluster);
+    let client = StarRocksClient::new(cluster, state.mysql_pool_manager.clone());
 
     // Try to get profile from StarRocks
     let profile_result = get_profile_from_starrocks(&client, &query_id).await;
@@ -68,53 +71,43 @@ async fn get_profile_from_starrocks(
     client: &StarRocksClient,
     query_id: &str,
 ) -> ApiResult<QueryProfile> {
-    // Try to get profile using HTTP REST API
-    let url = format!("{}/api/show_proc?path=/query_profile/{}", client.get_base_url(), query_id);
-
-    let response = client
-        .http_client
-        .get(&url)
-        .basic_auth(&client.cluster.username, Some(&client.cluster.password_encrypted))
-        .send()
-        .await
-        .map_err(|e| ApiError::cluster_connection_failed(format!("Request failed: {}", e)))?;
-
-    if !response.status().is_success() {
-        return Err(ApiError::cluster_connection_failed(format!(
-            "HTTP status: {}",
-            response.status()
-        )));
-    }
-
-    let data: serde_json::Value = response.json().await.map_err(|e| {
-        ApiError::cluster_connection_failed(format!("Failed to parse response: {}", e))
-    })?;
-
-    // Parse profile data from JSON response
-    let mut profile_content = String::new();
-    let fragments = Vec::new();
-
-    if let Some(array) = data.as_array() {
-        for item in array {
-            if let Some(obj) = item.as_object() {
-                let mut line = String::new();
-                for (key, value) in obj {
-                    line.push_str(&format!("{}: {}\n", key, value.as_str().unwrap_or("")));
+    // Note: SHOW PROC '/query_profile/{id}' path doesn't exist in StarRocks.
+    // Query profile information is typically available via HTTP API /api/profile?query_id={id}
+    // or stored in FE memory. For now, we return a message indicating the profile is not available via MySQL.
+    let path = format!("/query_profile/{}", query_id);
+    match client.show_proc_raw(&path).await {
+        Ok(rows) if !rows.is_empty() => {
+            let mut profile_content = String::new();
+            for row in rows {
+                if let serde_json::Value::Object(obj) = row {
+                    for (key, value) in obj {
+                        profile_content.push_str(&format!(
+                            "{}: {}\n",
+                            key,
+                            value.as_str().unwrap_or_default()
+                        ));
+                    }
+                    profile_content.push('\n');
                 }
-                profile_content.push_str(&line);
-                profile_content.push('\n');
             }
-        }
-    }
 
-    Ok(QueryProfile {
-        query_id: query_id.to_string(),
-        sql: "N/A".to_string(), // SQL is not available in profile
-        profile_content,
-        execution_time_ms: 0, // Could be parsed from profile content
-        status: "Completed".to_string(),
-        fragments,
-    })
+            Ok(QueryProfile {
+                query_id: query_id.to_string(),
+                sql: "N/A".to_string(),
+                profile_content,
+                execution_time_ms: 0,
+                status: "Completed".to_string(),
+                fragments: Vec::new(),
+            })
+        },
+        _ => {
+            // Path doesn't exist or returned empty - return informative message
+            Err(ApiError::not_found(format!(
+                "Query profile '{}' not available via MySQL interface. Profile information may be available via HTTP API /api/profile?query_id={}",
+                query_id, query_id
+            )))
+        },
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]

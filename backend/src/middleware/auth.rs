@@ -106,12 +106,8 @@ pub async fn auth_middleware(
     req.extensions_mut().insert(claims.username.clone());
 
     // Insert org context for downstream services/handlers
-    let org_ctx = OrgContext {
-        user_id,
-        username: claims.username.clone(),
-        organization_id,
-        is_super_admin,
-    };
+    let org_ctx =
+        OrgContext { user_id, username: claims.username.clone(), organization_id, is_super_admin };
     req.extensions_mut().insert(org_ctx.clone());
 
     if let Some((resource, action)) = permission_extractor::extract_permission(&method, &uri) {

@@ -125,20 +125,38 @@ pub struct Query {
     pub query_id: String,
     #[serde(rename = "ConnectionId")]
     pub connection_id: String,
-    #[serde(rename = "Database")]
+    #[serde(rename = "Database", default)]
     pub database: String,
     #[serde(rename = "User")]
     pub user: String,
-    #[serde(rename = "ScanBytes")]
+    #[serde(rename = "ScanBytes", default)]
     pub scan_bytes: String,
-    #[serde(rename = "ProcessRows")]
+    #[serde(rename = "ProcessRows", default)]
+    #[serde(alias = "ScanRows")] // Support both ProcessRows and ScanRows
     pub process_rows: String,
-    #[serde(rename = "CPUTime")]
+    #[serde(rename = "CPUTime", default)]
     pub cpu_time: String,
-    #[serde(rename = "ExecTime")]
+    #[serde(rename = "ExecTime", default)]
     pub exec_time: String,
-    #[serde(rename = "Sql")]
+    #[serde(rename = "Sql", default)]
     pub sql: String,
+    // Additional fields from SHOW PROC '/current_queries'
+    #[serde(rename = "StartTime", default)]
+    pub start_time: Option<String>,
+    #[serde(rename = "feIp", default)]
+    pub fe_ip: Option<String>,
+    #[serde(rename = "MemoryUsage", default)]
+    pub memory_usage: Option<String>,
+    #[serde(rename = "DiskSpillSize", default)]
+    pub disk_spill_size: Option<String>,
+    #[serde(rename = "ExecProgress", default)]
+    pub exec_progress: Option<String>,
+    #[serde(rename = "Warehouse", default)]
+    pub warehouse: Option<String>,
+    #[serde(rename = "CustomQueryId", default)]
+    pub custom_query_id: Option<String>,
+    #[serde(rename = "ResourceGroup", default)]
+    pub resource_group: Option<String>,
 }
 
 // Session/Process information
@@ -218,7 +236,18 @@ pub struct RuntimeInfo {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[allow(dead_code)]
 pub struct Database {
+    #[serde(rename = "DbName", alias = "database")]
     pub database: String,
+    #[serde(rename = "DbId", default)]
+    pub db_id: Option<String>,
+    #[serde(rename = "TableNum", default)]
+    pub table_num: Option<String>,
+    #[serde(rename = "Quota", default)]
+    pub quota: Option<String>,
+    #[serde(rename = "LastConsistencyCheckTime", default)]
+    pub last_consistency_check_time: Option<String>,
+    #[serde(rename = "ReplicaQuota", default)]
+    pub replica_quota: Option<String>,
 }
 
 // Table information
@@ -249,12 +278,35 @@ pub struct TableInfo {
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
 #[allow(dead_code)]
 pub struct SchemaChange {
+    #[serde(rename = "JobId")]
     pub job_id: String,
+    #[serde(rename = "TableName")]
     pub table_name: String,
+    #[serde(rename = "CreateTime")]
     pub create_time: String,
+    #[serde(rename = "FinishTime", default)]
     pub finish_time: Option<String>,
+    #[serde(rename = "State")]
     pub state: String,
+    #[serde(rename = "Msg", default)]
     pub msg: Option<String>,
+    // Additional fields from SHOW PROC '/jobs/{db_id}/schema_change'
+    #[serde(rename = "IndexName", default)]
+    pub index_name: Option<String>,
+    #[serde(rename = "IndexId", default)]
+    pub index_id: Option<String>,
+    #[serde(rename = "OriginIndexId", default)]
+    pub origin_index_id: Option<String>,
+    #[serde(rename = "SchemaVersion", default)]
+    pub schema_version: Option<String>,
+    #[serde(rename = "TransactionId", default)]
+    pub transaction_id: Option<String>,
+    #[serde(rename = "Progress", default)]
+    pub progress: Option<String>,
+    #[serde(rename = "Timeout", default)]
+    pub timeout: Option<String>,
+    #[serde(rename = "Warehouse", default)]
+    pub warehouse: Option<String>,
 }
 
 // Metrics summary

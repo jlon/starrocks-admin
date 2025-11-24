@@ -27,9 +27,12 @@ pub async fn get_runtime_info(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
-    let client = StarRocksClient::new(cluster);
+    let client = StarRocksClient::new(cluster, state.mysql_pool_manager.clone());
     let runtime_info = client.get_runtime_info().await?;
     Ok(Json(runtime_info))
 }

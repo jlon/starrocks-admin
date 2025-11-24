@@ -125,10 +125,6 @@ pub async fn update_me(
     let updated_user_id = user.id;
     let response = state.auth_service.to_user_response(user).await?;
 
-    tracing::info!(
-        "User updated successfully: {} (ID: {})",
-        updated_username,
-        updated_user_id,
-    );
+    tracing::info!("User updated successfully: {} (ID: {})", updated_username, updated_user_id,);
     Ok(Json(response))
 }

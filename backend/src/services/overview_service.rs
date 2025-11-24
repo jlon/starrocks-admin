@@ -1646,17 +1646,18 @@ impl OverviewService {
                 if row.len() >= 6 {
                     let db_name = row.first().map(|s| s.to_string()).unwrap_or_default();
                     let table_name = row.get(1).map(|s| s.to_string()).unwrap_or_default();
-                    
+
                     // Filter out system databases (double protection)
-                    if db_name == "_statistics_" 
+                    if db_name == "_statistics_"
                         || db_name == "information_schema"
                         || db_name == "sys"
                         || db_name == "starrocks_audit_db__"
-                        || table_name == "starrocks_audit_tbl__" {
+                        || table_name == "starrocks_audit_tbl__"
+                    {
                         tracing::debug!("Filtering out system table: {}.{}", db_name, table_name);
                         return None;
                     }
-                    
+
                     Some(TopPartitionByScore {
                         db_name,
                         table_name,
@@ -1924,7 +1925,7 @@ impl OverviewService {
     async fn get_starrocks_version(&self, cluster_id: i64) -> ApiResult<String> {
         use crate::services::StarRocksClient;
         let cluster = self.cluster_service.get_cluster(cluster_id).await?;
-        let starrocks_client = StarRocksClient::new(cluster);
+        let starrocks_client = StarRocksClient::new(cluster, self.mysql_pool_manager.clone());
         let frontends = starrocks_client.get_frontends().await?;
         if let Some(fe) = frontends.first() {
             Ok(fe.version.clone())

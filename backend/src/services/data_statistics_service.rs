@@ -397,10 +397,22 @@ impl DataStatisticsService {
                 let tables = results
                     .into_iter()
                     .filter_map(|row| {
-                        let catalog = row.get("catalog").and_then(|v| v.as_str()).unwrap_or("").trim();
-                        let database = row.get("database_name").and_then(|v| v.as_str()).unwrap_or("").trim();
+                        let catalog = row
+                            .get("catalog")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .trim();
+                        let database = row
+                            .get("database_name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .trim();
                         let table = row.get("table_name").and_then(|v| v.as_str())?.trim();
-                        let full_table_ref = row.get("full_table_ref").and_then(|v| v.as_str()).unwrap_or("").trim();
+                        let full_table_ref = row
+                            .get("full_table_ref")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .trim();
 
                         // Try to parse access_count - could be i64 or string
                         let access_count = row
@@ -416,7 +428,7 @@ impl DataStatisticsService {
                         // Format: table, db.table, or catalog.db.table
                         let full_ref_clean = full_table_ref.replace('`', "").trim().to_string();
                         let parts: Vec<&str> = full_ref_clean.split('.').collect();
-                        
+
                         let (final_db, final_table) = match parts.len() {
                             3 => {
                                 // catalog.database.table (external catalog)
@@ -442,23 +454,34 @@ impl DataStatisticsService {
                                     }
                                 } else {
                                     // No database info, skip
-                                    tracing::debug!("Skipping table with no database info: {}", table);
+                                    tracing::debug!(
+                                        "Skipping table with no database info: {}",
+                                        table
+                                    );
                                     return None;
                                 }
                             },
                             _ => {
-                                tracing::debug!("Invalid table reference format: {}", full_ref_clean);
+                                tracing::debug!(
+                                    "Invalid table reference format: {}",
+                                    full_ref_clean
+                                );
                                 return None;
-                            }
+                            },
                         };
 
                         // Filter out system tables
-                        if final_db.contains("information_schema") 
-                            || final_db.contains("_statistics_") 
+                        if final_db.contains("information_schema")
+                            || final_db.contains("_statistics_")
                             || final_db.contains("sys")
                             || final_db.contains("starrocks_audit_db__")
-                            || final_table == "starrocks_audit_tbl__" {
-                            tracing::debug!("Filtering out system table: {}.{}", final_db, final_table);
+                            || final_table == "starrocks_audit_tbl__"
+                        {
+                            tracing::debug!(
+                                "Filtering out system table: {}.{}",
+                                final_db,
+                                final_table
+                            );
                             return None;
                         }
 

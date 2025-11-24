@@ -122,6 +122,12 @@ async fn get_sessions_from_starrocks(mysql_client: &MySQLClient) -> ApiResult<Ve
         let state = row.get(6).cloned().unwrap_or_default();
         let info = row.get(7).cloned();
 
+        // Debug log to help identify sleep connections
+        tracing::debug!(
+            "Session {}: command='{}', state='{}'", 
+            id, command, state
+        );
+
         let session = Session { id, user, host, db, command, time: time_str, state, info };
 
         sessions.push(session);

@@ -200,9 +200,13 @@ export class SessionsComponent implements OnInit, OnDestroy {
     let filteredSessions = allSessions;
     
     if (this.sessionFilter.sleepOnly) {
-      filteredSessions = filteredSessions.filter(s => 
-        s.command?.toLowerCase() === 'sleep' || s.state?.toLowerCase() === 'sleep'
-      );
+      filteredSessions = filteredSessions.filter(s => {
+        const cmdLower = s.command?.toLowerCase() || '';
+        const stateLower = s.state?.toLowerCase() || '';
+        return cmdLower === 'sleep' || 
+               stateLower.includes('sleep') ||
+               cmdLower === 'daemon';
+      });
     }
     
     if (this.sessionFilter.slowOnly) {
@@ -351,9 +355,17 @@ export class SessionsComponent implements OnInit, OnDestroy {
     // Get all sessions first (not filtered)
     this.nodeService.getSessions().subscribe({
       next: (allSessions) => {
-        const sleepingSessions = allSessions.filter(s => 
-          s.command?.toLowerCase() === 'sleep' || s.state?.toLowerCase() === 'sleep'
-        );
+        // Fix: StarRocks returns Command as "Sleep" (capitalized) or "Daemon"
+        // We should check both command and info fields
+        const sleepingSessions = allSessions.filter(s => {
+          const cmdLower = s.command?.toLowerCase() || '';
+          const stateLower = s.state?.toLowerCase() || '';
+          
+          // Match sleep connections: command is "Sleep" or state contains "sleep"
+          return cmdLower === 'sleep' || 
+                 stateLower.includes('sleep') ||
+                 cmdLower === 'daemon'; // Daemon connections are also idle
+        });
 
         if (sleepingSessions.length === 0) {
           this.toastrService.info('当前没有睡眠连接', '提示');

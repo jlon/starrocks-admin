@@ -28,6 +28,7 @@ async fn test_get_active_cluster_by_org_isolation() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org1_cluster = cluster_service
@@ -54,6 +55,7 @@ async fn test_get_active_cluster_by_org_isolation() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org2_cluster = cluster_service
@@ -159,6 +161,7 @@ async fn test_super_admin_vs_regular_user_cluster_access() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org1_cluster = cluster_service
@@ -213,6 +216,7 @@ async fn test_multiple_orgs_multiple_active_clusters() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org1_cluster1 = cluster_service
@@ -238,6 +242,7 @@ async fn test_multiple_orgs_multiple_active_clusters() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let _org1_cluster2 = cluster_service
@@ -264,6 +269,7 @@ async fn test_multiple_orgs_multiple_active_clusters() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org2_cluster = cluster_service
@@ -323,6 +329,7 @@ async fn test_switching_active_cluster_isolation() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org1_cluster1 = cluster_service
@@ -348,6 +355,7 @@ async fn test_switching_active_cluster_isolation() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org1_cluster2 = cluster_service
@@ -374,6 +382,7 @@ async fn test_switching_active_cluster_isolation() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org2_cluster = cluster_service
@@ -450,6 +459,7 @@ async fn test_sql_query_organization_filter() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org1_cluster = cluster_service
@@ -475,6 +485,7 @@ async fn test_sql_query_organization_filter() {
         tags: None,
         catalog: "default_catalog".to_string(),
         organization_id: None,
+        deployment_mode: crate::models::cluster::DeploymentMode::default(),
     };
 
     let org2_cluster = cluster_service

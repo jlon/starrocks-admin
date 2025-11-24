@@ -1,6 +1,4 @@
-use crate::models::{
-    Backend, Cluster, Frontend, Query, RuntimeInfo,
-};
+use crate::models::{Backend, Cluster, Frontend, Query, RuntimeInfo};
 use crate::services::{mysql_client::MySQLClient, mysql_pool_manager::MySQLPoolManager};
 use crate::utils::{ApiError, ApiResult};
 use reqwest::Client;
@@ -81,35 +79,26 @@ impl StarRocksClient {
     }
 
     pub async fn get_backends(&self) -> ApiResult<Vec<Backend>> {
-        tracing::debug!("Fetching backends via MySQL SHOW PROC");
-
-        match self.show_proc_entities::<Backend>("/backends").await {
-            Ok(backends) if !backends.is_empty() => {
-                tracing::debug!("Retrieved {} backend entries", backends.len());
-                return Ok(backends);
-            },
-            Ok(_) => {
-                tracing::warn!(
-                    "SHOW PROC /backends returned empty result, falling back to /compute_nodes"
-                );
-            },
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to retrieve /backends via MySQL interface: {}. Falling back to /compute_nodes",
-                    e
-                );
-            },
-        }
-
-        let compute_nodes = self.show_proc_entities::<Backend>("/compute_nodes").await?;
-        if compute_nodes.is_empty() {
-            tracing::warn!("No backends or compute nodes found via SHOW PROC");
-        } else {
+        // Automatically switch query strategy based on deployment mode
+        if self.cluster.is_shared_data() {
             tracing::info!(
-                "Retrieved {} compute nodes via SHOW PROC /compute_nodes",
-                compute_nodes.len()
+                "Cluster {} is in shared-data mode, fetching compute nodes",
+                self.cluster.name
             );
+            return self.get_compute_nodes().await;
         }
+
+        tracing::debug!(
+            "Cluster {} is in shared-nothing mode, fetching backends",
+            self.cluster.name
+        );
+        self.show_proc_entities::<Backend>("/backends").await
+    }
+
+    // Get compute nodes for shared-data architecture
+    async fn get_compute_nodes(&self) -> ApiResult<Vec<Backend>> {
+        let compute_nodes = self.show_proc_entities::<Backend>("/compute_nodes").await?;
+        tracing::info!("Retrieved {} compute nodes (shared-data mode)", compute_nodes.len());
         Ok(compute_nodes)
     }
 
@@ -148,10 +137,24 @@ impl StarRocksClient {
         Ok(())
     }
 
-    // Drop backend node
+    // Drop backend node (BE for shared-nothing, CN for shared-data)
     pub async fn drop_backend(&self, host: &str, heartbeat_port: &str) -> ApiResult<()> {
-        let sql = format!("ALTER SYSTEM DROP backend \"{}:{}\"", host, heartbeat_port);
-        tracing::info!("Dropping backend: {}:{}", host, heartbeat_port);
+        let sql = if self.cluster.is_shared_data() {
+            // Shared-data mode: drop compute node
+            format!("ALTER SYSTEM DROP COMPUTE NODE \"{}:{}\"", host, heartbeat_port)
+        } else {
+            // Shared-nothing mode: drop backend
+            format!("ALTER SYSTEM DROP BACKEND \"{}:{}\"", host, heartbeat_port)
+        };
+
+        tracing::info!(
+            "Dropping {} node {}:{} from cluster {} (mode: {})",
+            if self.cluster.is_shared_data() { "compute" } else { "backend" },
+            host,
+            heartbeat_port,
+            self.cluster.name,
+            self.cluster.deployment_mode
+        );
         self.execute_sql(&sql).await
     }
 

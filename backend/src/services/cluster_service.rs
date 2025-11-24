@@ -78,8 +78,8 @@ impl ClusterService {
         let result = sqlx::query(
             "INSERT INTO clusters (name, description, fe_host, fe_http_port, fe_query_port, 
              username, password_encrypted, enable_ssl, connection_timeout, tags, catalog, 
-             is_active, created_by, organization_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             is_active, created_by, organization_id, deployment_mode)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&req.name)
         .bind(&req.description)
@@ -95,6 +95,7 @@ impl ClusterService {
         .bind(if is_first_cluster { 1 } else { 0 }) // Set as active if first cluster in org
         .bind(user_id)
         .bind(target_org_id)
+        .bind(req.deployment_mode.to_string())
         .execute(&self.pool)
         .await?;
 
@@ -291,6 +292,10 @@ impl ClusterService {
         if let Some(org_id) = req.organization_id {
             updates.push("organization_id = ?");
             params.push(org_id.to_string());
+        }
+        if let Some(mode) = &req.deployment_mode {
+            updates.push("deployment_mode = ?");
+            params.push(mode.to_string());
         }
 
         if updates.is_empty() {

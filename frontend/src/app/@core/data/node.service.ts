@@ -226,9 +226,27 @@ export class NodeService {
     return this.api.put(`/clusters/variables/${variableName}`, request);
   }
 
-  // Query History API with pagination
-  listQueryHistory(limit: number = 10, offset: number = 0): Observable<QueryHistoryResponse> {
-    return this.api.get<QueryHistoryResponse>(`/clusters/queries/history`, { limit, offset });
+  // Query History API with pagination and search
+  listQueryHistory(limit: number = 10, offset: number = 0, filters?: {
+    keyword?: string;
+    startTime?: string;
+    endTime?: string;
+  }): Observable<QueryHistoryResponse> {
+    const params: any = { limit, offset };
+    
+    if (filters) {
+      if (filters.keyword?.trim()) {
+        params.keyword = filters.keyword.trim();
+      }
+      if (filters.startTime) {
+        params.start_time = filters.startTime;
+      }
+      if (filters.endTime) {
+        params.end_time = filters.endTime;
+      }
+    }
+    
+    return this.api.get<QueryHistoryResponse>(`/clusters/queries/history`, params);
   }
 
   // Query Profile API

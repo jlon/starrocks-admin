@@ -8,12 +8,17 @@ use crate::utils::error::ApiResult;
 
 #[derive(Deserialize)]
 pub struct HistoryQueryParams {
-    /// max rows to return
     #[serde(default = "default_limit")]
     pub limit: i64,
     /// offset for pagination
     #[serde(default = "default_offset")]
     pub offset: i64,
+    /// search keyword for query_id, sql_statement, or user
+    pub keyword: Option<String>,
+    /// start time filter
+    pub start_time: Option<String>,
+    /// end time filter
+    pub end_time: Option<String>,
 }
 
 fn default_limit() -> i64 {
@@ -23,7 +28,6 @@ fn default_offset() -> i64 {
     0
 }
 
-/// Get finished (historical) queries from StarRocks audit table
 #[utoipa::path(
     get,
     path = "/api/clusters/queries/history",
@@ -51,17 +55,48 @@ pub async fn list_query_history(
 
     let limit = params.limit;
     let offset = params.offset;
+    let keyword = params.keyword.as_deref().unwrap_or("");
+    let start_time = params.start_time.as_deref();
+    let end_time = params.end_time.as_deref();
+
+    // Build WHERE conditions
+    let mut where_conditions = vec![
+        "isQuery = 1".to_string(),
+        "`timestamp` >= DATE_SUB(NOW(), INTERVAL 7 DAY)".to_string(),
+    ];
+
+    // Add keyword search if provided
+    if !keyword.is_empty() {
+        where_conditions.push(format!(
+            "(`queryId` LIKE '%{}%' OR `stmt` LIKE '%{}%' OR `user` LIKE '%{}%')",
+            keyword.replace('\'', "''"), // Escape single quotes
+            keyword.replace('\'', "''"),
+            keyword.replace('\'', "''")
+        ));
+    }
+
+    // Add time range filters if provided
+    if let Some(start) = start_time {
+        where_conditions.push(format!("`timestamp` >= '{}'", start));
+    }
+    if let Some(end) = end_time {
+        where_conditions.push(format!("`timestamp` <= '{}'", end));
+    }
+
+    let where_clause = where_conditions.join(" AND ");
 
     // First, get the total count (required for ng2-smart-table pagination)
-    let count_sql = r#"
+    let count_sql = format!(
+        r#"
         SELECT COUNT(*) as total
         FROM starrocks_audit_db__.starrocks_audit_tbl__
-        WHERE isQuery = 1
-          AND `timestamp` >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    "#;
+        WHERE {}
+    "#,
+        where_clause
+    );
 
     tracing::info!("Fetching total count for cluster {}", cluster.id);
-    let (_, count_rows) = mysql.query_raw(count_sql).await.map_err(|e| {
+    let (_, count_rows) = mysql.query_raw(&count_sql).await.map_err(|e| {
         tracing::error!("Failed to query count: {:?}", e);
         e
     })?;
@@ -95,12 +130,11 @@ pub async fn list_query_history(
             `state`,
             COALESCE(`resourceGroup`, '') AS warehouse
         FROM starrocks_audit_db__.starrocks_audit_tbl__
-        WHERE isQuery = 1
-          AND `timestamp` >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        WHERE {}
         ORDER BY `timestamp` DESC
         LIMIT {} OFFSET {}
     "#,
-        limit, offset
+        where_clause, limit, offset
     );
 
     tracing::info!(

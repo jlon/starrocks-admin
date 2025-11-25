@@ -182,11 +182,23 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Load query history with pagination
+  // Load query history with pagination and filters
   loadHistoryQueries(): void {
     this.loading = true;
+    
+    // Prepare filters
+    const filters = {
+      keyword: this.searchKeyword?.trim() || undefined,
+      startTime: this.searchStartTime || undefined,
+      endTime: this.searchEndTime || undefined,
+    };
+    
     this.nodeService
-      .listQueryHistory(this.historyPageSize, (this.historyCurrentPage - 1) * this.historyPageSize)
+      .listQueryHistory(
+        this.historyPageSize, 
+        (this.historyCurrentPage - 1) * this.historyPageSize,
+        filters
+      )
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
@@ -207,9 +219,20 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
 
   // Load query history silently (for auto-refresh, no loading spinner)
   loadHistoryQueriesSilently(): void {
+    // Prepare filters
+    const filters = {
+      keyword: this.searchKeyword?.trim() || undefined,
+      startTime: this.searchStartTime || undefined,
+      endTime: this.searchEndTime || undefined,
+    };
+    
     // Only update data, don't show loading spinner during auto-refresh
     this.nodeService
-      .listQueryHistory(this.historyPageSize, (this.historyCurrentPage - 1) * this.historyPageSize)
+      .listQueryHistory(
+        this.historyPageSize, 
+        (this.historyCurrentPage - 1) * this.historyPageSize,
+        filters
+      )
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (data) => {
@@ -284,29 +307,10 @@ export class AuditLogsComponent implements OnInit, OnDestroy {
     this.searchHistory();
   }
 
+  // Note: Filtering is now handled by the backend API
+  // This method is kept for reference but no longer used
   applyHistoryFilters(queries: QueryHistoryItem[]): QueryHistoryItem[] {
-    let filtered = queries;
-
-    // Filter by keyword (search in query_id and sql_statement)
-    if (this.searchKeyword && this.searchKeyword.trim() !== '') {
-      const keyword = this.searchKeyword.toLowerCase();
-      filtered = filtered.filter(q => 
-        q.query_id.toLowerCase().includes(keyword) || 
-        q.sql_statement.toLowerCase().includes(keyword) ||
-        q.user.toLowerCase().includes(keyword)
-      );
-    }
-
-    // Filter by start time
-    if (this.searchStartTime) {
-      filtered = filtered.filter(q => q.start_time >= this.searchStartTime);
-    }
-
-    // Filter by end time
-    if (this.searchEndTime) {
-      filtered = filtered.filter(q => q.start_time <= this.searchEndTime);
-    }
-
-    return filtered;
+    // Backend handles filtering now, so this method is not used
+    return queries;
   }
 }

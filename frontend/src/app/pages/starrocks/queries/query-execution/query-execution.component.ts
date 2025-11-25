@@ -4929,7 +4929,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         next: () => {
           this.toastrService.success(`查询 ${query.QueryId} 已成功查杀`, '成功');
           event.confirm.resolve();
-          this.loadRunningQueries();
+          // Reset loading state immediately, then refresh after delay
+          this.loading = false;
+          this.cdr.markForCheck();
+          // Add delay to allow StarRocks to clean up the query state
+          setTimeout(() => {
+            this.loadRunningQueries();
+          }, 1000);
         },
         error: (error) => {
           this.toastrService.danger(
@@ -4978,7 +4984,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
               } else {
                 this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
               }
-              this.loadRunningQueries();
+              // Add delay to allow StarRocks to clean up the query state
+              setTimeout(() => {
+                this.loadRunningQueries();
+              }, 1000);
             }
           },
           error: (error) => {
@@ -4991,7 +5000,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
               } else {
                 this.toastrService.danger('批量查杀失败', '错误');
               }
-              this.loadRunningQueries();
+              // Add delay to allow StarRocks to clean up the query state
+              setTimeout(() => {
+                this.loadRunningQueries();
+              }, 1000);
             }
           },
         });
@@ -5074,7 +5086,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       this.nodeService.killQuery(this.currentQueryDetail!.QueryId).subscribe({
         next: () => {
           this.toastrService.success(`查询 ${this.currentQueryDetail!.QueryId} 已成功查杀`, '成功');
-          this.loadRunningQueries();
+          // Reset loading state immediately, then refresh after delay
+          this.loading = false;
+          this.cdr.markForCheck();
+          // Add delay to allow StarRocks to clean up the query state
+          setTimeout(() => {
+            this.loadRunningQueries();
+          }, 1000);
         },
         error: (error) => {
           this.toastrService.danger(

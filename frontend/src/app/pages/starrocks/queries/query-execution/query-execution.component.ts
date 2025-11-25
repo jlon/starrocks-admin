@@ -3,7 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrService, NbThemeService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject, Observable, forkJoin, of, fromEvent } from 'rxjs';
-import { map, catchError, takeUntil, debounceTime } from 'rxjs/operators';
+import { map, catchError, takeUntil, debounceTime, finalize } from 'rxjs/operators';
 import { NodeService, Query, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
@@ -4775,7 +4775,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   loadRunningQueries(): void {
     this.loading = true;
     this.cdr.markForCheck();
-    this.nodeService.listQueries().subscribe({
+    this.nodeService.listQueries().pipe(
+      finalize(() => {
+        this.loading = false;
+        this.cdr.markForCheck();
+      })
+    ).subscribe({
       next: (queries) => {
         // Apply filters
         let filteredQueries = queries;
@@ -4795,13 +4800,9 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         }
         
         this.runningSource.load(filteredQueries);
-        this.loading = false;
-        this.cdr.markForCheck();
       },
       error: (error) => {
         this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
-        this.loading = false;
-        this.cdr.markForCheck();
       },
     });
   }
@@ -4918,6 +4919,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       '查杀',
       '取消',
       'danger'
+    ).pipe(
+      takeUntil(this.destroy$)
     ).subscribe(confirmed => {
       if (!confirmed) {
         event.confirm.reject();
@@ -4925,17 +4928,14 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       }
 
       this.loading = true;
-      this.nodeService.killQuery(query.QueryId).subscribe({
+      this.cdr.markForCheck();
+      this.nodeService.killQuery(query.QueryId).pipe(
+        takeUntil(this.destroy$)
+      ).subscribe({
         next: () => {
           this.toastrService.success(`查询 ${query.QueryId} 已成功查杀`, '成功');
+          this.loadRunningQueries();
           event.confirm.resolve();
-          // Reset loading state immediately, then refresh after delay
-          this.loading = false;
-          this.cdr.markForCheck();
-          // Add delay to allow StarRocks to clean up the query state
-          setTimeout(() => {
-            this.loadRunningQueries();
-          }, 1000);
         },
         error: (error) => {
           this.toastrService.danger(
@@ -4944,6 +4944,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           );
           event.confirm.reject();
           this.loading = false;
+          this.cdr.markForCheck();
         },
       });
     });
@@ -4962,18 +4963,24 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       '查杀',
       '取消',
       'danger'
+    ).pipe(
+      takeUntil(this.destroy$)
     ).subscribe(confirmed => {
       if (!confirmed) {
         return;
       }
 
       this.loading = true;
+      this.cdr.markForCheck();
+
       let successCount = 0;
       let failCount = 0;
       let completed = 0;
 
       queryIds.forEach(queryId => {
-        this.nodeService.killQuery(queryId).subscribe({
+        this.nodeService.killQuery(queryId).pipe(
+          takeUntil(this.destroy$)
+        ).subscribe({
           next: () => {
             successCount++;
             completed++;
@@ -4984,10 +4991,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
               } else {
                 this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
               }
-              // Add delay to allow StarRocks to clean up the query state
-              setTimeout(() => {
-                this.loadRunningQueries();
-              }, 1000);
+              this.cdr.markForCheck();
+              this.loadRunningQueries();
             }
           },
           error: (error) => {
@@ -5000,10 +5005,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
               } else {
                 this.toastrService.danger('批量查杀失败', '错误');
               }
-              // Add delay to allow StarRocks to clean up the query state
-              setTimeout(() => {
-                this.loadRunningQueries();
-              }, 1000);
+              this.cdr.markForCheck();
+              this.loadRunningQueries();
             }
           },
         });

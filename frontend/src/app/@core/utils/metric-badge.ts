@@ -49,6 +49,61 @@ export function extractNumericValue(value: string | number | null | undefined): 
   return parseFloat(normalized);
 }
 
+/**
+ * Parse StarRocks duration string (e.g., "1m41s", "35s370ms", "1ms41s") to milliseconds
+ * @param durationStr - Duration string from StarRocks
+ * @returns Duration in milliseconds
+ */
+export function parseStarRocksDuration(durationStr: string | number | null | undefined): number {
+  if (typeof durationStr === 'number') {
+    return durationStr;
+  }
+
+  if (!durationStr) {
+    return Number.NaN;
+  }
+
+  const str = durationStr.toString().trim();
+  let totalMs = 0;
+  
+  // Match patterns like: 1m41s, 35s370ms, 1ms41s, 1h2m3s4ms
+  // Order matters: match longer units first to avoid conflicts (ms before m, s before sec)
+  const regex = /(\d+)(h|hr|hour|ms|millisec|m|min|s|sec)/gi;
+  let match;
+  
+  while ((match = regex.exec(str)) !== null) {
+    const value = parseInt(match[1], 10);
+    const unit = match[2].toLowerCase();
+    
+    switch (unit) {
+      case 'h':
+      case 'hr':
+      case 'hour':
+        totalMs += value * 60 * 60 * 1000;
+        break;
+      case 'm':
+      case 'min':
+        totalMs += value * 60 * 1000;
+        break;
+      case 's':
+      case 'sec':
+        totalMs += value * 1000;
+        break;
+      case 'ms':
+      case 'millisec':
+        totalMs += value;
+        break;
+    }
+  }
+  
+  // If no units found, try to parse as plain number (assume milliseconds)
+  if (totalMs === 0 && /^\d+$/.test(str)) {
+    totalMs = parseInt(str, 10);
+  }
+  
+  return totalMs || Number.NaN;
+}
+
 export function resolveMetricStatus(value: number, thresholds: MetricThresholds): MetricStatus {
   const { warn, danger, reverse } = thresholds;
 

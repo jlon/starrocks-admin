@@ -8,7 +8,7 @@ import { NodeService } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
-import { MetricThresholds, renderMetricBadge } from '../../../../@core/utils/metric-badge';
+import { MetricThresholds, renderMetricBadge, parseStarRocksDuration } from '../../../../@core/utils/metric-badge';
 import { renderLongText } from '../../../../@core/utils/text-truncate';
 import { AuthService } from '../../../../@core/data/auth.service';
 
@@ -37,7 +37,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     { value: 60, label: '1分钟' },
   ];
   private destroy$ = new Subject<void>();
-  private readonly profileDurationThresholds: MetricThresholds = { warn: 3000, danger: 10000 };
+  private readonly profileDurationThresholds: MetricThresholds = { warn: 120000, danger: 240000 };
 
   // Profile dialog
   currentProfileDetail: string = '';
@@ -69,7 +69,16 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         title: '执行时间',
         type: 'html',
         width: '10%',
-        valuePrepareFunction: (value: string | number) => renderMetricBadge(value, this.profileDurationThresholds),
+        valuePrepareFunction: (value: string | number) => {
+          // Parse StarRocks duration string to milliseconds for accurate threshold comparison
+          const durationMs = parseStarRocksDuration(value);
+          return renderMetricBadge(durationMs, this.profileDurationThresholds, {
+            labelFormatter: (val) => {
+              // Use original string for display, but parsed number for thresholds
+              return typeof value === 'string' ? value : `${val}ms`;
+            }
+          });
+        },
       },
       State: {
         title: '状态',

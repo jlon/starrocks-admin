@@ -293,4 +293,51 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       }
     );
   }
+
+  // Copy profile content to clipboard
+  copyProfileToClipboard(): void {
+    if (!this.currentProfileDetail) {
+      return;
+    }
+
+    // Use Clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(this.currentProfileDetail)
+        .then(() => {
+          this.toastrService.success('Profile 内容已复制到剪贴板', '复制成功');
+        })
+        .catch(err => {
+          console.error('Failed to copy:', err);
+          this.fallbackCopy();
+        });
+    } else {
+      // Fallback for older browsers or non-secure contexts
+      this.fallbackCopy();
+    }
+  }
+
+  // Fallback copy method for older browsers
+  private fallbackCopy(): void {
+    const textArea = document.createElement('textarea');
+    textArea.value = this.currentProfileDetail;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        this.toastrService.success('Profile 内容已复制到剪贴板', '复制成功');
+      } else {
+        this.toastrService.warning('复制失败，请手动复制', '提示');
+      }
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      this.toastrService.warning('复制失败，请手动复制', '提示');
+    } finally {
+      document.body.removeChild(textArea);
+    }
+  }
 }

@@ -18,6 +18,7 @@ import {
   NbBadgeModule,
   NbProgressBarModule,
   NbToggleModule,
+  NbTooltipModule,
 } from '@nebular/theme';
 import { Ng2SmartTableModule } from 'ng2-smart-table';
 import { NgxEchartsModule } from 'ngx-echarts';
@@ -91,6 +92,7 @@ import { ActiveToggleRenderComponent } from './materialized-views/active-toggle-
     NbBadgeModule,
     NbProgressBarModule,
     NbToggleModule,
+    NbTooltipModule,
     Ng2SmartTableModule,
     NgxEchartsModule,
     DragDropModule,

@@ -10,7 +10,6 @@
           <div class="form-group" *ngIf="isSuperAdmin">
             <label for="organization" class="label">所属组织 *</label>
             <nb-form-field>
-              <nb-icon nbPrefix icon="briefcase-outline"></nb-icon>
               <nb-select
                 formControlName="organization_id"
                 id="organization"
@@ -78,20 +77,23 @@
             <div class="col-md-12">
               <div class="form-group">
                 <label for="deployment_mode" class="label">部署模式 *</label>
-                <nb-radio-group formControlName="deployment_mode" id="deployment_mode">
-                  <nb-radio value="shared_nothing">
-                    <strong>存算一体 (Shared-Nothing)</strong>
-                    <span class="text-hint d-block" style="font-size: 0.875rem;">
-                      传统架构,BE节点同时负责存储和计算,适用于对延迟敏感的场景
-                    </span>
-                  </nb-radio>
-                  <nb-radio value="shared_data">
-                    <strong>存算分离 (Shared-Data)</strong>
-                    <span class="text-hint d-block" style="font-size: 0.875rem;">
-                      云原生架构,CN节点仅负责计算,数据存储在对象存储(S3/HDFS),支持弹性扩缩容
-                    </span>
-                  </nb-radio>
-                </nb-radio-group>
+                <nb-form-field>
+                  <nb-select
+                    formControlName="deployment_mode"
+                    id="deployment_mode"
+                    placeholder="请选择部署模式"
+                    [status]="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched ? 'danger' : 'basic'"
+                    fullWidth
+                  >
+                    <nb-option value="shared_nothing">存算一体 (Shared-Nothing)</nb-option>
+                    <nb-option value="shared_data">存算分离 (Shared-Data)</nb-option>
+                  </nb-select>
+                </nb-form-field>
+                <ng-container *ngIf="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched">
+                  <small class="form-text text-danger">
+                    请选择部署模式
+                  </small>
+                </ng-container>
               </div>
             </div>
           </div>

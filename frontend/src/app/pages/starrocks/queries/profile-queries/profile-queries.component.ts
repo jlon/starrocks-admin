@@ -8,7 +8,7 @@ import { NodeService } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
-import { MetricThresholds, renderMetricBadge, parseStarRocksDuration } from '../../../../@core/utils/metric-badge';
+import { MetricThresholds, renderMetricBadge, parseStarRocksDuration, calculateDynamicThresholds } from '../../../../@core/utils/metric-badge';
 import { renderLongText } from '../../../../@core/utils/text-truncate';
 import { AuthService } from '../../../../@core/data/auth.service';
 
@@ -37,7 +37,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     { value: 60, label: '1分钟' },
   ];
   private destroy$ = new Subject<void>();
-  private readonly profileDurationThresholds: MetricThresholds = { warn: 120000, danger: 240000 };
+  private profileDurationThresholds: MetricThresholds = { warn: 120000, danger: 240000 }; // Will be updated dynamically
 
   // Profile dialog
   currentProfileDetail: string = '';
@@ -189,6 +189,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     this.nodeService.listProfiles().subscribe(
       data => {
         this.profileSource.load(data);
+        this.updateDynamicThresholds(data);
         this.loading = false;
       },
       error => {
@@ -198,18 +199,53 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     );
   }
 
-  // Load profiles silently (for auto-refresh, no loading spinner)
+  // Load profiles silently (for auto-refresh, without loading spinner)
   loadProfilesSilently(): void {
-    // Only update data, don't show loading spinner during auto-refresh
     this.nodeService.listProfiles().subscribe(
       data => {
         this.profileSource.load(data);
+        this.updateDynamicThresholds(data);
       },
       error => {
-        // Silently handle errors during auto-refresh, don't show toast
-        console.error('[ProfileQueries] Auto-refresh error:', error);
+        // Silently handle errors during auto-refresh
+        console.error('Failed to refresh profiles:', error);
       }
     );
+  }
+
+  // Update dynamic thresholds based on current data
+  updateDynamicThresholds(profiles: any[]): void {
+    if (!profiles || profiles.length === 0) {
+      return;
+    }
+
+    // Extract duration values from profiles
+    const durationValues = profiles
+      .map(profile => parseStarRocksDuration(profile.Time))
+      .filter(value => !isNaN(value) && value > 0);
+
+    if (durationValues.length < 5) {
+      // Not enough data for meaningful thresholds, use defaults
+      return;
+    }
+
+    // Calculate dynamic thresholds
+    const dynamicThresholds = calculateDynamicThresholds(durationValues, {
+      sampleSize: Math.min(500, durationValues.length),
+      percentileMethod: 'p85',
+      warnMultiplier: 2.0,
+      dangerMultiplier: 3.5,
+      minWarnThreshold: 30000,    // 30 seconds
+      minDangerThreshold: 120000, // 2 minutes
+      maxWarnThreshold: 300000,   // 5 minutes
+      maxDangerThreshold: 600000,  // 10 minutes
+    });
+
+    // Update thresholds
+    this.profileDurationThresholds = dynamicThresholds;
+    
+    console.log('Updated dynamic thresholds:', dynamicThresholds);
+    console.log(`Data range: ${Math.min(...durationValues)}ms - ${Math.max(...durationValues)}ms`);
   }
 
   // Handle profile edit action (view profile)

@@ -4,20 +4,15 @@ use sqlx::FromRow;
 use utoipa::ToSchema;
 
 /// Deployment mode for StarRocks cluster
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, sqlx::Type, Default)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "TEXT", rename_all = "snake_case")]
 pub enum DeploymentMode {
     /// Shared-nothing architecture: BE nodes handle both storage and compute
+    #[default]
     SharedNothing,
     /// Shared-data architecture: CN nodes for compute, separate object storage (S3/HDFS)
     SharedData,
-}
-
-impl Default for DeploymentMode {
-    fn default() -> Self {
-        DeploymentMode::SharedNothing
-    }
 }
 
 impl std::fmt::Display for DeploymentMode {

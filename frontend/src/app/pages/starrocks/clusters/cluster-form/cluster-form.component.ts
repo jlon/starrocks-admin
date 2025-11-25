@@ -120,6 +120,7 @@ export class ClusterFormComponent implements OnInit {
           enable_ssl: cluster.enable_ssl,
           connection_timeout: cluster.connection_timeout,
           catalog: cluster.catalog,
+          deployment_mode: cluster.deployment_mode,
           tags: cluster.tags.join(', '),
         });
         // Password is not loaded for security

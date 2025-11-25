@@ -4,6 +4,24 @@ export interface MetricThresholds {
   reverse?: boolean;
 }
 
+export interface DynamicThresholdOptions {
+  // 数据采样策略
+  sampleSize?: number;           // 采样数量，默认1000
+  percentileMethod?: 'p75' | 'p80' | 'p85' | 'p90' | 'p95'; // 百分位方法，默认p85
+  
+  // 阈值计算规则
+  warnMultiplier?: number;      // 警告阈值倍数，基于P75计算，默认2.0
+  dangerMultiplier?: number;     // 危险阈值倍数，基于P90计算，默认3.0
+  
+  // 最小阈值保护
+  minWarnThreshold?: number;     // 最小警告阈值（毫秒），默认30000 (30秒)
+  minDangerThreshold?: number;   // 最小危险阈值（毫秒），默认120000 (2分钟)
+  
+  // 最大阈值保护
+  maxWarnThreshold?: number;     // 最大警告阈值（毫秒），默认300000 (5分钟)
+  maxDangerThreshold?: number;   // 最大危险阈值（毫秒），默认600000 (10分钟)
+}
+
 export type MetricStatus = 'good' | 'warn' | 'alert' | 'neutral';
 
 export interface MetricBadgeOptions {
@@ -102,6 +120,101 @@ export function parseStarRocksDuration(durationStr: string | number | null | und
   }
   
   return totalMs || Number.NaN;
+}
+
+/**
+ * Calculate dynamic thresholds based on data distribution
+ * @param values - Array of duration values in milliseconds
+ * @param options - Configuration for dynamic threshold calculation
+ * @returns Calculated thresholds
+ */
+export function calculateDynamicThresholds(
+  values: number[],
+  options: DynamicThresholdOptions = {}
+): MetricThresholds {
+  const {
+    sampleSize = 1000,
+    percentileMethod = 'p85',
+    warnMultiplier = 2.0,
+    dangerMultiplier = 3.0,
+    minWarnThreshold = 30000,    // 30 seconds
+    minDangerThreshold = 120000, // 2 minutes
+    maxWarnThreshold = 300000,   // 5 minutes
+    maxDangerThreshold = 600000,  // 10 minutes
+  } = options;
+
+  // Filter valid values and sample if needed
+  const validValues = values
+    .filter(v => !isNaN(v) && v > 0)
+    .sort((a, b) => a - b);
+  
+  if (validValues.length === 0) {
+    // Fallback to default thresholds
+    return { warn: minWarnThreshold, danger: minDangerThreshold };
+  }
+
+  // Sample data if too large
+  const sampledValues = validValues.length > sampleSize 
+    ? sampleData(validValues, sampleSize)
+    : validValues;
+
+  // Calculate percentiles
+  const percentiles = calculatePercentiles(sampledValues);
+  
+  // Get base values for calculation
+  const baseWarnValue = percentiles[percentileMethod];
+  const baseDangerValue = percentiles.p95;
+
+  // Calculate thresholds with multipliers
+  let warnThreshold = Math.round(baseWarnValue * warnMultiplier);
+  let dangerThreshold = Math.round(baseDangerValue * dangerMultiplier);
+
+  // Apply min/max constraints
+  warnThreshold = Math.max(minWarnThreshold, Math.min(warnThreshold, maxWarnThreshold));
+  dangerThreshold = Math.max(minDangerThreshold, Math.min(dangerThreshold, maxDangerThreshold));
+
+  // Ensure danger threshold is greater than warn threshold
+  if (dangerThreshold <= warnThreshold) {
+    dangerThreshold = Math.round(warnThreshold * 1.5);
+  }
+
+  return { warn: warnThreshold, danger: dangerThreshold };
+}
+
+/**
+ * Sample data evenly from the array
+ */
+function sampleData(values: number[], sampleSize: number): number[] {
+  const step = Math.floor(values.length / sampleSize);
+  const sampled: number[] = [];
+  
+  for (let i = 0; i < values.length && sampled.length < sampleSize; i += step) {
+    sampled.push(values[i]);
+  }
+  
+  return sampled;
+}
+
+/**
+ * Calculate common percentiles from sorted data
+ */
+function calculatePercentiles(sortedValues: number[]): Record<string, number> {
+  const n = sortedValues.length;
+  
+  const getPercentile = (p: number): number => {
+    const index = Math.ceil((p / 100) * n) - 1;
+    return sortedValues[Math.max(0, Math.min(index, n - 1))];
+  };
+
+  return {
+    p50: getPercentile(50),
+    p75: getPercentile(75),
+    p80: getPercentile(80),
+    p85: getPercentile(85),
+    p90: getPercentile(90),
+    p95: getPercentile(95),
+    p99: getPercentile(99),
+  };
 }
 
 export function resolveMetricStatus(value: number, thresholds: MetricThresholds): MetricStatus {

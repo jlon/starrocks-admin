@@ -282,8 +282,6 @@ impl OrganizationService {
         .await?;
         
         let perm_count = perms.len();
-
-        let perm_count = perms.len();
         for (pid,) in perms {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
                 .bind(role_id)
@@ -292,13 +290,6 @@ impl OrganizationService {
                 .await?;
         }
         
-        tracing::info!(
-            "Created org_admin role for organization {} with {} permissions (excluding organization management)",
-            org_code,
-            perm_count
-        );
-        
-
         tracing::info!(
             "Created org_admin role for organization {} with {} permissions (excluding organization management)",
             org_code,

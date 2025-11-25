@@ -280,17 +280,14 @@ impl RoleService {
             .await?;
 
         tracing::info!("Role deleted: {} (ID: {})", role.name, role.id);
-
         Ok(())
     }
 
     /// Assign permissions to role (organization-scoped)
+    /// 
     /// Automatically:
-    /// 1. Associates API permissions with selected menu permissions (child APIs)
-    /// 2. Grants all parent menu permissions for selected permissions (parent menus)
-    /// Automatically:
-    /// 1. Associates API permissions with selected menu permissions (child APIs)
-    /// 2. Grants all parent menu permissions for selected permissions (parent menus)
+    ///   1. Associates API permissions with selected menu permissions (child APIs)
+    ///   2. Grants all parent menu permissions for selected permissions (parent menus)
     pub async fn assign_permissions_to_role(
         &self,
         role_id: i64,
@@ -334,13 +331,9 @@ impl RoleService {
 
         // Step 1: Add child API permissions for selected menu permissions
         let mut api_count = 0;
-        // Step 1: Add child API permissions for selected menu permissions
-        let mut api_count = 0;
         for permission_id in &req.permission_ids {
             if let Some(perm) = perm_map.get(permission_id)
-            if let Some(perm) = perm_map.get(permission_id)
                 && perm.r#type == "menu"
-                && let Some(api_ids) = menu_to_apis.get(permission_id)
                 && let Some(api_ids) = menu_to_apis.get(permission_id)
             {
                 extended_permission_ids.extend(api_ids.iter());

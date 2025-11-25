@@ -8,7 +8,7 @@ import { NodeService } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
-import { MetricThresholds, renderMetricBadge, parseStarRocksDuration, calculateDynamicThresholds } from '../../../../@core/utils/metric-badge';
+import { MetricThresholds, renderMetricBadge, parseStarRocksDuration } from '../../../../@core/utils/metric-badge';
 import { renderLongText } from '../../../../@core/utils/text-truncate';
 import { AuthService } from '../../../../@core/data/auth.service';
 
@@ -41,6 +41,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
   // Profile dialog
   currentProfileDetail: string = '';
+  profileDetailLoading = false;
   @ViewChild('profileDetailDialog') profileDetailDialogTemplate: TemplateRef<any>;
 
   // Profile management settings
@@ -99,10 +100,10 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   };
 
   constructor(
-    private nodeService: NodeService,
     private route: ActivatedRoute,
+    private nodeService: NodeService,
+    private clusterContextService: ClusterContextService,
     private toastrService: NbToastrService,
-    private clusterContext: ClusterContextService,
     private dialogService: NbDialogService,
     private authService: AuthService,
   ) {
@@ -113,7 +114,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     // Subscribe to active cluster changes
-    this.clusterContext.activeCluster$
+    this.clusterContextService.activeCluster$
       .pipe(takeUntil(this.destroy$))
       .subscribe(cluster => {
         this.activeCluster = cluster;
@@ -213,7 +214,16 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     );
   }
 
-  // Update dynamic thresholds based on current data
+  /**
+   * Update dynamic thresholds based on maximum time in current data
+   * Algorithm:
+   * - Find the maximum execution time in the dataset
+   * - Red (danger): > max_time * 70%
+   * - Yellow (warning): > max_time * 40% and <= max_time * 70%
+   * - Green (success): <= max_time * 40%
+   * 
+   * This ensures color coding adapts to the actual data range
+   */
   updateDynamicThresholds(profiles: any[]): void {
     if (!profiles || profiles.length === 0) {
       return;
@@ -224,28 +234,32 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       .map(profile => parseStarRocksDuration(profile.Time))
       .filter(value => !isNaN(value) && value > 0);
 
-    if (durationValues.length < 5) {
-      // Not enough data for meaningful thresholds, use defaults
+    if (durationValues.length === 0) {
+      // No valid data, use defaults
       return;
     }
 
-    // Calculate dynamic thresholds
-    const dynamicThresholds = calculateDynamicThresholds(durationValues, {
-      sampleSize: Math.min(500, durationValues.length),
-      percentileMethod: 'p85',
-      warnMultiplier: 2.0,
-      dangerMultiplier: 3.5,
-      minWarnThreshold: 30000,    // 30 seconds
-      minDangerThreshold: 120000, // 2 minutes
-      maxWarnThreshold: 300000,   // 5 minutes
-      maxDangerThreshold: 600000,  // 10 minutes
-    });
+    // Find maximum time
+    const maxTime = Math.max(...durationValues);
+    
+    // Calculate thresholds based on max time percentage
+    // Red: > 70% of max time
+    // Yellow: > 40% of max time
+    const warnThreshold = maxTime * 0.5;   // 40% of max
+    const dangerThreshold = maxTime * 0.8; // 70% of max
 
     // Update thresholds
-    this.profileDurationThresholds = dynamicThresholds;
-    
-    console.log('Updated dynamic thresholds:', dynamicThresholds);
-    console.log(`Data range: ${Math.min(...durationValues)}ms - ${Math.max(...durationValues)}ms`);
+    this.profileDurationThresholds = {
+      warn: warnThreshold,
+      danger: dangerThreshold,
+    };
+  }
+
+  // Helper: Format milliseconds to readable duration
+  private formatDuration(ms: number): string {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
+    return `${(ms / 60000).toFixed(2)}m`;
   }
 
   // Handle profile edit action (view profile)
@@ -255,19 +269,27 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
   // View profile detail from profile list
   viewProfileDetail(queryId: string): void {
+    this.profileDetailLoading = true;
+    this.currentProfileDetail = '';
+    
+    // Open dialog first with loading state
+    this.dialogService.open(this.profileDetailDialogTemplate, {
+      context: { profile: this.currentProfileDetail },
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+      dialogClass: 'modal-lg', // Use Bootstrap's large modal class
+    });
+    
+    // Then load profile data
     this.nodeService.getProfile(queryId).subscribe(
       data => {
         this.currentProfileDetail = data.profile_content;
-        this.dialogService.open(this.profileDetailDialogTemplate, {
-          context: { profile: this.currentProfileDetail },
-          hasBackdrop: true,
-          closeOnBackdropClick: true,
-          closeOnEsc: true,
-          dialogClass: 'modal-lg', // Use Bootstrap's large modal class
-        });
+        this.profileDetailLoading = false;
       },
       error => {
         this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
+        this.profileDetailLoading = false;
       }
     );
   }

@@ -1,18 +1,22 @@
-.profile-container {
-  .profile-scroll-container {
-    max-height: 70vh;
-    overflow-y: auto;
-    
-    .profile-content-text {
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-      font-size: 12px;
-      line-height: 1.4;
-      white-space: pre-wrap;
-      word-break: break-all;
-      margin: 0;
-      padding: 1rem;
-      background-color: var(--background-basic-color-1);
-      border-radius: 0.25rem;
+@import '../../../../@theme/styles/themes';
+
+@include nb-install-component() {
+  .profile-container {
+    .profile-scroll-container {
+      max-height: 70vh;
+      overflow-y: auto;
+      
+      .profile-content-text {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-all;
+        margin: 0;
+        padding: 1rem;
+        background-color: nb-theme(background-basic-color-1);
+        border-radius: nb-theme(border-radius);
+      }
     }
   }
 }

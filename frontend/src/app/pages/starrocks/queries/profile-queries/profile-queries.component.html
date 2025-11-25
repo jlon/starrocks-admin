@@ -63,7 +63,11 @@
     <nb-card-body>
       <nb-card accent="basic">
         <nb-card-body class="profile-scroll-container">
-          <pre class="profile-content-text">{{ currentProfileDetail }}</pre>
+          <div *ngIf="profileDetailLoading" class="text-center py-4">
+            <nb-spinner status="primary" size="large"></nb-spinner>
+            <p class="mt-3 text-hint">加载 Profile 详情中...</p>
+          </div>
+          <pre *ngIf="!profileDetailLoading" class="profile-content-text">{{ currentProfileDetail }}</pre>
         </nb-card-body>
       </nb-card>
     </nb-card-body>

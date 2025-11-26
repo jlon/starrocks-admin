@@ -70,35 +70,34 @@ pub async fn auth_middleware(
         uri
     );
 
-    // Load organization and role info
-    let is_super_admin: bool = sqlx::query_scalar(
+    // Load organization and role info with a single query
+    let (is_super_admin, organization_id): (bool, Option<i64>) = sqlx::query_as(
         r#"
-        SELECT EXISTS (
-          SELECT 1
-          FROM user_roles ur
-          JOIN roles r ON r.id = ur.role_id
-          WHERE ur.user_id = ? AND r.code = 'super_admin'
-        )
+        SELECT
+            COALESCE(EXISTS (
+                SELECT 1
+                FROM user_roles ur
+                JOIN roles r ON r.id = ur.role_id
+                WHERE ur.user_id = ? AND r.code = 'super_admin'
+            ), 0) as is_super_admin,
+            NULLIF(u.organization_id, 0) as organization_id
+        FROM users u
+        WHERE u.id = ?
         "#,
     )
     .bind(user_id)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(false);
-
-    // Prefer users.organization_id, fallback to user_organizations mapping
-    let organization_id: Option<i64> = sqlx::query_scalar(
-        r#"
-        SELECT organization_id FROM users WHERE id = ?
-        "#,
-    )
     .bind(user_id)
     .fetch_optional(&state.db)
     .await
-    .ok()
-    .flatten()
-    .or_else(|| async_std_block_on_fetch_org(&state.db, user_id))
-    .filter(|org| *org != 0);
+    .unwrap_or(None)
+    .unwrap_or((false, None));
+
+    // Fallback: fetch from user_organizations if organization_id is still None
+    let organization_id = if organization_id.is_none() {
+        async_std_block_on_fetch_org(&state.db, user_id)
+    } else {
+        organization_id
+    };
 
     // Insert legacy extensions to keep backward compatibility
     req.extensions_mut().insert(user_id);

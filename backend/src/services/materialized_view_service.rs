@@ -13,70 +13,64 @@ impl MaterializedViewService {
 
     /// Get all materialized views (both async and sync)
     /// If database is None, fetches from all databases in the catalog
+    /// Optimized version using information_schema system tables for better performance
     pub async fn list_materialized_views(
         &self,
         database: Option<&str>,
     ) -> ApiResult<Vec<MaterializedView>> {
-        let mut all_mvs = Vec::new();
-
-        if let Some(db) = database {
-            // Query specific database - run async and sync queries concurrently
-            let (async_result, sync_result) =
-                tokio::join!(self.get_async_mvs_from_db(db), self.get_sync_mvs_from_db(db));
-
-            if let Ok(async_mvs) = async_result {
-                all_mvs.extend(async_mvs);
-            }
-            if let Ok(sync_mvs) = sync_result {
-                all_mvs.extend(sync_mvs);
-            }
+        // Use information_schema for faster query and accurate row counts
+        let sql = if let Some(db) = database {
+            format!(
+                "SELECT 
+                    mv.MATERIALIZED_VIEW_ID as `id`,
+                    mv.TABLE_NAME as `name`,
+                    mv.TABLE_SCHEMA as database_name,
+                    mv.REFRESH_TYPE as refresh_type,
+                    mv.IS_ACTIVE as is_active,
+                    mv.PARTITION_TYPE as partition_type,
+                    mv.TASK_ID as task_id,
+                    mv.TASK_NAME as task_name,
+                    mv.LAST_REFRESH_START_TIME as last_refresh_start_time,
+                    mv.LAST_REFRESH_FINISHED_TIME as last_refresh_finished_time,
+                    mv.LAST_REFRESH_DURATION as last_refresh_duration,
+                    mv.LAST_REFRESH_STATE as last_refresh_state,
+                    COALESCE(t.TABLE_ROWS, 0) as `rows`,
+                    mv.MATERIALIZED_VIEW_DEFINITION as `text`
+                FROM information_schema.materialized_views mv
+                LEFT JOIN information_schema.tables t 
+                    ON mv.TABLE_SCHEMA = t.TABLE_SCHEMA AND mv.TABLE_NAME = t.TABLE_NAME
+                WHERE mv.TABLE_SCHEMA = '{}'",
+                db
+            )
         } else {
-            // Query all databases concurrently for better performance
-            let databases = self.get_all_databases().await?;
-            tracing::info!("Fetching MVs from {} databases concurrently", databases.len());
+            // Exclude system databases
+            "SELECT 
+                mv.MATERIALIZED_VIEW_ID as `id`,
+                mv.TABLE_NAME as `name`,
+                mv.TABLE_SCHEMA as database_name,
+                mv.REFRESH_TYPE as refresh_type,
+                mv.IS_ACTIVE as is_active,
+                mv.PARTITION_TYPE as partition_type,
+                mv.TASK_ID as task_id,
+                mv.TASK_NAME as task_name,
+                mv.LAST_REFRESH_START_TIME as last_refresh_start_time,
+                mv.LAST_REFRESH_FINISHED_TIME as last_refresh_finished_time,
+                mv.LAST_REFRESH_DURATION as last_refresh_duration,
+                mv.LAST_REFRESH_STATE as last_refresh_state,
+                COALESCE(t.TABLE_ROWS, 0) as `rows`,
+                mv.MATERIALIZED_VIEW_DEFINITION as `text`
+            FROM information_schema.materialized_views mv
+            LEFT JOIN information_schema.tables t 
+                ON mv.TABLE_SCHEMA = t.TABLE_SCHEMA AND mv.TABLE_NAME = t.TABLE_NAME
+            WHERE mv.TABLE_SCHEMA NOT IN ('information_schema', '_statistics_')".to_string()
+        };
 
-            // Create concurrent tasks for each database using tokio::spawn
-            let mut tasks = Vec::new();
+        tracing::info!("Querying materialized views using information_schema");
+        let results = self.mysql_client.query(&sql).await?;
+        let mvs = Self::parse_system_table_results(results)?;
+        tracing::info!("Fetched {} materialized views", mvs.len());
 
-            for db in databases {
-                let mysql_client = self.mysql_client.clone();
-
-                let task = tokio::spawn(async move {
-                    let mut mvs = Vec::new();
-
-                    // Fetch async MVs
-                    let sql_async = format!("SHOW MATERIALIZED VIEWS FROM `{}`", db);
-                    if let Ok(results) = mysql_client.query(&sql_async).await
-                        && let Ok(async_mvs) = Self::parse_async_mv_results(results, &db)
-                    {
-                        mvs.extend(async_mvs);
-                    }
-
-                    // Fetch sync MVs
-                    let sql_sync = format!("SHOW ALTER MATERIALIZED VIEW FROM `{}`", db);
-                    if let Ok(results) = mysql_client.query(&sql_sync).await
-                        && let Ok(sync_mvs) = Self::parse_sync_mv_results(results, &db)
-                    {
-                        mvs.extend(sync_mvs);
-                    }
-
-                    mvs
-                });
-
-                tasks.push(task);
-            }
-
-            // Collect all results
-            for task in tasks {
-                if let Ok(mvs) = task.await {
-                    all_mvs.extend(mvs);
-                }
-            }
-
-            tracing::info!("Total MVs fetched: {}", all_mvs.len());
-        }
-
-        Ok(all_mvs)
+        Ok(mvs)
     }
 
     /// Get a specific materialized view by name
@@ -450,6 +444,86 @@ impl MaterializedViewService {
                 last_refresh_state: Some("SUCCESS".to_string()),
                 rows: None,
                 text: format!("-- Sync materialized view on table: {}", table_name),
+            };
+
+            mvs.push(mv);
+        }
+
+        Ok(mvs)
+    }
+
+    /// Parse results from information_schema system tables
+    fn parse_system_table_results(
+        results: Vec<serde_json::Value>,
+    ) -> ApiResult<Vec<MaterializedView>> {
+        let mut mvs = Vec::new();
+
+        for row in results {
+            let mv = MaterializedView {
+                id: row
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                name: row
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                database_name: row
+                    .get("database_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                refresh_type: row
+                    .get("refresh_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("UNKNOWN")
+                    .to_string(),
+                is_active: row
+                    .get("is_active")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == "true" || s == "1")
+                    .unwrap_or(false),
+                partition_type: row
+                    .get("partition_type")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                task_id: row
+                    .get("task_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                task_name: row
+                    .get("task_name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                last_refresh_start_time: row
+                    .get("last_refresh_start_time")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                last_refresh_finished_time: row
+                    .get("last_refresh_finished_time")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                last_refresh_duration: row
+                    .get("last_refresh_duration")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                last_refresh_state: row
+                    .get("last_refresh_state")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                rows: row
+                    .get("rows")
+                    .and_then(|v| {
+                        // Try as i64 first, then as string
+                        v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
+                    }),
+                text: row
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
             };
 
             mvs.push(mv);

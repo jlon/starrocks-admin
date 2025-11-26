@@ -49,18 +49,23 @@ cd build/dist
 open http://localhost:8080
 ```
 
-### Method 2: Docker Deployment
+### Method 2: Docker Deployment (Recommended)
 
 ```bash
-# 1. Clone the project
+# Option 1: Use pre-built image from Docker Hub
+docker pull docker.io/johndockerhub/starrocks-admin:latest
+docker run -d -p 8080:8080 --name starrocks-admin \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  docker.io/johndockerhub/starrocks-admin:latest
+
+# Option 2: Build from source
 git clone https://github.com/jlon/starrocks-admin.git
 cd starrocks-admin
-
-# 2. Start the service
 make docker-build  # Build Docker image
 make docker-up     # Start Docker container
 
-# 3. Access the application
+# Access the application
 open http://localhost:8080
 ```
 
@@ -68,37 +73,76 @@ open http://localhost:8080
 
 StarRocks Admin provides an intuitive and beautiful web management interface covering all aspects of cluster management.
 
-### Cluster Overview
-![Cluster Overview](docs/images/1集群概览.png)
-Real-time display of overall cluster status, performance metrics, and resource usage for a comprehensive view of cluster health.
-
 ### Cluster Management
 ![Cluster Management](docs/images/1集群列表.png)
 Unified management of multiple StarRocks clusters with support for adding, editing, and deleting cluster configurations.
 
-### Node Management
-![Node Management](docs/images/2节点管理.png)
-View and manage all nodes in the cluster, monitoring the running status and resource usage of each node.
+### Cluster Overview
+![Cluster Overview](docs/images/2集群概览.png)
+Real-time display of overall cluster status, performance metrics, and resource usage for a comprehensive view of cluster health.
 
-### Query Management
-![Query Management](docs/images/3查询管理.png)
+![Cluster Overview Detail 1](docs/images/2集群概览1.png)
+Detailed cluster metrics and performance indicators.
+
+![Cluster Overview Detail 2](docs/images/2集群概览2.png)
+Resource usage and capacity planning insights.
+
+### Node Management - FE Nodes
+![FE Node Management](docs/images/3节点管理-fe.png)
+View and manage Frontend (FE) nodes, monitoring their running status and resource usage.
+
+### Node Management - BE Nodes
+![BE Node Management](docs/images/3.节点管理-be.png)
+View and manage Backend (BE) nodes with detailed performance metrics.
+
+### Query Management - Real-time Queries
+![Real-time Queries](docs/images/4查询管理-实时查询.png)
 Real-time view of executing queries with support for query termination and performance analysis.
 
+![Running Queries](docs/images/4查询管理-实时查询-运行中.png)
+Monitor actively running queries and their execution status.
+
+### Query Management - Audit Logs
+![Audit Logs](docs/images/4.查询管理-审计日志.png)
+Comprehensive audit logs for all executed queries with detailed metadata.
+
+### Query Management - Query Profiles
+![Query Profiles](docs/images/4查询管理-profiles.png)
+Detailed query execution profiles for performance analysis and optimization.
+
+![Query Profile Details](docs/images/4查询管理-profiles1.png)
+In-depth query performance metrics and execution plans.
+
 ### Materialized Views
-![Materialized Views](docs/images/9.物化视图.png)
+![Materialized Views](docs/images/5.物化视图.png)
 View and manage all materialized views in the cluster, with support for enabling, disabling, and editing.
 
+![Materialized Views Detail](docs/images/5物化视图1.png)
+Detailed materialized view configuration and refresh status.
+
+### Feature Cards
+![Feature Cards](docs/images/6功能卡片.png)
+Quick access to system functions with support for custom SQL execution and common operations.
+
 ### Session Management
-![Session Management](docs/images/6回话管理.png)
+![Session Management](docs/images/7会话管理.png)
 Manage database connection sessions, view active sessions and historical connection information.
 
 ### Variable Management
-![Variable Management](docs/images/5变量管理.png)
+![Variable Management](docs/images/8变量管理.png)
 Configure and manage system variables with support for viewing and modifying runtime parameters.
 
-### Feature Cards
-![System Management](docs/images/4.功能卡片.png)
-System-level configuration management including user permissions, system functions, and more. Also supports custom SQL.
+### System Management - User Management
+![User Management](docs/images/10系统管理-用户管理.png)
+Manage system users, roles, and permissions with fine-grained access control.
+
+### System Management - Organization Management
+![Organization Management](docs/images/10系统管理-组织管理.png)
+Multi-tenant organization management for enterprise deployments.
+
+### System Management - Role Management
+![Role Management](docs/images/10系统管理-角色管理.png)
+Define and manage user roles with customizable permission sets.
 
 ## Configuration
 
@@ -217,18 +261,23 @@ cd build/dist
 open http://localhost:8080
 ```
 
-### 方式二：Docker 部署
+### 方式二：Docker 部署（推荐）
 
 ```bash
-# 1. 克隆项目
+# 方式1: 使用 Docker Hub 预构建镜像
+docker pull docker.io/johndockerhub/starrocks-admin:latest
+docker run -d -p 8080:8080 --name starrocks-admin \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  docker.io/johndockerhub/starrocks-admin:latest
+
+# 方式2: 从源码构建
 git clone https://github.com/jlon/starrocks-admin.git
 cd starrocks-admin
-
-# 2. 启动服务
 make docker-build  # 构建 Docker 镜像
 make docker-up     # 启动 Docker 容器
 
-# 3. 访问应用
+# 访问应用
 open http://localhost:8080
 ```
 
@@ -236,37 +285,76 @@ open http://localhost:8080
 
 StarRocks Admin 提供了直观、美观的 Web 管理界面，涵盖集群管理的各个方面。
 
-### 集群概览
-![集群概览](docs/images/1集群概览.png)
-实时展示集群整体状态、性能指标和资源使用情况，一目了然掌握集群健康状态。
-
 ### 集群管理
 ![集群管理](docs/images/1集群列表.png)
 统一管理多个 StarRocks 集群，支持添加、编辑、删除集群配置。
 
-### 节点管理
-![节点管理](docs/images/2节点管理.png)
-查看和管理集群中的所有节点，监控各节点的运行状态和资源使用。
+### 集群概览
+![集群概览](docs/images/2集群概览.png)
+实时展示集群整体状态、性能指标和资源使用情况，一目了然掌握集群健康状态。
 
-### 查询管理
-![查询管理](docs/images/3查询管理.png)
+![集群概览详情1](docs/images/2集群概览1.png)
+详细的集群指标和性能监控数据。
+
+![集群概览详情2](docs/images/2集群概览2.png)
+资源使用情况和容量规划建议。
+
+### 节点管理 - FE 节点
+![FE节点管理](docs/images/3节点管理-fe.png)
+查看和管理前端（FE）节点，监控节点运行状态和资源使用。
+
+### 节点管理 - BE 节点
+![BE节点管理](docs/images/3.节点管理-be.png)
+查看和管理后端（BE）节点，包含详细的性能指标。
+
+### 查询管理 - 实时查询
+![实时查询](docs/images/4查询管理-实时查询.png)
 实时查看正在执行的查询，支持查询终止和性能分析。
 
+![运行中查询](docs/images/4查询管理-实时查询-运行中.png)
+监控活跃查询及其执行状态。
+
+### 查询管理 - 审计日志
+![审计日志](docs/images/4.查询管理-审计日志.png)
+完整的查询审计日志，包含详细的元数据信息。
+
+### 查询管理 - Query Profile
+![查询Profiles](docs/images/4查询管理-profiles.png)
+详细的查询执行Profile，用于性能分析和优化。
+
+![Profile详情](docs/images/4查询管理-profiles1.png)
+深入的查询性能指标和执行计划。
+
 ### 物化视图
-![节点管理](docs/images/9.物化视图.png)
-查看和管理集群中的所有物化视图，可以开启关闭编辑等。
+![物化视图](docs/images/5.物化视图.png)
+查看和管理集群中的所有物化视图，支持开启、关闭、编辑等操作。
+
+![物化视图详情](docs/images/5物化视图1.png)
+详细的物化视图配置和刷新状态。
+
+### 功能卡片
+![功能卡片](docs/images/6功能卡片.png)
+快速访问系统功能，支持自定义SQL执行和常用操作。
 
 ### 会话管理
-![会话管理](docs/images/6回话管理.png)
+![会话管理](docs/images/7会话管理.png)
 管理数据库连接会话，查看活跃会话和历史连接信息。
 
 ### 变量管理
-![变量管理](docs/images/5变量管理.png)
+![变量管理](docs/images/8变量管理.png)
 配置和管理系统变量，支持查看和修改运行时参数。
 
-### 功能卡片
-![功能卡片](docs/images/4.功能卡片.png)
-系统级别的配置管理，包括用户权限、系统函数等功能。还支持自定义SQL。
+### 系统管理 - 用户管理
+![用户管理](docs/images/10系统管理-用户管理.png)
+管理系统用户、角色和权限，实现细粒度的访问控制。
+
+### 系统管理 - 组织管理
+![组织管理](docs/images/10系统管理-组织管理.png)
+多租户组织管理，适用于企业级部署场景。
+
+### 系统管理 - 角色管理
+![角色管理](docs/images/10系统管理-角色管理.png)
+定义和管理用户角色，配置可自定义的权限集。
 
 ## 配置说明
 

@@ -159,7 +159,7 @@ mysql -h <fe_host> -P 9030 -u root -p < setup_starrocks_admin_role.sql
 mysql -h <fe_host> -P 9030 -u starrocks_monitor -p < verify_permissions.sql
 ```
 
-For detailed permission configuration guide, see [scripts/README_PERMISSIONS.md](scripts/README_PERMISSIONS.md)
+For detailed permission configuration guide, see [scripts/permissions/README_PERMISSIONS.md](scripts/permissions/README_PERMISSIONS.md)
 
 **Security Note:** Do NOT use the `root` account in production. Always create a dedicated monitoring user with minimal required permissions.
 
@@ -371,7 +371,7 @@ mysql -h <fe_host> -P 9030 -u root -p < setup_starrocks_admin_role.sql
 mysql -h <fe_host> -P 9030 -u starrocks_monitor -p < verify_permissions.sql
 ```
 
-详细的权限配置指南请参考 [scripts/README_PERMISSIONS.md](scripts/README_PERMISSIONS.md)
+详细的权限配置指南请参考 [scripts/permissions/README_PERMISSIONS.md](scripts/permissions/README_PERMISSIONS.md)
 
 **安全提示:** 生产环境禁止使用 `root` 账号，务必创建专用的监控账号并遵循最小权限原则。
 

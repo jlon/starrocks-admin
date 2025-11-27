@@ -53,11 +53,11 @@ open http://localhost:8080
 
 ```bash
 # Option 1: Use pre-built image from Docker Hub
-docker pull docker.io/johndockerhub/starrocks-admin:latest
+docker pull ghcr.io/jlon/starrocks-admin:latest
 docker run -d -p 8080:8080 --name starrocks-admin \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
-  docker.io/johndockerhub/starrocks-admin:latest
+  ghcr.io/jlon/starrocks-admin:latest
 
 # Option 2: Build from source
 git clone https://github.com/jlon/starrocks-admin.git
@@ -265,11 +265,11 @@ open http://localhost:8080
 
 ```bash
 # 方式1: 使用 Docker Hub 预构建镜像
-docker pull docker.io/johndockerhub/starrocks-admin:latest
+docker pull ghcr.io/jlon/starrocks-admin:latest
 docker run -d -p 8080:8080 --name starrocks-admin \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
-  docker.io/johndockerhub/starrocks-admin:latest
+  ghcr.io/jlon/starrocks-admin:latest
 
 # 方式2: 从源码构建
 git clone https://github.com/jlon/starrocks-admin.git

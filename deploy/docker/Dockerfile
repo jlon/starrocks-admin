@@ -14,7 +14,8 @@ WORKDIR /app/frontend
 # Install dependencies and build (outputs to frontend/dist)
 # Use relative base href (./) to support sub-path deployments (e.g., /starrocks-admin/)
 # This follows Flink's approach for sub-path deployment support
-RUN npm ci --silent
+# Note: Removed --silent to see detailed error messages during build
+RUN npm ci
 RUN npm run build -- --configuration production --base-href ./
 
 # Step 2: Build backend (rust-embed will directly embed from ../frontend/dist)

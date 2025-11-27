@@ -32,7 +32,8 @@ frontend/typings/
 frontend/docs/
 frontend/e2e/*.js
 frontend/e2e/*.map
-frontend/package-lock.json
+# Note: package-lock.json is needed for npm ci in Docker builds
+# frontend/package-lock.json
 
 # Backend runtime (from testing)
 backend/conf/

@@ -52,9 +52,32 @@ export class ClusterDetailComponent implements OnInit {
   }
 
   navigateTo(path: string): void {
-    if (path === 'queries') {
-      this.router.navigate(['/pages/starrocks/queries/execution']);
+    // Paths that require activating cluster first and then navigating to a global route
+    const globalRoutes = ['queries', 'monitor', 'frontends', 'backends'];
+    
+    if (globalRoutes.includes(path) || path === 'queries') { // keep queries explicit for safety
+      this.clusterService.activateCluster(this.clusterId).subscribe(() => {
+        let routePath = '';
+        switch (path) {
+          case 'queries':
+            routePath = '/pages/starrocks/queries/execution';
+            break;
+          case 'monitor':
+            routePath = '/pages/starrocks/overview';
+            break;
+          case 'frontends':
+            routePath = '/pages/starrocks/frontends';
+            break;
+          case 'backends':
+            routePath = '/pages/starrocks/backends';
+            break;
+        }
+        if (routePath) {
+          this.router.navigate([routePath]);
+        }
+      });
     } else {
+      // Fallback for any future routes that might actually take an ID
       this.router.navigate(['/pages/starrocks', path, this.clusterId]);
     }
   }

@@ -1,57 +1,126 @@
 <div class="row" *ngIf="!loading && cluster">
   <div class="col-12">
     <nb-card>
-      <nb-card-header>
+      <nb-card-header class="border-bottom">
         <div class="d-flex justify-content-between align-items-center">
-          <h5>{{ cluster?.name || '未知集群' }}</h5>
-          <div>
-            <button nbButton status="info" size="small" (click)="editCluster()" class="me-2">
-              <nb-icon icon="edit-outline"></nb-icon> 编辑
+          <div class="d-flex align-items-center gap-4">
+            <div class="icon-container bg-primary-light text-primary">
+              <nb-icon icon="cube"></nb-icon>
+            </div>
+            <div class="d-flex flex-column justify-content-center">
+              <div class="d-flex align-items-center gap-2">
+                <h5 class="mb-0">{{ cluster?.name }}</h5>
+                <nb-tag *ngIf="health?.status" [text]="health?.status" [status]="health?.status === 'healthy' ? 'success' : 'warning'" size="tiny" appearance="filled"></nb-tag>
+              </div>
+              <span class="text-hint caption-2 mt-1">ID: {{ cluster?.id }}</span>
+            </div>
+          </div>
+          <div class="actions d-flex gap-2">
+            <button nbButton ghost status="info" (click)="editCluster()" nbTooltip="编辑配置">
+              <nb-icon icon="settings-2-outline"></nb-icon>
             </button>
-            <button nbButton status="danger" size="small" (click)="deleteCluster()">
-              <nb-icon icon="trash-outline"></nb-icon> 删除
+            <button nbButton ghost status="danger" (click)="deleteCluster()" nbTooltip="删除集群">
+              <nb-icon icon="trash-2-outline"></nb-icon>
             </button>
           </div>
         </div>
       </nb-card-header>
-      <nb-card-body>
-        <div class="row">
-          <div class="col-md-6">
-            <h6>基本信息</h6>
-            <table class="table">
-              <tr><td>集群名称:</td><td>{{ cluster?.name }}</td></tr>
-              <tr><td>描述:</td><td>{{ cluster?.description || '-' }}</td></tr>
-              <tr><td>FE 地址:</td><td>{{ cluster?.fe_host }}:{{ cluster?.fe_http_port }}</td></tr>
-              <tr><td>查询端口:</td><td>{{ cluster?.fe_query_port }}</td></tr>
-              <tr><td>用户名:</td><td>{{ cluster?.username }}</td></tr>
-              <tr><td>Catalog:</td><td>{{ cluster?.catalog }}</td></tr>
-              <tr><td>创建时间:</td><td>{{ cluster?.created_at | date:'yyyy-MM-dd HH:mm:ss' }}</td></tr>
-            </table>
-          </div>
-          <div class="col-md-6">
-            <h6>健康状态</h6>
-            <div *ngIf="health">
-              <nb-alert [status]="health.status === 'healthy' ? 'success' : health.status === 'warning' ? 'warning' : 'danger'">
-                <strong>{{ health.status }}</strong>
-              </nb-alert>
-              <div *ngFor="let check of health.checks" class="mb-2">
-                <nb-icon [icon]="check.status === 'ok' ? 'checkmark-circle-2' : 'alert-circle'"
-                         [status]="check.status === 'ok' ? 'success' : check.status === 'warning' ? 'warning' : 'danger'">
-                </nb-icon>
-                {{ check.name }}: {{ check.message }}
+
+      <nb-card-body class="p-4">
+        <div class="row g-4">
+          <!-- 基本信息列 -->
+          <div class="col-md-7 col-lg-8 border-end-md">
+            <h6 class="section-title mb-3">
+              <nb-icon icon="info-outline" class="me-2 text-hint"></nb-icon>
+              基本信息
+            </h6>
+            
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="label">描述</span>
+                <span class="value">{{ cluster?.description || '-' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">FE 地址</span>
+                <span class="value font-monospace">{{ cluster?.fe_host }}:{{ cluster?.fe_http_port }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">查询端口</span>
+                <span class="value font-monospace">{{ cluster?.fe_query_port }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">连接用户</span>
+                <span class="value">{{ cluster?.username }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">Catalog</span>
+                <span class="value">{{ cluster?.catalog || 'default_catalog' }}</span>
+              </div>
+              <div class="info-item">
+                <span class="label">创建时间</span>
+                <span class="value">{{ cluster?.created_at | date:'yyyy-MM-dd HH:mm:ss' }}</span>
+              </div>
+            </div>
+
+            <div class="mt-5">
+              <h6 class="section-title mb-3">
+                <nb-icon icon="compass-outline" class="me-2 text-hint"></nb-icon>
+                快速导航
+              </h6>
+              <div class="row g-3">
+                <div class="col-6 col-sm-4 col-xl-3">
+                  <div class="nav-card" (click)="navigateTo('backends')">
+                    <nb-icon icon="hard-drive-outline" status="info"></nb-icon>
+                    <span>Backend 节点</span>
+                  </div>
+                </div>
+                <div class="col-6 col-sm-4 col-xl-3">
+                  <div class="nav-card" (click)="navigateTo('frontends')">
+                    <nb-icon icon="browser-outline" status="primary"></nb-icon>
+                    <span>Frontend 节点</span>
+                  </div>
+                </div>
+                <div class="col-6 col-sm-4 col-xl-3">
+                  <div class="nav-card" (click)="navigateTo('queries')">
+                    <nb-icon icon="activity-outline" status="warning"></nb-icon>
+                    <span>查询管理</span>
+                  </div>
+                </div>
+                <div class="col-6 col-sm-4 col-xl-3">
+                  <div class="nav-card" (click)="navigateTo('monitor')">
+                    <nb-icon icon="pie-chart-outline" status="success"></nb-icon>
+                    <span>监控指标</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="row mt-4">
-          <div class="col-12">
-            <h6>快速导航</h6>
-            <div class="nav-buttons">
-              <button nbButton status="primary" (click)="navigateTo('backends')">Backend 节点</button>
-              <button nbButton status="primary" (click)="navigateTo('frontends')">Frontend 节点</button>
-              <button nbButton status="primary" (click)="navigateTo('queries')">查询管理</button>
-              <button nbButton status="primary" (click)="navigateTo('monitor')">监控指标</button>
+          <!-- 健康检查列 -->
+          <div class="col-md-5 col-lg-4 ps-md-4">
+            <h6 class="section-title mb-3">
+              <nb-icon icon="activity-outline" class="me-2 text-hint"></nb-icon>
+              健康检查
+            </h6>
+            
+            <div class="health-timeline" *ngIf="health">
+              <div *ngFor="let check of health.checks" class="timeline-item">
+                <div class="timeline-marker" [class.status-success]="check.status === 'ok'" [class.status-danger]="check.status !== 'ok'"></div>
+                <div class="timeline-content">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <span class="check-name">{{ check.name }}</span>
+                    <nb-icon [icon]="check.status === 'ok' ? 'checkmark-circle-2' : 'alert-circle'" 
+                             [status]="check.status === 'ok' ? 'success' : 'danger'" 
+                             class="check-icon"></nb-icon>
+                  </div>
+                  <p class="check-message text-hint caption mt-1">{{ check.message }}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div *ngIf="!health" class="text-center py-4 text-hint">
+              <nb-spinner size="small" status="basic" class="mb-2"></nb-spinner>
+              <div class="caption">正在检查健康状态...</div>
             </div>
           </div>
         </div>
@@ -60,6 +129,6 @@
   </div>
 </div>
 
-<div *ngIf="loading" class="text-center">
-  <nb-spinner status="primary"></nb-spinner>
+<div *ngIf="loading" class="text-center py-5">
+  <nb-spinner status="primary" size="large"></nb-spinner>
 </div>

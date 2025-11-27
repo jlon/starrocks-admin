@@ -1,295 +1,139 @@
 <div class="row">
   <div class="col-12">
     <nb-card>
-      <nb-card-header>
+      <nb-card-header class="border-0">
         <div class="d-flex justify-content-between align-items-center">
           <h5>StarRocks 集群概览</h5>
-          <button nbButton ghost size="small" status="primary" (click)="addCluster()" [disabled]="!canCreateCluster">
+          <button nbButton ghost status="primary" (click)="addCluster()" [disabled]="!canCreateCluster">
             <nb-icon icon="plus-outline"></nb-icon>
             添加集群
           </button>
         </div>
       </nb-card-header>
       <nb-card-body>
-        <div *ngIf="loading" class="text-center">
-          <nb-spinner status="primary"></nb-spinner>
+        <div *ngIf="loading" class="text-center py-5">
+          <nb-spinner status="primary" size="large"></nb-spinner>
         </div>
 
-        <div *ngIf="!loading && !hasClusterAccess" class="text-center p-5">
-          <nb-icon icon="shield-off-outline" status="warning" style="font-size: 4rem"></nb-icon>
-          <p class="mt-3 mb-1">您暂无查看集群的权限</p>
-          <p class="text-hint">请联系管理员授予集群相关权限后再访问此页面。</p>
+        <div *ngIf="!loading && !hasClusterAccess" class="text-center py-5">
+          <div class="empty-state">
+            <div class="icon-container status-warning">
+              <nb-icon icon="shield-off-outline"></nb-icon>
+            </div>
+            <h6>暂无权限</h6>
+            <p class="text-hint">请联系管理员授予集群相关权限</p>
+          </div>
         </div>
 
-        <div *ngIf="!loading && hasClusterAccess && clusters.length === 0" class="text-center p-5">
-          <nb-icon icon="cloud-outline" status="basic" style="font-size: 4rem"></nb-icon>
-          <p class="mt-3">还没有集群，点击上方按钮添加</p>
+        <div *ngIf="!loading && hasClusterAccess && clusters.length === 0" class="text-center py-5">
+          <div class="empty-state">
+            <div class="icon-container status-basic">
+              <nb-icon icon="layers-outline"></nb-icon>
+            </div>
+            <h6>暂无集群</h6>
+            <p class="text-hint">点击上方按钮添加您的第一个 StarRocks 集群</p>
+          </div>
         </div>
 
         <div *ngIf="!loading && hasClusterAccess && clusters.length > 0" class="row">
-          <div *ngFor="let clusterCard of clusters" class="col-md-6 col-lg-4 mb-3">
-            <nb-card 
-              class="cluster-card"
-              [ngClass]="'status-' + getStatusColor(clusterCard.health?.status)">
-              <nb-badge 
-                [status]="getHealthBadgeStatus(clusterCard)" 
-                [text]="getHealthBadgeTextWithTime(clusterCard)"
-                position="top left">
-              </nb-badge>
+          <div *ngFor="let clusterCard of clusters" class="col-xxxl-3 col-xxl-4 col-md-6 mb-4">
+            <nb-card class="cluster-card h-100" 
+                    [class.active-card]="clusterCard.isActive"
+                    [accent]="getStatusColor(clusterCard.health?.status)">
               <nb-card-header>
-                <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex justify-content-between align-items-start">
                   <div class="d-flex align-items-center gap-2">
-                    <h6 class="mb-0">{{ clusterCard?.cluster?.name || '未知' }}</h6>
-                    <nb-badge 
-                      *ngIf="clusterCard.isActive" 
-                      text="当前激活" 
-                      status="success"
-                      position="top right"
-                    ></nb-badge>
+                    <nb-icon icon="cube" [status]="getStatusColor(clusterCard.health?.status)" class="cluster-icon"></nb-icon>
+                    <div>
+                      <div class="cluster-title-wrapper d-flex align-items-center gap-2" (click)="navigateToCluster(clusterCard.cluster.id)">
+                        <h6 class="cluster-title text-basic mb-0">{{ clusterCard?.cluster?.name }}</h6>
+                        <nb-icon icon="external-link-outline" class="action-icon"></nb-icon>
+                      </div>
+                      <div class="text-hint caption-2 mt-1" *ngIf="clusterCard.organization && isSuperAdmin">
+                        {{ clusterCard.organization.name }}
+                      </div>
+                    </div>
                   </div>
-                  <div class="d-flex align-items-center gap-2">
-                    <!-- 编辑按钮 -->
-                    <button 
-                      nbButton 
-                      ghost
-                      size="tiny"
-                      status="basic"
-                      (click)="editCluster(clusterCard.cluster)"
-                      [disabled]="!canUpdateCluster"
-                      nbTooltip="编辑集群"
-                      nbTooltipPlacement="top"
-                    >
-                      <nb-icon icon="edit-outline"></nb-icon>
+                  
+                  <div class="actions">
+                    <button nbButton ghost size="small" status="basic" (click)="editCluster(clusterCard.cluster)" [disabled]="!canUpdateCluster" nbTooltip="设置">
+                      <nb-icon icon="settings-2-outline"></nb-icon>
                     </button>
-                    
-                    <!-- 删除按钮 -->
-                    <button 
-                      nbButton 
-                      ghost
-                      size="tiny"
-                      status="danger"
-                      (click)="deleteCluster(clusterCard.cluster)"
-                      [disabled]="!canDeleteCluster"
-                      nbTooltip="删除集群"
-                      nbTooltipPlacement="top"
-                    >
-                      <nb-icon icon="trash-2-outline"></nb-icon>
-                    </button>
-                    
-                    <!-- 激活按钮 -->
-                    <button 
-                      nbButton 
-                      ghost
-                      size="small"
-                      [status]="clusterCard.isActive ? 'warning' : 'basic'"
-                      [class.active-star]="clusterCard.isActive"
-                      (click)="toggleActiveCluster(clusterCard)"
-                      [disabled]="!canActivateCluster"
-                      [nbTooltip]="clusterCard.isActive ? '点击取消激活' : '点击设为当前集群'"
-                      nbTooltipPlacement="top"
-                    >
+                    <button nbButton ghost size="small" [status]="clusterCard.isActive ? 'warning' : 'basic'" (click)="toggleActiveCluster(clusterCard)" [disabled]="!canActivateCluster" [nbTooltip]="clusterCard.isActive ? '已激活' : '设为当前'">
                       <nb-icon [icon]="clusterCard.isActive ? 'star' : 'star-outline'"></nb-icon>
+                    </button>
+                    <button nbButton ghost size="small" status="danger" (click)="deleteCluster(clusterCard.cluster)" [disabled]="!canDeleteCluster" nbTooltip="删除">
+                      <nb-icon icon="trash-2-outline"></nb-icon>
                     </button>
                   </div>
                 </div>
               </nb-card-header>
+
               <nb-card-body>
-                <div *ngIf="clusterCard.loading" class="text-center py-3">
-                  <nb-spinner size="small" status="info"></nb-spinner>
+                <!-- 核心指标区 - 黄金位置 -->
+                <div class="metrics-row d-flex justify-content-between align-items-center mb-4">
+                  <div class="metric-item text-center" [class.text-danger]="getHealthScore(clusterCard) !== '100'">
+                     <div class="h4 mb-0 font-weight-bold">{{ getHealthScore(clusterCard) }}%</div>
+                     <div class="caption-2 text-hint text-uppercase">健康度</div>
+                  </div>
+                  <div class="divider-vertical"></div>
+                  <div class="metric-item text-center cursor-pointer" (click)="navigateToFrontends(clusterCard.cluster.id)">
+                     <div class="h4 mb-0 font-weight-bold text-primary">{{ getFeCount(clusterCard) }}</div>
+                     <div class="caption-2 text-hint text-uppercase">FE 节点</div>
+                  </div>
+                  <div class="divider-vertical"></div>
+                  <div class="metric-item text-center cursor-pointer" (click)="navigateToBackends(clusterCard.cluster.id)">
+                     <div class="h4 mb-0 font-weight-bold text-info">{{ getBeCount(clusterCard) }}</div>
+                     <div class="caption-2 text-hint text-uppercase">BE 节点</div>
+                  </div>
                 </div>
 
-                <nb-list *ngIf="!clusterCard.loading">
-                  <!-- 组织信息 (Super Admin Only) -->
-                  <nb-list-item *ngIf="isSuperAdmin && clusterCard.organization">
-                    <div class="d-flex align-items-start gap-2 w-100">
-                      <nb-icon icon="briefcase-outline" class="info-icon"></nb-icon>
-                      <div class="d-flex justify-content-between flex-grow-1">
-                        <span class="text-hint">所属组织</span>
-                        <span class="text-basic text-end">
-                          {{ clusterCard.organization.name }}
-                          <span class="text-hint" *ngIf="clusterCard.organization.code">({{ clusterCard.organization.code }})</span>
-                        </span>
-                      </div>
-                    </div>
-                  </nb-list-item>
+                <!-- 信息区 -->
+                <div class="info-section">
+                  <div class="info-row">
+                    <nb-icon icon="link-2-outline" class="text-hint"></nb-icon>
+                    <span class="text-basic subtitle-2">{{ clusterCard.cluster.fe_host }}:{{ clusterCard.cluster.fe_http_port }}</span>
+                  </div>
                   
-                  <!-- FE 地址 -->
-                  <nb-list-item>
-                    <div class="d-flex align-items-start gap-2 w-100">
-                      <nb-icon icon="pin-outline" class="info-icon"></nb-icon>
-                      <div class="d-flex justify-content-between flex-grow-1">
-                        <span class="text-hint">FE 地址</span>
-                        <span class="text-basic text-end">{{ clusterCard.cluster.fe_host }}:{{ clusterCard.cluster.fe_http_port }}</span>
-                      </div>
-                    </div>
-                  </nb-list-item>
+                  <div class="info-row" *ngIf="clusterCard.cluster.description">
+                    <nb-icon icon="text-outline" class="text-hint"></nb-icon>
+                    <span class="text-hint caption">{{ clusterCard.cluster.description }}</span>
+                  </div>
 
-                  <!-- 描述 -->
-                  <nb-list-item *ngIf="clusterCard.cluster.description">
-                    <div class="d-flex align-items-start gap-2 w-100">
-                      <nb-icon icon="file-text-outline" class="info-icon"></nb-icon>
-                      <div class="d-flex justify-content-between flex-grow-1">
-                        <span class="text-hint">描述</span>
-                        <span class="text-basic text-end" style="max-width: 60%;">{{ clusterCard.cluster.description }}</span>
-                      </div>
-                    </div>
-                  </nb-list-item>
+                  <div class="tags-container" *ngIf="clusterCard.cluster.tags && clusterCard.cluster.tags.length > 0">
+                    <nb-tag-list>
+                      <nb-tag *ngFor="let tag of clusterCard.cluster.tags" [text]="tag" size="tiny" appearance="outline" status="basic"></nb-tag>
+                    </nb-tag-list>
+                  </div>
+                </div>
 
-                  <!-- 标签 -->
-                  <nb-list-item *ngIf="clusterCard.cluster.tags && clusterCard.cluster.tags.length > 0">
-                    <div class="d-flex align-items-start gap-2 w-100">
-                      <nb-icon icon="pricetags-outline" class="info-icon"></nb-icon>
-                      <div class="d-flex justify-content-between flex-grow-1">
-                        <span class="text-hint">标签</span>
-                        <div class="text-end">
-                          <nb-badge
-                            *ngFor="let tag of clusterCard.cluster.tags"
-                            [text]="tag"
-                            status="basic"
-                            class="ms-1"
-                          ></nb-badge>
-                        </div>
-                      </div>
+                <!-- 健康检查详情折叠区 -->
+                <div class="health-details-section" *ngIf="clusterCard.health">
+                  <div class="d-flex justify-content-between align-items-center py-2 cursor-pointer" (click)="toggleHealthDetails(clusterCard)">
+                    <div class="d-flex align-items-center">
+                      <nb-icon [icon]="clusterCard.showHealthDetails ? 'chevron-down-outline' : 'chevron-right-outline'" pack="eva" class="text-hint me-1"></nb-icon>
+                      <span class="caption-2 text-hint">健康检查详情</span>
                     </div>
-                  </nb-list-item>
+                    <nb-tag *ngIf="getFailedChecksCount(clusterCard) > 0" [text]="getFailedChecksCount(clusterCard) + ' 异常'" status="danger" size="tiny"></nb-tag>
+                    <nb-tag *ngIf="getFailedChecksCount(clusterCard) === 0" text="正常" status="success" size="tiny"></nb-tag>
+                  </div>
 
-                  <!-- 健康检查 - 折叠式 -->
-                  <nb-list-item *ngIf="clusterCard.health">
-                    <div class="w-100">
-                      <div class="health-summary" (click)="toggleHealthDetails(clusterCard)">
-                        <div class="d-flex justify-content-between align-items-center">
-                          <div class="d-flex align-items-center gap-2">
-                            <nb-icon 
-                              [icon]="getHealthIcon(clusterCard)" 
-                              [status]="getHealthBadgeStatus(clusterCard)">
-                            </nb-icon>
-                            <span class="text-hint">健康检查</span>
-                            <nb-badge 
-                              *ngIf="getFailedChecksCount(clusterCard) > 0"
-                              [text]="getFailedChecksCount(clusterCard) + ' 个失败'"
-                              status="danger"
-                              size="tiny">
-                            </nb-badge>
-                          </div>
-                          <button nbButton ghost size="tiny" status="basic">
-                            <nb-icon [icon]="clusterCard.showHealthDetails ? 'chevron-up-outline' : 'chevron-down-outline'"></nb-icon>
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <!-- 折叠详情 -->
-                      <div *ngIf="clusterCard.showHealthDetails" class="health-details mt-2">
-                        <div class="health-check-list">
-                          <div *ngFor="let check of clusterCard.health.checks" class="health-check-item">
-                            <div class="d-flex align-items-center justify-content-between mb-1" style="min-width: 0; flex: 1;">
-                              <div class="d-flex align-items-center gap-2" style="min-width: 0; flex: 1; overflow: hidden;">
-                                <nb-icon 
-                                  [icon]="check.status === 'ok' ? 'checkmark-circle-2' : 'alert-circle'"
-                                  [status]="check.status === 'ok' ? 'success' : 'danger'"
-                                  class="check-icon">
-                                </nb-icon>
-                                <span class="check-name" style="min-width: 0; flex: 1;">{{ check.name }}</span>
-                              </div>
-                              <nb-badge 
-                                *ngIf="check.status !== 'ok'"
-                                text="异常"
-                                status="danger"
-                                size="tiny"
-                                style="flex-shrink: 0;">
-                              </nb-badge>
-                            </div>
-                            <div class="check-message">{{ check.message }}</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </nb-list-item>
-                </nb-list>
-                
-                <!-- 关键指标展示 -->
-                <div class="metrics-section" *ngIf="clusterCard.health">
-                  <div class="metrics-grid">
-                    <div 
-                      class="metric-item metric-clickable"
-                      (click)="navigateToFrontends(clusterCard.cluster.id)"
-                      [class.disabled]="!canViewFrontends"
-                      nbTooltip="查看 FE 节点"
-                      nbTooltipPlacement="top">
-                      <nb-icon icon="browser-outline" status="info"></nb-icon>
-                      <div class="metric-content">
-                        <span class="metric-label">FE 节点</span>
-                        <span class="metric-value">{{ getFeCount(clusterCard) }}</span>
-                      </div>
-                    </div>
-                    <div 
-                      class="metric-item metric-clickable"
-                      (click)="navigateToBackends(clusterCard.cluster.id)"
-                      [class.disabled]="!canViewBackends"
-                      nbTooltip="查看 BE 节点"
-                      nbTooltipPlacement="top">
-                      <nb-icon icon="hard-drive-outline" status="success"></nb-icon>
-                      <div class="metric-content">
-                        <span class="metric-label">BE 节点</span>
-                        <span class="metric-value">{{ getBeCount(clusterCard) }}</span>
-                      </div>
-                    </div>
-                    <div class="metric-item">
-                      <nb-icon icon="activity-outline" status="primary"></nb-icon>
-                      <div class="metric-content">
-                        <span class="metric-label">健康度</span>
-                        <span class="metric-value">
-                          {{ getHealthScore(clusterCard) === '—' ? '—' : getHealthScore(clusterCard) + '%' }}
-                        </span>
+                  <div class="health-list mt-2" *ngIf="clusterCard.showHealthDetails">
+                    <div *ngFor="let check of clusterCard.health.checks" class="health-item d-flex align-items-start py-2 border-bottom border-light">
+                      <nb-icon [icon]="check.status === 'ok' ? 'checkmark-circle-2' : 'alert-circle'" [status]="check.status === 'ok' ? 'success' : 'danger'" class="me-2 mt-1"></nb-icon>
+                      <div class="flex-grow-1">
+                        <div class="subtitle-2">{{ check.name }}</div>
+                        <div class="caption text-hint">{{ check.message }}</div>
                       </div>
                     </div>
                   </div>
                 </div>
+
               </nb-card-body>
-              <nb-card-footer>
-                <div class="d-flex justify-content-between gap-2">
-                  <button 
-                    nbButton 
-                    ghost 
-                    size="small" 
-                    status="info" 
-                    (click)="navigateToCluster(clusterCard.cluster.id)"
-                    [disabled]="!canViewClusterDetails"
-                    nbTooltip="查看集群详情"
-                    nbTooltipPlacement="top">
-                    <nb-icon icon="eye-outline"></nb-icon>
-                    详情
-                  </button>
-                  <button 
-                    nbButton 
-                    ghost 
-                    size="small" 
-                    status="success" 
-                    (click)="navigateToBackends(clusterCard.cluster.id)"
-                    [disabled]="!canViewBackends"
-                    nbTooltip="查看集群节点"
-                    nbTooltipPlacement="top">
-                    <nb-icon icon="hard-drive-outline"></nb-icon>
-                    节点
-                  </button>
-                  <button 
-                    nbButton 
-                    ghost 
-                    size="small" 
-                    status="primary" 
-                    (click)="navigateToQueries(clusterCard.cluster.id)"
-                    [disabled]="!canViewQueries"
-                    nbTooltip="查看查询统计"
-                    nbTooltipPlacement="top">
-                    <nb-icon icon="activity-outline"></nb-icon>
-                    查询
-                  </button>
-                </div>
-              </nb-card-footer>
-             </nb-card>
+            </nb-card>
           </div>
         </div>
       </nb-card-body>
     </nb-card>
   </div>
 </div>
-

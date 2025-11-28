@@ -18,7 +18,17 @@ impl StarRocksClient {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(cluster.connection_timeout as u64))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_else(|e| {
+                // HTTP client build failure is rare and usually indicates system resource issues
+                tracing::error!(
+                    "Failed to build HTTP client for cluster {}: {}. This is a critical error.",
+                    cluster.name,
+                    e
+                );
+                // Use default client as fallback but log the issue
+                tracing::warn!("Using default HTTP client configuration as fallback");
+                Client::default()
+            });
 
         Self { http_client, cluster, mysql_pool_manager }
     }

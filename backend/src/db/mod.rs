@@ -6,15 +6,23 @@ pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> 
     tracing::info!("Initializing database connection: {}", database_url);
 
     if let Some(dir) = std::path::Path::new(database_url.trim_start_matches("sqlite://")).parent() {
-        tracing::debug!("Creating database directory: {:?}", dir);
-        std::fs::create_dir_all(dir).ok();
+        if !dir.exists() {
+            tracing::debug!("Creating database directory: {:?}", dir);
+            std::fs::create_dir_all(dir).map_err(|e| {
+                tracing::error!("Failed to create database directory {:?}: {}", dir, e);
+                sqlx::Error::Io(e)
+            })?;
+        }
     }
 
-    // 确保数据库文件存在
+    // Ensure database file exists
     let db_path = database_url.trim_start_matches("sqlite://");
     if !std::path::Path::new(db_path).exists() {
         tracing::debug!("Creating database file: {}", db_path);
-        std::fs::File::create(db_path).ok();
+        std::fs::File::create(db_path).map_err(|e| {
+            tracing::error!("Failed to create database file {}: {}", db_path, e);
+            sqlx::Error::Io(e)
+        })?;
     }
 
     tracing::debug!("Creating database pool with max_connections=10, acquire_timeout=5s");

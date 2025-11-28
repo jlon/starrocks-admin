@@ -93,31 +93,39 @@ impl MySQLSession {
             return Ok(());
         }
 
-        let use_catalog_sql_plain = format!("USE CATALOG {}", catalog);
+        // StarRocks uses SET CATALOG, not USE CATALOG
+        // Try without quotes first
+        let set_catalog_sql = format!("SET CATALOG {}", catalog);
         if let Err(primary_err) = self
             .conn
-            .query::<mysql_async::Row, _>(&use_catalog_sql_plain)
+            .query::<mysql_async::Row, _>(&set_catalog_sql)
             .await
         {
-            tracing::warn!(
-                "USE CATALOG {} without quotes failed: {}. Retrying with backticks.",
+            tracing::debug!(
+                "SET CATALOG {} without quotes failed: {}. Retrying with backticks.",
                 catalog,
                 primary_err
             );
 
-            let use_catalog_sql_quoted = format!("USE CATALOG `{}`", catalog);
-            if let Err(fallback_err) = self
-                .conn
-                .query::<mysql_async::Row, _>(&use_catalog_sql_quoted)
+            // Retry with backticks for catalog names with special characters
+            let set_catalog_sql_quoted = format!("SET CATALOG `{}`", catalog);
+            self.conn
+                .query::<mysql_async::Row, _>(&set_catalog_sql_quoted)
                 .await
-            {
-                tracing::warn!(
-                    "USE CATALOG {} failed even with backticks: {}",
-                    catalog,
-                    fallback_err
-                );
-            }
+                .map_err(|e| {
+                    tracing::error!(
+                        "Failed to switch to catalog {}: {}",
+                        catalog,
+                        e
+                    );
+                    ApiError::internal_error(format!(
+                        "Failed to switch to catalog {}: {}",
+                        catalog, e
+                    ))
+                })?;
         }
+        
+        tracing::debug!("Successfully switched to catalog: {}", catalog);
         Ok(())
     }
 

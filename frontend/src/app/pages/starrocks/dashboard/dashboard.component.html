@@ -3,10 +3,10 @@
     <nb-card>
       <nb-card-header class="border-0">
         <div class="d-flex justify-content-between align-items-center">
-          <h5>StarRocks 集群概览</h5>
+          <h5>{{ 'cluster.overview_title' | translate }}</h5>
           <button nbButton ghost status="primary" (click)="addCluster()" [disabled]="!canCreateCluster">
             <nb-icon icon="plus-outline"></nb-icon>
-            添加集群
+            {{ 'cluster.add_cluster' | translate }}
           </button>
         </div>
       </nb-card-header>
@@ -20,8 +20,8 @@
             <div class="icon-container status-warning">
               <nb-icon icon="shield-off-outline"></nb-icon>
             </div>
-            <h6>暂无权限</h6>
-            <p class="text-hint">请联系管理员授予集群相关权限</p>
+            <h6>{{ 'cluster.no_permission' | translate }}</h6>
+            <p class="text-hint">{{ 'cluster.no_permission_hint' | translate }}</p>
           </div>
         </div>
 
@@ -30,8 +30,8 @@
             <div class="icon-container status-basic">
               <nb-icon icon="layers-outline"></nb-icon>
             </div>
-            <h6>暂无集群</h6>
-            <p class="text-hint">点击上方按钮添加您的第一个 StarRocks 集群</p>
+            <h6>{{ 'cluster.no_clusters' | translate }}</h6>
+            <p class="text-hint">{{ 'cluster.no_clusters_hint' | translate }}</p>
           </div>
         </div>
 
@@ -56,13 +56,13 @@
                   </div>
                   
                   <div class="actions">
-                    <button nbButton ghost size="small" status="basic" (click)="editCluster(clusterCard.cluster)" [disabled]="!canUpdateCluster" nbTooltip="设置">
+                    <button nbButton ghost size="small" status="basic" (click)="editCluster(clusterCard.cluster)" [disabled]="!canUpdateCluster" [nbTooltip]="'common.settings' | translate">
                       <nb-icon icon="settings-2-outline"></nb-icon>
                     </button>
-                    <button nbButton ghost size="small" [status]="clusterCard.isActive ? 'warning' : 'basic'" (click)="toggleActiveCluster(clusterCard)" [disabled]="!canActivateCluster" [nbTooltip]="clusterCard.isActive ? '已激活' : '设为当前'">
+                    <button nbButton ghost size="small" [status]="clusterCard.isActive ? 'warning' : 'basic'" (click)="toggleActiveCluster(clusterCard)" [disabled]="!canActivateCluster" [nbTooltip]="clusterCard.isActive ? ('common.activated' | translate) : ('common.set_as_current' | translate)">
                       <nb-icon [icon]="clusterCard.isActive ? 'star' : 'star-outline'"></nb-icon>
                     </button>
-                    <button nbButton ghost size="small" status="danger" (click)="deleteCluster(clusterCard.cluster)" [disabled]="!canDeleteCluster" nbTooltip="删除">
+                    <button nbButton ghost size="small" status="danger" (click)="deleteCluster(clusterCard.cluster)" [disabled]="!canDeleteCluster" [nbTooltip]="'common.delete' | translate">
                       <nb-icon icon="trash-2-outline"></nb-icon>
                     </button>
                   </div>
@@ -74,17 +74,22 @@
                 <div class="metrics-row d-flex justify-content-between align-items-center mb-4">
                   <div class="metric-item text-center" [class.text-danger]="getHealthScore(clusterCard) !== '100'">
                      <div class="h4 mb-0 font-weight-bold">{{ getHealthScore(clusterCard) }}%</div>
-                     <div class="caption-2 text-hint text-uppercase">健康度</div>
+                     <div class="caption-2 text-hint text-uppercase">{{ 'cluster.health_score' | translate }}</div>
                   </div>
                   <div class="divider-vertical"></div>
                   <div class="metric-item text-center cursor-pointer" (click)="navigateToFrontends(clusterCard.cluster.id)">
                      <div class="h4 mb-0 font-weight-bold text-primary">{{ getFeCount(clusterCard) }}</div>
-                     <div class="caption-2 text-hint text-uppercase">FE 节点</div>
+                     <div class="caption-2 text-hint text-uppercase">{{ 'cluster.fe_nodes' | translate }}</div>
                   </div>
                   <div class="divider-vertical"></div>
                   <div class="metric-item text-center cursor-pointer" (click)="navigateToBackends(clusterCard.cluster.id)">
+<<<<<<< HEAD
                      <div class="h4 mb-0 font-weight-bold text-info">{{ getComputeNodeCount(clusterCard) }}</div>
                      <div class="caption-2 text-hint text-uppercase">{{ getComputeNodeLabel(clusterCard) }}</div>
+=======
+                     <div class="h4 mb-0 font-weight-bold text-info">{{ getBeCount(clusterCard) }}</div>
+                     <div class="caption-2 text-hint text-uppercase">{{ 'cluster.be_nodes' | translate }}</div>
+>>>>>>> feat(i18n): complete internationalization for all pages
                   </div>
                 </div>
 
@@ -112,10 +117,10 @@
                   <div class="d-flex justify-content-between align-items-center py-2 cursor-pointer" (click)="toggleHealthDetails(clusterCard)">
                     <div class="d-flex align-items-center">
                       <nb-icon [icon]="clusterCard.showHealthDetails ? 'chevron-down-outline' : 'chevron-right-outline'" pack="eva" class="text-hint me-1"></nb-icon>
-                      <span class="caption-2 text-hint">健康检查详情</span>
+                      <span class="caption-2 text-hint">{{ 'cluster.health_check_details' | translate }}</span>
                     </div>
-                    <nb-tag *ngIf="getFailedChecksCount(clusterCard) > 0" [text]="getFailedChecksCount(clusterCard) + ' 异常'" status="danger" size="tiny"></nb-tag>
-                    <nb-tag *ngIf="getFailedChecksCount(clusterCard) === 0" text="正常" status="success" size="tiny"></nb-tag>
+                    <nb-tag *ngIf="getFailedChecksCount(clusterCard) > 0" [text]="getFailedChecksCount(clusterCard) + ' ' + ('common.abnormal' | translate)" status="danger" size="tiny"></nb-tag>
+                    <nb-tag *ngIf="getFailedChecksCount(clusterCard) === 0" [text]="'common.normal' | translate" status="success" size="tiny"></nb-tag>
                   </div>
 
                   <div class="health-list mt-2" *ngIf="clusterCard.showHealthDetails">

@@ -3,6 +3,7 @@ import { NbDialogService, NbToastrService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { forkJoin, of, Subject } from 'rxjs';
 import { finalize, map, switchMap, takeUntil } from 'rxjs/operators';
+import { TranslateService } from '@ngx-translate/core';
 
 import {
   CreateUserPayload,
@@ -55,7 +56,12 @@ export class UsersComponent implements OnInit, OnDestroy {
     private dialogService: NbDialogService,
     private confirmDialogService: ConfirmDialogService,
     private toastrService: NbToastrService,
-  ) {}
+    private translate: TranslateService,
+  ) {
+    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.settings = this.buildTableSettings();
+    });
+  }
 
   ngOnInit(): void {
     this.permissionService.permissions$
@@ -154,7 +160,7 @@ export class UsersComponent implements OnInit, OnDestroy {
 
     if (!this.roleCatalog.length) {
       this.loadRoleCatalog();
-      this.toastrService.info('正在加载角色数据，请稍后重试', '提示');
+      this.toastrService.info(this.translate.instant('common.loading'), this.translate.instant('header.hint'));
       return;
     }
 
@@ -184,7 +190,7 @@ export class UsersComponent implements OnInit, OnDestroy {
 
     if (!this.roleCatalog.length) {
       this.loadRoleCatalog();
-      this.toastrService.info('正在加载角色数据，请稍后重试', '提示');
+      this.toastrService.info(this.translate.instant('common.loading'), this.translate.instant('header.hint'));
       return;
     }
 
@@ -218,7 +224,7 @@ export class UsersComponent implements OnInit, OnDestroy {
         if (confirmed) {
           this.userService.deleteUser(user.id).subscribe({
             next: () => {
-              this.toastrService.success('用户已删除', '成功');
+              this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
               this.loadUsers();
             },
             error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
@@ -235,7 +241,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     const payload = result.payload as CreateUserPayload;
     this.userService.createUser(payload).subscribe({
       next: () => {
-        this.toastrService.success('用户已创建', '成功');
+        this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
         this.loadUsers();
       },
       error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
@@ -250,7 +256,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     const payload = result.payload as UpdateUserPayload;
     this.userService.updateUser(userId, payload).subscribe({
       next: () => {
-        this.toastrService.success('用户信息已更新', '成功');
+        this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
         this.loadUsers();
       },
       error: (error) => ErrorHandler.handleHttpError(error, this.toastrService),
@@ -292,7 +298,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     return {
       mode: 'external',
       hideSubHeader: false,
-      noDataMessage: this.hasListPermission ? '暂无用户数据' : '您暂无查看用户的权限',
+      noDataMessage: this.hasListPermission ? this.translate.instant('common.no_data') : this.translate.instant('cluster.no_permission'),
       actions: {
         add: false,
         edit: false,
@@ -305,38 +311,38 @@ export class UsersComponent implements OnInit, OnDestroy {
       },
       columns: {
         id: {
-          title: 'ID',
+          title: this.translate.instant('users.id'),
           type: 'number',
           width: '6%',
         },
         username: {
-          title: '用户名',
+          title: this.translate.instant('users.username'),
           type: 'string',
           width: '12%',
         },
         email: {
-          title: '邮箱',
+          title: this.translate.instant('users.email'),
           type: 'string',
           width: '18%',
         },
         organization_name: {
-          title: '所属组织',
+          title: this.translate.instant('users.organization'),
           type: 'string',
           width: '13%',
           valuePrepareFunction: (name: string) => name || '-',
         },
         is_org_admin: {
-          title: '管理员',
+          title: this.translate.instant('users.is_admin'),
           type: 'html',
           width: '8%',
           valuePrepareFunction: (isAdmin: boolean) => {
             return isAdmin
-              ? '<span class="badge badge-success">是</span>'
-              : '<span class="badge badge-basic">否</span>';
+              ? `<span class="badge badge-success">${this.translate.instant('users.yes')}</span>`
+              : `<span class="badge badge-basic">${this.translate.instant('users.no')}</span>`;
           },
         },
         roles: {
-          title: '角色',
+          title: this.translate.instant('users.role'),
           type: 'custom',
           width: '18%',
           renderComponent: UsersRoleBadgeCellComponent,
@@ -344,13 +350,13 @@ export class UsersComponent implements OnInit, OnDestroy {
           sort: false,
         },
         created_at: {
-          title: '创建时间',
+          title: this.translate.instant('users.created_time'),
           type: 'string',
           width: '12%',
-          valuePrepareFunction: (date: string) => new Date(date).toLocaleString('zh-CN'),
+          valuePrepareFunction: (date: string) => new Date(date).toLocaleString(this.translate.currentLang === 'zh' ? 'zh-CN' : 'en-US'),
         },
         actions: {
-          title: '操作',
+          title: this.translate.instant('users.actions'),
           type: 'custom',
           width: '10%',
           renderComponent: UsersActionsCellComponent,

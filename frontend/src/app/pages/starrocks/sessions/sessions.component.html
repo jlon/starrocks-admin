@@ -87,14 +87,14 @@
 
         <div *ngIf="loading" class="text-center py-4">
           <nb-spinner size="large" status="primary"></nb-spinner>
-          <p class="mt-3 text-muted">Loading sessions...</p>
+          <p class="mt-3 text-muted">{{ 'sessions.loading' | translate }}</p>
         </div>
 
         <div *ngIf="!loading && sessions.length === 0">
           <nb-alert status="info">
             <p class="mb-0">
               <nb-icon icon="info-outline"></nb-icon>
-              No active sessions found.
+              {{ 'sessions.no_active_sessions' | translate }}
             </p>
           </nb-alert>
         </div>

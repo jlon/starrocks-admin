@@ -57,7 +57,7 @@
 
         <div *ngIf="loading" class="text-center py-4">
           <nb-spinner size="large" status="primary"></nb-spinner>
-          <p class="mt-3 text-muted">Loading variables...</p>
+          <p class="mt-3 text-muted">{{ 'variables.loading' | translate }}</p>
         </div>
 
         <div *ngIf="!loading && variables.length === 0">
@@ -80,8 +80,7 @@
           <nb-alert status="warning">
             <p class="mb-0">
               <nb-icon icon="alert-triangle-outline"></nb-icon>
-              <strong>Warning:</strong> Modifying system variables may affect cluster behavior. 
-              Please consult the StarRocks documentation before making changes.
+              <strong>{{ 'variables.warning_title' | translate }}</strong> {{ 'variables.warning_message' | translate }}
             </p>
           </nb-alert>
         </div>

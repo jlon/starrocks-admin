@@ -3,6 +3,7 @@ import { NbDialogService, NbToastrService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { TranslateService } from '@ngx-translate/core';
 
 import {
   CreateOrganizationRequest,
@@ -47,7 +48,12 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
     private toastrService: NbToastrService,
     private authService: AuthService,
     private userService: UserService,
-  ) {}
+    private translate: TranslateService,
+  ) {
+    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.settings = this.buildTableSettings();
+    });
+  }
 
   ngOnInit(): void {
     this.permissionService.permissions$
@@ -169,7 +175,7 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.organizationService.createOrganization(payload).subscribe({
       next: () => {
-        this.toastrService.success('组织创建成功', '成功');
+        this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
         this.loadOrganizations();
       },
       error: (error) => {
@@ -189,7 +195,7 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.organizationService.updateOrganization(id, payload).subscribe({
       next: () => {
-        this.toastrService.success('组织更新成功', '成功');
+        this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
         this.loadOrganizations();
       },
       error: (error) => {
@@ -203,7 +209,7 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.organizationService.deleteOrganization(id).subscribe({
       next: () => {
-        this.toastrService.success('组织删除成功', '成功');
+        this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
         this.loadOrganizations();
       },
       error: (error) => {
@@ -242,40 +248,40 @@ export class OrganizationsComponent implements OnInit, OnDestroy {
       },
       columns: {
         code: {
-          title: '组织代码',
+          title: this.translate.instant('roles.role_code'),
           type: 'string',
           width: '15%',
         },
         name: {
-          title: '组织名称',
+          title: this.translate.instant('common.name'),
           type: 'string',
           width: '20%',
         },
         description: {
-          title: '描述',
+          title: this.translate.instant('common.description'),
           type: 'string',
           width: '30%',
         },
         is_system: {
-          title: '系统组织',
+          title: 'System',
           type: 'html',
           width: '10%',
           valuePrepareFunction: (cell: boolean) => {
             return cell
-              ? '<span class="badge badge-danger">是</span>'
-              : '<span class="badge badge-basic">否</span>';
+              ? `<span class="badge badge-danger">${this.translate.instant('users.yes')}</span>`
+              : `<span class="badge badge-basic">${this.translate.instant('users.no')}</span>`;
           },
         },
         created_at: {
-          title: '创建时间',
+          title: this.translate.instant('users.created_time'),
           type: 'string',
           width: '15%',
           valuePrepareFunction: (cell: string) => {
-            return cell ? new Date(cell).toLocaleString('zh-CN') : '';
+            return cell ? new Date(cell).toLocaleString(this.translate.currentLang === 'zh' ? 'zh-CN' : 'en-US') : '';
           },
         },
         actions: {
-          title: '操作',
+          title: this.translate.instant('users.actions'),
           type: 'custom',
           width: '10%',
           filter: false,

@@ -4,9 +4,9 @@
       <div class="header__info">
         <div class="header__title-row">
           <nb-icon icon="home-outline" class="header__icon"></nb-icon>
-        <h5 class="header__title">组织管理</h5>
+          <h5 class="header__title">{{ 'organizations.title' | translate }}</h5>
         </div>
-        <p class="header__subtitle">管理系统组织，创建和管理多租户组织</p>
+        <p class="header__subtitle">{{ 'organizations.subtitle' | translate }}</p>
       </div>
       <div class="header__actions">
       <button
@@ -18,7 +18,7 @@
         ngxHasPermission="api:organizations:create"
       >
         <nb-icon icon="plus-outline"></nb-icon>
-        创建组织
+        {{ 'organizations.create_organization' | translate }}
       </button>
       </div>
     </div>
@@ -28,13 +28,13 @@
     <!-- Loading spinner -->
     <div *ngIf="loading" class="loading-container">
       <nb-spinner size="large" status="primary"></nb-spinner>
-      <span class="loading-text">加载中...</span>
+      <span class="loading-text">{{ 'common.loading' | translate }}</span>
     </div>
 
     <!-- No permission alert -->
     <nb-alert *ngIf="!loading && !hasListPermission" status="warning" class="permission-alert">
       <nb-icon icon="alert-triangle-outline"></nb-icon>
-      您暂无查看组织的权限，请联系管理员获取授权。
+      {{ 'organizations.no_permission_hint' | translate }}
     </nb-alert>
 
     <!-- Table with enhanced styling -->

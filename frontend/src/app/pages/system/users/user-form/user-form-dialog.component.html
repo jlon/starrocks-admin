@@ -1,7 +1,12 @@
 <nb-card class="user-dialog">
   <nb-card-header>
     <div class="dialog-header">
-        <h5>{{ mode === 'create' ? '新增用户' : '编辑用户' }}</h5>
+      <div>
+        <h5>{{ mode === 'create' ? ('users.add_user' | translate) : ('users.edit_user' | translate) }}</h5>
+        <p class="dialog-subtitle">
+          {{ mode === 'create' ? ('users.create_user_subtitle' | translate) : ('users.edit_user_subtitle' | translate) }}
+        </p>
+      </div>
       <button nbButton ghost status="basic" size="small" (click)="cancel()">
         <nb-icon icon="close-outline"></nb-icon>
       </button>
@@ -9,69 +14,186 @@
   </nb-card-header>
 
   <nb-card-body>
-    <form [formGroup]="form" novalidate>
-      <!-- Organization (Super Admin) -->
-      <div class="form-row" *ngIf="isSuperAdmin">
-        <div class="form-group full">
-          <label class="label">所属组织</label>
-          <nb-select formControlName="organizationId" placeholder="请选择组织" fullWidth
-            [status]="form.get('organizationId')?.invalid && form.get('organizationId')?.touched ? 'danger' : 'basic'">
-            <nb-option *ngFor="let org of organizations" [value]="org.id">{{ org.name }}</nb-option>
-              </nb-select>
+    <form [formGroup]="form" class="user-form" novalidate>
+      <div class="form-container">
+        <!-- Organization Selection (Super Admin Only) -->
+        <div class="form-group" *ngIf="isSuperAdmin">
+          <label class="label" for="input-organization">{{ 'users.organization' | translate }}</label>
+          <nb-form-field>
+            <nb-select
+              formControlName="organizationId"
+              id="input-organization"
+              [placeholder]="'users.organization_placeholder' | translate"
+              [status]="form.get('organizationId')?.invalid && form.get('organizationId')?.touched ? 'danger' : 'basic'"
+              fullWidth
+            >
+              <nb-option *ngFor="let org of organizations" [value]="org.id">
+                {{ org.name }}
+                <span class="org-code" *ngIf="org.code">({{ org.code }})</span>
+              </nb-option>
+            </nb-select>
+          </nb-form-field>
+          <ng-container *ngIf="form.get('organizationId')?.invalid && form.get('organizationId')?.touched">
+            <p class="caption status-danger" *ngIf="form.get('organizationId')?.errors?.['required']">
+              {{ 'users.organization_required' | translate }}
+            </p>
+          </ng-container>
         </div>
-          </div>
 
-          <!-- Organization Display (Org Admin) -->
-      <div class="form-row" *ngIf="!isSuperAdmin && currentOrganization">
-        <div class="form-group full">
-            <label class="label">所属组织</label>
-          <input nbInput fullWidth [value]="currentOrganization.name" disabled />
+        <!-- Organization Display (Org Admin) -->
+        <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
+          <label class="label">{{ 'users.organization' | translate }}</label>
+          <nb-form-field>
+            <input
+              nbInput
+              fullWidth
+              type="text"
+              [value]="currentOrganization.name"
+              disabled
+            />
+          </nb-form-field>
+          <p class="caption status-hint">{{ 'users.organization_hint' | translate }}</p>
         </div>
-          </div>
 
-      <!-- Username & Email -->
-      <div class="form-row">
+        <!-- Username & Email -->
+        <div class="form-row">
           <div class="form-group">
-          <label class="label">用户名</label>
-          <input nbInput fullWidth formControlName="username" placeholder="用户名"
-            [status]="form.get('username')?.invalid && form.get('username')?.touched ? 'danger' : 'basic'" />
+            <label class="label" for="input-username">{{ 'users.username' | translate }}</label>
+            <nb-form-field>
+              <input
+                nbInput
+                fullWidth
+                id="input-username"
+                [placeholder]="'users.username_placeholder' | translate"
+                formControlName="username"
+                [status]="form.get('username')?.invalid && form.get('username')?.touched ? 'danger' : 'basic'"
+                maxlength="50"
+              />
+            </nb-form-field>
+            <ng-container *ngIf="form.get('username')?.invalid && form.get('username')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('username')?.errors?.['required']">
+                {{ 'users.username_required' | translate }}
+              </p>
+              <p class="caption status-danger" *ngIf="form.get('username')?.errors?.['minlength']">
+                {{ 'users.username_minlength' | translate }}
+              </p>
+            </ng-container>
           </div>
           <div class="form-group">
-          <label class="label">邮箱</label>
-          <input nbInput fullWidth type="email" formControlName="email" placeholder="邮箱地址"
-            [status]="form.get('email')?.invalid && form.get('email')?.touched ? 'danger' : 'basic'" />
+            <label class="label" for="input-email">{{ 'users.email_address' | translate }}</label>
+            <nb-form-field>
+              <input
+                nbInput
+                fullWidth
+                type="email"
+                id="input-email"
+                [placeholder]="'users.email_placeholder' | translate"
+                formControlName="email"
+                [status]="form.get('email')?.invalid && form.get('email')?.touched ? 'danger' : 'basic'"
+                maxlength="100"
+              />
+            </nb-form-field>
+            <ng-container *ngIf="form.get('email')?.invalid && form.get('email')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('email')?.errors?.['required']">
+                {{ 'users.email_required' | translate }}
+              </p>
+              <p class="caption status-danger" *ngIf="form.get('email')?.errors?.['email']">
+                {{ 'users.email_invalid' | translate }}
+              </p>
+            </ng-container>
+          </div>
         </div>
-          </div>
 
-      <!-- Password & Confirm -->
-      <div class="form-row">
+        <!-- Password & Confirm -->
+        <div class="form-row">
           <div class="form-group">
-          <label class="label">密码 <span class="hint" *ngIf="mode === 'edit'">(留空不改)</span></label>
-          <input nbInput fullWidth type="password" formControlName="password"
-            [placeholder]="mode === 'create' ? '密码' : '留空不修改'"
-            [status]="form.get('password')?.invalid && form.get('password')?.touched ? 'danger' : 'basic'" />
+            <label class="label" for="input-password">
+              {{ 'users.password' | translate }}
+              <span class="label-hint" *ngIf="mode === 'edit'">{{ 'users.password_hint_edit' | translate }}</span>
+            </label>
+            <nb-form-field>
+              <input
+                nbInput
+                fullWidth
+                type="password"
+                id="input-password"
+                [placeholder]="mode === 'create' ? ('users.password_placeholder_create' | translate) : ('users.password_placeholder_edit' | translate)"
+                formControlName="password"
+                [status]="form.get('password')?.invalid && form.get('password')?.touched ? 'danger' : 'basic'"
+              />
+            </nb-form-field>
+            <ng-container *ngIf="form.get('password')?.invalid && form.get('password')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('password')?.errors?.['required']">
+                {{ 'users.password_required' | translate }}
+              </p>
+              <p class="caption status-danger" *ngIf="form.get('password')?.errors?.['minlength']">
+                {{ 'users.password_minlength' | translate }}
+              </p>
+            </ng-container>
           </div>
           <div class="form-group">
-          <label class="label">确认密码</label>
-          <input nbInput fullWidth type="password" formControlName="confirmPassword" placeholder="再次输入"
-            [status]="(form.get('confirmPassword')?.invalid || form.errors?.['passwordMismatch']) && form.get('confirmPassword')?.touched ? 'danger' : 'basic'" />
+            <label class="label" for="input-confirm-password">{{ 'users.confirm_password' | translate }}</label>
+            <nb-form-field>
+              <input
+                nbInput
+                fullWidth
+                type="password"
+                id="input-confirm-password"
+                [placeholder]="'users.confirm_password_placeholder' | translate"
+                formControlName="confirmPassword"
+                [status]="(form.get('confirmPassword')?.invalid || form.errors?.['passwordMismatch']) && form.get('confirmPassword')?.touched ? 'danger' : 'basic'"
+              />
+            </nb-form-field>
+            <ng-container *ngIf="form.get('confirmPassword')?.invalid && form.get('confirmPassword')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('confirmPassword')?.errors?.['required']">
+                {{ 'users.confirm_password_required' | translate }}
+              </p>
+            </ng-container>
+            <ng-container *ngIf="form.errors?.['passwordMismatch'] && form.get('confirmPassword')?.touched">
+              <p class="caption status-danger">
+                {{ 'users.password_mismatch' | translate }}
+              </p>
+            </ng-container>
+          </div>
         </div>
-          </div>
 
-      <!-- Role -->
-      <div class="form-row">
-        <div class="form-group full">
-          <label class="label">角色</label>
-          <nb-select formControlName="roleIds" placeholder="选择角色（可多选）" multiple fullWidth
-            [status]="form.get('roleIds')?.invalid && form.get('roleIds')?.touched ? 'danger' : 'basic'">
-            <nb-option *ngFor="let role of filteredRoles" [value]="role.id">{{ role.name }}</nb-option>
-              </nb-select>
-          </div>
+        <!-- Role Selection -->
+        <div class="form-group">
+          <label class="label" for="input-roles">{{ 'users.roles' | translate }}</label>
+          <nb-form-field>
+            <nb-select
+              formControlName="roleIds"
+              id="input-roles"
+              [placeholder]="'users.roles_placeholder' | translate"
+              [status]="form.get('roleIds')?.invalid && form.get('roleIds')?.touched ? 'danger' : 'basic'"
+              multiple
+              fullWidth
+            >
+              <nb-option *ngFor="let role of filteredRoles" [value]="role.id">
+                {{ role.name }}
+                <span class="role-code" *ngIf="role.code">({{ role.code }})</span>
+              </nb-option>
+            </nb-select>
+          </nb-form-field>
+          <ng-container *ngIf="form.get('roleIds')?.invalid && form.get('roleIds')?.touched">
+            <p class="caption status-danger" *ngIf="form.get('roleIds')?.errors?.['required']">
+              {{ 'users.roles_required' | translate }}
+            </p>
+          </ng-container>
+          <p class="caption status-hint" *ngIf="filteredRoles.length === 0">
+            {{ 'users.no_roles_available' | translate }}
+          </p>
+        </div>
       </div>
     </form>
   </nb-card-body>
 
   <nb-card-footer>
-    <button nbButton status="primary" size="small" (click)="submit()" [disabled]="form.invalid || loading">保存</button>
+    <div class="footer-actions">
+      <button nbButton ghost status="basic" (click)="cancel()">{{ 'common.cancel' | translate }}</button>
+      <button nbButton status="primary" (click)="submit()" [disabled]="form.invalid || loading">
+        {{ mode === 'create' ? ('users.create_user_button' | translate) : ('users.save_changes' | translate) }}
+      </button>
+    </div>
   </nb-card-footer>
 </nb-card>

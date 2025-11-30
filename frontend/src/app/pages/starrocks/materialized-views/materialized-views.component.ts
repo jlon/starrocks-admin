@@ -51,31 +51,10 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
 
   // Options for filters
   databases: string[] = [];
-  refreshTypeOptions = [
-    { value: 'all', label: '全部类型' },
-    { value: 'ASYNC', label: '自动刷新' },
-    { value: 'MANUAL', label: '手动刷新' },
-    { value: 'ROLLUP', label: '同步' },
-    { value: 'INCREMENTAL', label: '增量' },
-  ];
-  activeStateOptions = [
-    { value: 'all', label: '全部' },
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' },
-  ];
-  refreshStateOptions = [
-    { value: 'all', label: '全部' },
-    { value: 'SUCCESS', label: '成功' },
-    { value: 'RUNNING', label: '运行中' },
-    { value: 'FAILED', label: '失败' },
-    { value: 'PENDING', label: '等待中' },
-  ];
-  partitionTypeOptions = [
-    { value: 'all', label: '全部分区类型' },
-    { value: 'RANGE', label: 'RANGE' },
-    { value: 'LIST', label: 'LIST' },
-    { value: 'UNPARTITIONED', label: 'UNPARTITIONED' },
-  ];
+  refreshTypeOptions: any[] = [];
+  activeStateOptions: any[] = [];
+  refreshStateOptions: any[] = [];
+  partitionTypeOptions: any[] = [];
 
   // Statistics
   totalCount = 0;
@@ -113,121 +92,153 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
   editAdvancedClause = '';
   editing = false;
 
-  refreshModeOptions = [
-    { value: 'ASYNC', label: '异步模式' },
-    { value: 'SYNC', label: '同步模式' },
-  ];
+  refreshModeOptions: any[] = [];
+  settings: any = {};
 
-  settings = {
-    mode: 'external',
-    hideSubHeader: false,
-    noDataMessage: '暂无物化视图数据',
-    actions: {
-      columnTitle: '操作',
-      add: false,
-      edit: true,
-      delete: true,
-      position: 'right',
-    },
-    edit: {
-      editButtonContent: '<i class="nb-search"></i>',
-      confirmEdit: false,
-    },
-    delete: {
-      deleteButtonContent: '<i class="nb-trash"></i>',
-      confirmDelete: false,
-    },
-    pager: {
-      display: true,
-      perPage: 15,
-    },
-    columns: {
-      name: {
-        title: '名称',
-        type: 'string',
-        width: '12%',
+  private initFilterOptions(): void {
+    this.refreshTypeOptions = [
+      { value: 'all', label: this.translate.instant('materialized_views.all_databases') },
+      { value: 'ASYNC', label: this.translate.instant('materialized_views.auto_refresh') },
+      { value: 'MANUAL', label: this.translate.instant('materialized_views.manual_refresh') },
+      { value: 'ROLLUP', label: 'ROLLUP' },
+      { value: 'INCREMENTAL', label: 'INCREMENTAL' },
+    ];
+    this.activeStateOptions = [
+      { value: 'all', label: this.translate.instant('materialized_views.all_databases') },
+      { value: 'active', label: this.translate.instant('materialized_views.active') },
+      { value: 'inactive', label: this.translate.instant('materialized_views.inactive') },
+    ];
+    this.refreshStateOptions = [
+      { value: 'all', label: this.translate.instant('materialized_views.all_databases') },
+      { value: 'SUCCESS', label: this.translate.instant('common.success') },
+      { value: 'RUNNING', label: this.translate.instant('overview.running') },
+      { value: 'FAILED', label: this.translate.instant('common.error') },
+      { value: 'PENDING', label: 'PENDING' },
+    ];
+    this.partitionTypeOptions = [
+      { value: 'all', label: this.translate.instant('materialized_views.all_databases') },
+      { value: 'RANGE', label: 'RANGE' },
+      { value: 'LIST', label: 'LIST' },
+      { value: 'UNPARTITIONED', label: 'UNPARTITIONED' },
+    ];
+    this.refreshModeOptions = [
+      { value: 'ASYNC', label: 'ASYNC' },
+      { value: 'SYNC', label: 'SYNC' },
+    ];
+  }
+
+  private initTableSettings(): void {
+    this.settings = {
+      mode: 'external',
+      hideSubHeader: false,
+      noDataMessage: this.translate.instant('common.no_data'),
+      actions: {
+        columnTitle: this.translate.instant('common.action'),
+        add: false,
+        edit: true,
+        delete: true,
+        position: 'right',
       },
-      database_name: {
-        title: '数据库',
-        type: 'string',
-        width: '10%',
+      edit: {
+        editButtonContent: '<i class="nb-search"></i>',
+        confirmEdit: false,
       },
-      mv_type: {
-        title: '类型',
-        type: 'html',
-        width: '7%',
-        valuePrepareFunction: (value: any, row: MaterializedView) => {
-          if (row.refresh_type === 'ROLLUP') {
-            return '<span class="badge badge-primary">同步</span>';
-          } else {
-            return '<span class="badge badge-info">异步</span>';
-          }
+      delete: {
+        deleteButtonContent: '<i class="nb-trash"></i>',
+        confirmDelete: false,
+      },
+      pager: {
+        display: true,
+        perPage: 15,
+      },
+      columns: {
+        name: {
+          title: this.translate.instant('common.name'),
+          type: 'string',
+          width: '12%',
+        },
+        database_name: {
+          title: this.translate.instant('overview.database'),
+          type: 'string',
+          width: '10%',
+        },
+        mv_type: {
+          title: this.translate.instant('common.type'),
+          type: 'html',
+          width: '7%',
+          valuePrepareFunction: (value: any, row: MaterializedView) => {
+            if (row.refresh_type === 'ROLLUP') {
+              return '<span class="badge badge-primary">ROLLUP</span>';
+            } else {
+              return '<span class="badge badge-info">ASYNC</span>';
+            }
+          },
+        },
+        refresh_type: {
+          title: this.translate.instant('materialized_views.refresh_type'),
+          type: 'html',
+          width: '9%',
+          valuePrepareFunction: (value: string) => {
+            return this.getRefreshTypeBadge(value);
+          },
+        },
+        is_active: {
+          title: this.translate.instant('common.status'),
+          type: 'custom',
+          width: '12%',
+          renderComponent: ActiveToggleRenderComponent,
+          onComponentInitFunction: (instance: any) => {
+            instance.toggle.subscribe((rowData: any) => {
+              this.toggleActiveState(rowData);
+            });
+          },
+        },
+        last_refresh_state: {
+          title: this.translate.instant('materialized_views.refresh_state'),
+          type: 'html',
+          width: '9%',
+          valuePrepareFunction: (value: string, row: MaterializedView) => {
+            if (row.refresh_type === 'ROLLUP') return '-';
+            return this.getRefreshStateBadge(value);
+          },
+        },
+        last_refresh_finished_time: {
+          title: this.translate.instant('materialized_views.last_refresh_end'),
+          type: 'string',
+          width: '15%',
+          valuePrepareFunction: (value: string) => value || '-',
+        },
+        rows: {
+          title: this.translate.instant('materialized_views.mv_rows'),
+          type: 'string',
+          width: '8%',
+          valuePrepareFunction: (value: number) => {
+            if (value === null || value === undefined) return '-';
+            return this.formatNumber(value);
+          },
+        },
+        partition_type: {
+          title: this.translate.instant('materialized_views.partition_type'),
+          type: 'string',
+          width: '8%',
+          valuePrepareFunction: (value: string) => value || '-',
+        },
+        error_info: {
+          title: this.translate.instant('common.error'),
+          type: 'html',
+          width: '8%',
+          valuePrepareFunction: (value: any, row: MaterializedView) => {
+            if (row.last_refresh_error_message) {
+              return `<span class="text-danger" title="${row.last_refresh_error_message}">
+                <i class="nb-alert-circle"></i> ${this.translate.instant('common.error')}
+              </span>`;
+            }
+            return '-';
+          },
         },
       },
-      refresh_type: {
-        title: '刷新策略',
-        type: 'html',
-        width: '9%',
-        valuePrepareFunction: (value: string) => {
-          return this.getRefreshTypeBadge(value);
-        },
-      },
-      is_active: {
-        title: '状态',
-        type: 'custom',
-        width: '12%',
-        renderComponent: ActiveToggleRenderComponent,
-        onComponentInitFunction: (instance: any) => {
-          instance.toggle.subscribe((rowData: any) => {
-            this.toggleActiveState(rowData);
-          });
-        },
-      },
-      last_refresh_state: {
-        title: '刷新状态',
-        type: 'html',
-        width: '9%',
-        valuePrepareFunction: (value: string, row: MaterializedView) => {
-          if (row.refresh_type === 'ROLLUP') return '-';
-          return this.getRefreshStateBadge(value);
-        },
-      },
-      last_refresh_finished_time: {
-        title: '最后刷新时间',
-        type: 'string',
-        width: '15%',
-        valuePrepareFunction: (value: string) => value || '-',
-      },
-      rows: {
-        title: '行数',
-        type: 'string',
-        width: '8%',
-        valuePrepareFunction: (value: number) => {
-          if (value === null || value === undefined) return '-';
-          return this.formatNumber(value);
-        },
-      },
-      partition_type: {
-        title: '分区类型',
-        type: 'string',
-        width: '8%',
-        valuePrepareFunction: (value: string) => value || '-',
-      },
-      error_info: {
-        title: '错误信息',
-        type: 'html',
-        width: '8%',
-        valuePrepareFunction: (value: any, row: MaterializedView) => {
-          if (row.last_refresh_error_message) {
-            return `<span class="text-danger" title="${row.last_refresh_error_message}">
-              <i class="nb-alert-circle"></i> 错误
-            </span>`;
-          }
-          return '-';
-        },
-      },
-    },
-  };
+    };
+  }
 
   constructor(
     private mvService: MaterializedViewService,
@@ -240,6 +251,9 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    this.initFilterOptions();
+    this.initTableSettings();
+    
     // Get clusterId from ClusterContextService
     this.clusterId = this.clusterContextService.getActiveClusterId() || 0;
 
@@ -481,7 +495,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
 
   createMV() {
     if (!this.createSQL.trim()) {
-      this.toastrService.warning('请输入CREATE MATERIALIZED VIEW SQL语句', '输入错误');
+      this.toastrService.warning(this.translate.instant('common.warning'), this.translate.instant('common.warning'));
       return;
     }
 
@@ -491,14 +505,14 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.toastrService.success('物化视图创建成功', '成功');
+          this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
           this.closeCreateDialog();
           this.loadMaterializedViews();
         },
         error: (error) => {
           this.toastrService.danger(
             ErrorHandler.extractErrorMessage(error),
-            '创建物化视图失败',
+            this.translate.instant('common.error'),
           );
           this.creating = false;
         },
@@ -520,7 +534,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
         error: (error) => {
           this.toastrService.danger(
             ErrorHandler.extractErrorMessage(error),
-            '加载DDL失败',
+            this.translate.instant('common.error'),
           );
         },
       });
@@ -569,14 +583,14 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.toastrService.success('刷新任务已启动', '成功');
+          this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
           this.closeRefreshDialog();
           setTimeout(() => this.loadMaterializedViews(), 1000);
         },
         error: (error) => {
           this.toastrService.danger(
             ErrorHandler.extractErrorMessage(error),
-            '刷新失败',
+            this.translate.instant('common.error'),
           );
           this.refreshing = false;
         },
@@ -586,10 +600,10 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
   cancelRefresh(mv: MaterializedView) {
     this.confirmDialogService
       .confirm(
-        '取消刷新',
-        `确定要取消物化视图 "${mv.name}" 的刷新任务吗？`,
-        '取消刷新',
-        '不取消',
+        this.translate.instant('common.cancel'),
+        `Cancel refresh for "${mv.name}"?`,
+        this.translate.instant('common.confirm'),
+        this.translate.instant('common.cancel'),
       )
       .subscribe((confirmed) => {
         if (confirmed) {
@@ -598,13 +612,13 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
             .pipe(takeUntil(this.destroy$))
             .subscribe({
               next: () => {
-                this.toastrService.success('刷新任务已取消', '成功');
+                this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
                 this.loadMaterializedViews();
               },
               error: (error) => {
                 this.toastrService.danger(
                   ErrorHandler.extractErrorMessage(error),
-                  '取消刷新失败',
+                  this.translate.instant('common.error'),
                 );
               },
             });
@@ -618,14 +632,14 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.toastrService.success('物化视图删除成功', '成功');
+          this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
           tableEvent?.confirm.resolve();
           this.loadMaterializedViews();
         },
         error: (error) => {
           this.toastrService.danger(
             ErrorHandler.extractErrorMessage(error),
-            '删除失败',
+            this.translate.instant('common.error'),
           );
           tableEvent?.confirm.reject();
         },
@@ -635,14 +649,14 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
   // Toggle Active/Inactive state
   toggleActiveState(mv: MaterializedView) {
     const newState = mv.is_active ? 'INACTIVE' : 'ACTIVE';
-    const action = mv.is_active ? '停用' : '激活';
+    const action = mv.is_active ? this.translate.instant('materialized_views.deactivate') : this.translate.instant('materialized_views.activate');
     
     this.confirmDialogService
       .confirm(
-        `${action}物化视图`,
-        `确定要${action}物化视图 "${mv.name}" 吗？`,
         action,
-        '取消',
+        `${action} "${mv.name}"?`,
+        this.translate.instant('common.confirm'),
+        this.translate.instant('common.cancel'),
       )
       .subscribe((confirmed) => {
         if (confirmed) {
@@ -651,13 +665,13 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
             .pipe(takeUntil(this.destroy$))
             .subscribe({
               next: () => {
-                this.toastrService.success(`物化视图已${action}`, '成功');
+                this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
                 this.loadMaterializedViews();
               },
               error: (error) => {
                 this.toastrService.danger(
                   ErrorHandler.extractErrorMessage(error),
-                  `${action}失败`,
+                  this.translate.instant('common.error'),
                 );
               },
             });
@@ -698,11 +712,11 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
     switch (this.editAction) {
       case 'rename':
         if (!this.editNewName.trim()) {
-          this.toastrService.warning('请输入新名称', '输入错误');
+          this.toastrService.warning(this.translate.instant('common.warning'), this.translate.instant('common.warning'));
           return;
         }
         if (this.editNewName === this.selectedMV.name) {
-          this.toastrService.warning('新名称与当前名称相同', '输入错误');
+          this.toastrService.warning(this.translate.instant('common.warning'), this.translate.instant('common.warning'));
           return;
         }
         alterClause = `RENAME ${this.editNewName}`;
@@ -714,7 +728,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
         } else {
           const interval = parseInt(this.editRefreshInterval);
           if (!interval || interval <= 0) {
-            this.toastrService.warning('请输入有效的刷新间隔', '输入错误');
+            this.toastrService.warning(this.translate.instant('common.warning'), this.translate.instant('common.warning'));
             return;
           }
           alterClause = `REFRESH ASYNC EVERY(INTERVAL ${interval} ${this.editRefreshUnit})`;
@@ -723,7 +737,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
         
       case 'properties':
         if (!this.editPropertyKey.trim() || !this.editPropertyValue.trim()) {
-          this.toastrService.warning('请输入属性名称和值', '输入错误');
+          this.toastrService.warning(this.translate.instant('common.warning'), this.translate.instant('common.warning'));
           return;
         }
         // Add session. prefix if it's a session variable
@@ -735,7 +749,7 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
         
       case 'advanced':
         if (!this.editAdvancedClause.trim()) {
-          this.toastrService.warning('请输入ALTER子句', '输入错误');
+          this.toastrService.warning(this.translate.instant('common.warning'), this.translate.instant('common.warning'));
           return;
         }
         alterClause = this.editAdvancedClause;
@@ -748,14 +762,14 @@ export class MaterializedViewsComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.toastrService.success('物化视图修改成功', '成功');
+          this.toastrService.success(this.translate.instant('common.success'), this.translate.instant('common.success'));
           this.closeEditDialog();
           this.loadMaterializedViews();
         },
         error: (error) => {
           this.toastrService.danger(
             ErrorHandler.extractErrorMessage(error),
-            '修改失败',
+            this.translate.instant('common.error'),
           );
           this.editing = false;
         },

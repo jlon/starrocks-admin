@@ -8,12 +8,12 @@
         <form [formGroup]="clusterForm" (ngSubmit)="onSubmit()">
           <!-- Organization Selection (Super Admin Only) -->
           <div class="form-group" *ngIf="isSuperAdmin">
-            <label for="organization" class="label">所属组织 *</label>
+            <label for="organization" class="label">{{ 'cluster.form.organization_label' | translate }} *</label>
             <nb-form-field>
               <nb-select
                 formControlName="organization_id"
                 id="organization"
-                placeholder="请选择组织"
+                [placeholder]="'cluster.form.organization_placeholder' | translate"
                 [status]="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched ? 'danger' : 'basic'"
                 fullWidth
               >
@@ -25,14 +25,14 @@
             </nb-form-field>
             <ng-container *ngIf="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched">
               <small class="form-text text-danger">
-                请选择组织
+                {{ 'cluster.form.organization_required' | translate }}
               </small>
             </ng-container>
           </div>
 
           <!-- Organization Display (Org Admin) -->
           <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
-            <label class="label">所属组织</label>
+            <label class="label">{{ 'cluster.form.organization_label' | translate }}</label>
             <div class="alert alert-info d-flex align-items-center">
               <nb-icon icon="info-outline" class="me-2"></nb-icon>
               <span>{{ currentOrganization.name }} <span class="text-hint">({{ currentOrganization.code }})</span></span>
@@ -76,22 +76,22 @@
           <div class="row">
             <div class="col-md-12">
               <div class="form-group">
-                <label for="deployment_mode" class="label">部署模式 *</label>
+                <label for="deployment_mode" class="label">{{ 'cluster.form.deployment_mode_label' | translate }} *</label>
                 <nb-form-field>
                   <nb-select
                     formControlName="deployment_mode"
                     id="deployment_mode"
-                    placeholder="请选择部署模式"
+                    [placeholder]="'cluster.form.deployment_mode_placeholder' | translate"
                     [status]="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched ? 'danger' : 'basic'"
                     fullWidth
                   >
-                    <nb-option value="shared_nothing">存算一体 (Shared-Nothing)</nb-option>
-                    <nb-option value="shared_data">存算分离 (Shared-Data)</nb-option>
+                    <nb-option value="shared_nothing">{{ 'cluster.form.shared_nothing' | translate }}</nb-option>
+                    <nb-option value="shared_data">{{ 'cluster.form.shared_data' | translate }}</nb-option>
                   </nb-select>
                 </nb-form-field>
                 <ng-container *ngIf="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched">
                   <small class="form-text text-danger">
-                    请选择部署模式
+                    {{ 'cluster.form.deployment_mode_required' | translate }}
                   </small>
                 </ng-container>
               </div>

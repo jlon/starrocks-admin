@@ -2,8 +2,8 @@
   <nb-card-header>
     <div class="header">
       <div class="header__info">
-        <h5 class="header__title">组织管理</h5>
-        <p class="header__subtitle">管理系统组织，创建和管理多租户组织</p>
+        <h5 class="header__title">{{ 'organizations.title' | translate }}</h5>
+        <p class="header__subtitle">{{ 'organizations.subtitle' | translate }}</p>
       </div>
       <button
         nbButton
@@ -14,7 +14,7 @@
         ngxHasPermission="api:organizations:create"
       >
         <nb-icon icon="plus-outline"></nb-icon>
-        创建组织
+        {{ 'organizations.create_organization' | translate }}
       </button>
     </div>
   </nb-card-header>
@@ -25,7 +25,7 @@
     </div>
 
     <nb-alert *ngIf="!loading && !hasListPermission" status="warning">
-      您暂无查看组织的权限，请联系管理员获取授权。
+      {{ 'organizations.no_permission_hint' | translate }}
     </nb-alert>
 
     <ng2-smart-table
@@ -35,4 +35,3 @@
     ></ng2-smart-table>
   </nb-card-body>
 </nb-card>
-

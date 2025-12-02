@@ -1,0 +1,33 @@
+apiVersion: v2
+name: starrocks-admin
+description: A Helm chart for deploying StarRocks Admin on Kubernetes
+
+# Chart type: application or library
+type: application
+
+# Chart version - follows SemVer (https://semver.org/)
+version: 0.1.0
+
+# Application version deployed by this chart
+appVersion: "1.16.0"
+
+# Minimum Kubernetes version required
+kubeVersion: ">=1.16.0-0"
+
+# Keywords for better discoverability
+keywords:
+  - starrocks
+  - kubernetes
+
+# Maintainer information
+maintainers:
+  - name: StarRocks Admin Team
+    email: wang.t.ince@gmail.com
+    url: https://github.com/jlon/starrocks-admin
+
+# Source code locations
+sources:
+  - https://github.com/jlon/starrocks-admin
+
+# Home page URL
+home: https://github.com/jlon/starrocks-admin

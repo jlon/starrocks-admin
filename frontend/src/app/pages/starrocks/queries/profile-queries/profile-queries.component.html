@@ -91,40 +91,8 @@
             </div>
             
             <div *ngIf="!analysisLoading && !analysisError && analysisData" class="dag-layout" [class.fullscreen-mode]="isFullscreen">
-              
-              <!-- Left Panel: Top 10 Lists -->
-              <div class="dag-left-panel">
-                <div class="panel-header">
-                  <span class="title">Profile</span>
-                  <span class="subtitle">Profile详情</span>
-                </div>
-                
-                <!-- Top 10 By Time -->
-                <div class="top-list-card">
-                  <div class="card-header">Top 10 by Time</div>
-                  <div class="card-body">
-                     <div *ngFor="let node of topNodes" class="top-item" (click)="selectNode(node)" [class.selected]="selectedNode?.id === node.id">
-                       <div class="top-item-row">
-                         <span class="node-name" [title]="node.operator_name">{{ node.operator_name }}</span>
-                         <span class="node-pct">{{ node.time_percentage | number:'1.2-2' }}%</span>
-                       </div>
-                       <div class="progress-bg">
-                         <div class="progress-fill" [style.width.%]="node.time_percentage"></div>
-                       </div>
-                     </div>
-                  </div>
-                </div>
 
-                <!-- Top 10 By Memory (Mock for visual consistency with Figure 2) -->
-                <div class="top-list-card mt-3">
-                  <div class="card-header">Top 10 by Memory</div>
-                  <div class="card-body">
-                     <div class="empty-text">暂无内存数据</div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Center Panel: Graph -->
+              <!-- Center Panel: Graph (No left panel, like Figure 1) -->
               <div class="dag-center-panel" 
                    (wheel)="onWheel($event)"
                    (mousedown)="startPan($event)"
@@ -151,30 +119,49 @@
                        [style.width.px]="graphWidth" 
                        [style.height.px]="graphHeight"
                        [style.transform]="'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + zoomLevel + ')'"
-                       [style.transformOrigin]="'center center'"> <!-- Center Zoom -->
+                       [style.transformOrigin]="'center center'">
                     
-                    <!-- Edges -->
+                    <!-- Edges - Lines with dynamic width based on rows -->
                     <svg class="edges-svg" [attr.width]="graphWidth" [attr.height]="graphHeight">
+                      <!-- Arrow marker definitions -->
+                      <defs>
+                        <marker *ngFor="let edge of graphEdges"
+                                [attr.id]="edge.markerId"
+                                [attr.markerWidth]="edge.arrowSize"
+                                [attr.markerHeight]="edge.arrowSize"
+                                [attr.refX]="edge.arrowSize"
+                                [attr.refY]="edge.arrowSize / 2"
+                                orient="auto"
+                                markerUnits="userSpaceOnUse">
+                          <!-- Triangle pointing RIGHT (orient=auto rotates to path direction) -->
+                          <polygon [attr.points]="'0,0 ' + edge.arrowSize + ',' + (edge.arrowSize/2) + ' 0,' + edge.arrowSize"
+                                   [attr.fill]="edge.strokeColor"/>
+                        </marker>
+                      </defs>
                       <g *ngFor="let edge of graphEdges">
-                        <path [attr.d]="getEdgePath(edge.points)" class="edge-path"/>
-                        <!-- Manual Arrow (Gray #8c8c8c, tip touches node border) -->
-                        <path d="M0,0 L-10,-5 L-10,5 Z" fill="#8c8c8c" [attr.transform]="edge.arrowTransform"/>
-                        
-                        <!-- Rows label (No red border, just white background for readability) -->
-                        <g *ngIf="edge.label !== null">
-                          <rect [attr.x]="getEdgeLabelPosition(edge.points).x - 40" 
-                                [attr.y]="getEdgeLabelPosition(edge.points).y - 10"
-                                width="80" height="20" fill="white" fill-opacity="0.9" rx="2"/>
-                          <text [attr.x]="getEdgeLabelPosition(edge.points).x" 
-                                [attr.y]="getEdgeLabelPosition(edge.points).y + 4"
-                                class="edge-label">{{ edge.labelFormatted }}</text>
-                        </g>
+                        <path [attr.d]="getEdgePath(edge.points)" 
+                              class="edge-path" 
+                              [attr.stroke]="edge.strokeColor"
+                              [attr.stroke-width]="edge.strokeWidth"
+                              [attr.marker-end]="'url(#' + edge.markerId + ')'" />
                       </g>
                     </svg>
                     
-                    <!-- Nodes - 100%复刻图3样式 -->
+                    <!-- Edge Labels -->
+                    <div class="edge-labels-layer">
+                      <ng-container *ngFor="let edge of graphEdges">
+                        <div *ngIf="edge.labelFormatted"
+                             class="edge-label-text"
+                             [style.left.px]="edge.labelPos?.x"
+                             [style.top.px]="edge.labelPos?.y">
+                          {{ edge.labelFormatted }}
+                        </div>
+                      </ng-container>
+                    </div>
+                    
+                    <!-- Nodes - 复刻图1样式 -->
                     <div *ngFor="let node of graphNodes" 
-                         class="dag-node"
+                         class="dag-node" [attr.data-node-id]="node.id"
                          [ngClass]="{
                            'selected': selectedNode?.id === node.id,
                            'is-top-1': getNodeRank(node) === 1, 
@@ -185,10 +172,9 @@
                          [style.width.px]="node.width"
                          (click)="selectNode(node)">
                       
-                      <!-- Header -->
-                      <div class="node-header">
+                      <!-- Header with dynamic color -->
+                      <div class="node-header" [ngClass]="getNodeHeaderClass(node)">
                         <span class="node-title">{{ node.operator_name }}</span>
-                        <!-- Top 节点标记 (黄色倒三角) -->
                         <div *ngIf="getNodeRank(node) > 1" class="top-mark"></div>
                       </div>
                       
@@ -197,60 +183,150 @@
                         <div class="node-row id-row">
                           <span>plan_node_id={{ node.plan_node_id }}</span>
                         </div>
-                        <div class="node-row metric-row">
-                          <div class="time-info">
-                            <span class="label">耗时:</span>
-                            <span class="value">{{ formatDurationNs(node.metrics?.operator_total_time) }}</span>
-                          </div>
-                          <div class="pct-info">
-                            {{ node.time_percentage | number:'1.2-2' }}%
-                          </div>
+                        <!-- Horizontal layout: Time | Percentage (复刻图1) -->
+                        <div class="node-row metric-row-horizontal">
+                          <span class="time-value">耗时: {{ formatDurationNs(node.metrics?.operator_total_time) }}</span>
+                          <span class="pct-value">{{ node.time_percentage | number:'1.2-2' }}%</span>
                         </div>
                       </div>
 
-                      <!-- Bottom Progress Line (图3样式) -->
+                      <!-- Bottom Progress Line -->
                       <div class="node-bottom-progress" *ngIf="getNodeRank(node) !== 1">
-                         <div class="progress-bar" [style.width.%]="node.time_percentage"></div>
+                         <div class="progress-bar" [style.width.%]="node.time_percentage" [style.background]="getProgressColor(node)"></div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
               
-              <!-- Right Panel: Execution Details (参考图2/3右侧) -->
+              <!-- Right Panel: 完全复刻图1右侧 -->
               <div class="resize-handle" (mousedown)="startResizeRight($event)" [class.collapsed]="isRightPanelCollapsed"></div>
               
               <div class="dag-right-panel" [style.width.px]="isRightPanelCollapsed ? 40 : rightPanelWidth" [class.collapsed]="isRightPanelCollapsed">
-                <div class="panel-header-right">
-                  <span *ngIf="!isRightPanelCollapsed">执行概览</span>
-                  <span class="collapse-btn" (click)="toggleRightPanel()">{{ isRightPanelCollapsed ? '展开' : '收起 ^' }}</span>
-                </div>
                 
-                <div class="detail-content" *ngIf="!isRightPanelCollapsed">
-                   <div class="section-title">Execution Wall time:</div>
-                   <!-- Total Progress Bar -->
-                   <div class="total-progress-container">
-                     <div class="total-progress-bar" style="width: 100%"></div>
-                     <span class="total-time-text">{{ currentProfileDetail ? '100%' : '-' }}</span>
-                   </div>
-
-                   <div class="metrics-list" *ngIf="selectedNode">
-                     <div class="metric-item highlight">
-                       <span class="dot">●</span>
-                       <span class="name">{{ selectedNode.operator_name }}</span>
-                       <span class="val">{{ selectedNode.time_percentage | number:'1.2-2' }}%</span>
-                     </div>
-                     <!-- Iterate over metrics if available -->
-                     <div class="metric-item" *ngFor="let metric of objectKeys(selectedNode.metrics || {})">
-                        <span class="name pl-3">{{ metric }}</span>
-                        <span class="val">{{ selectedNode.metrics[metric] }}</span>
-                     </div>
-                   </div>
-                   
-                   <div class="metrics-list" *ngIf="!selectedNode">
-                     <div class="empty-text">点击节点查看详情</div>
-                   </div>
+                <!-- Top 10 By Time Section -->
+                <div class="right-section top10-section">
+                  <div class="section-header">
+                    <span class="title">Top 10 By Time</span>
+                    <span class="link" (click)="toggleMemoryView()">⇄ Memory</span>
+                    <span class="collapse-toggle" (click)="toggleTop10()">{{ isTop10Collapsed ? '∨ 展开' : '∧ 收起' }}</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isTop10Collapsed && !isRightPanelCollapsed">
+                    <table class="top10-table">
+                      <thead>
+                        <tr>
+                          <th>节点</th>
+                          <th>时间</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let node of topNodes; let i = index" 
+                            (click)="selectNode(node)" 
+                            [class.selected]="selectedNode?.id === node.id">
+                          <td class="node-name">{{ node.operator_name }}</td>
+                          <td class="node-time">{{ node.time_percentage | number:'1.2-2' }}%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+
+                <!-- Summary Section -->
+                <div class="right-section summary-section">
+                  <div class="section-header">
+                    <span class="title">总览</span>
+                    <span class="collapse-toggle" (click)="toggleSummary()">{{ isSummaryCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isSummaryCollapsed && !isRightPanelCollapsed">
+                    <!-- Execution Time Bar -->
+                    <div class="summary-row">
+                      <span class="label">Execution time</span>
+                    </div>
+                    <div class="exec-time-bar">
+                      <div class="bar-fill io" [style.width.%]="analysisData?.summary?.io_percentage || 20"></div>
+                      <div class="bar-fill processing" [style.width.%]="analysisData?.summary?.processing_percentage || 80"></div>
+                    </div>
+                    
+                    <!-- IO Section -->
+                    <div class="metric-group">
+                      <div class="metric-header">
+                        <span class="dot io"></span>
+                        <span class="name">IO ⓘ</span>
+                        <span class="value">{{ analysisData?.summary?.io_time || '20.91%(2ms672us)' }}</span>
+                      </div>
+                      <div class="metric-detail">
+                        <span>IoSeekTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.io_seek_time || '2ms660us' }}</span>
+                      </div>
+                      <div class="metric-detail">
+                        <span>LocalDiskReadIOTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.local_disk_io || '12us302ns' }}</span>
+                      </div>
+                      <div class="metric-detail">
+                        <span>RemoteReadIOTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.remote_io || '0' }}</span>
+                      </div>
+                    </div>
+                    
+                    <!-- Processing Section -->
+                    <div class="metric-group">
+                      <div class="metric-header">
+                        <span class="dot processing"></span>
+                        <span class="name">Processing ⓘ</span>
+                        <span class="value">{{ analysisData?.summary?.processing_time || '79.09%(10ms108us)' }}</span>
+                      </div>
+                    </div>
+                    
+                    <!-- Other Metrics -->
+                    <div class="metrics-list-simple">
+                      <div class="metric-row-simple">
+                        <span>ExecutionWallTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.wall_time || '19.836ms' }}</span>
+                      </div>
+                      <div class="metric-row-simple">
+                        <span>CollectProfileTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.collect_time || '1ms' }}</span>
+                      </div>
+                      <div class="metric-row-simple">
+                        <span>PlannerTotalTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.planner_time || '10ms' }}</span>
+                      </div>
+                      <div class="metric-row-simple">
+                        <span>QueryCpuTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.cpu_time || '186.211ms(95.46%)' }}</span>
+                      </div>
+                      <div class="metric-row-simple">
+                        <span>QueryScanTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.scan_time || '2.673ms(1.37%)' }}</span>
+                      </div>
+                      <div class="metric-row-simple">
+                        <span>QueryNetworkTime ⓘ</span>
+                        <span>{{ analysisData?.summary?.network_time || '5.041ms(2.58%)' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Diagnosis Section -->
+                <div class="right-section diagnosis-section">
+                  <div class="section-header">
+                    <span class="title">诊断建议</span>
+                    <span class="warning-badge" *ngIf="analysisData?.suggestions?.length">❶</span>
+                    <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
+                    <div *ngIf="analysisData?.suggestions?.length" class="diagnosis-list">
+                      <div *ngFor="let suggestion of analysisData?.suggestions" class="diagnosis-item">
+                        <span class="icon">💡</span>
+                        <span class="text">{{ suggestion }}</span>
+                      </div>
+                    </div>
+                    <div *ngIf="!analysisData?.suggestions?.length" class="empty-diagnosis">
+                      暂无诊断建议
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
             </div>

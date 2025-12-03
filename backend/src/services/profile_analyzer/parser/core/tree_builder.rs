@@ -279,19 +279,22 @@ impl TreeBuilder {
                 node.metrics.operator_total_time = Some(cpu_time_ns);
             }
             
-            if total_time_ns > 0 {
+            if total_time_ns > 0 && base_time_ns > 0 {
                 let percentage = (total_time_ns as f64 / base_time_ns as f64) * 100.0;
-                // Round to 2 decimal places
-                node.time_percentage = Some((percentage * 100.0).round() / 100.0);
-                
-                // Mark consuming nodes (StarRocks thresholds: >30% most, >15% second)
-                // Reference: ExplainAnalyzer.java line 1549-1553
-                if percentage > time_thresholds::MOST_CONSUMING_THRESHOLD {
-                    node.is_most_consuming = true;
-                    node.is_second_most_consuming = false;
-                } else if percentage > time_thresholds::SECOND_CONSUMING_THRESHOLD {
-                    node.is_most_consuming = false;
-                    node.is_second_most_consuming = true;
+                // Ensure percentage is valid (not NaN or Infinity)
+                if percentage.is_finite() {
+                    // Round to 2 decimal places
+                    node.time_percentage = Some((percentage * 100.0).round() / 100.0);
+                    
+                    // Mark consuming nodes (StarRocks thresholds: >30% most, >15% second)
+                    // Reference: ExplainAnalyzer.java line 1549-1553
+                    if percentage > time_thresholds::MOST_CONSUMING_THRESHOLD {
+                        node.is_most_consuming = true;
+                        node.is_second_most_consuming = false;
+                    } else if percentage > time_thresholds::SECOND_CONSUMING_THRESHOLD {
+                        node.is_most_consuming = false;
+                        node.is_second_most_consuming = true;
+                    }
                 }
             }
         }
@@ -340,6 +343,7 @@ impl TreeBuilder {
     }
     
     /// Determine base time for percentage calculation
+    /// Returns 0 if no valid time can be determined (caller should handle this case)
     fn determine_base_time(
         summary: &ProfileSummary,
         nodes: &[ExecutionTreeNode],
@@ -359,32 +363,24 @@ impl TreeBuilder {
             }
         }
         
-        // Fallback: sum all operator times
-        let mut total_ns = 0u64;
-        for node in nodes {
-            if let Some(time) = node.metrics.operator_total_time {
-                total_ns += time;
-            }
-        }
-        
-        if total_ns > 0 {
-            return total_ns;
+        // Fallback: sum all operator times from nodes
+        let node_total: u64 = nodes.iter()
+            .filter_map(|n| n.metrics.operator_total_time)
+            .sum();
+        if node_total > 0 {
+            return node_total;
         }
         
         // Last resort: sum from fragments
-        for fragment in fragments {
-            for pipeline in &fragment.pipelines {
-                for operator in &pipeline.operators {
-                    if let Some(time_str) = operator.common_metrics.get("OperatorTotalTime") {
-                        if let Ok(time_ms) = ValueParser::parse_time_to_ms(time_str) {
-                            total_ns += (time_ms * 1_000_000.0) as u64;
-                        }
-                    }
-                }
-            }
-        }
+        let fragment_total: u64 = fragments.iter()
+            .flat_map(|f| &f.pipelines)
+            .flat_map(|p| &p.operators)
+            .filter_map(|op| op.common_metrics.get("OperatorTotalTime"))
+            .filter_map(|s| ValueParser::parse_time_to_ms(s).ok())
+            .map(|ms| (ms * 1_000_000.0) as u64)
+            .sum();
         
-        total_ns
+        fragment_total
     }
 }
 

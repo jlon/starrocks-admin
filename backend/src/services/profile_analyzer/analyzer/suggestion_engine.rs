@@ -104,28 +104,50 @@ impl SuggestionEngine {
         score.max(0.0)
     }
     
-    /// Parse total time string to seconds
+    /// Parse total time string to seconds, supporting combined formats like "1h30m5s", "1m30s", "1s30ms"
     fn parse_total_time(time_str: &str) -> Result<f64, ()> {
-        let time_str = time_str.trim();
+        let s = time_str.trim();
+        if s.is_empty() { return Err(()); }
         
-        if time_str.contains("h") {
-            let parts: Vec<&str> = time_str.split('h').collect();
-            let hours: f64 = parts.first().unwrap_or(&"0").parse().unwrap_or(0.0);
-            let rest = parts.get(1).unwrap_or(&"0");
-            let minutes: f64 = rest.split('m').next().unwrap_or("0").parse().unwrap_or(0.0);
-            Ok(hours * 3600.0 + minutes * 60.0)
-        } else if time_str.contains("m") && !time_str.contains("ms") {
-            let minutes: f64 = time_str.split('m').next().unwrap_or("0").parse().unwrap_or(0.0);
-            Ok(minutes * 60.0)
-        } else if time_str.ends_with("ms") {
-            let ms: f64 = time_str.trim_end_matches("ms").parse().unwrap_or(0.0);
-            Ok(ms / 1000.0)
-        } else if time_str.ends_with("s") {
-            let s: f64 = time_str.trim_end_matches("s").parse().unwrap_or(0.0);
-            Ok(s)
-        } else {
-            Err(())
+        let mut total_seconds = 0.0;
+        let mut num_buf = String::new();
+        let mut found_unit = false;
+        let chars: Vec<char> = s.chars().collect();
+        let mut i = 0;
+        
+        while i < chars.len() {
+            let c = chars[i];
+            if c.is_ascii_digit() || c == '.' {
+                num_buf.push(c);
+                i += 1;
+            } else {
+                let value: f64 = num_buf.parse().unwrap_or(0.0);
+                num_buf.clear();
+                
+                if c == 'h' {
+                    total_seconds += value * 3600.0;
+                    found_unit = true;
+                    i += 1;
+                } else if c == 'm' {
+                    if i + 1 < chars.len() && chars[i + 1] == 's' {
+                        total_seconds += value / 1000.0;
+                        i += 2;
+                    } else {
+                        total_seconds += value * 60.0;
+                        i += 1;
+                    }
+                    found_unit = true;
+                } else if c == 's' {
+                    total_seconds += value;
+                    found_unit = true;
+                    i += 1;
+                } else {
+                    i += 1;
+                }
+            }
         }
+        
+        if found_unit { Ok(total_seconds) } else { Err(()) }
     }
     
     /// Format duration to human-readable string

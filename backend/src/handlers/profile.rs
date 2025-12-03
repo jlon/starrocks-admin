@@ -9,6 +9,17 @@ use crate::services::MySQLClient;
 use crate::services::profile_analyzer::{analyze_profile, ProfileAnalysisResponse};
 use crate::utils::{ApiResult, error::ApiError};
 
+/// Validate and sanitize query_id to prevent SQL injection
+/// StarRocks query_id format: UUID like "12345678-1234-1234-1234-123456789abc"
+fn sanitize_query_id(query_id: &str) -> Result<&str, ApiError> {
+    let id = query_id.trim();
+    // Allow alphanumeric, hyphens, and underscores (UUID format)
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(ApiError::invalid_data("Invalid query_id format"));
+    }
+    Ok(id)
+}
+
 // List all query profiles for a cluster
 #[utoipa::path(
     get,
@@ -100,13 +111,15 @@ pub async fn get_profile(
             .await?
     };
 
-    tracing::info!("Fetching profile detail for query {} in cluster {}", query_id, cluster.id);
+    // Sanitize query_id to prevent SQL injection
+    let safe_query_id = sanitize_query_id(&query_id)?;
+    tracing::info!("Fetching profile detail for query {} in cluster {}", safe_query_id, cluster.id);
 
     // Get connection pool and execute SELECT get_query_profile()
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
 
-    let sql = format!("SELECT get_query_profile('{}')", query_id);
+    let sql = format!("SELECT get_query_profile('{}')", safe_query_id);
     let (_, rows) = mysql_client.query_raw(&sql).await?;
 
     // Extract profile content from result
@@ -114,7 +127,11 @@ pub async fn get_profile(
         .first()
         .and_then(|row| row.first())
         .cloned()
-        .unwrap_or_else(|| "Profile not found or unavailable".to_string());
+        .unwrap_or_default();
+
+    if profile_content.trim().is_empty() {
+        return Err(ApiError::not_found(format!("Profile not found for query: {}", query_id)));
+    }
 
     tracing::info!("Profile content length: {} bytes", profile_content.len());
 
@@ -143,34 +160,37 @@ pub async fn analyze_profile_handler(
     axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Path(query_id): Path<String>,
 ) -> ApiResult<Json<ProfileAnalysisResponse>> {
-    tracing::info!("Analyzing profile for query {} (using test data)", query_id);
-
-    // Use hardcoded test profile for stable development
-    let test_profile_path = "/home/oppo/Documents/starrocks-admin/backend/tests/fixtures/profiles/test_profile.txt";
-    let profile_content = match tokio::fs::read_to_string(test_profile_path).await {
-        Ok(content) => content,
-        Err(e) => {
-            tracing::error!("Failed to read test profile: {}", e);
-            return Err(ApiError::not_found(format!("Test profile file not found: {}", e)));
-        }
+    // Get the active cluster with organization isolation
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
     };
 
+    // Sanitize query_id to prevent SQL injection
+    let safe_query_id = sanitize_query_id(&query_id)?;
+    tracing::info!("Analyzing profile for query {} in cluster {}", safe_query_id, cluster.id);
+
+    // Get profile content from database
+    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
+    let mysql_client = MySQLClient::from_pool(pool);
+    let sql = format!("SELECT get_query_profile('{}')", safe_query_id);
+    let (_, rows) = mysql_client.query_raw(&sql).await?;
+
+    let profile_content = rows
+        .first()
+        .and_then(|row| row.first())
+        .cloned()
+        .unwrap_or_default();
+
     if profile_content.trim().is_empty() {
-        tracing::warn!("Test profile content is empty");
-        return Err(ApiError::not_found("Test profile content is empty"));
+        return Err(ApiError::not_found(format!("Profile not found for query: {}", query_id)));
     }
 
-    tracing::info!("Using test profile content, length: {} bytes", profile_content.len());
+    tracing::info!("Profile content length: {} bytes", profile_content.len());
 
     // Parse the profile and return analysis
-    match analyze_profile(&profile_content) {
-        Ok(analysis) => {
-            tracing::info!("Profile analysis completed successfully");
-            Ok(Json(analysis))
-        }
-        Err(e) => {
-            tracing::error!("Failed to analyze test profile: {}", e);
-            Err(ApiError::internal_error(format!("Analysis failed: {}", e)))
-        }
-    }
+    analyze_profile(&profile_content)
+        .map(Json)
+        .map_err(|e| ApiError::internal_error(format!("Analysis failed: {}", e)))
 }

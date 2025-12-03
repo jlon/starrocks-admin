@@ -1,5 +1,6 @@
 import { ChangeDetectorRef, Component, OnInit, OnDestroy, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { Location } from '@angular/common'; // Import Location
 import { NbToastrService, NbDialogService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
@@ -69,9 +70,14 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   isFullscreen = false; // Default to normal layout, toggle for full screen
   
   // Right Panel State
-  rightPanelWidth = 320;
+  rightPanelWidth = 380;
   isRightPanelCollapsed = false;
   isResizingRight = false;
+  
+  // Right panel section collapse states (Figure 1 style)
+  isTop10Collapsed = false;
+  isSummaryCollapsed = false;
+  isDiagnosisCollapsed = false;
   
   private nodeRankMap: Map<string, number> = new Map(); // Node rank by time percentage
   objectKeys = Object.keys; // Helper for template
@@ -139,6 +145,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     private dialogService: NbDialogService,
     private authService: AuthService,
     private cdr: ChangeDetectorRef,
+    private location: Location, // Inject Location
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);
@@ -164,9 +171,6 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
     // Load data - backend will get active cluster automatically
     this.loadProfiles();
-    
-    // For testing DAG immediately
-    this.loadAnalysis('mock-query-id');
   }
 
   ngOnDestroy(): void {
@@ -420,15 +424,37 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     }, 100);
   }
 
+  private getIntersectionPoint(
+    from: { x: number, y: number },
+    target: { x: number, y: number, width: number, height: number }
+  ): { x: number, y: number } {
+    const dx = from.x - target.x;
+    const dy = from.y - target.y;
+    if (dx === 0 && dy === 0) {
+      return { ...target };
+    }
+
+    const halfW = target.width / 2;
+    const halfH = target.height / 2;
+    const tx = dx !== 0 ? halfW / Math.abs(dx) : Infinity;
+    const ty = dy !== 0 ? halfH / Math.abs(dy) : Infinity;
+    const t = Math.min(tx, ty);
+
+    return {
+      x: target.x + t * dx,
+      y: target.y + t * dy,
+    };
+  }
+
   // Build DAG graph using dagre
   buildGraph(tree: any): void {
     const g = new dagre.graphlib.Graph();
     g.setGraph({ 
       rankdir: 'BT',
-      marginx: 20, 
-      marginy: 20,
-      nodesep: 50,
-      ranksep: 80
+      marginx: 40, 
+      marginy: 40,
+      nodesep: 80,  // Increase node separation
+      ranksep: 100  // Increase rank separation
     });
     g.setDefaultEdgeLabel(() => ({}));
 
@@ -445,7 +471,9 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
     // Add nodes
     nodeList.forEach((node: any) => {
-      g.setNode(node.id, { width: 200, height: 90 });
+      // Node height: Header(35) + Body(55) + Progress(3) ≈ 93px
+      // Use 95px for dagre layout to ensure proper spacing
+      g.setNode(node.id, { width: 220, height: 95 });
     });
 
     // Add edges
@@ -471,11 +499,11 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     this.graphNodes = nodeList.map((node: any) => {
       const layoutNode = g.node(node.id);
       
-      // Sanitize coordinates to prevent NaN/Infinity issues
+      // Calculate coordinates for sanitized output
       const x = (layoutNode && isFinite(layoutNode.x)) ? layoutNode.x : 0;
       const y = (layoutNode && isFinite(layoutNode.y)) ? layoutNode.y : 0;
-      const width = (layoutNode && isFinite(layoutNode.width)) ? layoutNode.width : 200;
-      const height = (layoutNode && isFinite(layoutNode.height)) ? layoutNode.height : 90;
+      const width = (layoutNode && isFinite(layoutNode.width)) ? layoutNode.width : 220;
+      const height = (layoutNode && isFinite(layoutNode.height)) ? layoutNode.height : 95;
 
       return {
         ...node,
@@ -486,41 +514,111 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       };
     });
 
-    this.graphEdges = g.edges().map((e: any) => {
-      const edge = g.edge(e);
-      // Find source node to get rows for label
-      const sourceNode = nodeList.find((n: any) => n.id === e.v);
-      const rows = sourceNode?.rows;
+    // First pass: collect all rows values to determine max for stroke width calculation
+    const allRows = nodeList.map((n: any) => n.rows || 0).filter((r: number) => r > 0);
+    const maxRows = allRows.length > 0 ? Math.max(...allRows) : 1;
 
-      // Calculate arrow position dynamically
-      let arrowTransform = '';
+    this.graphEdges = g.edges().map((e: any, index: number) => {
+      const edge = g.edge(e);
+      const sourceNodeData = nodeList.find((n: any) => n.id === e.v);
+      const sourceNode = this.graphNodes.find((n: any) => n.id === e.v);
       const targetNode = this.graphNodes.find((n: any) => n.id === e.w);
-      if (edge.points && edge.points.length >= 2 && targetNode) {
-        const prev = edge.points[edge.points.length - 2];
-        const center = { x: targetNode.x, y: targetNode.y };
-        const intersection = this.calculateIntersection(prev, center, targetNode.width, targetNode.height);
-        
-        const dx = intersection.x - prev.x;
-        const dy = intersection.y - prev.y;
-        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-        arrowTransform = `translate(${intersection.x}, ${intersection.y}) rotate(${angle})`;
-      } else if (edge.points && edge.points.length >= 2) {
-        // Fallback
-        const end = edge.points[edge.points.length - 1];
-        const prev = edge.points[edge.points.length - 2];
-        const dx = end.x - prev.x;
-        const dy = end.y - prev.y;
-        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-        arrowTransform = `translate(${end.x}, ${end.y}) rotate(${angle})`;
+      const rows = sourceNodeData?.rows || 0;
+
+      let labelFormatted = rows > 0 ? 'Rows: ' + Number(rows).toLocaleString() : '';
+
+      if (targetNode && (
+          targetNode.operator_name.includes('JOIN') ||
+          targetNode.operator_name === 'NESTLOOP_JOIN' ||
+          targetNode.operator_name === 'HASH_JOIN'
+        ) && targetNode.children && targetNode.children.length >= 2) {
+        if (targetNode.children[0] === e.v) {
+          labelFormatted += ' (PROBE)';
+        } else if (targetNode.children[1] === e.v) {
+          labelFormatted += ' (BUILD)';
+        }
       }
+
+      // Calculate dynamic stroke width based on rows (Algorithm: Logarithmic Scale)
+      // Use Log scale because rows can vary from 0 to billions. Linear scale makes small diffs invisible.
+      const minStrokeWidth = 1.5;
+      const maxStrokeWidth = 6;
+      
+      let strokeWidth = minStrokeWidth;
+      if (rows > 0 && maxRows > 0) {
+        const logRows = Math.log10(rows + 1); // +1 to avoid log(0)
+        const logMax = Math.log10(maxRows + 1);
+        // Calculate ratio based on orders of magnitude
+        const ratio = logMax > 0 ? logRows / logMax : 0;
+        strokeWidth = minStrokeWidth + ratio * (maxStrokeWidth - minStrokeWidth);
+      }
+
+      // Calculate target position for multi-child nodes (Algorithm: Center Distribution)
+      // Instead of spreading across the full width, distribute from center with fixed spacing
+      // This looks better and more "connected"
+      let targetX = targetNode?.x || 0;
+      if (targetNode && targetNode.children && targetNode.children.length > 1) {
+        const childIndex = targetNode.children.indexOf(e.v);
+        const numChildren = targetNode.children.length;
+        const spacing = 40; // 40px spacing between connection points
+        
+        // Calculate offset from center
+        // e.g. 2 children: -20, +20
+        // e.g. 3 children: -40, 0, +40
+        const centerOffset = (childIndex - (numChildren - 1) / 2) * spacing;
+        targetX = targetNode.x + centerOffset;
+      }
+
+      // Calculate visible line segment
+      let visibleStart = { x: 0, y: 0 };
+      let visibleEnd = { x: 0, y: 0 };
+      
+      if (sourceNode && targetNode) {
+        // Source: arrow starts from node's TOP edge
+        visibleStart = {
+          x: sourceNode.x,
+          y: sourceNode.y - sourceNode.height / 2
+        };
+        // Target: arrow ends at node's BOTTOM edge
+        // Use dagre height/2 as base, will be fine-tuned by updateEdgesAfterRender()
+        visibleEnd = {
+          x: targetX,
+          y: targetNode.y + targetNode.height / 2
+        };
+      }
+
+      // Define points for the line
+      const displayPoints = [visibleStart, visibleEnd];
+
+      // Label position: geometric middle of visible segment
+      const labelPos = {
+        x: (visibleStart.x + visibleEnd.x) / 2,
+        y: (visibleStart.y + visibleEnd.y) / 2
+      };
+
+      // Determine stroke color based on target node type
+      let strokeColor = '#bfbfbf';
+      if (targetNode) {
+        const name = targetNode.operator_name?.toUpperCase() || '';
+        if (name.includes('SCAN') || name.includes('JOIN')) {
+          strokeColor = '#fa8c16';
+        }
+      }
+
+      // Calculate arrow size based on stroke width
+      const arrowSize = Math.max(8, strokeWidth * 2);
 
       return {
         v: e.v,
         w: e.w,
-        points: edge.points || [],
-        label: rows !== undefined ? rows : null,
-        labelFormatted: rows !== undefined ? 'Rows: ' + Number(rows).toLocaleString() : '',
-        arrowTransform
+        points: displayPoints,
+        markerId: `edge-marker-${e.v}-${e.w}-${index}`,
+        labelPos,
+        strokeColor,
+        strokeWidth,
+        arrowSize,
+        label: rows,
+        labelFormatted,
       };
     });
     
@@ -553,8 +651,71 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     // Calculate node ranks for color coding
     this.calculateNodeRanks();
     
-    // Center the graph after layout
-    setTimeout(() => this.centerGraph());
+    // Center the graph after layout, then update edges based on actual DOM heights
+    setTimeout(() => {
+      this.centerGraph();
+      this.updateEdgesAfterRender();
+    });
+  }
+  
+  // Update edge positions after DOM has rendered (measure actual node heights)
+  private updateEdgesAfterRender(): void {
+    const nodeElements = document.querySelectorAll('.dag-node');
+    if (!nodeElements.length) return;
+    
+    // Build a map of actual DOM heights
+    const actualHeights: Map<string, number> = new Map();
+    nodeElements.forEach((el: Element) => {
+      const nodeId = el.getAttribute('data-node-id');
+      if (nodeId) {
+        actualHeights.set(nodeId, el.getBoundingClientRect().height / this.zoomLevel);
+      }
+    });
+    
+    // Update graphNodes with actual heights
+    this.graphNodes.forEach(node => {
+      const actualH = actualHeights.get(node.id);
+      if (actualH && actualH > 0) {
+        node.actualHeight = actualH;
+      }
+    });
+    
+    // Recalculate edge endpoints using actual heights
+    this.graphEdges = this.graphEdges.map(edge => {
+      const sourceNode = this.graphNodes.find(n => n.id === edge.v);
+      const targetNode = this.graphNodes.find(n => n.id === edge.w);
+      
+      if (sourceNode && targetNode) {
+        const sourceActualH = sourceNode.actualHeight || sourceNode.height;
+        const targetActualH = targetNode.actualHeight || targetNode.height;
+        
+        // DOM node is positioned at: top = node.y - dagreHeight/2
+        // So actual TOP edge = node.y - dagreHeight/2
+        // And actual BOTTOM edge = (node.y - dagreHeight/2) + actualDOMHeight
+        
+        // Source node: arrow starts from its TOP edge
+        const newStartY = sourceNode.y - sourceNode.height / 2;
+        // Target node: arrow ends at its BOTTOM edge
+        // BOTTOM = (node.y - dagreHeight/2) + actualDOMHeight
+        const newEndY = (targetNode.y - targetNode.height / 2) + targetActualH;
+        
+        // Update points
+        if (edge.points && edge.points.length >= 2) {
+          edge.points[0] = { x: edge.points[0].x, y: newStartY };
+          edge.points[1] = { x: edge.points[1].x, y: newEndY };
+        }
+        
+        // Update label position (middle of line)
+        edge.labelPos = {
+          x: (edge.points[0].x + edge.points[1].x) / 2,
+          y: (newStartY + newEndY) / 2
+        };
+      }
+      
+      return edge;
+    });
+    console.log('Edges updated with actual DOM heights');
+    this.cdr.markForCheck();
   }
   
   // Center the graph in the viewport
@@ -608,7 +769,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         const ratio = remaining / seg.dist;
         return {
           x: seg.p1.x + (seg.p2.x - seg.p1.x) * ratio,
-          y: seg.p1.y + (seg.p2.y - seg.p1.y) * ratio - 8 // Offset slightly up
+          y: seg.p1.y + (seg.p2.y - seg.p1.y) * ratio,
         };
       }
       currentLen += seg.dist;
@@ -616,7 +777,12 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     
     // Fallback
     const mid = Math.floor(points.length / 2);
-    return { x: points[mid].x, y: points[mid].y - 8 };
+    return { x: points[mid].x, y: points[mid].y };
+  }
+
+  getLabelTransform(points: {x: number, y: number}[]): string {
+    const pos = this.getEdgeLabelPosition(points);
+    return `translate(${pos.x}, ${pos.y})`;
   }
 
   // Zoom controls
@@ -640,27 +806,6 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         // Trigger resize event to re-layout if needed
         window.dispatchEvent(new Event('resize'));
     });
-  }
-
-  // Calculate intersection point between line (p1 -> center) and rectangle (center, w, h)
-  calculateIntersection(p1: {x: number, y: number}, center: {x: number, y: number}, w: number, h: number): {x: number, y: number} {
-    const dx = p1.x - center.x;
-    const dy = p1.y - center.y;
-    if (dx === 0 && dy === 0) return center;
-    
-    const halfW = w / 2;
-    const halfH = h / 2;
-    
-    // Avoid division by zero
-    const tx = dx !== 0 ? halfW / Math.abs(dx) : Infinity;
-    const ty = dy !== 0 ? halfH / Math.abs(dy) : Infinity;
-    
-    const t = Math.min(tx, ty);
-    
-    return {
-      x: center.x + t * dx,
-      y: center.y + t * dy
-    };
   }
 
   // Panning
@@ -762,6 +907,37 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     if (val < 1000000000) return (val/1000000).toFixed(2) + 'ms';
     return (val/1000000000).toFixed(2) + 's';
   }
+
+  // Fix for Angular base href issue with SVG markers
+  get arrowMarkerUrl(): string {
+    return `url(${this.location.path()}#dag-arrow)`;
+  }
+
+  // Get node header class based on operator type (Figure 1 style)
+  getNodeHeaderClass(node: any): string {
+    const name = node.operator_name?.toUpperCase() || '';
+    if (this.getNodeRank(node) === 1) return 'header-red';
+    if (name.includes('SCAN')) return 'header-orange';
+    if (name.includes('JOIN')) return 'header-orange';
+    if (name.includes('EXCHANGE')) return 'header-gray';
+    if (name.includes('PROJECT')) return 'header-gray';
+    if (name.includes('AGGREGATION')) return 'header-gray';
+    return 'header-gray';
+  }
+
+  // Get progress bar color
+  getProgressColor(node: any): string {
+    const name = node.operator_name?.toUpperCase() || '';
+    if (name.includes('SCAN')) return '#fa8c16';
+    if (name.includes('JOIN')) return '#fa8c16';
+    return '#d9d9d9';
+  }
+
+  // Toggle functions for right panel sections
+  toggleTop10(): void { this.isTop10Collapsed = !this.isTop10Collapsed; }
+  toggleSummary(): void { this.isSummaryCollapsed = !this.isSummaryCollapsed; }
+  toggleDiagnosis(): void { this.isDiagnosisCollapsed = !this.isDiagnosisCollapsed; }
+  toggleMemoryView(): void { /* Future: switch to memory view */ }
 
   // Copy profile content to clipboard
   copyProfileToClipboard(): void {

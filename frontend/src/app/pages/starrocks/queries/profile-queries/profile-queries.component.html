@@ -48,48 +48,164 @@
 
 <!-- Profile Detail Dialog Template -->
 <ng-template #profileDetailDialog let-data let-ref="dialogRef">
-  <nb-card accent="info">
+  <nb-card accent="info" class="profile-dialog-card">
     <nb-card-header>
       <div class="d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center">
           <nb-icon icon="file-text-outline" status="info" class="me-2"></nb-icon>
           <h5 class="mb-0">Query Profile 详情</h5>
         </div>
-        <button nbButton ghost status="basic" size="small" (click)="ref.close()">
-          <nb-icon icon="close-outline"></nb-icon>
-        </button>
+        <div class="d-flex align-items-center gap-2">
+          <button nbButton status="primary" size="small" (click)="refreshAnalysis()" [disabled]="profileDetailLoading">
+            <nb-icon icon="refresh-outline"></nb-icon>
+            刷新
+          </button>
+          <button nbButton ghost status="basic" size="small" (click)="ref.close()">
+            <nb-icon icon="close-outline"></nb-icon>
+          </button>
+        </div>
       </div>
     </nb-card-header>
-    <nb-card-body>
-      <nb-card accent="basic">
-        <nb-card-body class="profile-scroll-container position-relative">
-          <div *ngIf="profileDetailLoading" class="text-center py-4">
-            <nb-spinner status="primary" size="large"></nb-spinner>
-            <p class="mt-3 text-hint">加载 Profile 详情中...</p>
-          </div>
-
-          <div class="profile-copy-overlay" *ngIf="!profileDetailLoading" style="position: absolute; top: 0.5rem; right: 0.5rem; left: auto; z-index: 10;">
-            <button
-              nbButton
-              status="basic"
-              size="small"
-              (click)="copyProfileToClipboard()"
-              [disabled]="!currentProfileDetail"
-              nbTooltip="复制到剪贴板"
-              nbTooltipPlacement="left"
-            >
-              <nb-icon icon="copy-outline"></nb-icon>
-            </button>
-          </div>
-          <div *ngIf="!profileDetailLoading" class="profile-pre-wrapper">
-            <div *ngIf="!currentProfileDetail || currentProfileDetail.trim() === ''" class="text-center py-4 text-hint">
-              <nb-icon icon="file-text-outline" status="basic" class="mb-2"></nb-icon>
-              <p>暂无 Profile 数据</p>
+    <nb-card-body class="p-0">
+      <nb-tabset>
+        <!-- Tab 1: DAG 执行分析 (默认) -->
+        <nb-tab tabTitle="执行分析" tabIcon="activity-outline">
+          <div class="dag-container">
+            <div *ngIf="analysisLoading" class="text-center py-5">
+              <nb-spinner status="primary" size="large"></nb-spinner>
+              <p class="mt-3 text-hint">正在分析 Profile...</p>
             </div>
-            <pre *ngIf="currentProfileDetail && currentProfileDetail.trim() !== ''" class="profile-content-text">{{ currentProfileDetail }}</pre>
+            
+            <div *ngIf="!analysisLoading && analysisError" class="text-center py-5 text-danger">
+              <nb-icon icon="alert-triangle-outline" status="danger" class="mb-2" style="font-size: 2rem;"></nb-icon>
+              <p>{{ analysisError }}</p>
+            </div>
+            
+            <div *ngIf="!analysisLoading && !analysisError && analysisData" class="dag-layout">
+              <!-- Left Panel: Top Nodes -->
+              <div class="dag-left-panel">
+                <nb-card size="small" class="mb-2">
+                  <nb-card-header class="py-2">Top 10 by Time</nb-card-header>
+                  <nb-list class="top-nodes-list">
+                    <nb-list-item *ngFor="let node of topNodes" class="py-1">
+                      <div class="top-node-row">
+                        <span class="node-name text-truncate">{{ node.operator_name }}</span>
+                        <span class="node-pct" [ngClass]="getPercentageClass(node.time_percentage)">
+                          {{ node.time_percentage | number:'1.2-2' }}%
+                        </span>
+                      </div>
+                    </nb-list-item>
+                    <nb-list-item *ngIf="topNodes.length === 0" class="text-hint">
+                      暂无数据
+                    </nb-list-item>
+                  </nb-list>
+                </nb-card>
+              </div>
+              
+              <!-- Center Panel: Graph -->
+              <div class="dag-center-panel">
+                <div class="graph-viewport">
+                  <div class="graph-content" [style.width.px]="graphWidth" [style.height.px]="graphHeight">
+                    <!-- Edges -->
+                    <svg class="edges-svg" [style.width.px]="graphWidth" [style.height.px]="graphHeight">
+                      <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                          <polygon points="0 0, 10 3.5, 0 7" fill="#8f9bb3"/>
+                        </marker>
+                      </defs>
+                      <g *ngFor="let edge of graphEdges">
+                        <path [attr.d]="getEdgePath(edge.points)" class="edge-path" marker-end="url(#arrowhead)"/>
+                      </g>
+                    </svg>
+                    
+                    <!-- Nodes -->
+                    <div *ngFor="let node of graphNodes" 
+                         class="dag-node"
+                         [ngClass]="getPercentageClass(node.time_percentage)"
+                         [class.selected]="selectedNode?.id === node.id"
+                         [style.left.px]="node.x - (node.width/2)"
+                         [style.top.px]="node.y - (node.height/2)"
+                         [style.width.px]="node.width"
+                         [style.height.px]="node.height"
+                         (click)="selectNode(node)">
+                      <div class="node-header">
+                        <span class="node-type">{{ node.operator_name }}</span>
+                      </div>
+                      <div class="node-body">
+                        <div class="info-row"><span class="label">id={{ node.plan_node_id }}</span></div>
+                        <div class="info-row">
+                          <span class="label">Time:</span>
+                          <span class="value">{{ formatDurationNs(node.metrics?.operator_total_time) }}</span>
+                        </div>
+                        <div class="info-row pct-row">
+                          <span class="value">{{ node.time_percentage | number:'1.2-2' }}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Right Panel: Details -->
+              <div class="dag-right-panel">
+                <nb-card size="small" *ngIf="selectedNode">
+                  <nb-card-header class="py-2">{{ selectedNode.operator_name }}</nb-card-header>
+                  <nb-card-body class="py-2">
+                    <div class="detail-row">
+                      <span class="label">Time:</span>
+                      <span class="value">{{ formatDurationNs(selectedNode.metrics?.operator_total_time) }}</span>
+                    </div>
+                    <div class="detail-row">
+                      <span class="label">Percentage:</span>
+                      <span class="value">{{ selectedNode.time_percentage | number:'1.2-2' }}%</span>
+                    </div>
+                    <div class="detail-row" *ngIf="selectedNode.metrics?.pull_row_num">
+                      <span class="label">Rows:</span>
+                      <span class="value">{{ selectedNode.metrics.pull_row_num | number }}</span>
+                    </div>
+                  </nb-card-body>
+                </nb-card>
+                <div *ngIf="!selectedNode" class="text-center text-hint py-4">
+                  点击节点查看详情
+                </div>
+              </div>
+            </div>
           </div>
-        </nb-card-body>
-      </nb-card>
+        </nb-tab>
+        
+        <!-- Tab 2: Profile 原始文本 -->
+        <nb-tab tabTitle="Profile详情" tabIcon="file-text-outline">
+          <nb-card accent="basic" class="m-0">
+            <nb-card-body class="profile-scroll-container position-relative">
+              <div *ngIf="profileDetailLoading" class="text-center py-4">
+                <nb-spinner status="primary" size="large"></nb-spinner>
+                <p class="mt-3 text-hint">加载 Profile 详情中...</p>
+              </div>
+
+              <div class="profile-copy-overlay" *ngIf="!profileDetailLoading" style="position: absolute; top: 0.5rem; right: 0.5rem; left: auto; z-index: 10;">
+                <button
+                  nbButton
+                  status="basic"
+                  size="small"
+                  (click)="copyProfileToClipboard()"
+                  [disabled]="!currentProfileDetail"
+                  nbTooltip="复制到剪贴板"
+                  nbTooltipPlacement="left"
+                >
+                  <nb-icon icon="copy-outline"></nb-icon>
+                </button>
+              </div>
+              <div *ngIf="!profileDetailLoading" class="profile-pre-wrapper">
+                <div *ngIf="!currentProfileDetail || currentProfileDetail.trim() === ''" class="text-center py-4 text-hint">
+                  <nb-icon icon="file-text-outline" status="basic" class="mb-2"></nb-icon>
+                  <p>暂无 Profile 数据</p>
+                </div>
+                <pre *ngIf="currentProfileDetail && currentProfileDetail.trim() !== ''" class="profile-content-text">{{ currentProfileDetail }}</pre>
+              </div>
+            </nb-card-body>
+          </nb-card>
+        </nb-tab>
+      </nb-tabset>
     </nb-card-body>
   </nb-card>
 </ng-template>

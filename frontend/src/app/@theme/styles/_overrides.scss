@@ -97,4 +97,29 @@
       padding: 0.875rem 1.25rem; // Reduced from 1.25rem
     }
   }
+  
+  // Profile Dialog Large Size
+  .cdk-overlay-pane.profile-dialog-lg {
+    width: 90vw !important;
+    max-width: 1400px !important;
+    
+    nb-card.profile-dialog-card {
+      width: 100%;
+      max-height: 85vh;
+      
+      nb-card-body {
+        padding: 0;
+        overflow: hidden;
+      }
+      
+      nb-tabset {
+        height: 100%;
+        
+        .tab-content {
+          height: calc(85vh - 120px);
+          overflow: auto;
+        }
+      }
+    }
+  }
 }

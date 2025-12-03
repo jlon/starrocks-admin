@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { NbToastrService, NbDialogService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
@@ -11,6 +12,7 @@ import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { MetricThresholds, renderMetricBadge, parseStarRocksDuration } from '../../../../@core/utils/metric-badge';
 import { renderLongText } from '../../../../@core/utils/text-truncate';
 import { AuthService } from '../../../../@core/data/auth.service';
+import * as dagre from 'dagre';
 
 @Component({
   selector: 'ngx-profile-queries',
@@ -41,8 +43,20 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
   // Profile dialog
   currentProfileDetail: string = '';
+  currentQueryId: string = '';
   profileDetailLoading = false;
   @ViewChild('profileDetailDialog') profileDetailDialogTemplate: TemplateRef<any>;
+  
+  // DAG Analysis
+  analysisLoading = false;
+  analysisError: string = '';
+  analysisData: any = null;
+  topNodes: any[] = [];
+  graphNodes: any[] = [];
+  graphEdges: any[] = [];
+  graphWidth = 800;
+  graphHeight = 600;
+  selectedNode: any = null;
 
   // Profile management settings
   profileSettings = {
@@ -101,6 +115,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
   constructor(
     private route: ActivatedRoute,
+    private http: HttpClient,
     private nodeService: NodeService,
     private clusterContextService: ClusterContextService,
     private toastrService: NbToastrService,
@@ -269,8 +284,16 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
   // View profile detail from profile list
   viewProfileDetail(queryId: string): void {
+    this.currentQueryId = queryId;
     this.profileDetailLoading = true;
+    this.analysisLoading = true;
     this.currentProfileDetail = '';
+    this.analysisData = null;
+    this.analysisError = '';
+    this.topNodes = [];
+    this.graphNodes = [];
+    this.graphEdges = [];
+    this.selectedNode = null;
     
     // Open dialog first with loading state
     this.dialogService.open(this.profileDetailDialogTemplate, {
@@ -278,10 +301,10 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       hasBackdrop: true,
       closeOnBackdropClick: true,
       closeOnEsc: true,
-      dialogClass: 'modal-lg', // Use Bootstrap's large modal class
+      dialogClass: 'profile-dialog-lg',
     });
     
-    // Then load profile data
+    // Load profile text
     this.nodeService.getProfile(queryId).subscribe(
       data => {
         this.currentProfileDetail = data.profile_content;
@@ -292,6 +315,128 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         this.profileDetailLoading = false;
       }
     );
+    
+    // Load analysis data
+    this.loadAnalysis(queryId);
+  }
+  
+  // Load profile analysis for DAG
+  loadAnalysis(queryId: string): void {
+    this.analysisLoading = true;
+    this.analysisError = '';
+    
+    this.http.get<any>(`/api/clusters/profiles/${queryId}/analyze`).subscribe({
+      next: (data) => {
+        this.analysisData = data;
+        this.topNodes = data.summary?.top_time_consuming_nodes || [];
+        if (data.execution_tree) {
+          this.buildGraph(data.execution_tree);
+        }
+        this.analysisLoading = false;
+      },
+      error: (err) => {
+        console.error('Failed to analyze profile', err);
+        this.analysisError = '分析失败: ' + (err.error?.message || err.message || '未知错误');
+        this.analysisLoading = false;
+      }
+    });
+  }
+  
+  // Refresh analysis
+  refreshAnalysis(): void {
+    if (this.currentQueryId) {
+      this.loadAnalysis(this.currentQueryId);
+    }
+  }
+  
+  // Build DAG graph using dagre
+  buildGraph(tree: any): void {
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ 
+      rankdir: 'BT',
+      marginx: 20, 
+      marginy: 20,
+      nodesep: 50,
+      ranksep: 80
+    });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    const nodeList = tree.nodes || [];
+
+    // Add nodes
+    nodeList.forEach((node: any) => {
+      g.setNode(node.id, { width: 200, height: 90 });
+    });
+
+    // Add edges
+    nodeList.forEach((node: any) => {
+      if (node.children) {
+        node.children.forEach((childId: string) => {
+          g.setEdge(childId, node.id);
+        });
+      }
+    });
+
+    // Calculate layout
+    dagre.layout(g);
+
+    // Extract coordinates
+    this.graphNodes = nodeList.map((node: any) => {
+      const layoutNode = g.node(node.id);
+      return {
+        ...node,
+        x: layoutNode.x,
+        y: layoutNode.y,
+        width: layoutNode.width,
+        height: layoutNode.height
+      };
+    });
+
+    this.graphEdges = g.edges().map((e: any) => {
+      const edge = g.edge(e);
+      return {
+        v: e.v,
+        w: e.w,
+        points: edge.points
+      };
+    });
+
+    // Calculate bounding box
+    const maxX = Math.max(...this.graphNodes.map((n: any) => (n.x || 0) + (n.width || 0)/2));
+    const maxY = Math.max(...this.graphNodes.map((n: any) => (n.y || 0) + (n.height || 0)/2));
+    this.graphWidth = Math.max(maxX + 50, 600);
+    this.graphHeight = Math.max(maxY + 50, 400);
+  }
+  
+  // Select a node
+  selectNode(node: any): void {
+    this.selectedNode = node;
+  }
+  
+  // Get edge path for SVG
+  getEdgePath(points: {x: number, y: number}[]): string {
+    if (!points || points.length === 0) return '';
+    return 'M' + points.map(p => `${p.x},${p.y}`).join(' L');
+  }
+  
+  // Get percentage class for styling
+  getPercentageClass(pct: number): string {
+    if (!pct) return 'normal';
+    if (pct > 30) return 'danger';
+    if (pct > 15) return 'warning';
+    return 'normal';
+  }
+  
+  // Format duration in nanoseconds
+  formatDurationNs(ns: any): string {
+    if (!ns) return '-';
+    const val = Number(ns);
+    if (isNaN(val)) return ns;
+    
+    if (val < 1000) return val + 'ns';
+    if (val < 1000000) return (val/1000).toFixed(2) + 'us';
+    if (val < 1000000000) return (val/1000000).toFixed(2) + 'ms';
+    return (val/1000000000).toFixed(2) + 's';
   }
 
   // Copy profile content to clipboard

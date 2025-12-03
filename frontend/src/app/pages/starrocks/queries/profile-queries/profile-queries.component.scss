@@ -35,4 +35,177 @@
       border-radius: nb-theme(border-radius);
     }
   }
+  
+  // DAG Container Styles
+  .dag-container {
+    min-height: 500px;
+    padding: 10px;
+  }
+  
+  .dag-layout {
+    display: flex;
+    height: 500px;
+    gap: 10px;
+  }
+  
+  .dag-left-panel {
+    width: 220px;
+    min-width: 220px;
+    overflow-y: auto;
+    
+    .top-nodes-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .top-node-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      font-size: 12px;
+      
+      .node-name {
+        font-weight: 600;
+        max-width: 120px;
+      }
+      
+      .node-pct {
+        font-family: monospace;
+        font-weight: bold;
+        
+        &.danger { color: nb-theme(color-danger-500); }
+        &.warning { color: nb-theme(color-warning-500); }
+        &.normal { color: nb-theme(text-hint-color); }
+      }
+    }
+  }
+  
+  .dag-center-panel {
+    flex-grow: 1;
+    overflow: auto;
+    background-color: nb-theme(background-basic-color-2);
+    border-radius: nb-theme(border-radius);
+    position: relative;
+    
+    .graph-viewport {
+      padding: 20px;
+      min-height: 100%;
+    }
+    
+    .graph-content {
+      position: relative;
+      min-width: 100%;
+      min-height: 100%;
+    }
+  }
+  
+  .dag-right-panel {
+    width: 280px;
+    min-width: 280px;
+    overflow-y: auto;
+    
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 12px;
+      border-bottom: 1px dashed nb-theme(border-basic-color-3);
+      
+      .label { color: nb-theme(text-hint-color); }
+      .value { font-family: monospace; font-weight: 600; }
+      
+      &:last-child { border-bottom: none; }
+    }
+  }
+  
+  // DAG Node Styles
+  .dag-node {
+    position: absolute;
+    background: nb-theme(card-background-color);
+    border-radius: nb-theme(border-radius);
+    box-shadow: nb-theme(shadow);
+    overflow: hidden;
+    border: 1px solid nb-theme(border-basic-color-3);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+    z-index: 5;
+    
+    &:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transform: translateY(-2px);
+      z-index: 6;
+    }
+    
+    &.selected {
+      border: 2px solid nb-theme(color-primary-500);
+      box-shadow: 0 0 0 3px rgba(51, 102, 255, 0.2);
+    }
+    
+    .node-header {
+      background: nb-theme(background-basic-color-3);
+      padding: 6px 10px;
+      font-weight: 600;
+      font-size: 12px;
+      color: nb-theme(text-basic-color);
+      border-bottom: 1px solid nb-theme(border-basic-color-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .node-body {
+      padding: 6px 10px;
+      font-size: 11px;
+      
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 2px;
+        
+        .label { color: nb-theme(text-hint-color); }
+        .value { font-family: monospace; font-weight: 600; }
+        
+        &.pct-row {
+          justify-content: flex-end;
+          .value { font-weight: 700; }
+        }
+      }
+    }
+    
+    // Conditional coloring based on cost
+    &.danger {
+      .node-header {
+        background: rgba(255, 61, 113, 0.15);
+        color: nb-theme(color-danger-500);
+      }
+      border-color: nb-theme(color-danger-300);
+      
+      .node-body .pct-row .value { color: nb-theme(color-danger-500); }
+    }
+    
+    &.warning {
+      .node-header {
+        background: rgba(255, 170, 0, 0.15);
+        color: nb-theme(color-warning-600);
+      }
+      border-color: nb-theme(color-warning-300);
+      
+      .node-body .pct-row .value { color: nb-theme(color-warning-600); }
+    }
+  }
+  
+  .edges-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 1;
+    
+    .edge-path {
+      fill: none;
+      stroke: nb-theme(border-basic-color-4);
+      stroke-width: 1.5px;
+    }
+  }
 }

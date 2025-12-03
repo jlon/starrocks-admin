@@ -16,6 +16,12 @@
               刷新
             </button>
             
+            <!-- DEBUG: Test button -->
+            <button nbButton status="warning" size="small" (click)="testSpecificQuery()">
+              <nb-icon icon="code-outline"></nb-icon>
+              测试DAG
+            </button>
+            
             <nb-select 
               [(selected)]="selectedRefreshInterval" 
               size="small" 
@@ -76,99 +82,177 @@
               <p class="mt-3 text-hint">正在分析 Profile...</p>
             </div>
             
-            <div *ngIf="!analysisLoading && analysisError" class="text-center py-5 text-danger">
-              <nb-icon icon="alert-triangle-outline" status="danger" class="mb-2" style="font-size: 2rem;"></nb-icon>
-              <p>{{ analysisError }}</p>
+            <div *ngIf="!analysisLoading && analysisError" class="text-center py-5">
+              <nb-icon icon="alert-triangle-outline" status="warning" class="mb-2" style="font-size: 2rem;"></nb-icon>
+              <p class="text-hint">{{ analysisError }}</p>
+              <p class="text-hint" style="font-size: 12px;">
+                提示: StarRocks 的 Profile 数据会定期清理，较早的查询可能已无法获取详细分析。
+              </p>
             </div>
             
-            <div *ngIf="!analysisLoading && !analysisError && analysisData" class="dag-layout">
-              <!-- Left Panel: Top Nodes -->
-              <div class="dag-left-panel">
-                <nb-card size="small" class="mb-2">
-                  <nb-card-header class="py-2">Top 10 by Time</nb-card-header>
-                  <nb-list class="top-nodes-list">
-                    <nb-list-item *ngFor="let node of topNodes" class="py-1">
-                      <div class="top-node-row">
-                        <span class="node-name text-truncate">{{ node.operator_name }}</span>
-                        <span class="node-pct" [ngClass]="getPercentageClass(node.time_percentage)">
-                          {{ node.time_percentage | number:'1.2-2' }}%
-                        </span>
-                      </div>
-                    </nb-list-item>
-                    <nb-list-item *ngIf="topNodes.length === 0" class="text-hint">
-                      暂无数据
-                    </nb-list-item>
-                  </nb-list>
-                </nb-card>
-              </div>
+            <div *ngIf="!analysisLoading && !analysisError && analysisData" class="dag-layout" [class.fullscreen-mode]="isFullscreen">
               
+              <!-- Left Panel: Top 10 Lists -->
+              <div class="dag-left-panel">
+                <div class="panel-header">
+                  <span class="title">Profile</span>
+                  <span class="subtitle">Profile详情</span>
+                </div>
+                
+                <!-- Top 10 By Time -->
+                <div class="top-list-card">
+                  <div class="card-header">Top 10 by Time</div>
+                  <div class="card-body">
+                     <div *ngFor="let node of topNodes" class="top-item" (click)="selectNode(node)" [class.selected]="selectedNode?.id === node.id">
+                       <div class="top-item-row">
+                         <span class="node-name" [title]="node.operator_name">{{ node.operator_name }}</span>
+                         <span class="node-pct">{{ node.time_percentage | number:'1.2-2' }}%</span>
+                       </div>
+                       <div class="progress-bg">
+                         <div class="progress-fill" [style.width.%]="node.time_percentage"></div>
+                       </div>
+                     </div>
+                  </div>
+                </div>
+
+                <!-- Top 10 By Memory (Mock for visual consistency with Figure 2) -->
+                <div class="top-list-card mt-3">
+                  <div class="card-header">Top 10 by Memory</div>
+                  <div class="card-body">
+                     <div class="empty-text">暂无内存数据</div>
+                  </div>
+                </div>
+              </div>
+
               <!-- Center Panel: Graph -->
-              <div class="dag-center-panel">
+              <div class="dag-center-panel" 
+                   (wheel)="onWheel($event)"
+                   (mousedown)="startPan($event)"
+                   (window:mousemove)="pan($event)"
+                   (window:mouseup)="endPan()">
+                <!-- Toolbar -->
+                <div class="dag-toolbar">
+                  <button nbButton size="tiny" status="basic" ghost (click)="toggleFullscreen()" [nbTooltip]="isFullscreen ? '退出全屏' : '全屏'">
+                    <nb-icon [icon]="isFullscreen ? 'collapse-outline' : 'expand-outline'"></nb-icon>
+                  </button>
+                  <button nbButton size="tiny" status="basic" ghost (click)="zoomIn()" nbTooltip="放大">
+                    <nb-icon icon="plus-outline"></nb-icon>
+                  </button>
+                  <button nbButton size="tiny" status="basic" ghost (click)="zoomOut()" nbTooltip="缩小">
+                    <nb-icon icon="minus-outline"></nb-icon>
+                  </button>
+                  <button nbButton size="tiny" status="basic" ghost (click)="resetZoom()" nbTooltip="重置">
+                    <nb-icon icon="maximize-outline"></nb-icon>
+                  </button>
+                </div>
+                
                 <div class="graph-viewport">
-                  <div class="graph-content" [style.width.px]="graphWidth" [style.height.px]="graphHeight">
+                  <div class="graph-content" 
+                       [style.width.px]="graphWidth" 
+                       [style.height.px]="graphHeight"
+                       [style.transform]="'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + zoomLevel + ')'"
+                       [style.transformOrigin]="'center center'"> <!-- Center Zoom -->
+                    
                     <!-- Edges -->
-                    <svg class="edges-svg" [style.width.px]="graphWidth" [style.height.px]="graphHeight">
-                      <defs>
-                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                          <polygon points="0 0, 10 3.5, 0 7" fill="#8f9bb3"/>
-                        </marker>
-                      </defs>
+                    <svg class="edges-svg" [attr.width]="graphWidth" [attr.height]="graphHeight">
                       <g *ngFor="let edge of graphEdges">
-                        <path [attr.d]="getEdgePath(edge.points)" class="edge-path" marker-end="url(#arrowhead)"/>
+                        <path [attr.d]="getEdgePath(edge.points)" class="edge-path"/>
+                        <!-- Manual Arrow (Gray #8c8c8c, tip touches node border) -->
+                        <path d="M0,0 L-10,-5 L-10,5 Z" fill="#8c8c8c" [attr.transform]="edge.arrowTransform"/>
+                        
+                        <!-- Rows label (No red border, just white background for readability) -->
+                        <g *ngIf="edge.label !== null">
+                          <rect [attr.x]="getEdgeLabelPosition(edge.points).x - 40" 
+                                [attr.y]="getEdgeLabelPosition(edge.points).y - 10"
+                                width="80" height="20" fill="white" fill-opacity="0.9" rx="2"/>
+                          <text [attr.x]="getEdgeLabelPosition(edge.points).x" 
+                                [attr.y]="getEdgeLabelPosition(edge.points).y + 4"
+                                class="edge-label">{{ edge.labelFormatted }}</text>
+                        </g>
                       </g>
                     </svg>
                     
-                    <!-- Nodes -->
+                    <!-- Nodes - 100%复刻图3样式 -->
                     <div *ngFor="let node of graphNodes" 
                          class="dag-node"
-                         [ngClass]="getPercentageClass(node.time_percentage)"
-                         [class.selected]="selectedNode?.id === node.id"
+                         [ngClass]="{
+                           'selected': selectedNode?.id === node.id,
+                           'is-top-1': getNodeRank(node) === 1, 
+                           'is-top-node': getNodeRank(node) > 0
+                         }"
                          [style.left.px]="node.x - (node.width/2)"
                          [style.top.px]="node.y - (node.height/2)"
                          [style.width.px]="node.width"
-                         [style.height.px]="node.height"
                          (click)="selectNode(node)">
+                      
+                      <!-- Header -->
                       <div class="node-header">
-                        <span class="node-type">{{ node.operator_name }}</span>
+                        <span class="node-title">{{ node.operator_name }}</span>
+                        <!-- Top 节点标记 (黄色倒三角) -->
+                        <div *ngIf="getNodeRank(node) > 1" class="top-mark"></div>
                       </div>
+                      
+                      <!-- Body -->
                       <div class="node-body">
-                        <div class="info-row"><span class="label">id={{ node.plan_node_id }}</span></div>
-                        <div class="info-row">
-                          <span class="label">Time:</span>
-                          <span class="value">{{ formatDurationNs(node.metrics?.operator_total_time) }}</span>
+                        <div class="node-row id-row">
+                          <span>plan_node_id={{ node.plan_node_id }}</span>
                         </div>
-                        <div class="info-row pct-row">
-                          <span class="value">{{ node.time_percentage | number:'1.2-2' }}%</span>
+                        <div class="node-row metric-row">
+                          <div class="time-info">
+                            <span class="label">耗时:</span>
+                            <span class="value">{{ formatDurationNs(node.metrics?.operator_total_time) }}</span>
+                          </div>
+                          <div class="pct-info">
+                            {{ node.time_percentage | number:'1.2-2' }}%
+                          </div>
                         </div>
+                      </div>
+
+                      <!-- Bottom Progress Line (图3样式) -->
+                      <div class="node-bottom-progress" *ngIf="getNodeRank(node) !== 1">
+                         <div class="progress-bar" [style.width.%]="node.time_percentage"></div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
               
-              <!-- Right Panel: Details -->
-              <div class="dag-right-panel">
-                <nb-card size="small" *ngIf="selectedNode">
-                  <nb-card-header class="py-2">{{ selectedNode.operator_name }}</nb-card-header>
-                  <nb-card-body class="py-2">
-                    <div class="detail-row">
-                      <span class="label">Time:</span>
-                      <span class="value">{{ formatDurationNs(selectedNode.metrics?.operator_total_time) }}</span>
-                    </div>
-                    <div class="detail-row">
-                      <span class="label">Percentage:</span>
-                      <span class="value">{{ selectedNode.time_percentage | number:'1.2-2' }}%</span>
-                    </div>
-                    <div class="detail-row" *ngIf="selectedNode.metrics?.pull_row_num">
-                      <span class="label">Rows:</span>
-                      <span class="value">{{ selectedNode.metrics.pull_row_num | number }}</span>
-                    </div>
-                  </nb-card-body>
-                </nb-card>
-                <div *ngIf="!selectedNode" class="text-center text-hint py-4">
-                  点击节点查看详情
+              <!-- Right Panel: Execution Details (参考图2/3右侧) -->
+              <div class="resize-handle" (mousedown)="startResizeRight($event)" [class.collapsed]="isRightPanelCollapsed"></div>
+              
+              <div class="dag-right-panel" [style.width.px]="isRightPanelCollapsed ? 40 : rightPanelWidth" [class.collapsed]="isRightPanelCollapsed">
+                <div class="panel-header-right">
+                  <span *ngIf="!isRightPanelCollapsed">执行概览</span>
+                  <span class="collapse-btn" (click)="toggleRightPanel()">{{ isRightPanelCollapsed ? '展开' : '收起 ^' }}</span>
+                </div>
+                
+                <div class="detail-content" *ngIf="!isRightPanelCollapsed">
+                   <div class="section-title">Execution Wall time:</div>
+                   <!-- Total Progress Bar -->
+                   <div class="total-progress-container">
+                     <div class="total-progress-bar" style="width: 100%"></div>
+                     <span class="total-time-text">{{ currentProfileDetail ? '100%' : '-' }}</span>
+                   </div>
+
+                   <div class="metrics-list" *ngIf="selectedNode">
+                     <div class="metric-item highlight">
+                       <span class="dot">●</span>
+                       <span class="name">{{ selectedNode.operator_name }}</span>
+                       <span class="val">{{ selectedNode.time_percentage | number:'1.2-2' }}%</span>
+                     </div>
+                     <!-- Iterate over metrics if available -->
+                     <div class="metric-item" *ngFor="let metric of objectKeys(selectedNode.metrics || {})">
+                        <span class="name pl-3">{{ metric }}</span>
+                        <span class="val">{{ selectedNode.metrics[metric] }}</span>
+                     </div>
+                   </div>
+                   
+                   <div class="metrics-list" *ngIf="!selectedNode">
+                     <div class="empty-text">点击节点查看详情</div>
+                   </div>
                 </div>
               </div>
+
             </div>
           </div>
         </nb-tab>

@@ -164,6 +164,46 @@ export interface ProfileDetail {
   profile_content: string;
 }
 
+export interface ProfileAnalysisNode {
+  id: string;
+  operator_name: string;
+  node_type: string;
+  plan_node_id: number;
+  parent_plan_node_id: number | null;
+  metrics: any;
+  children: string[];
+  depth: number;
+  is_hotspot: boolean;
+  hotspot_severity: string;
+  fragment_id: string;
+  pipeline_id: string;
+  time_percentage: number;
+  is_most_consuming: boolean;
+  is_second_most_consuming: boolean;
+  unique_metrics: any;
+}
+
+export interface ProfileExecutionTree {
+  root: ProfileAnalysisNode;
+  nodes: ProfileAnalysisNode[];
+}
+
+export interface ProfileAnalysisResult {
+  hotspots: any[];
+  conclusion: string;
+  suggestions: string[];
+  performance_score: number;
+  execution_tree: ProfileExecutionTree;
+  summary: {
+    query_id: string;
+    top_time_consuming_nodes: Array<{
+      operator_name: string;
+      time_percentage: number;
+    }>;
+    [key: string]: any;
+  };
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -289,5 +329,9 @@ export class NodeService {
 
   getProfile(queryId: string): Observable<ProfileDetail> {
     return this.api.get<ProfileDetail>(`/clusters/profiles/${queryId}`);
+  }
+
+  analyzeProfile(queryId: string): Observable<ProfileAnalysisResult> {
+    return this.api.get<ProfileAnalysisResult>(`/clusters/profiles/${queryId}/analyze`);
   }
 }

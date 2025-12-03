@@ -180,6 +180,9 @@ pub struct ExecutionTreeNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_percentage: Option<f64>,
     
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows: Option<u64>,
+
     #[serde(default)]
     pub is_most_consuming: bool,
     #[serde(default)]

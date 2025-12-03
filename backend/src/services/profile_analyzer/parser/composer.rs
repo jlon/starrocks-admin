@@ -155,6 +155,8 @@ impl ProfileComposer {
                     metrics.specialized = self.specialized_parser.parse(&pure_name, &operator_text);
                 }
                 
+                let rows = metrics.push_row_num.or(metrics.pull_row_num);
+
                 ExecutionTreeNode {
                     id: format!("node_{}", topo_node.id),
                     plan_node_id: Some(topo_node.id),
@@ -169,6 +171,7 @@ impl ProfileComposer {
                     fragment_id: frag_id,
                     pipeline_id: pipe_id,
                     time_percentage: None,
+                    rows,
                     is_most_consuming: false,
                     is_second_most_consuming: false,
                     unique_metrics: aggregated_op.unique_metrics.clone(),
@@ -188,6 +191,7 @@ impl ProfileComposer {
                     fragment_id: None,
                     pipeline_id: None,
                     time_percentage: None,
+                    rows: None,
                     is_most_consuming: false,
                     is_second_most_consuming: false,
                     unique_metrics: HashMap::new(),
@@ -220,6 +224,7 @@ impl ProfileComposer {
                         // Check if already in topology
                         if !topology.nodes.iter().any(|n| n.id == plan_id) {
                             let metrics = MetricsParser::from_hashmap(&operator.common_metrics);
+                            let rows = metrics.push_row_num.or(metrics.pull_row_num);
                             
                             let sink_node = ExecutionTreeNode {
                                 id: format!("sink_{}", plan_id.abs()),
@@ -235,6 +240,7 @@ impl ProfileComposer {
                                 fragment_id: Some(fragment.id.clone()),
                                 pipeline_id: Some(pipeline.id.clone()),
                                 time_percentage: None,
+                                rows,
                                 is_most_consuming: false,
                                 is_second_most_consuming: false,
                                 unique_metrics: operator.unique_metrics.clone(),
@@ -274,6 +280,8 @@ impl ProfileComposer {
                     let mut metrics = MetricsParser::parse_common_metrics(&operator_text);
                     metrics.specialized = self.specialized_parser.parse(&pure_name, &operator_text);
                     
+                    let rows = metrics.push_row_num.or(metrics.pull_row_num);
+
                     let node = ExecutionTreeNode {
                         id: format!("node_{}", plan_id),
                         plan_node_id: Some(plan_id),
@@ -288,6 +296,7 @@ impl ProfileComposer {
                         fragment_id: Some(fragment.id.clone()),
                         pipeline_id: Some(pipeline.id.clone()),
                         time_percentage: None,
+                        rows,
                         is_most_consuming: false,
                         is_second_most_consuming: false,
                         unique_metrics: HashMap::new(),

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::models::{ProfileDetail, ProfileListItem};
 use crate::services::MySQLClient;
 use crate::services::profile_analyzer::{analyze_profile, ProfileAnalysisResponse};
-use crate::utils::ApiResult;
+use crate::utils::{ApiResult, error::ApiError};
 
 // List all query profiles for a cluster
 #[utoipa::path(
@@ -143,47 +143,34 @@ pub async fn analyze_profile_handler(
     axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Path(query_id): Path<String>,
 ) -> ApiResult<Json<ProfileAnalysisResponse>> {
-    // Get the active cluster with organization isolation
-    let cluster = if org_ctx.is_super_admin {
-        state.cluster_service.get_active_cluster().await?
-    } else {
-        state
-            .cluster_service
-            .get_active_cluster_by_org(org_ctx.organization_id)
-            .await?
+    tracing::info!("Analyzing profile for query {} (using test data)", query_id);
+
+    // Use hardcoded test profile for stable development
+    let test_profile_path = "/home/oppo/Documents/starrocks-admin/backend/tests/fixtures/profiles/test_profile.txt";
+    let profile_content = match tokio::fs::read_to_string(test_profile_path).await {
+        Ok(content) => content,
+        Err(e) => {
+            tracing::error!("Failed to read test profile: {}", e);
+            return Err(ApiError::not_found(format!("Test profile file not found: {}", e)));
+        }
     };
 
-    tracing::info!("Analyzing profile for query {} in cluster {}", query_id, cluster.id);
-
-    // Get connection pool and fetch profile content
-    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
-    let mysql_client = MySQLClient::from_pool(pool);
-
-    let sql = format!("SELECT get_query_profile('{}')", query_id);
-    let (_, rows) = mysql_client.query_raw(&sql).await?;
-
-    // Extract profile content
-    let profile_content = rows
-        .first()
-        .and_then(|row| row.first())
-        .cloned()
-        .ok_or_else(|| crate::utils::ApiError::ResourceNotFound("Profile not found".to_string()))?;
-
-    if profile_content.is_empty() || profile_content == "Profile not found or unavailable" {
-        return Err(crate::utils::ApiError::ResourceNotFound("Profile content is empty or unavailable".to_string()));
+    if profile_content.trim().is_empty() {
+        tracing::warn!("Test profile content is empty");
+        return Err(ApiError::not_found("Test profile content is empty"));
     }
 
-    tracing::info!("Profile content length: {} bytes, starting analysis", profile_content.len());
+    tracing::info!("Using test profile content, length: {} bytes", profile_content.len());
 
-    // Analyze the profile
-    let analysis_result = analyze_profile(&profile_content)
-        .map_err(|e| crate::utils::ApiError::InternalError(format!("Profile analysis failed: {}", e)))?;
-
-    tracing::info!(
-        "Profile analysis complete: {} hotspots, score: {:.1}",
-        analysis_result.hotspots.len(),
-        analysis_result.performance_score
-    );
-
-    Ok(Json(analysis_result))
+    // Parse the profile and return analysis
+    match analyze_profile(&profile_content) {
+        Ok(analysis) => {
+            tracing::info!("Profile analysis completed successfully");
+            Ok(Json(analysis))
+        }
+        Err(e) => {
+            tracing::error!("Failed to analyze test profile: {}", e);
+            Err(ApiError::internal_error(format!("Analysis failed: {}", e)))
+        }
+    }
 }

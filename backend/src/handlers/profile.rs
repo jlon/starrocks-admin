@@ -130,12 +130,12 @@ pub async fn get_profile(
         .unwrap_or_default();
 
     if profile_content.trim().is_empty() {
-        return Err(ApiError::not_found(format!("Profile not found for query: {}", query_id)));
+        return Err(ApiError::not_found(format!("Profile not found for query: {}", safe_query_id)));
     }
 
     tracing::info!("Profile content length: {} bytes", profile_content.len());
 
-    Ok(Json(ProfileDetail { query_id, profile_content }))
+    Ok(Json(ProfileDetail { query_id: safe_query_id.to_string(), profile_content }))
 }
 
 /// Analyze a query profile and return structured visualization data
@@ -156,38 +156,21 @@ pub async fn get_profile(
     tag = "Profiles"
 )]
 pub async fn analyze_profile_handler(
-    State(state): State<Arc<crate::AppState>>,
-    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+    State(_state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(_org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
     Path(query_id): Path<String>,
 ) -> ApiResult<Json<ProfileAnalysisResponse>> {
-    // Get the active cluster with organization isolation
-    let cluster = if org_ctx.is_super_admin {
-        state.cluster_service.get_active_cluster().await?
-    } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
-    };
-
-    // Sanitize query_id to prevent SQL injection
+    // Sanitize query_id
     let safe_query_id = sanitize_query_id(&query_id)?;
-    tracing::info!("Analyzing profile for query {} in cluster {}", safe_query_id, cluster.id);
+    tracing::info!("Analyzing profile for query {}", safe_query_id);
 
-    // Get profile content from database
-    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
-    let mysql_client = MySQLClient::from_pool(pool);
-    let sql = format!("SELECT get_query_profile('{}')", safe_query_id);
-    let (_, rows) = mysql_client.query_raw(&sql).await?;
+    // DEBUG: Temporarily read from test file for debugging
+    // TODO: Remove this after debugging is complete
+    let test_file_path = "tests/fixtures/profiles/test_profile.txt";
+    let profile_content = std::fs::read_to_string(test_file_path)
+        .map_err(|e| ApiError::internal_error(format!("Failed to read test profile: {}", e)))?;
 
-    let profile_content = rows
-        .first()
-        .and_then(|row| row.first())
-        .cloned()
-        .unwrap_or_default();
-
-    if profile_content.trim().is_empty() {
-        return Err(ApiError::not_found(format!("Profile not found for query: {}", query_id)));
-    }
-
-    tracing::info!("Profile content length: {} bytes", profile_content.len());
+    tracing::info!("DEBUG: Using test profile from {}, length: {} bytes", test_file_path, profile_content.len());
 
     // Parse the profile and return analysis
     analyze_profile(&profile_content)

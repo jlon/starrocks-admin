@@ -45,6 +45,7 @@ impl ProfileComposer {
         if summary.query_cumulative_operator_time_ms.is_none() {
             if let Some(qcot) = execution_info.metrics.get("QueryCumulativeOperatorTime") {
                 summary.query_cumulative_operator_time_ms = ValueParser::parse_time_to_ms(qcot).ok();
+                summary.query_cumulative_operator_time = Some(qcot.clone());
             }
         }
         

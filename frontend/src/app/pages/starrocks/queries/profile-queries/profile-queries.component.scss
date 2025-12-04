@@ -522,4 +522,67 @@
       padding: 20px 0;
     }
   }
+  
+  // Node Detail Section (when node is selected)
+  .node-detail-section {
+    .section-header {
+      .title {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+    
+    .node-detail-tabs {
+      ::ng-deep {
+        .tabset {
+          padding: 0;
+        }
+        
+        .tab {
+          padding: 4px 8px;
+          font-size: 11px;
+        }
+        
+        .tab-content {
+          padding: 8px 0;
+        }
+      }
+    }
+    
+    .metrics-list-simple {
+      max-height: 300px;
+      overflow-y: auto;
+      
+      .metric-row-simple {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 0;
+        font-size: 11px;
+        border-bottom: 1px solid #f5f5f5;
+        
+        span:first-child { 
+          color: #666; 
+          max-width: 140px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        span:last-child { 
+          color: #333;
+          font-family: 'Monaco', 'Menlo', monospace;
+          font-size: 10px;
+        }
+      }
+    }
+    
+    .badge-danger {
+      background: #ff4d4f;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+    }
+  }
 }

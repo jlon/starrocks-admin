@@ -199,7 +199,7 @@
                 </div>
               </div>
               
-              <!-- Right Panel: 完全复刻图1右侧 -->
+              <!-- Right Panel: Dynamic content based on selection -->
               <div class="resize-handle" (mousedown)="startResizeRight($event)" [class.collapsed]="isRightPanelCollapsed"></div>
               
               <div class="dag-right-panel" [style.width.px]="isRightPanelCollapsed ? 40 : rightPanelWidth" [class.collapsed]="isRightPanelCollapsed">
@@ -220,19 +220,22 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr *ngFor="let node of topNodes; let i = index" 
-                            (click)="selectNode(node)" 
+                        <tr *ngFor="let node of top10NodesByTime; let i = index" 
+                            (click)="selectNodeById(node.id)" 
                             [class.selected]="selectedNode?.id === node.id">
                           <td class="node-name">{{ node.operator_name }}</td>
                           <td class="node-time">{{ node.time_percentage | number:'1.2-2' }}%</td>
+                        </tr>
+                        <tr *ngIf="!top10NodesByTime?.length">
+                          <td colspan="2" class="text-center text-hint">暂无数据</td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
                 </div>
 
-                <!-- Summary Section -->
-                <div class="right-section summary-section">
+                <!-- Summary Section (when no node selected) -->
+                <div class="right-section summary-section" *ngIf="!selectedNode">
                   <div class="section-header">
                     <span class="title">总览</span>
                     <span class="collapse-toggle" (click)="toggleSummary()">{{ isSummaryCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
@@ -243,67 +246,173 @@
                       <span class="label">Execution time</span>
                     </div>
                     <div class="exec-time-bar">
-                      <div class="bar-fill io" [style.width.%]="analysisData?.summary?.io_percentage || 20"></div>
-                      <div class="bar-fill processing" [style.width.%]="analysisData?.summary?.processing_percentage || 80"></div>
+                      <div class="bar-fill io" [style.width.%]="getScanTimePercentage()"></div>
+                      <div class="bar-fill processing" [style.width.%]="getCpuTimePercentage()"></div>
                     </div>
                     
-                    <!-- IO Section -->
+                    <!-- IO/Scan Section -->
                     <div class="metric-group">
                       <div class="metric-header">
                         <span class="dot io"></span>
-                        <span class="name">IO ⓘ</span>
-                        <span class="value">{{ analysisData?.summary?.io_time || '20.91%(2ms672us)' }}</span>
-                      </div>
-                      <div class="metric-detail">
-                        <span>IoSeekTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.io_seek_time || '2ms660us' }}</span>
-                      </div>
-                      <div class="metric-detail">
-                        <span>LocalDiskReadIOTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.local_disk_io || '12us302ns' }}</span>
-                      </div>
-                      <div class="metric-detail">
-                        <span>RemoteReadIOTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.remote_io || '0' }}</span>
+                        <span class="name">Scan Time</span>
+                        <span class="value">{{ formatTimeWithPercent(analysisData?.summary?.query_cumulative_scan_time, getScanTimePercentage()) }}</span>
                       </div>
                     </div>
                     
-                    <!-- Processing Section -->
+                    <!-- Processing/CPU Section -->
                     <div class="metric-group">
                       <div class="metric-header">
                         <span class="dot processing"></span>
-                        <span class="name">Processing ⓘ</span>
-                        <span class="value">{{ analysisData?.summary?.processing_time || '79.09%(10ms108us)' }}</span>
+                        <span class="name">CPU Time</span>
+                        <span class="value">{{ formatTimeWithPercent(analysisData?.summary?.query_cumulative_cpu_time, getCpuTimePercentage()) }}</span>
                       </div>
                     </div>
                     
-                    <!-- Other Metrics -->
+                    <!-- Summary Metrics from backend -->
                     <div class="metrics-list-simple">
-                      <div class="metric-row-simple">
-                        <span>ExecutionWallTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.wall_time || '19.836ms' }}</span>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_execution_wall_time">
+                        <span>ExecutionWallTime</span>
+                        <span>{{ analysisData?.summary?.query_execution_wall_time }}</span>
                       </div>
-                      <div class="metric-row-simple">
-                        <span>CollectProfileTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.collect_time || '1ms' }}</span>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_operator_time">
+                        <span>OperatorTime</span>
+                        <span>{{ analysisData?.summary?.query_cumulative_operator_time }}</span>
                       </div>
-                      <div class="metric-row-simple">
-                        <span>PlannerTotalTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.planner_time || '10ms' }}</span>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_cpu_time">
+                        <span>QueryCpuTime</span>
+                        <span>{{ analysisData?.summary?.query_cumulative_cpu_time }}</span>
                       </div>
-                      <div class="metric-row-simple">
-                        <span>QueryCpuTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.cpu_time || '186.211ms(95.46%)' }}</span>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_scan_time">
+                        <span>QueryScanTime</span>
+                        <span>{{ analysisData?.summary?.query_cumulative_scan_time }}</span>
                       </div>
-                      <div class="metric-row-simple">
-                        <span>QueryScanTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.scan_time || '2.673ms(1.37%)' }}</span>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_network_time">
+                        <span>QueryNetworkTime</span>
+                        <span>{{ analysisData?.summary?.query_cumulative_network_time }}</span>
                       </div>
-                      <div class="metric-row-simple">
-                        <span>QueryNetworkTime ⓘ</span>
-                        <span>{{ analysisData?.summary?.network_time || '5.041ms(2.58%)' }}</span>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_peak_schedule_time">
+                        <span>PeakScheduleTime</span>
+                        <span>{{ analysisData?.summary?.query_peak_schedule_time }}</span>
+                      </div>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.result_deliver_time">
+                        <span>ResultDeliverTime</span>
+                        <span>{{ analysisData?.summary?.result_deliver_time }}</span>
+                      </div>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_sum_memory_usage">
+                        <span>MemoryUsage</span>
+                        <span>{{ analysisData?.summary?.query_sum_memory_usage }}</span>
+                      </div>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_spill_bytes">
+                        <span>SpillBytes</span>
+                        <span>{{ analysisData?.summary?.query_spill_bytes }}</span>
+                      </div>
+                      <!-- Fallback when no metrics available -->
+                      <div *ngIf="!hasAnyMetric()" class="text-hint text-center py-2">
+                        暂无指标数据
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                <!-- Node Detail Section (when node is selected) -->
+                <div class="right-section node-detail-section" *ngIf="selectedNode">
+                  <div class="section-header">
+                    <span class="title">{{ selectedNode.operator_name }}</span>
+                    <span class="collapse-toggle" (click)="clearSelectedNode()">✕ 关闭</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isRightPanelCollapsed">
+                    <!-- Node Tabs using Nebular -->
+                    <nb-tabset class="node-detail-tabs">
+                      <!-- CoreMetrics Tab -->
+                      <nb-tab tabTitle="CoreMetrics">
+                        <div class="metrics-list-simple">
+                          <div class="metric-row-simple">
+                            <span>plan_node_id</span>
+                            <span>{{ selectedNode.plan_node_id }}</span>
+                          </div>
+                          <div class="metric-row-simple">
+                            <span>OperatorTotalTime</span>
+                            <span>{{ formatDurationNs(selectedNode.metrics?.operator_total_time) }}</span>
+                          </div>
+                          <div class="metric-row-simple">
+                            <span>TimePercentage</span>
+                            <span>{{ selectedNode.time_percentage | number:'1.2-2' }}%</span>
+                          </div>
+                          <div class="metric-row-simple" *ngIf="selectedNode.rows !== undefined">
+                            <span>OutputRows</span>
+                            <span>{{ selectedNode.rows | number }}</span>
+                          </div>
+                          <div class="metric-row-simple" *ngIf="selectedNode.metrics?.push_row_num">
+                            <span>PushRowNum</span>
+                            <span>{{ selectedNode.metrics?.push_row_num | number }}</span>
+                          </div>
+                          <div class="metric-row-simple" *ngIf="selectedNode.metrics?.pull_row_num">
+                            <span>PullRowNum</span>
+                            <span>{{ selectedNode.metrics?.pull_row_num | number }}</span>
+                          </div>
+                          <div class="metric-row-simple" *ngIf="selectedNode.metrics?.memory_usage">
+                            <span>MemoryUsage</span>
+                            <span>{{ formatBytes(selectedNode.metrics?.memory_usage) }}</span>
+                          </div>
+                        </div>
+                      </nb-tab>
+                      
+                      <!-- NodeMetrics Tab (All metrics) -->
+                      <nb-tab tabTitle="NodeMetrics">
+                        <div class="metrics-list-simple">
+                          <!-- All metrics from node.metrics -->
+                          <ng-container *ngIf="selectedNode.metrics">
+                            <div class="metric-row-simple" *ngFor="let key of getMetricKeys(selectedNode.metrics)">
+                              <span>{{ key }}</span>
+                              <span>{{ formatMetricValue(key, selectedNode.metrics[key]) }}</span>
+                            </div>
+                          </ng-container>
+                          <!-- Unique metrics -->
+                          <ng-container *ngIf="selectedNode.unique_metrics">
+                            <div class="metric-row-simple" *ngFor="let key of objectKeys(selectedNode.unique_metrics)">
+                              <span>{{ key }}</span>
+                              <span>{{ selectedNode.unique_metrics[key] }}</span>
+                            </div>
+                          </ng-container>
+                          <div *ngIf="!selectedNode.metrics && !selectedNode.unique_metrics" class="text-hint text-center py-2">
+                            暂无详细指标
+                          </div>
+                        </div>
+                      </nb-tab>
+                      
+                      <!-- Pipeline Tab -->
+                      <nb-tab tabTitle="Pipeline">
+                        <div class="metrics-list-simple">
+                          <div class="metric-row-simple" *ngIf="selectedNode.fragment_id">
+                            <span>FragmentID</span>
+                            <span>{{ selectedNode.fragment_id }}</span>
+                          </div>
+                          <div class="metric-row-simple" *ngIf="selectedNode.pipeline_id">
+                            <span>PipelineID</span>
+                            <span>{{ selectedNode.pipeline_id }}</span>
+                          </div>
+                          <div class="metric-row-simple">
+                            <span>Depth</span>
+                            <span>{{ selectedNode.depth }}</span>
+                          </div>
+                          <div class="metric-row-simple">
+                            <span>NodeType</span>
+                            <span>{{ selectedNode.node_type }}</span>
+                          </div>
+                          <div class="metric-row-simple" *ngIf="selectedNode.is_hotspot">
+                            <span>IsHotspot</span>
+                            <span class="badge badge-danger">Yes</span>
+                          </div>
+                          <div class="metric-row-simple" *ngIf="selectedNode.hotspot_severity && selectedNode.hotspot_severity !== 'Normal'">
+                            <span>HotspotSeverity</span>
+                            <span>{{ selectedNode.hotspot_severity }}</span>
+                          </div>
+                          <div *ngIf="!selectedNode.fragment_id && !selectedNode.pipeline_id" class="text-hint text-center py-2">
+                            Pipeline 信息暂不可用
+                          </div>
+                        </div>
+                      </nb-tab>
+                    </nb-tabset>
                   </div>
                 </div>
 
@@ -311,7 +420,7 @@
                 <div class="right-section diagnosis-section">
                   <div class="section-header">
                     <span class="title">诊断建议</span>
-                    <span class="warning-badge" *ngIf="analysisData?.suggestions?.length">❶</span>
+                    <span class="warning-badge" *ngIf="analysisData?.suggestions?.length">{{ analysisData?.suggestions?.length }}</span>
                     <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">

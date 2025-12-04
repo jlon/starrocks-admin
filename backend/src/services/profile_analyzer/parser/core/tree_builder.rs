@@ -238,6 +238,12 @@ impl TreeBuilder {
         // This follows StarRocks' sumUpMetric() which sums all operator times for same plan_node_id
         let aggregated_times = Self::aggregate_operator_times_by_plan_node_id(fragments);
         
+        // Aggregate NetworkTime by plan_node_id (for EXCHANGE nodes)
+        let aggregated_network_times = Self::aggregate_metric_by_plan_node_id(fragments, "NetworkTime");
+        
+        // Aggregate ScanTime by plan_node_id (for SCAN nodes)
+        let aggregated_scan_times = Self::aggregate_metric_by_plan_node_id(fragments, "ScanTime");
+        
         // Calculate percentage for each node following StarRocks logic
         for node in nodes.iter_mut() {
             let plan_id = node.plan_node_id.unwrap_or(-999);
@@ -246,37 +252,28 @@ impl TreeBuilder {
             let cpu_time_ns = aggregated_times.get(&plan_id).copied().unwrap_or(0);
             let mut total_time_ns = cpu_time_ns;
             
-            // For Exchange nodes, add NetworkTime from unique_metrics
+            // For Exchange nodes, add NetworkTime
             // Reference: ExplainAnalyzer.java line 1537-1541
-            // Uses searchMetric with useMaxValue=true, so try __MAX_OF_ first
             if node.operator_name.contains("EXCHANGE") {
-                let network_time_str = node.unique_metrics
-                    .get("__MAX_OF_NetworkTime")
-                    .or_else(|| node.unique_metrics.get("NetworkTime"));
-                if let Some(time_str) = network_time_str {
-                    if let Ok(duration) = ValueParser::parse_duration(time_str) {
-                        total_time_ns += duration.as_nanos() as u64;
-                    }
+                // Add aggregated NetworkTime from all fragments
+                if let Some(&network_time) = aggregated_network_times.get(&plan_id) {
+                    total_time_ns += network_time;
                 }
             }
             
-            // For Scan nodes, add ScanTime from unique_metrics
+            // For Scan nodes, add ScanTime
             // Reference: ExplainAnalyzer.java line 1542-1547
-            // Uses searchMetric with useMaxValue=true, so try __MAX_OF_ first
             if node.operator_name.contains("SCAN") {
-                let scan_time_str = node.unique_metrics
-                    .get("__MAX_OF_ScanTime")
-                    .or_else(|| node.unique_metrics.get("ScanTime"));
-                if let Some(time_str) = scan_time_str {
-                    if let Ok(duration) = ValueParser::parse_duration(time_str) {
-                        total_time_ns += duration.as_nanos() as u64;
-                    }
+                // Add aggregated ScanTime from all fragments
+                if let Some(&scan_time) = aggregated_scan_times.get(&plan_id) {
+                    total_time_ns += scan_time;
                 }
             }
             
-            // Update node's operator_total_time with aggregated value
-            if cpu_time_ns > 0 {
-                node.metrics.operator_total_time = Some(cpu_time_ns);
+            // Update node's operator_total_time with TOTAL time (cpuTime + extra time)
+            // This is what should be displayed as the node's execution time
+            if total_time_ns > 0 {
+                node.metrics.operator_total_time = Some(total_time_ns);
             }
             
             if total_time_ns > 0 && base_time_ns > 0 {
@@ -300,6 +297,38 @@ impl TreeBuilder {
         }
         
         Ok(())
+    }
+    
+    /// Aggregate a specific metric by plan_node_id from all operators in fragments
+    /// Searches for __MAX_OF_{metric} first, then falls back to {metric}
+    fn aggregate_metric_by_plan_node_id(fragments: &[Fragment], metric_name: &str) -> HashMap<i32, u64> {
+        let mut aggregated: HashMap<i32, u64> = HashMap::new();
+        let max_metric_name = format!("__MAX_OF_{}", metric_name);
+        
+        for fragment in fragments {
+            for pipeline in &fragment.pipelines {
+                for operator in &pipeline.operators {
+                    let plan_id = operator.plan_node_id
+                        .as_ref()
+                        .and_then(|s| s.parse::<i32>().ok())
+                        .unwrap_or(-999);
+                    
+                    // Try __MAX_OF_ first, then fallback to regular metric
+                    let time_str = operator.unique_metrics
+                        .get(&max_metric_name)
+                        .or_else(|| operator.unique_metrics.get(metric_name));
+                    
+                    if let Some(time_str) = time_str {
+                        if let Ok(duration) = ValueParser::parse_duration(time_str) {
+                            let time_ns = duration.as_nanos() as u64;
+                            *aggregated.entry(plan_id).or_insert(0) += time_ns;
+                        }
+                    }
+                }
+            }
+        }
+        
+        aggregated
     }
     
     /// Aggregate OperatorTotalTime by plan_node_id from all operators in fragments

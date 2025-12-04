@@ -738,6 +738,99 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     this.selectedNode = node;
   }
   
+  // Select node by ID (for top10 table click)
+  selectNodeById(nodeId: string): void {
+    const node = this.graphNodes.find(n => n.id === nodeId);
+    if (node) {
+      this.selectedNode = node;
+    }
+  }
+  
+  // Clear selected node (return to summary view)
+  clearSelectedNode(): void {
+    this.selectedNode = null;
+  }
+  
+  // Get top 10 nodes by time percentage (include all nodes, even 0%)
+  get top10NodesByTime(): any[] {
+    if (!this.graphNodes || this.graphNodes.length === 0) return [];
+    return [...this.graphNodes]
+      .filter(n => n.time_percentage !== undefined && n.time_percentage !== null)
+      .sort((a, b) => (b.time_percentage || 0) - (a.time_percentage || 0))
+      .slice(0, 10);
+  }
+  
+  // Calculate scan time percentage
+  getScanTimePercentage(): number {
+    const scanMs = this.analysisData?.summary?.query_cumulative_scan_time_ms || 0;
+    const totalMs = this.analysisData?.summary?.query_cumulative_operator_time_ms || 
+                    this.analysisData?.summary?.query_execution_wall_time_ms || 1;
+    return totalMs > 0 ? Math.min((scanMs / totalMs) * 100, 100) : 0;
+  }
+  
+  // Calculate CPU time percentage
+  getCpuTimePercentage(): number {
+    const cpuMs = this.analysisData?.summary?.query_cumulative_cpu_time_ms || 0;
+    const totalMs = this.analysisData?.summary?.query_cumulative_operator_time_ms || 
+                    this.analysisData?.summary?.query_execution_wall_time_ms || 1;
+    return totalMs > 0 ? Math.min((cpuMs / totalMs) * 100, 100) : 0;
+  }
+  
+  // Format time string with percentage
+  formatTimeWithPercent(timeStr: string | undefined, percent: number): string {
+    if (!timeStr) return '-';
+    return `${percent.toFixed(2)}%(${timeStr})`;
+  }
+  
+  // Check if any summary metric is available
+  hasAnyMetric(): boolean {
+    const s = this.analysisData?.summary;
+    if (!s) return false;
+    return !!(s.query_execution_wall_time || s.query_cumulative_operator_time ||
+              s.query_cumulative_cpu_time || s.query_cumulative_scan_time ||
+              s.query_cumulative_network_time || s.query_peak_schedule_time ||
+              s.result_deliver_time || s.query_sum_memory_usage || s.query_spill_bytes);
+  }
+  
+  // Get metric keys from metrics object (filter out null/undefined and specialized)
+  getMetricKeys(metrics: any): string[] {
+    if (!metrics) return [];
+    return Object.keys(metrics).filter(key => {
+      const val = metrics[key];
+      return val !== null && val !== undefined && key !== 'specialized';
+    });
+  }
+  
+  // Format metric value based on key name
+  formatMetricValue(key: string, value: any): string {
+    if (value === null || value === undefined) return '-';
+    const lowerKey = key.toLowerCase();
+    // Time metrics (in nanoseconds)
+    if (lowerKey.includes('time')) {
+      return this.formatDurationNs(value);
+    }
+    // Memory/bytes metrics
+    if (lowerKey.includes('memory') || lowerKey.includes('bytes')) {
+      return this.formatBytes(value);
+    }
+    // Number metrics
+    if (typeof value === 'number') {
+      return value.toLocaleString();
+    }
+    return String(value);
+  }
+  
+  // Format bytes to human readable
+  formatBytes(bytes: any): string {
+    if (!bytes) return '-';
+    const val = Number(bytes);
+    if (isNaN(val)) return String(bytes);
+    if (val < 1024) return val + ' B';
+    if (val < 1024 * 1024) return (val / 1024).toFixed(2) + ' KB';
+    if (val < 1024 * 1024 * 1024) return (val / (1024 * 1024)).toFixed(2) + ' MB';
+    return (val / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+  
   // Get edge path for SVG
   getEdgePath(points: {x: number, y: number}[]): string {
     if (!points || points.length === 0) return '';
@@ -905,7 +998,24 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     if (val < 1000) return val + 'ns';
     if (val < 1000000) return (val/1000).toFixed(2) + 'us';
     if (val < 1000000000) return (val/1000000).toFixed(2) + 'ms';
-    return (val/1000000000).toFixed(2) + 's';
+    
+    // Convert to seconds
+    const totalSeconds = val / 1000000000;
+    if (totalSeconds < 60) return totalSeconds.toFixed(2) + 's';
+    
+    // Convert to human-readable format for larger durations
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    const millis = Math.round((totalSeconds % 1) * 1000);
+    
+    let result = '';
+    if (hours > 0) result += hours + 'h';
+    if (minutes > 0) result += minutes + 'm';
+    if (seconds > 0 || (hours === 0 && minutes === 0)) result += seconds + 's';
+    if (millis > 0) result += millis + 'ms';
+    
+    return result || '0s';
   }
 
   // Fix for Angular base href issue with SVG markers

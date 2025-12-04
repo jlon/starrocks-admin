@@ -1,5 +1,91 @@
 // ============================================
-// DAG Visualization Styles - 完全复刻图1设计
+// Profile Queries Component Styles
+// ============================================
+
+@import '../../../../@theme/styles/themes';
+
+// ============================================
+// Profile Dialog Tab Style - Match scrollbar color
+// ============================================
+.profile-dialog-card {
+  nb-tabset {
+    ::ng-deep {
+      .tabset {
+        border-bottom-color: rgba(143, 150, 170, 0.25);
+      }
+      
+      .tab-link {
+        &::before {
+          // Active tab underline - same as scrollbar color
+          background-color: rgba(143, 150, 170, 0.65) !important;
+        }
+      }
+    }
+  }
+}
+
+// ============================================
+// Profile Dialog Header - Clean & Modern
+// ============================================
+.profile-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem !important;
+  border-bottom: 1px solid var(--border-basic-color-3, #e4e9f2);
+  
+  .header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    
+    h5 {
+      margin: 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--text-basic-color, #222b45);
+    }
+    
+    .header-subtitle {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      color: var(--text-hint-color, #8f9bb3);
+      font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+      
+      .subtitle-icon {
+        font-size: 0.875rem;
+        opacity: 0.7;
+      }
+    }
+  }
+  
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    
+    button[nbButton] {
+      &[outline] {
+        // Subtle outline button style
+      }
+      
+      &[ghost] {
+        // Close button - larger hit area
+        padding: 0.25rem;
+        
+        nb-icon {
+          font-size: 1.25rem;
+        }
+      }
+    }
+  }
+}
+
+// ============================================
+// DAG Visualization Styles
 // ============================================
 
 // Scrollbar mixin (matching tab-bar component style from @theme)
@@ -63,13 +149,30 @@
   }
 }
 
+// ============================================
+// DAG Container - 包裹整个 DAG 区域
+// ============================================
+.dag-container {
+  position: relative;
+  width: 100%;
+  height: 100%;  // Fill parent container (tab-content)
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+// ============================================
+// DAG Layout - 两栏布局
+// ============================================
 .dag-layout {
   display: flex;
   flex-direction: row;
-  height: calc(100vh - 180px);
+  height: 100%;
+  width: 100%;
+  max-width: 100%;  // Prevent expansion beyond parent
   background-color: #f5f7fa;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
 
   &.fullscreen-mode {
     position: fixed;
@@ -85,9 +188,10 @@
 // Center Panel - Graph
 // ============================================
 .dag-center-panel {
-  flex: 1;
+  flex: 1 1 0;  // Allow shrink and grow, basis 0
+  min-width: 0;  // Critical: allow flex item to shrink below content size
   position: relative;
-  background-color: #f5f7fa; // Light gray background
+  background-color: #f5f7fa;
   overflow: hidden;
   display: flex;
   justify-content: center;
@@ -318,14 +422,19 @@
 // Resize Handle
 // ============================================
 .resize-handle {
-  width: 5px;
-  margin-left: -2px; // Center over border
+  width: 8px;
+  height: 100%; // Must have height to be clickable
   cursor: col-resize;
   z-index: 30;
   background: transparent;
   transition: background 0.2s;
+  flex-shrink: 0;
   
   &:hover {
+    background: rgba(24, 144, 255, 0.3);
+  }
+  
+  &:active {
     background: rgba(24, 144, 255, 0.5);
   }
   
@@ -338,20 +447,38 @@
 // Right Panel - 完全复刻图1右侧
 // ============================================
 .dag-right-panel {
-  min-width: 0;
+  // Fixed dimensions - prevent content from expanding panel
+  height: 100%;
   max-height: 100%;
+  box-sizing: border-box;
+  
+  // Layout
   background: #fff;
   border-left: 1px solid #e8e8e8;
   display: flex;
   flex-direction: column;
   z-index: 20;
+  
+  // Critical: prevent flex item from growing beyond set width
+  flex-grow: 0;
   flex-shrink: 0;
+  
+  // Overflow control - scroll vertically, hide horizontal overflow
   overflow-y: auto;
   overflow-x: hidden;
   @include themed-scrollbar;
 
+  // Force all children to respect parent width
+  > * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
   .right-section {
     border-bottom: 1px solid #f0f0f0;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;  // Prevent section from shrinking
     
     .section-header {
       display: flex;
@@ -359,11 +486,15 @@
       padding: 12px 16px;
       background: #fafafa;
       border-bottom: 1px solid #f0f0f0;
+      box-sizing: border-box;
       
       .title {
         font-weight: 600;
         font-size: 13px;
         color: #333;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       
       .link {
@@ -371,6 +502,7 @@
         color: #1890ff;
         font-size: 12px;
         cursor: pointer;
+        flex-shrink: 0;
         
         &:hover { text-decoration: underline; }
       }
@@ -380,6 +512,7 @@
         color: #1890ff;
         font-size: 12px;
         cursor: pointer;
+        flex-shrink: 0;
       }
       
       .warning-badge {
@@ -393,12 +526,15 @@
         align-items: center;
         justify-content: center;
         font-size: 10px;
+        flex-shrink: 0;
       }
     }
     
     .section-body {
       padding: 12px 16px;
-      overflow-y: auto;
+      overflow-x: hidden;  // Prevent horizontal scroll/expansion
+      overflow-y: visible;  // Allow content to show (parent handles scroll)
+      box-sizing: border-box;
       @include themed-scrollbar;
     }
   }
@@ -406,8 +542,10 @@
   // Top 10 Table
   .top10-table {
     width: 100%;
+    table-layout: fixed;  // Fixed layout to respect width
     border-collapse: collapse;
     font-size: 12px;
+    box-sizing: border-box;
     
     th {
       text-align: left;
@@ -415,11 +553,17 @@
       color: #8c8c8c;
       font-weight: normal;
       border-bottom: 1px solid #f0f0f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     
     td {
       padding: 8px;
       border-bottom: 1px solid #f5f5f5;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     
     tr {
@@ -437,9 +581,10 @@
       white-space: nowrap;
     }
     
-    .node-time {
+    .node-time, .node-memory {
       text-align: right;
       color: #666;
+      width: 80px;  // Fixed width for value column
     }
   }
 
@@ -512,7 +657,9 @@
     .metrics-list-simple {
       max-height: 400px;
       overflow-y: auto;
+      overflow-x: hidden;  // Prevent horizontal expansion
       padding-right: 4px;
+      box-sizing: border-box;
       @include themed-scrollbar;
       
       .metric-row-simple {
@@ -521,9 +668,25 @@
         padding: 6px 0;
         font-size: 12px;
         border-bottom: 1px solid #f5f5f5;
+        box-sizing: border-box;
+        min-width: 0;  // Allow flex items to shrink below content size
         
-        span:first-child { color: #666; }
-        span:last-child { color: #333; text-align: right; }
+        span:first-child { 
+          color: #666;
+          flex-shrink: 0;
+          max-width: 50%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        span:last-child { 
+          color: #333; 
+          text-align: right;
+          min-width: 0;  // Allow shrinking
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
       }
     }
   }

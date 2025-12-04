@@ -54,22 +54,24 @@
 
 <!-- Profile Detail Dialog Template -->
 <ng-template #profileDetailDialog let-data let-ref="dialogRef">
-  <nb-card accent="info" class="profile-dialog-card">
-    <nb-card-header>
-      <div class="d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center">
-          <nb-icon icon="file-text-outline" status="info" class="me-2"></nb-icon>
-          <h5 class="mb-0">Query Profile 详情</h5>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-          <button nbButton status="primary" size="small" (click)="refreshAnalysis()" [disabled]="profileDetailLoading">
-            <nb-icon icon="refresh-outline"></nb-icon>
-            刷新
-          </button>
-          <button nbButton ghost status="basic" size="small" (click)="ref.close()">
-            <nb-icon icon="close-outline"></nb-icon>
-          </button>
-        </div>
+  <nb-card class="profile-dialog-card" 
+           [ngStyle]="{'width': '90vw', 'max-width': '1400px', 'height': '85vh', 'overflow': 'hidden'}">
+    <nb-card-header class="profile-dialog-header">
+      <div class="header-left">
+        <h5>Query Profile 详情</h5>
+        <p class="header-subtitle" *ngIf="currentQueryId">
+          <nb-icon icon="hash-outline" class="subtitle-icon"></nb-icon>
+          {{ currentQueryId }}
+        </p>
+      </div>
+      <div class="header-actions">
+        <button nbButton outline status="primary" size="small" (click)="refreshAnalysis()" [disabled]="profileDetailLoading">
+          <nb-icon icon="refresh-outline"></nb-icon>
+          刷新
+        </button>
+        <button nbButton ghost status="basic" (click)="ref.close()">
+          <nb-icon icon="close-outline"></nb-icon>
+        </button>
       </div>
     </nb-card-header>
     <nb-card-body class="p-0">

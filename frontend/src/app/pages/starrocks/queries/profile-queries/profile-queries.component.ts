@@ -946,15 +946,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       this.translateX = event.clientX - this.startX;
       this.translateY = event.clientY - this.startY;
     }
-    
-    if (this.isResizingRight) {
-       event.preventDefault();
-       const containerWidth = document.body.clientWidth; // Approximate
-       const newWidth = containerWidth - event.clientX;
-       if (newWidth > 200 && newWidth < 800) {
-         this.rightPanelWidth = newWidth;
-       }
-    }
+    // Note: resize handling is now done in startResizeRight() with dedicated listeners
   }
   
   endPan(): void {
@@ -977,6 +969,40 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     this.isResizingRight = true;
     document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none'; // 防止选择文本
+    
+    // 记录起始位置和宽度
+    const startX = event.clientX;
+    const startWidth = this.rightPanelWidth;
+    
+    // Add global event listeners for reliable resize tracking
+    const onMouseMove = (e: MouseEvent) => {
+      if (this.isResizingRight) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // 使用拖动距离来计算新宽度（更可靠）
+        const deltaX = startX - e.clientX;
+        const newWidth = startWidth + deltaX;
+        
+        if (newWidth > 200 && newWidth < 800) {
+          this.rightPanelWidth = newWidth;
+        }
+      }
+    };
+    
+    const onMouseUp = (e: MouseEvent) => {
+      e.preventDefault();
+      this.isResizingRight = false;
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMouseMove, true);
+      document.removeEventListener('mouseup', onMouseUp, true);
+    };
+    
+    // 使用 capture 模式确保优先处理
+    document.addEventListener('mousemove', onMouseMove, true);
+    document.addEventListener('mouseup', onMouseUp, true);
   }
   
   // Mouse wheel zoom

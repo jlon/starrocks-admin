@@ -8,32 +8,6 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::time::Duration;
 
-// Compiled regex patterns following StarRocks RuntimeProfileParser.java
-// Reference: fe/fe-core/src/main/java/com/starrocks/common/util/RuntimeProfileParser.java
-
-/// Timer pattern: "- MetricName: 1h30m5s100ms50us10ns"
-/// StarRocks: TIMER_PATTERN = "^- (.*?): (((-?\\d+(\\.\\d+)?)(ms|us|ns|h|m|s))+)$"
-static TIMER_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^-\s*(.*?):\s*(((-?\d+(?:\.\d+)?)(ms|us|ns|h|m|s))+)$").unwrap()
-});
-
-/// Timer segment pattern for extracting individual time components
-static TIMER_SEGMENT_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(-?\d+(?:\.\d+)?)(ms|us|ns|h|m|s)").unwrap()
-});
-
-/// Byte counter pattern: "- MetricName: 558.156 GB"
-/// StarRocks: BYTE_COUNTER_PATTERN = "^- (.*?): (-?\\d+\\.\\d+) (KB|MB|GB|TB|B)$"
-static BYTE_COUNTER_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^-?\s*(.*?):\s*(-?\d+\.?\d*)\s*(TB|GB|MB|KB|B)$").unwrap()
-});
-
-/// Unit counter pattern with optional precise value in parentheses
-/// StarRocks: UNIT_COUNTER_PATTERN = "^- (.*?): (-?\\d+(\\.\\d+)?([eE][-+]?\\d+)?)[BMK]?( \\((-?\\d+(\\.\\d+)?)\\))?$"
-static UNIT_COUNTER_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^-?\s*(.*?):\s*(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)[BMK]?(?:\s*\((-?\d+(?:\.\d+)?)\))?$").unwrap()
-});
-
 // Legacy patterns for backward compatibility
 static TIME_COMPONENT_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(-?\d+(?:\.\d+)?)\s*(ms|us|μs|ns|h|m|s)").unwrap()
@@ -198,56 +172,6 @@ impl ValueParser {
         ))
     }
     
-    /// Parse percentage string
-    pub fn parse_percentage(input: &str) -> ParseResult<f64> {
-        let input = input.trim().trim_end_matches('%');
-        input.parse::<f64>().map_err(|e| ParseError::ParseNumberError(
-            format!("Failed to parse percentage '{}': {}", input, e)
-        ))
-    }
-    
-    /// Parse boolean value
-    pub fn parse_bool(input: &str) -> ParseResult<bool> {
-        match input.trim().to_lowercase().as_str() {
-            "true" | "yes" | "1" => Ok(true),
-            "false" | "no" | "0" => Ok(false),
-            _ => Err(ParseError::ValueError {
-                value: input.to_string(),
-                reason: "Invalid boolean value".to_string(),
-            }),
-        }
-    }
-    
-    /// Format nanoseconds to human-readable duration string
-    pub fn format_duration_ns(ns: u64) -> String {
-        let ms = ns as f64 / 1_000_000.0;
-        if ms >= 1000.0 {
-            format!("{:.2}s", ms / 1000.0)
-        } else if ms >= 1.0 {
-            format!("{:.2}ms", ms)
-        } else {
-            let us = ns as f64 / 1000.0;
-            if us >= 1.0 {
-                format!("{:.2}us", us)
-            } else {
-                format!("{}ns", ns)
-            }
-        }
-    }
-    
-    /// Format bytes to human-readable string
-    pub fn format_bytes(bytes: u64) -> String {
-        const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
-        let mut size = bytes as f64;
-        let mut unit_index = 0;
-        
-        while size >= 1024.0 && unit_index < UNITS.len() - 1 {
-            size /= 1024.0;
-            unit_index += 1;
-        }
-        
-        format!("{:.2} {}", size, UNITS[unit_index])
-    }
 }
 
 #[cfg(test)]

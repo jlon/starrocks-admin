@@ -285,14 +285,12 @@ mod tests {
                     TopologyNode {
                         id: 1,
                         name: "ROOT".to_string(),
-                        node_class: NodeClass::Unknown,
                         properties: std::collections::HashMap::new(),
                         children: vec![0],
                     },
                     TopologyNode {
                         id: 0,
                         name: "LEAF".to_string(),
-                        node_class: NodeClass::Unknown,
                         properties: std::collections::HashMap::new(),
                         children: vec![],
                     },
@@ -699,12 +697,12 @@ mod tests {
     }
 
     // ========================================================================
-    // Hotspot Detection Tests
+    // Hotspot Detection Tests (using RuleEngine)
     // ========================================================================
 
     mod hotspot_tests {
         use super::*;
-        use crate::services::profile_analyzer::analyzer::HotSpotDetector;
+        use crate::services::profile_analyzer::analyzer::RuleEngine;
 
         #[test]
         fn test_detect_long_running_query() {
@@ -712,16 +710,13 @@ mod tests {
             let mut composer = ProfileComposer::new();
             let profile = composer.parse(&profile_text).unwrap();
             
-            let hotspots = HotSpotDetector::analyze(&profile);
+            let engine = RuleEngine::new();
+            let diagnostics = engine.analyze(&profile);
             
-            // Profile1 runs for 9m41s, should detect long running issue
-            let long_running = hotspots.iter().find(|h| h.issue_type == "LongRunning");
-            // Note: threshold is 1 hour, so 9m41s won't trigger this
-            // But high time cost nodes should be detected
-            
-            println!("Detected {} hotspots for profile1", hotspots.len());
-            for hotspot in &hotspots {
-                println!("  - {}: {} ({:?})", hotspot.node_path, hotspot.issue_type, hotspot.severity);
+            // Profile1 runs for 9m41s, should detect issues
+            println!("Detected {} diagnostics for profile1", diagnostics.len());
+            for diag in &diagnostics {
+                println!("  - [{}] {}: {}", diag.rule_id, diag.node_path, diag.message);
             }
         }
 
@@ -731,12 +726,13 @@ mod tests {
             let mut composer = ProfileComposer::new();
             let profile = composer.parse(&profile_text).unwrap();
             
-            let hotspots = HotSpotDetector::analyze(&profile);
+            let engine = RuleEngine::new();
+            let diagnostics = engine.analyze(&profile);
             
-            // All hotspots should have suggestions
-            for hotspot in &hotspots {
-                assert!(!hotspot.suggestions.is_empty(), 
-                    "Hotspot {} has no suggestions", hotspot.node_path);
+            // All diagnostics should have suggestions
+            for diag in &diagnostics {
+                assert!(!diag.suggestions.is_empty(), 
+                    "Diagnostic {} has no suggestions", diag.rule_id);
             }
         }
     }
@@ -874,6 +870,240 @@ Query:
             assert_eq!(OperatorParser::canonical_topology_name("HASH_JOIN_BUILD"), "HASH_JOIN");
             assert_eq!(OperatorParser::canonical_topology_name("AGGREGATE_BLOCKING"), "AGGREGATE");
             assert_eq!(OperatorParser::canonical_topology_name("OLAP_SCAN"), "OLAP_SCAN");
+        }
+    }
+
+    // ========================================================================
+    // Rule Engine Tests - Profile Diagnostic Validation
+    // ========================================================================
+
+    mod rule_engine_tests {
+        use super::*;
+        use crate::services::profile_analyzer::analyzer::RuleEngine;
+        use crate::services::profile_analyzer::analyzer::rule_engine::RuleEngineConfig;
+        use crate::services::profile_analyzer::analyzer::rules::RuleSeverity;
+
+        /// Test result summary for a profile
+        #[derive(Debug)]
+        struct ProfileTestResult {
+            filename: String,
+            parse_success: bool,
+            diagnostics_count: usize,
+            rule_ids: Vec<String>,
+            messages: Vec<String>,
+        }
+
+        /// Run diagnostic test on a single profile
+        fn test_single_profile(filename: &str) -> ProfileTestResult {
+            let profile_text = load_profile(filename);
+            
+            let mut result = ProfileTestResult {
+                filename: filename.to_string(),
+                parse_success: false,
+                diagnostics_count: 0,
+                rule_ids: vec![],
+                messages: vec![],
+            };
+            
+            // Parse profile
+            let mut composer = ProfileComposer::new();
+            let profile = match composer.parse(&profile_text) {
+                Ok(p) => {
+                    result.parse_success = true;
+                    p
+                }
+                Err(e) => {
+                    result.messages.push(format!("Parse error: {:?}", e));
+                    return result;
+                }
+            };
+            
+            // Run rule engine
+            let config = RuleEngineConfig {
+                max_suggestions: 10,
+                include_parameters: true,
+                ..Default::default()
+            };
+            let engine = RuleEngine::with_config(config);
+            let diagnostics = engine.analyze(&profile);
+            
+            result.diagnostics_count = diagnostics.len();
+            result.rule_ids = diagnostics.iter().map(|d| d.rule_id.clone()).collect();
+            result.messages = diagnostics.iter().map(|d| d.message.clone()).collect();
+            
+            result
+        }
+
+        #[test]
+        fn test_all_profile_fixtures() {
+            let profile_files = vec![
+                "profile1.txt",
+                "profile2.txt", 
+                "profile3.txt",
+                "profile4.txt",
+                "profile5.txt",
+                "test_profile.txt",
+            ];
+            
+            println!("\n============================================================");
+            println!("Profile Diagnostic Test Results");
+            println!("============================================================\n");
+            
+            let mut total_parsed = 0;
+            let mut total_with_diagnostics = 0;
+            
+            for filename in &profile_files {
+                let result = test_single_profile(filename);
+                
+                println!("📄 {}", result.filename);
+                println!("   Parse: {}", if result.parse_success { "✅" } else { "❌" });
+                println!("   Diagnostics: {}", result.diagnostics_count);
+                
+                if result.parse_success {
+                    total_parsed += 1;
+                }
+                if result.diagnostics_count > 0 {
+                    total_with_diagnostics += 1;
+                    println!("   Rules triggered: {:?}", result.rule_ids);
+                    for msg in result.messages.iter().take(3) {
+                        println!("      - {}", msg);
+                    }
+                }
+                println!();
+                
+                // Assert parse success
+                assert!(result.parse_success, "Profile {} should parse successfully", filename);
+            }
+            
+            println!("Summary: {}/{} parsed, {}/{} with diagnostics",
+                total_parsed, profile_files.len(),
+                total_with_diagnostics, profile_files.len());
+        }
+
+        #[test]
+        fn test_profile1_scan_heavy() {
+            // Profile 1: 9m41s total, scan time dominates
+            let result = test_single_profile("profile1.txt");
+            
+            assert!(result.parse_success, "Profile should parse");
+            
+            println!("\nProfile1 (scan-heavy) diagnostics:");
+            for (rule_id, msg) in result.rule_ids.iter().zip(result.messages.iter()) {
+                println!("  [{}] {}", rule_id, msg);
+            }
+            
+            // Should detect long running or scan-related issues
+            let has_relevant_diagnostic = result.rule_ids.iter()
+                .any(|id| id.starts_with("Q") || id.starts_with("G"));
+            
+            assert!(has_relevant_diagnostic || result.diagnostics_count > 0,
+                "Should detect performance issues in scan-heavy profile");
+        }
+
+        #[test]
+        fn test_profile2() {
+            let result = test_single_profile("profile2.txt");
+            assert!(result.parse_success, "Profile should parse");
+            
+            println!("\nProfile2 diagnostics:");
+            for (rule_id, msg) in result.rule_ids.iter().zip(result.messages.iter()) {
+                println!("  [{}] {}", rule_id, msg);
+            }
+        }
+
+        #[test]
+        fn test_profile3() {
+            let result = test_single_profile("profile3.txt");
+            assert!(result.parse_success, "Profile should parse");
+            
+            println!("\nProfile3 diagnostics:");
+            for (rule_id, msg) in result.rule_ids.iter().zip(result.messages.iter()) {
+                println!("  [{}] {}", rule_id, msg);
+            }
+        }
+
+        #[test]
+        fn test_profile4() {
+            let result = test_single_profile("profile4.txt");
+            assert!(result.parse_success, "Profile should parse");
+            
+            println!("\nProfile4 diagnostics:");
+            for (rule_id, msg) in result.rule_ids.iter().zip(result.messages.iter()) {
+                println!("  [{}] {}", rule_id, msg);
+            }
+        }
+
+        #[test]
+        fn test_profile5() {
+            let result = test_single_profile("profile5.txt");
+            assert!(result.parse_success, "Profile should parse");
+            
+            println!("\nProfile5 diagnostics:");
+            for (rule_id, msg) in result.rule_ids.iter().zip(result.messages.iter()) {
+                println!("  [{}] {}", rule_id, msg);
+            }
+        }
+
+        #[test]
+        fn test_rule_engine_creation() {
+            let _engine = RuleEngine::new();
+            // Should create without panic
+            assert!(true, "Rule engine created successfully");
+        }
+
+        #[test]
+        fn test_rule_engine_with_config() {
+            let config = RuleEngineConfig {
+                max_suggestions: 3,
+                include_parameters: false,
+                min_severity: RuleSeverity::Warning,
+            };
+            
+            let engine = RuleEngine::with_config(config);
+            
+            // Load a profile and verify config is respected
+            let profile_text = load_profile("profile1.txt");
+            let mut composer = ProfileComposer::new();
+            let profile = composer.parse(&profile_text).expect("Should parse");
+            
+            let diagnostics = engine.analyze(&profile);
+            
+            // Should respect max_suggestions limit
+            assert!(diagnostics.len() <= 3, 
+                "Should respect max_suggestions limit, got {}", diagnostics.len());
+            
+            // Should filter out Info severity
+            for d in &diagnostics {
+                assert!(d.severity >= RuleSeverity::Warning,
+                    "Should filter out Info severity, got {:?}", d.severity);
+            }
+        }
+
+        #[test]
+        fn test_rule_engine_empty_profile() {
+            let engine = RuleEngine::new();
+            
+            // Create minimal profile
+            let profile = Profile {
+                summary: ProfileSummary {
+                    query_id: "test".to_string(),
+                    total_time: "1s".to_string(),
+                    ..Default::default()
+                },
+                planner: PlannerInfo {
+                    details: std::collections::HashMap::new(),
+                },
+                execution: ExecutionInfo {
+                    topology: String::new(),
+                    metrics: std::collections::HashMap::new(),
+                },
+                fragments: vec![],
+                execution_tree: None,
+            };
+            
+            // Should not panic
+            let diagnostics = engine.analyze(&profile);
+            println!("Empty profile diagnostics: {}", diagnostics.len());
         }
     }
 }

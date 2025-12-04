@@ -709,6 +709,160 @@
           line-height: 1.5;
         }
       }
+      
+      // Detailed diagnosis item with rule info and parameters
+      .diagnosis-item-detailed {
+        padding: 12px;
+        margin-bottom: 8px;
+        background: rgba(143, 150, 170, 0.04);
+        border-radius: 6px;
+        border-left: 3px solid transparent;
+        
+        &:hover {
+          background: rgba(143, 150, 170, 0.08);
+        }
+        
+        .diag-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+          
+          .diag-badge {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            
+            &.badge-danger {
+              background: rgba(255, 61, 113, 0.15);
+              color: #ff3d71;
+            }
+            &.badge-warning {
+              background: rgba(255, 170, 0, 0.15);
+              color: #ffaa00;
+            }
+            &.badge-info {
+              background: rgba(0, 149, 255, 0.15);
+              color: #0095ff;
+            }
+          }
+          
+          .diag-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #222b45;
+          }
+        }
+        
+        .diag-message {
+          font-size: 12px;
+          color: #333;
+          line-height: 1.5;
+          margin-bottom: 6px;
+        }
+        
+        .diag-node {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          margin-bottom: 8px;
+          
+          nb-icon {
+            font-size: 12px;
+          }
+        }
+        
+        .diag-suggestions {
+          margin-bottom: 8px;
+          
+          .diag-suggestion {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            font-size: 11px;
+            color: #555;
+            padding: 2px 0;
+            
+            .icon {
+              font-size: 12px;
+            }
+          }
+        }
+        
+        .diag-params {
+          background: rgba(0, 149, 255, 0.05);
+          border-radius: 4px;
+          padding: 8px;
+          
+          .param-item {
+            margin-bottom: 8px;
+            
+            &:last-child {
+              margin-bottom: 0;
+            }
+            
+            .param-header {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              margin-bottom: 4px;
+              
+              nb-icon {
+                font-size: 14px;
+              }
+              
+              .param-name {
+                font-size: 12px;
+                font-weight: 600;
+                color: #222b45;
+              }
+              
+              .param-type {
+                font-size: 9px;
+                padding: 1px 4px;
+                border-radius: 2px;
+                background: rgba(143, 150, 170, 0.15);
+                color: #666;
+              }
+            }
+            
+            .param-value {
+              font-size: 11px;
+              margin-bottom: 4px;
+              
+              code {
+                background: rgba(143, 150, 170, 0.1);
+                padding: 1px 4px;
+                border-radius: 2px;
+                font-family: 'Monaco', 'Menlo', monospace;
+                color: #0095ff;
+              }
+            }
+            
+            .param-command {
+              .command-text {
+                display: block;
+                font-size: 11px;
+                padding: 6px 8px;
+                background: #1a1a2e;
+                color: #00d68f;
+                border-radius: 4px;
+                font-family: 'Monaco', 'Menlo', monospace;
+                cursor: pointer;
+                transition: background 0.15s ease;
+                word-break: break-all;
+                
+                &:hover {
+                  background: #252542;
+                }
+              }
+            }
+          }
+        }
+      }
     }
     
     .empty-diagnosis {

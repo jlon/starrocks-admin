@@ -202,6 +202,8 @@ export interface ProfileAnalysisResult {
     }>;
     [key: string]: any;
   };
+  // Raw profile content for PROFILE tab display
+  profile_content?: string;
 }
 
 @Injectable({

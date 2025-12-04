@@ -529,17 +529,59 @@
                 <div class="right-section diagnosis-section">
                   <div class="section-header">
                     <span class="title">诊断建议</span>
-                    <span class="warning-badge" *ngIf="analysisData?.suggestions?.length">{{ analysisData?.suggestions?.length }}</span>
+                    <span class="warning-badge" *ngIf="analysisData?.diagnostics?.length">{{ analysisData?.diagnostics?.length }}</span>
                     <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
-                    <div *ngIf="analysisData?.suggestions?.length" class="diagnosis-list">
+                    <!-- Show detailed diagnostics if available -->
+                    <div *ngIf="analysisData?.diagnostics?.length" class="diagnosis-list">
+                      <div *ngFor="let diag of analysisData?.diagnostics" class="diagnosis-item-detailed">
+                        <div class="diag-header">
+                          <span class="diag-badge" [ngClass]="{
+                            'badge-danger': diag.severity === 'Error',
+                            'badge-warning': diag.severity === 'Warning',
+                            'badge-info': diag.severity === 'Info'
+                          }">{{ diag.rule_id }}</span>
+                          <span class="diag-name">{{ diag.rule_name }}</span>
+                        </div>
+                        <div class="diag-message">{{ diag.message }}</div>
+                        <div class="diag-node" *ngIf="diag.node_path">
+                          <nb-icon icon="pin-outline" class="text-hint"></nb-icon>
+                          <span class="text-hint">{{ diag.node_path }}</span>
+                        </div>
+                        <div class="diag-suggestions" *ngIf="diag.suggestions?.length">
+                          <div *ngFor="let suggestion of diag.suggestions" class="diag-suggestion">
+                            <span class="icon">💡</span>
+                            <span>{{ suggestion }}</span>
+                          </div>
+                        </div>
+                        <!-- Parameter tuning suggestions -->
+                        <div class="diag-params" *ngIf="diag.parameter_suggestions?.length">
+                          <div *ngFor="let param of diag.parameter_suggestions" class="param-item">
+                            <div class="param-header">
+                              <nb-icon icon="settings-2-outline" class="text-primary"></nb-icon>
+                              <span class="param-name">{{ param.name }}</span>
+                              <span class="param-type badge badge-basic">{{ param.param_type }}</span>
+                            </div>
+                            <div class="param-value">
+                              <span class="text-hint">推荐值:</span>
+                              <code>{{ param.recommended }}</code>
+                            </div>
+                            <div class="param-command" *ngIf="param.command">
+                              <code class="command-text" (click)="copyToClipboard(param.command)" nbTooltip="点击复制">{{ param.command }}</code>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Fallback to simple suggestions if no diagnostics -->
+                    <div *ngIf="!analysisData?.diagnostics?.length && analysisData?.suggestions?.length" class="diagnosis-list">
                       <div *ngFor="let suggestion of analysisData?.suggestions" class="diagnosis-item">
                         <span class="icon">💡</span>
                         <span class="text">{{ suggestion }}</span>
                       </div>
                     </div>
-                    <div *ngIf="!analysisData?.suggestions?.length" class="empty-diagnosis">
+                    <div *ngIf="!analysisData?.diagnostics?.length && !analysisData?.suggestions?.length" class="empty-diagnosis">
                       暂无诊断建议
                     </div>
                   </div>

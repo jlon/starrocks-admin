@@ -1,9 +1,8 @@
 //! Profile analyzer module
 //! 
-//! Provides hotspot detection and suggestion generation.
+//! Provides rule-based diagnostics for query profile analysis.
 
-pub mod hotspot_detector;
-pub mod suggestion_engine;
+pub mod rules;
+pub mod rule_engine;
 
-pub use hotspot_detector::HotSpotDetector;
-pub use suggestion_engine::SuggestionEngine;
+pub use rule_engine::RuleEngine;

@@ -358,6 +358,36 @@ pub struct ProfileAnalysisResponse {
     pub performance_score: f64,
     pub execution_tree: Option<ExecutionTree>,
     pub summary: Option<ProfileSummary>,
+    /// Rule-based diagnostics with parameter suggestions
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DiagnosticResult>,
+    /// Raw profile content for display in PROFILE tab
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_content: Option<String>,
+}
+
+/// Diagnostic result from rule engine
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiagnosticResult {
+    pub rule_id: String,
+    pub rule_name: String,
+    pub severity: String,
+    pub node_path: String,
+    pub message: String,
+    pub suggestions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_suggestions: Vec<ParameterTuningSuggestion>,
+}
+
+/// Parameter tuning suggestion
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParameterTuningSuggestion {
+    pub name: String,
+    pub param_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<String>,
+    pub recommended: String,
+    pub command: String,
 }
 
 // ============================================================================
@@ -376,44 +406,10 @@ pub struct TopologyGraph {
 pub struct TopologyNode {
     pub id: i32,
     pub name: String,
-    #[serde(skip, default)]
-    pub node_class: NodeClass,
     #[serde(default)]
     pub properties: HashMap<String, serde_json::Value>,
     #[serde(default)]
     pub children: Vec<i32>,
-}
-
-impl TopologyNode {
-    /// Infer node class from operator name
-    pub fn infer_node_class(name: &str) -> NodeClass {
-        match name {
-            "EXCHANGE" | "MERGE_EXCHANGE" => NodeClass::ExchangeNode,
-            name if name.contains("SCAN") => NodeClass::ScanNode,
-            name if name.contains("JOIN") => NodeClass::JoinNode,
-            "AGGREGATE" | "AGGREGATION" => NodeClass::AggregationNode,
-            "SORT" => NodeClass::SortNode,
-            "PROJECT" => NodeClass::ProjectNode,
-            "RESULT_SINK" => NodeClass::ResultSink,
-            "OLAP_TABLE_SINK" => NodeClass::OlapTableSink,
-            _ => NodeClass::Unknown,
-        }
-    }
-}
-
-/// Node classification for topology
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub enum NodeClass {
-    ExchangeNode,
-    ScanNode,
-    JoinNode,
-    AggregationNode,
-    SortNode,
-    ProjectNode,
-    ResultSink,
-    OlapTableSink,
-    #[default]
-    Unknown,
 }
 
 // ============================================================================
@@ -422,24 +418,11 @@ pub enum NodeClass {
 
 pub mod constants {
     /// Time thresholds for performance classification
+    /// Aligned with StarRocks ExplainAnalyzer.java:1546-1550
     pub mod time_thresholds {
         /// Threshold for "most consuming" node (> 30%)
         pub const MOST_CONSUMING_THRESHOLD: f64 = 30.0;
         /// Threshold for "second most consuming" node (> 15%)
         pub const SECOND_CONSUMING_THRESHOLD: f64 = 15.0;
-        /// Threshold for metric significance (> 0.3%)
-        pub const METRIC_CONSUMING_THRESHOLD: f64 = 0.3;
-    }
-    
-    /// Top N limits
-    pub mod top_n {
-        pub const TOP_NODES_LIMIT: usize = 3;
-    }
-    
-    /// StarRocks specific constants
-    pub mod starrocks {
-        pub const MERGED_INFO_PREFIX_MAX: &str = "__MAX_OF_";
-        pub const MERGED_INFO_PREFIX_MIN: &str = "__MIN_OF_";
-        pub const FINAL_SINK_PSEUDO_PLAN_NODE_ID: i32 = -1;
     }
 }

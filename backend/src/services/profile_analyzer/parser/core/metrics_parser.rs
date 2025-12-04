@@ -66,11 +66,6 @@ impl MetricsParser {
         Self::extract_section_block(text, "UniqueMetrics:")
     }
     
-    /// Check if text contains a specific section
-    pub fn has_section(text: &str, section_name: &str) -> bool {
-        text.contains(section_name)
-    }
-    
     /// Extract a section block from text
     fn extract_section_block(text: &str, section_marker: &str) -> String {
         if let Some(start) = text.find(section_marker) {

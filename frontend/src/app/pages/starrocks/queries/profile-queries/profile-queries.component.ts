@@ -690,40 +690,35 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       dialogClass: 'profile-dialog-lg',
     });
     
-    // Load profile text
-    this.nodeService.getProfile(queryId).subscribe(
-      data => {
-        this.currentProfileDetail = data.profile_content;
-        this.profileDetailLoading = false;
-      },
-      error => {
-        this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
-        this.profileDetailLoading = false;
-      }
-    );
-    
-    // Load analysis data
+    // Load analysis data (includes profile_content)
     this.loadAnalysis(queryId);
   }
   
-  // Load profile analysis for DAG
+  // Load profile analysis for DAG (includes profile_content)
   loadAnalysis(queryId: string): void {
     this.analysisLoading = true;
+    this.profileDetailLoading = true;
     this.analysisError = '';
     
     this.nodeService.analyzeProfile(queryId).subscribe({
       next: (data) => {
         this.analysisData = data;
         this.topNodes = data.summary?.top_time_consuming_nodes || [];
+        // Set profile content from analysis response
+        if (data.profile_content) {
+          this.currentProfileDetail = data.profile_content;
+        }
         if (data.execution_tree) {
           this.buildGraph(data.execution_tree);
         }
         this.analysisLoading = false;
+        this.profileDetailLoading = false;
       },
       error: (err) => {
         console.error('Failed to analyze profile', err);
         this.analysisError = '分析失败: ' + (err.error?.message || err.message || '未知错误');
         this.analysisLoading = false;
+        this.profileDetailLoading = false;
       }
     });
   }
@@ -1502,6 +1497,38 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       this.toastrService.warning('复制失败，请手动复制', '提示');
     } finally {
       document.body.removeChild(textArea);
+    }
+  }
+
+  // Copy text to clipboard (for parameter commands)
+  copyToClipboard(text: string): void {
+    if (!text) return;
+    
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+        .then(() => {
+          this.toastrService.success('已复制到剪贴板', '复制成功');
+        })
+        .catch(err => {
+          console.error('Failed to copy:', err);
+          this.toastrService.warning('复制失败', '提示');
+        });
+    } else {
+      // Fallback
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        this.toastrService.success('已复制到剪贴板', '复制成功');
+      } catch (err) {
+        this.toastrService.warning('复制失败', '提示');
+      } finally {
+        document.body.removeChild(textArea);
+      }
     }
   }
 }

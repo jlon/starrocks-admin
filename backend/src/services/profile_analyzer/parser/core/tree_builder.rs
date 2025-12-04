@@ -193,11 +193,6 @@ impl TreeBuilder {
             return Ok(());
         }
         
-        let id_to_idx: HashMap<String, usize> = nodes.iter()
-            .enumerate()
-            .map(|(idx, node)| (node.id.clone(), idx))
-            .collect();
-        
         // Find root (node with no parent)
         let mut has_parent = HashSet::new();
         for node in nodes.iter() {
@@ -416,7 +411,6 @@ impl TreeBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::profile_analyzer::models::{OperatorMetrics, NodeType, HotSeverity};
     
     #[test]
     fn test_find_sink_node() {

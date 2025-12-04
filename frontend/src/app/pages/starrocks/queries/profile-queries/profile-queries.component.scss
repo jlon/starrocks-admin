@@ -2,28 +2,6 @@
 // Profile Queries Component Styles
 // ============================================
 
-@import '../../../../@theme/styles/themes';
-
-// ============================================
-// Profile Dialog Tab Style - Match scrollbar color
-// ============================================
-.profile-dialog-card {
-  nb-tabset {
-    ::ng-deep {
-      .tabset {
-        border-bottom-color: rgba(143, 150, 170, 0.25);
-      }
-      
-      .tab-link {
-        &::before {
-          // Active tab underline - same as scrollbar color
-          background-color: rgba(143, 150, 170, 0.65) !important;
-        }
-      }
-    }
-  }
-}
-
 // ============================================
 // Profile Dialog Header - Clean & Modern
 // ============================================
@@ -734,16 +712,47 @@
     .node-detail-tabs {
       ::ng-deep {
         .tabset {
-          padding: 0;
-        }
-        
-        .tab {
-          padding: 4px 8px;
-          font-size: 11px;
+          padding: 0.25rem 0;
+          gap: 0.125rem;
+          border-bottom: 1px solid rgba(143, 150, 170, 0.1);
+          
+          .tab {
+            .tab-link {
+              padding: 0.375rem 0.75rem;
+              border-radius: 4px;
+              font-size: 0.6875rem;
+              font-weight: 500;
+              text-transform: uppercase;
+              letter-spacing: 0.025em;
+              color: rgba(34, 43, 69, 0.55);
+              background: transparent;
+              transition: all 0.15s ease;
+              
+              // 移除下划线
+              &::before {
+                display: none !important;
+              }
+              
+              &:hover:not(.active) {
+                background: rgba(143, 150, 170, 0.06);
+                color: rgba(34, 43, 69, 0.75);
+              }
+            }
+            
+            &.active .tab-link {
+              background: rgba(143, 150, 170, 0.1);
+              color: #222b45;
+              font-weight: 600;
+              
+              &::before {
+                display: none !important;
+              }
+            }
+          }
         }
         
         .tab-content {
-          padding: 8px 0;
+          padding: 0.5rem 0;
         }
       }
     }

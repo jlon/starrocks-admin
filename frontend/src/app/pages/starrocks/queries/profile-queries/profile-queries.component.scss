@@ -2,11 +2,38 @@
 // DAG Visualization Styles - 完全复刻图1设计
 // ============================================
 
+// Scrollbar mixin (matching tab-bar component style from @theme)
+@mixin themed-scrollbar {
+  // Firefox
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 150, 170, 0.45) transparent;
+
+  // Webkit browsers (Chrome, Safari, Edge)
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(143, 150, 170, 0.45);
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(143, 150, 170, 0.65);
+  }
+}
+
 // Profile scroll container
 .profile-scroll-container {
   max-height: 70vh;
   overflow-y: auto;
   position: relative;
+  @include themed-scrollbar;
 
   .profile-pre-wrapper {
     position: relative;
@@ -36,10 +63,6 @@
   }
 }
 
-// ============================================
-// DAG Layout - 两栏布局 (参考图1)
-// Center (Graph) - Right (Details)
-// ============================================
 .dag-layout {
   display: flex;
   flex-direction: row;
@@ -91,6 +114,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    @include themed-scrollbar;
   }
   
   .graph-content {
@@ -315,6 +339,7 @@
 // ============================================
 .dag-right-panel {
   min-width: 0;
+  max-height: 100%;
   background: #fff;
   border-left: 1px solid #e8e8e8;
   display: flex;
@@ -322,6 +347,8 @@
   z-index: 20;
   flex-shrink: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  @include themed-scrollbar;
 
   .right-section {
     border-bottom: 1px solid #f0f0f0;
@@ -371,6 +398,8 @@
     
     .section-body {
       padding: 12px 16px;
+      overflow-y: auto;
+      @include themed-scrollbar;
     }
   }
 
@@ -481,6 +510,11 @@
     }
     
     .metrics-list-simple {
+      max-height: 400px;
+      overflow-y: auto;
+      padding-right: 4px;
+      @include themed-scrollbar;
+      
       .metric-row-simple {
         display: flex;
         justify-content: space-between;
@@ -489,7 +523,7 @@
         border-bottom: 1px solid #f5f5f5;
         
         span:first-child { color: #666; }
-        span:last-child { color: #333; }
+        span:last-child { color: #333; text-align: right; }
       }
     }
   }
@@ -554,6 +588,8 @@
     .metrics-list-simple {
       max-height: 300px;
       overflow-y: auto;
+      padding-right: 8px; // Prevent content from being hidden by scrollbar
+      @include themed-scrollbar;
       
       .metric-row-simple {
         display: flex;
@@ -561,18 +597,22 @@
         padding: 5px 0;
         font-size: 11px;
         border-bottom: 1px solid #f5f5f5;
+        gap: 12px; // Add gap between label and value
         
         span:first-child { 
           color: #666; 
-          max-width: 140px;
+          max-width: 160px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          flex-shrink: 0;
         }
         span:last-child { 
           color: #333;
           font-family: 'Monaco', 'Menlo', monospace;
           font-size: 10px;
+          text-align: right;
+          word-break: break-all;
         }
       }
     }

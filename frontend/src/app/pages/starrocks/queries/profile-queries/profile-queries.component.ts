@@ -69,8 +69,8 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   // Window control state
   isFullscreen = false; // Default to normal layout, toggle for full screen
   
-  // Right Panel State
-  rightPanelWidth = 380;
+  // Right Panel State (default width expanded by 30%)
+  rightPanelWidth = 500;
   isRightPanelCollapsed = false;
   isResizingRight = false;
   
@@ -78,6 +78,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   isTop10Collapsed = false;
   isSummaryCollapsed = false;
   isDiagnosisCollapsed = false;
+  showMemoryView = false; // Toggle between Time and Memory view
   
   private nodeRankMap: Map<string, number> = new Map(); // Node rank by time percentage
   objectKeys = Object.keys; // Helper for template
@@ -734,8 +735,20 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   }
   
   // Select a node
-  selectNode(node: any): void {
+  selectNode(node: any, event?: Event): void {
+    if (event) {
+      event.stopPropagation(); // Prevent panel click from clearing selection
+    }
     this.selectedNode = node;
+  }
+  
+  // Handle click on DAG panel background (clear selection)
+  onDagPanelClick(event: Event): void {
+    // Only clear if clicking on the panel itself, not on nodes
+    const target = event.target as HTMLElement;
+    if (!target.closest('.dag-node') && !target.closest('.dag-toolbar')) {
+      this.clearSelectedNode();
+    }
   }
   
   // Select node by ID (for top10 table click)
@@ -757,6 +770,14 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     return [...this.graphNodes]
       .filter(n => n.time_percentage !== undefined && n.time_percentage !== null)
       .sort((a, b) => (b.time_percentage || 0) - (a.time_percentage || 0))
+      .slice(0, 10);
+  }
+  
+  // Get top 10 nodes by memory usage (show all nodes, even with null/0 memory)
+  get top10NodesByMemory(): any[] {
+    if (!this.graphNodes || this.graphNodes.length === 0) return [];
+    return [...this.graphNodes]
+      .sort((a, b) => (b.metrics?.memory_usage || 0) - (a.metrics?.memory_usage || 0))
       .slice(0, 10);
   }
   
@@ -822,7 +843,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   
   // Format bytes to human readable
   formatBytes(bytes: any): string {
-    if (!bytes) return '-';
+    if (bytes === null || bytes === undefined) return '0 B';
     const val = Number(bytes);
     if (isNaN(val)) return String(bytes);
     if (val < 1024) return val + ' B';
@@ -1047,7 +1068,9 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   toggleTop10(): void { this.isTop10Collapsed = !this.isTop10Collapsed; }
   toggleSummary(): void { this.isSummaryCollapsed = !this.isSummaryCollapsed; }
   toggleDiagnosis(): void { this.isDiagnosisCollapsed = !this.isDiagnosisCollapsed; }
-  toggleMemoryView(): void { /* Future: switch to memory view */ }
+  toggleMemoryView(): void { 
+    this.showMemoryView = !this.showMemoryView; 
+  }
 
   // Copy profile content to clipboard
   copyProfileToClipboard(): void {

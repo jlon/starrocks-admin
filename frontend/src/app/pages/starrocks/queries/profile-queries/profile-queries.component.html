@@ -97,7 +97,8 @@
                    (wheel)="onWheel($event)"
                    (mousedown)="startPan($event)"
                    (window:mousemove)="pan($event)"
-                   (window:mouseup)="endPan()">
+                   (window:mouseup)="endPan()"
+                   (click)="onDagPanelClick($event)">
                 <!-- Toolbar -->
                 <div class="dag-toolbar">
                   <button nbButton size="tiny" status="basic" ghost (click)="toggleFullscreen()" [nbTooltip]="isFullscreen ? '退出全屏' : '全屏'">
@@ -170,7 +171,7 @@
                          [style.left.px]="node.x - (node.width/2)"
                          [style.top.px]="node.y - (node.height/2)"
                          [style.width.px]="node.width"
-                         (click)="selectNode(node)">
+                         (click)="selectNode(node, $event)">
                       
                       <!-- Header with dynamic color -->
                       <div class="node-header" [ngClass]="getNodeHeaderClass(node)">
@@ -204,15 +205,16 @@
               
               <div class="dag-right-panel" [style.width.px]="isRightPanelCollapsed ? 40 : rightPanelWidth" [class.collapsed]="isRightPanelCollapsed">
                 
-                <!-- Top 10 By Time Section -->
+                <!-- Top 10 By Time/Memory Section -->
                 <div class="right-section top10-section">
                   <div class="section-header">
-                    <span class="title">Top 10 By Time</span>
-                    <span class="link" (click)="toggleMemoryView()">⇄ Memory</span>
+                    <span class="title">Top 10 By {{ showMemoryView ? 'Memory' : 'Time' }}</span>
+                    <span class="link" (click)="toggleMemoryView()">⇄ {{ showMemoryView ? 'Time' : 'Memory' }}</span>
                     <span class="collapse-toggle" (click)="toggleTop10()">{{ isTop10Collapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isTop10Collapsed && !isRightPanelCollapsed">
-                    <table class="top10-table">
+                    <!-- Time View -->
+                    <table class="top10-table" *ngIf="!showMemoryView">
                       <thead>
                         <tr>
                           <th>节点</th>
@@ -227,6 +229,26 @@
                           <td class="node-time">{{ node.time_percentage | number:'1.2-2' }}%</td>
                         </tr>
                         <tr *ngIf="!top10NodesByTime?.length">
+                          <td colspan="2" class="text-center text-hint">暂无数据</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <!-- Memory View -->
+                    <table class="top10-table" *ngIf="showMemoryView">
+                      <thead>
+                        <tr>
+                          <th>节点</th>
+                          <th>内存</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let node of top10NodesByMemory; let i = index" 
+                            (click)="selectNodeById(node.id)" 
+                            [class.selected]="selectedNode?.id === node.id">
+                          <td class="node-name">{{ node.operator_name }}</td>
+                          <td class="node-memory">{{ formatBytes(node.metrics?.memory_usage) }}</td>
+                        </tr>
+                        <tr *ngIf="!top10NodesByMemory?.length">
                           <td colspan="2" class="text-center text-hint">暂无数据</td>
                         </tr>
                       </tbody>

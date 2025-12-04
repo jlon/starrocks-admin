@@ -67,10 +67,6 @@
     gap: 0.5rem;
     
     button[nbButton] {
-      &[outline] {
-        // Subtle outline button style
-      }
-      
       &[ghost] {
         // Close button - larger hit area
         padding: 0.25rem;
@@ -203,7 +199,7 @@
     z-index: 100;
     background: rgba(255, 255, 255, 0.9);
     border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     padding: 4px;
     display: flex;
     gap: 4px;
@@ -239,12 +235,12 @@
   box-sizing: border-box;
   z-index: 10;
   min-width: 200px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease;
   
   &:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   }
   
   &.selected {
@@ -381,8 +377,8 @@
 
 .arrow-head-dom {
   position: absolute;
-  width: 0; 
-  height: 0; 
+  width: 0;
+  height: 0;
   border-left-style: solid;
   border-left-color: transparent;
   border-right-style: solid;
@@ -670,7 +666,7 @@
         box-sizing: border-box;
         min-width: 0;  // Allow flex items to shrink below content size
         
-        span:first-child { 
+        span:first-child {
           color: #666;
           flex-shrink: 0;
           max-width: 50%;
@@ -678,8 +674,9 @@
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        span:last-child { 
-          color: #333; 
+
+        span:last-child {
+          color: #333;
           text-align: right;
           min-width: 0;  // Allow shrinking
           overflow: hidden;
@@ -946,15 +943,15 @@
         border-bottom: 1px solid #f5f5f5;
         gap: 12px; // Add gap between label and value
         
-        span:first-child { 
-          color: #666; 
+        span:first-child {
+          color: #666;
           max-width: 160px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
           flex-shrink: 0;
         }
-        span:last-child { 
+        span:last-child {
           color: #333;
           font-family: 'Monaco', 'Menlo', monospace;
           font-size: 10px;

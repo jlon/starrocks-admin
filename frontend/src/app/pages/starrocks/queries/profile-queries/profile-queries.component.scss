@@ -3,6 +3,27 @@
 // ============================================
 
 // ============================================
+// Metric Hint Icon Style
+// ============================================
+.metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  
+  .metric-hint {
+    font-size: 0.875rem;
+    color: rgba(143, 150, 170, 0.6);
+    cursor: help;
+    transition: color 0.15s ease;
+    flex-shrink: 0;
+    
+    &:hover {
+      color: rgba(143, 150, 170, 0.9);
+    }
+  }
+}
+
+// ============================================
 // Profile Dialog Header - Clean & Modern
 // ============================================
 .profile-dialog-header {

@@ -83,6 +83,366 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   private nodeRankMap: Map<string, number> = new Map(); // Node rank by time percentage
   objectKeys = Object.keys; // Helper for template
 
+  // Metric descriptions for tooltips
+  // Reference: https://docs.starrocks.io/zh/docs/best_practices/query_tuning/query_profile_operator_metrics/
+  metricDescriptions: { [key: string]: string } = {
+    // ============================================
+    // 概要指标 (Summary Metrics)
+    // ============================================
+    'Total': '查询消耗的总时间，包括计划、执行和分析阶段的持续时间',
+    'QueryState': '查询状态，可能的状态包括Finished、Error和Running',
+    'QueryId': '查询的唯一标识符',
+    'StartTime': '查询开始的时间戳',
+    'EndTime': '查询结束的时间戳',
+    'QueryType': '查询的类型',
+    'StarRocksVersion': '使用的StarRocks版本',
+    'User': '执行查询的用户',
+    'DefaultDb': '查询使用的默认数据库',
+    'SqlStatement': '执行的SQL语句',
+    'Variables': '查询中使用的重要变量',
+    'NonDefaultSessionVariables': '查询中使用的非默认会话变量',
+    'CollectProfileTime': '收集概要所花费的时间',
+    'IsProfileAsync': '指示概要收集是否为异步',
+
+    // ============================================
+    // 执行概览指标 (Execution Overview Metrics)
+    // ============================================
+    'FrontendProfileMergeTime': 'FE端概要处理时间',
+    'QueryAllocatedMemoryUsage': '节点间分配的总内存',
+    'QueryDeallocatedMemoryUsage': '节点间释放的总内存',
+    'QueryPeakMemoryUsagePerNode': '每个节点的最大内存峰值',
+    'QuerySumMemoryUsage': '节点间的总内存峰值',
+    'QueryExecutionWallTime': '执行的墙钟时间',
+    'ExecutionWallTime': 'Query执行总耗时',
+    'QueryCumulativeCpuTime': '节点间的总CPU时间',
+    'QueryCpuTime': '查询累积CPU使用时间，所有并发进程累加，因此该指标会大于实际的执行时间',
+    'QueryCumulativeOperatorTime': 'Operator执行的总时间，为Operator时间百分比的分母',
+    'OperatorTime': '所有Operator累计执行时间',
+    'QueryCumulativeNetworkTime': 'Exchange节点的总网络时间',
+    'QueryNetworkTime': '所有Exchange节点网络传输耗时之和',
+    'QueryCumulativeScanTime': 'Scan节点的总IO时间',
+    'QueryScanTime': '所有SCAN节点扫描耗时之和',
+    'QueryPeakScheduleTime': '最大Pipeline调度时间',
+    'PeakScheduleTime': 'Pipeline调度峰值等待时间',
+    'QuerySpillBytes': '溢出到磁盘的数据',
+    'SpillBytes': '溢出到磁盘的数据量',
+    'ResultDeliverTime': '结果传输耗时',
+    'MemoryUsage': '查询内存使用量',
+
+    // ============================================
+    // Fragment 指标
+    // ============================================
+    'InstanceNum': 'FragmentInstances的数量',
+    'InstanceIds': '所有FragmentInstances的ID',
+    'BackendNum': '参与的BE数量',
+    'BackendAddresses': 'BE地址',
+    'FragmentInstancePrepareTime': 'Fragment准备阶段的持续时间',
+    'InstanceAllocatedMemoryUsage': '实例分配的总内存',
+    'InstanceDeallocatedMemoryUsage': '实例释放的总内存',
+    'InstancePeakMemoryUsage': '实例间的内存峰值',
+    'FragmentID': 'Fragment标识符',
+
+    // ============================================
+    // Pipeline 指标
+    // ============================================
+    'DriverTotalTime': 'Driver消耗的总时间。DriverTotalTime = ActiveTime + PendingTime + ScheduleTime',
+    'ActiveTime': 'Driver执行时间。ActiveTime = ∑OperatorTotalTime + OverheadTime',
+    'PendingTime': 'Driver因为输入或者前置条件不满足等待的时间',
+    'ScheduleTime': 'Driver调度等待时间',
+    'InputEmptyTime': '输入为空的等待时间',
+    'OutputFullTime': '输出满的等待时间',
+    'PreconditionBlockTime': '前置条件阻塞时间',
+    'PipelineID': 'Pipeline标识符',
+    'Depth': '节点在执行树中的深度',
+    'NodeType': '节点类型',
+    'IsHotspot': '是否为热点节点',
+    'HotspotSeverity': '热点严重程度',
+
+    // ============================================
+    // Operator 通用指标
+    // ============================================
+    'OperatorTotalTime': 'Operator消耗的总时间',
+    'PushRowNum': 'Operator累积输出行数',
+    'PullRowNum': 'Operator累积输入行数',
+    'PullChunkNum': 'Operator累积输入Chunk数',
+    'PushChunkNum': 'Operator累积输出Chunk数',
+    'PeakMemoryUsage': 'Operator最大内存使用量',
+    'OutputRows': 'Operator输出行数',
+    'TimePercentage': '该Operator耗时占总耗时的百分比',
+    'OutputChunkBytes': 'Operator输出Chunk的字节数',
+
+    // ============================================
+    // Scan Operator (OLAP/Connector)
+    // ============================================
+    'Table': '表名称',
+    'Rollup': '使用的物化视图或Rollup名称',
+    'ScanTime': 'Scan累计时间，Scan操作在异步I/O线程池中完成',
+    'TabletCount': 'Tablet数量',
+    'MorselsCount': 'Morsel数量',
+    'PushdownPredicates': '下推的谓词数量',
+    'BytesRead': '读取数据的大小',
+    'RowsRead': '读取的行数',
+    'RawRowsRead': '实际扫描到的原始记录行数',
+    'CompressedBytesRead': '读取压缩数据的大小',
+    'UncompressedBytesRead': '读取解压后数据的大小',
+    'IOTime': '累计I/O时间',
+    'IOTimeTotal': '总I/O时间',
+    'IOTimeLocalDisk': '从本地缓存读取数据时所产生的I/O操作耗时',
+    'IOTimeRemote': '从OSS读取数据时所产生的I/O操作耗时',
+    'BitmapIndexFilterRows': 'Bitmap索引过滤的数据行数',
+    'BitmapIndexFilter': 'Bitmap索引过滤耗时',
+    'BloomFilterFilterRows': 'Bloomfilter过滤的数据行数',
+    'BloomFilterFilter': 'Bloomfilter过滤耗时',
+    'SegmentRuntimeZoneMapFilterRows': 'Runtime Zone Map过滤的数据行数',
+    'SegmentZoneMapFilterRows': 'Zone Map过滤的数据行数',
+    'ZoneMapIndexFilterRows': 'Zone Map索引过滤的数据行数',
+    'ZoneMapIndexFiter': 'Zone Map索引过滤耗时',
+    'ShortKeyFilterRows': 'Short Key过滤的数据行数',
+    'ShortKeyFilter': 'Short Key过滤耗时',
+    'PredFilter': '谓词过滤耗时',
+    'PredFilterRows': '谓词过滤的行数',
+    'DelVecFilterRows': '删除向量过滤的行数',
+    'SegmentInit': 'Segment初始化耗时',
+    'SegmentRead': 'Segment读取耗时',
+    'ColumnIteratorInit': '列迭代器初始化耗时',
+    'BlockSeek': 'Block寻址耗时',
+    'BlockSeekCount': 'Block寻址次数',
+    'BlockFetch': 'Block获取耗时',
+    'BlockFetchCount': 'Block获取次数',
+    'ChunkCopy': 'Chunk复制耗时',
+    'DecompressT': '解压耗时',
+    'CreateSegmentIter': '创建Segment迭代器耗时',
+    'GetDelVec': '获取删除向量耗时',
+    'GetDeltaColumnGroup': '获取Delta列组耗时',
+    'PrepareChunkSourceTime': '准备Chunk源耗时',
+    'SubmitTaskTime': '提交任务耗时',
+    'SubmitTaskCount': '提交任务次数',
+    'IOTaskWaitTime': 'IO任务等待时间',
+    'IOTaskExecTime': 'IO任务执行时间',
+    'PrefetchHitCount': '预取命中次数',
+    'PrefetchPendingTime': '预取等待时间',
+    'PrefetchWaitFinishTime': '预取完成等待时间',
+    
+    // Connector Scan (存算分离)
+    'CompressedBytesReadLocalDisk': '从计算节点的本地缓存读取的经过压缩后的数据量',
+    'CompressedBytesReadRemote': '从OSS读取的经过压缩的数据总量',
+    'CompressedBytesReadRequest': '请求读取的压缩数据大小',
+    'CompressedBytesReadTotal': '读取的压缩数据总量',
+    'IOCountLocalDisk': '本地磁盘IO次数',
+    'IOCountRemote': '远程IO次数',
+    'IOCountRequest': '请求IO次数',
+    'IOCountTotal': '总IO次数',
+    'PagesCountLocalDisk': '本地磁盘页数',
+    'PagesCountRemote': '远程页数',
+    'PagesCountMemory': '内存页数',
+    'PagesCountTotal': '总页数',
+    'DataSourceType': '数据源类型',
+    'SharedScan': '是否共享扫描',
+    'MorselQueueType': 'Morsel队列类型',
+    'AdaptiveIOTasks': '是否启用自适应IO任务',
+    'PeakIOTasks': 'IO任务峰值数',
+    'ChunkBufferCapacity': 'Chunk缓冲区容量',
+    'DefaultChunkBufferCapacity': '默认Chunk缓冲区容量',
+    'PeakChunkBufferSize': 'Chunk缓冲区峰值大小',
+    'PeakChunkBufferMemoryUsage': 'Chunk缓冲区内存使用峰值',
+    'PeakScanTaskQueueSize': '扫描任务队列峰值大小',
+    'RowsetsReadCount': '读取的Rowset数量',
+    'SegmentsReadCount': '读取的Segment数量',
+    'TotalColumnsDataPageCount': '总列数据页数',
+    'AccessPathHits': '访问路径命中次数',
+    'AccessPathUnhits': '访问路径未命中次数',
+    'PushdownAccessPaths': '下推的访问路径数',
+    'ShortKeyRangeNumber': 'Short Key范围数',
+    'RemainingRowsAfterShortKeyFilter': 'Short Key过滤后剩余行数',
+    'MemAllocFailed': '内存分配失败次数',
+
+    // ============================================
+    // Exchange Operator
+    // ============================================
+    // Sink
+    'PartType': '数据分布模式，包括UNPARTITIONED、RANDOM、HASH_PARTITIONED和BUCKET_SHUFFLE_HASH_PARTITIONED',
+    'DestFragments': '目标Fragment',
+    'DestID': '目标ID',
+    'ChannelNum': '通道数量',
+    'BytesSent': '发送的数据大小',
+    'BytesUnsent': '未发送的数据大小',
+    'RequestSent': '已发送请求数',
+    'RequestUnsent': '未发送请求数',
+    'BytesPassThrough': 'PassThrough的字节数',
+    'PassThroughBufferPeakMemoryUsage': 'PassThrough缓冲区内存使用峰值',
+    'OverallThroughput': '吞吐速率',
+    'OverallTime': '总体时间',
+    'NetworkTime': '数据包传输时间（不包括接收后处理时间）',
+    'WaitTime': '由于发送端队列满而导致的等待时间',
+    'NetworkBandwidth': '网络带宽',
+    'SerializeChunkTime': '序列化Chunk耗时',
+    'SerializedBytes': '序列化字节数',
+    'CompressTime': '压缩耗时',
+    'CompressedBytes': '压缩后字节数',
+    'RpcCount': 'RPC调用次数',
+    'RpcAvgTime': 'RPC平均耗时',
+    'ShuffleHashTime': 'Shuffle哈希计算耗时',
+    'ShuffleChunkAppendTime': 'Shuffle Chunk追加耗时',
+    'ShuffleChunkAppendCounter': 'Shuffle Chunk追加计数',
+    'BufferUnplugCount': '缓冲区解除阻塞次数',
+    'ClosureBlockCount': '闭包阻塞次数',
+    'ClosureBlockTime': '闭包阻塞时间',
+    
+    // Source
+    'SenderWaitLockTime': '等锁时间',
+    'WaitLockTime': '等锁时间',
+    'BytesReceived': '接收的数据大小',
+    'DecompressChunkTime': '解压时间',
+    'DeserializeChunkTime': '反序列化时间',
+    'SenderTotalTime': '发送总时间',
+    'ReceiverProcessTotalTime': '接收端处理总时间',
+    'PeakBufferMemoryBytes': '缓冲区内存峰值字节数',
+
+    // ============================================
+    // Aggregate Operator
+    // ============================================
+    'GroupingKeys': 'GROUP BY列',
+    'AggregateFunctions': '聚合函数',
+    'AggComputeTime': '聚合函数计算耗时',
+    'ExprComputeTime': '表达式计算耗时',
+    'HashTableSize': 'Hash Table大小',
+    'HashTableMemoryUsage': 'Hash Table内存使用量',
+    'InputRowCount': '输入行数',
+    'PassThroughRowCount': 'PassThrough行数',
+    'ResultAggAppendTime': '结果聚合追加耗时',
+    'ResultGroupByAppendTime': '结果分组追加耗时',
+    'GetResultsTime': '获取结果耗时',
+    'IteratorMergeTime': '迭代器合并耗时',
+    'StreamingTime': '流式处理耗时',
+    'AggStateName': '聚合状态名称',
+
+    // ============================================
+    // Join Operator
+    // ============================================
+    // Probe
+    'DistributionMode': '数据分布模式',
+    'JoinType': 'Join类型',
+    'OtherJoinConjunctEvaluateTime': '其他JoinConjunct耗时',
+    'ProbeConjunctEvaluateTime': 'Probe Conjunct耗时',
+    'SearchHashTableTime': '查询Hash Table耗时',
+    'SearchHashTableCount': '查询Hash Table次数',
+    'WhereConjunctEvaluateTime': 'Where Conjunct耗时',
+    'OutputBuildColumnTime': '输出Build列耗时',
+    'OutputProbeColumnTime': '输出Probe列耗时',
+    'OutputTupleColumnTime': '输出Tuple列耗时',
+    'ProbeRowsCounter': 'Probe行计数',
+    
+    // Build
+    'JoinPredicates': 'Join谓词',
+    'BuildBuckets': 'Hash Table的Bucket数量',
+    'BuildHashTableTime': '构建Hash Table耗时',
+    'CopyRightTableChunkTime': '复制右表Chunk耗时',
+    'RuntimeFilterBuildTime': 'Runtime Filter构建时间',
+    'RuntimeFilterNum': 'Runtime Filter个数',
+    'BuildConjunctEvaluateTime': 'Build Conjunct评估耗时',
+    'BuildRowsCounter': 'Build行计数',
+    'RuntimeBloomFilterNum': 'Runtime Bloom Filter个数',
+    'RuntimeInFilterNum': 'Runtime In Filter个数',
+
+    // ============================================
+    // Window Function Operator
+    // ============================================
+    'ComputeTime': '窗口函数计算耗时',
+    'PartitionKeys': '分区列',
+    'PartitionChunksNum': '分区Chunk数',
+    'PartitionRowsNum': '分区行数',
+    'PeerGroupChunksNum': 'Peer Group Chunk数',
+    'PeerGroupRowsNum': 'Peer Group行数',
+    'ColumnResize': '列调整大小次数',
+
+    // ============================================
+    // Sort Operator
+    // ============================================
+    'SortKeys': '排序键',
+    'SortType': '查询结果排序方式：全排序或者排序Top N个结果',
+    'MaxBufferedRows': '缓冲行数的峰值',
+    'MaxBufferedBytes': '缓冲字节数的峰值',
+    'NumSortedRuns': '排序运行的次数',
+    'BuildingTime': '排序期间维护内部数据结构所花费的时间',
+    'MergingTime': '排序期间合并排序运行所花费的时间',
+    'SortingTime': '排序所花费的时间',
+    'OutputTime': '构建输出排序序列所花费的时间',
+
+    // ============================================
+    // Merge Operator
+    // ============================================
+    'Limit': '限制返回的行数',
+    'Offset': '偏移量',
+    'StreamingBatchSize': '当在流模式下执行合并时，每次合并操作处理的数据大小',
+    'LateMaterializationMaxBufferChunkNum': '启用延迟物化时缓冲区中的最大Chunk数量',
+    'OverallStageCount': '所有阶段的总执行次数',
+    'OverallStageTime': '每个阶段的总执行时间',
+    'LateMaterializationGenerateOrdinalTime': '延迟物化期间生成序数列所花费的时间',
+    'SortedRunProviderTime': '在Process阶段从提供者检索数据所花费的时间',
+
+    // ============================================
+    // TableFunction Operator
+    // ============================================
+    'TableFunctionExecTime': 'Table Function计算耗时',
+    'TableFunctionExecCount': 'Table Function执行次数',
+
+    // ============================================
+    // Project Operator
+    // ============================================
+    'CommonSubExprComputeTime': '公共子表达式计算耗时',
+
+    // ============================================
+    // LocalExchange Operator
+    // ============================================
+    'Type': 'Local Exchange类型，包括：Passthrough、Partition和Broadcast',
+    'ShuffleNum': 'Shuffle数量，该指标仅当Type为Partition时有效',
+    'LocalExchangePeakMemoryUsage': '内存使用峰值',
+    'LocalExchangePeakBufferSize': '缓冲区的大小峰值',
+    'LocalExchangePeakBufferMemoryUsage': '缓冲区的内存使用峰值',
+    'LocalExchangePeakBufferChunkNum': '缓冲区中的Chunk数量峰值',
+    'LocalExchangePeakBufferRowNum': '缓冲区中的行数峰值',
+    'LocalExchangePeakBufferBytes': '缓冲区中的数据大小峰值',
+    'LocalExchangePeakBufferChunkSize': '缓冲区中的Chunk大小峰值',
+    'LocalExchangePeakBufferChunkRowNum': '缓冲区中每个Chunk的行数峰值',
+    'LocalExchangePeakBufferChunkBytes': '缓冲区中每个Chunk的数据大小峰值',
+
+    // ============================================
+    // OlapTableSink Operator
+    // ============================================
+    'IndexNum': '为目标表创建的同步物化视图的数量',
+    'ReplicatedStorage': '是否启用了单领导者复制',
+    'TxnID': '导入事务的ID',
+    'RowsFiltered': '由于数据质量不足而被过滤掉的行数',
+    'RowsReturned': '写入目标表的行数',
+    'RpcClientSideTime': '客户端记录的导入的总RPC时间消耗',
+    'RpcServerSideTime': '服务器端记录的导入的总RPC时间消耗',
+    'PrepareDataTime': '数据准备阶段的总时间消耗，包括数据格式转换和数据质量检查',
+    'SendDataTime': '发送数据的本地时间消耗，包括序列化和压缩数据的时间，以及将任务提交到发送者队列的时间',
+
+    // ============================================
+    // 执行时间分类 (Execution Time Categories)
+    // ============================================
+    'IO': '所有SCAN节点IO耗时之和',
+    'Processing': 'Operator节点用于记录其执行计算操作的总耗时',
+    'IoSeekTime': 'IO Seek寻址过程产生的总耗时，该指标仅适用于存算分离实例',
+    'LocalDiskReadIOTime': '从本地缓存读取数据产生的I/O耗时，该指标仅适用于存算分离实例',
+    'RemoteReadIOTime': '从远端OSS读取数据产生的I/O耗时，该指标仅适用于存算分离实例',
+
+    // ============================================
+    // 其他常用指标
+    // ============================================
+    'SinkType': 'Sink类型',
+    'AppendChunkTime': '追加Chunk耗时',
+    'TupleConvertTime': 'Tuple转换耗时',
+    'ResultRendTime': '结果渲染耗时',
+    'NumSentRows': '发送的行数',
+  };
+
+  // Get metric description
+  getMetricDescription(key: string): string | null {
+    return this.metricDescriptions[key] || null;
+  }
+
   // Profile management settings
   profileSettings = {
     mode: 'external',

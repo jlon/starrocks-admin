@@ -295,39 +295,84 @@
                     <!-- Summary Metrics from backend -->
                     <div class="metrics-list-simple">
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_execution_wall_time">
-                        <span>ExecutionWallTime</span>
+                        <span class="metric-label">
+                          ExecutionWallTime
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('ExecutionWallTime')" 
+                                   *ngIf="getMetricDescription('ExecutionWallTime')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.query_execution_wall_time }}</span>
                       </div>
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_operator_time">
-                        <span>OperatorTime</span>
+                        <span class="metric-label">
+                          OperatorTime
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('OperatorTime')" 
+                                   *ngIf="getMetricDescription('OperatorTime')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.query_cumulative_operator_time }}</span>
                       </div>
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_cpu_time">
-                        <span>QueryCpuTime</span>
+                        <span class="metric-label">
+                          QueryCpuTime
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('QueryCpuTime')" 
+                                   *ngIf="getMetricDescription('QueryCpuTime')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.query_cumulative_cpu_time }}</span>
                       </div>
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_scan_time">
-                        <span>QueryScanTime</span>
+                        <span class="metric-label">
+                          QueryScanTime
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('QueryScanTime')" 
+                                   *ngIf="getMetricDescription('QueryScanTime')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.query_cumulative_scan_time }}</span>
                       </div>
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_network_time">
-                        <span>QueryNetworkTime</span>
+                        <span class="metric-label">
+                          QueryNetworkTime
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('QueryNetworkTime')" 
+                                   *ngIf="getMetricDescription('QueryNetworkTime')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.query_cumulative_network_time }}</span>
                       </div>
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_peak_schedule_time">
-                        <span>PeakScheduleTime</span>
+                        <span class="metric-label">
+                          PeakScheduleTime
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('PeakScheduleTime')" 
+                                   *ngIf="getMetricDescription('PeakScheduleTime')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.query_peak_schedule_time }}</span>
                       </div>
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.result_deliver_time">
-                        <span>ResultDeliverTime</span>
+                        <span class="metric-label">
+                          ResultDeliverTime
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('ResultDeliverTime')" 
+                                   *ngIf="getMetricDescription('ResultDeliverTime')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.result_deliver_time }}</span>
                       </div>
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_sum_memory_usage">
-                        <span>MemoryUsage</span>
+                        <span class="metric-label">
+                          MemoryUsage
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('MemoryUsage')" 
+                                   *ngIf="getMetricDescription('MemoryUsage')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.query_sum_memory_usage }}</span>
                       </div>
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_spill_bytes">
-                        <span>SpillBytes</span>
+                        <span class="metric-label">
+                          SpillBytes
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('SpillBytes')" 
+                                   *ngIf="getMetricDescription('SpillBytes')"></nb-icon>
+                        </span>
                         <span>{{ analysisData?.summary?.query_spill_bytes }}</span>
                       </div>
                       <!-- Fallback when no metrics available -->
@@ -355,27 +400,57 @@
                             <span>{{ selectedNode.plan_node_id }}</span>
                           </div>
                           <div class="metric-row-simple">
-                            <span>OperatorTotalTime</span>
+                            <span class="metric-label">
+                              OperatorTotalTime
+                              <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                       [nbTooltip]="getMetricDescription('OperatorTotalTime')" 
+                                       *ngIf="getMetricDescription('OperatorTotalTime')"></nb-icon>
+                            </span>
                             <span>{{ formatDurationNs(selectedNode.metrics?.operator_total_time) }}</span>
                           </div>
                           <div class="metric-row-simple">
-                            <span>TimePercentage</span>
+                            <span class="metric-label">
+                              TimePercentage
+                              <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                       [nbTooltip]="getMetricDescription('TimePercentage')" 
+                                       *ngIf="getMetricDescription('TimePercentage')"></nb-icon>
+                            </span>
                             <span>{{ selectedNode.time_percentage | number:'1.2-2' }}%</span>
                           </div>
                           <div class="metric-row-simple" *ngIf="selectedNode.rows !== undefined">
-                            <span>OutputRows</span>
+                            <span class="metric-label">
+                              OutputRows
+                              <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                       [nbTooltip]="getMetricDescription('OutputRows')" 
+                                       *ngIf="getMetricDescription('OutputRows')"></nb-icon>
+                            </span>
                             <span>{{ selectedNode.rows | number }}</span>
                           </div>
                           <div class="metric-row-simple" *ngIf="selectedNode.metrics?.push_row_num">
-                            <span>PushRowNum</span>
+                            <span class="metric-label">
+                              PushRowNum
+                              <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                       [nbTooltip]="getMetricDescription('PushRowNum')" 
+                                       *ngIf="getMetricDescription('PushRowNum')"></nb-icon>
+                            </span>
                             <span>{{ selectedNode.metrics?.push_row_num | number }}</span>
                           </div>
                           <div class="metric-row-simple" *ngIf="selectedNode.metrics?.pull_row_num">
-                            <span>PullRowNum</span>
+                            <span class="metric-label">
+                              PullRowNum
+                              <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                       [nbTooltip]="getMetricDescription('PullRowNum')" 
+                                       *ngIf="getMetricDescription('PullRowNum')"></nb-icon>
+                            </span>
                             <span>{{ selectedNode.metrics?.pull_row_num | number }}</span>
                           </div>
                           <div class="metric-row-simple" *ngIf="selectedNode.metrics?.memory_usage">
-                            <span>MemoryUsage</span>
+                            <span class="metric-label">
+                              MemoryUsage
+                              <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                       [nbTooltip]="getMetricDescription('PeakMemoryUsage')" 
+                                       *ngIf="getMetricDescription('PeakMemoryUsage')"></nb-icon>
+                            </span>
                             <span>{{ formatBytes(selectedNode.metrics?.memory_usage) }}</span>
                           </div>
                         </div>
@@ -387,14 +462,24 @@
                           <!-- All metrics from node.metrics -->
                           <ng-container *ngIf="selectedNode.metrics">
                             <div class="metric-row-simple" *ngFor="let key of getMetricKeys(selectedNode.metrics)">
-                              <span>{{ key }}</span>
+                              <span class="metric-label">
+                                {{ key }}
+                                <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                         [nbTooltip]="getMetricDescription(key)" 
+                                         *ngIf="getMetricDescription(key)"></nb-icon>
+                              </span>
                               <span>{{ formatMetricValue(key, selectedNode.metrics[key]) }}</span>
                             </div>
                           </ng-container>
                           <!-- Unique metrics -->
                           <ng-container *ngIf="selectedNode.unique_metrics">
                             <div class="metric-row-simple" *ngFor="let key of objectKeys(selectedNode.unique_metrics)">
-                              <span>{{ key }}</span>
+                              <span class="metric-label">
+                                {{ key }}
+                                <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                         [nbTooltip]="getMetricDescription(key)" 
+                                         *ngIf="getMetricDescription(key)"></nb-icon>
+                              </span>
                               <span>{{ selectedNode.unique_metrics[key] }}</span>
                             </div>
                           </ng-container>

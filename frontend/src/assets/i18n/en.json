@@ -332,7 +332,13 @@
     "filter_slow_only": "Show slow sessions only (≥1min)",
     "clear_filter": "Clear Filter",
     "clear_sleeping": "Clear Sleeping Connections",
-    "batch_kill": "Batch Kill Displayed"
+    "batch_kill": "Batch Kill Displayed",
+    "kill_success": "Session {{id}} terminated successfully",
+    "clear_sleeping_success": "Successfully cleared {{count}} sleeping connections",
+    "clear_sleeping_partial": "Cleared {{success}} connections, {{fail}} failed",
+    "batch_kill_success": "Successfully killed {{count}} sessions",
+    "batch_kill_partial": "Killed {{success}} sessions, {{fail}} failed",
+    "partial_success": "Partial Success"
   },
   "variables": {
     "title": "Variables",
@@ -345,7 +351,9 @@
     "no_variables": "No variables found. Try adjusting your search criteria",
     "loading": "Loading variables...",
     "warning_title": "Warning:",
-    "warning_message": "Modifying system variables may affect cluster behavior. Please consult the StarRocks documentation before making changes."
+    "warning_message": "Modifying system variables may affect cluster behavior. Please consult the StarRocks documentation before making changes.",
+    "update_success": "Variable \"{{name}}\" updated successfully",
+    "update_failed": "Failed to update variable"
   },
   "roles": {
     "title": "Role Management",
@@ -410,6 +418,23 @@
     "title": "Organization Management",
     "subtitle": "Manage system organizations, create and manage multi-tenant organizations",
     "create_organization": "Create Organization",
+    "edit_organization": "Edit Organization",
+    "create_subtitle": "Create new organization",
+    "edit_subtitle": "Modify organization and admin configuration",
+    "code": "Organization Code",
+    "code_placeholder": "Enter organization code (lowercase letters, numbers, underscores)",
+    "code_required": "Organization code is required",
+    "code_pattern": "Organization code can only contain lowercase letters, numbers and underscores",
+    "name": "Organization Name",
+    "name_placeholder": "Enter organization name",
+    "name_required": "Organization name is required",
+    "description": "Description",
+    "description_placeholder": "Enter organization description (optional)",
+    "admin_user": "Organization Admin (Optional)",
+    "admin_user_placeholder": "Select a user from this organization as admin",
+    "no_users_in_org": "No users in this organization",
+    "admin_user_hint": "Only users belonging to this organization can be selected. Leave empty to keep current admin.",
+    "save_changes": "Save Changes",
     "no_permission_hint": "You don't have permission to view organizations. Please contact administrator for authorization."
   },
   "materialized_views": {

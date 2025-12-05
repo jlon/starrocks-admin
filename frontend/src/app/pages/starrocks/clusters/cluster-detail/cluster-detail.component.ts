@@ -104,7 +104,10 @@ export class ClusterDetailComponent implements OnInit {
 
         this.clusterService.deleteCluster(this.clusterId).subscribe({
           next: () => {
-            this.toastrService.success('集群删除成功', '成功');
+            this.toastrService.success(
+              this.translate.instant('cluster.delete_success_simple'),
+              this.translate.instant('common.success')
+            );
             this.router.navigate(['/pages/starrocks/clusters']);
           },
           error: (error) => {

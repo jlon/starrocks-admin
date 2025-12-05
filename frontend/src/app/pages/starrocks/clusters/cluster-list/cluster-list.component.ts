@@ -128,7 +128,10 @@ export class ClusterListComponent implements OnInit {
 
         this.clusterService.deleteCluster(cluster.id).subscribe({
           next: () => {
-            this.toastrService.success('集群删除成功', '成功');
+            this.toastrService.success(
+              this.translate.instant('cluster.delete_success_simple'),
+              this.translate.instant('common.success')
+            );
             this.loadClusters();
           },
           error: (error) => {

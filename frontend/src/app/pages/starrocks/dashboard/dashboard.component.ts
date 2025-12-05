@@ -163,7 +163,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return;
     }
     this.clusterContext.setActiveCluster(clusterCard.cluster);
-    this.toastrService.success(`已激活集群: ${clusterCard.cluster.name}`, '成功');
+    this.toastrService.success(
+      this.translate.instant('cluster.activate_success', { name: clusterCard.cluster.name }),
+      this.translate.instant('common.success')
+    );
     this.cdr.markForCheck();
       
       // Reload clusters to update is_active status
@@ -448,7 +451,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
         this.clusterService.deleteCluster(cluster.id).subscribe({
           next: () => {
-            this.toastrService.success(`集群 "${cluster.name}" 已删除`, '成功');
+            this.toastrService.success(
+              this.translate.instant('cluster.delete_success', { name: cluster.name }),
+              this.translate.instant('common.success')
+            );
             this.loadClusters();
             this.cdr.markForCheck();
           },

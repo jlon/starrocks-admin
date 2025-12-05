@@ -458,14 +458,14 @@ impl OverviewService {
         cards.push(HealthCard {
             title: "Cluster Status".to_string(),
             value: format!(
-                "{}/{} BE, {}/{} FE",
+                "{}/{} BE/CN, {}/{} FE",
                 snapshot.backend_alive,
                 snapshot.backend_total,
                 snapshot.frontend_alive,
                 snapshot.frontend_total
             ),
             status: cluster_status,
-            description: "Backend and Frontend nodes availability".to_string(),
+            description: "Compute nodes (BE/CN) and Frontend nodes availability".to_string(),
         });
 
         // QPS Card
@@ -497,7 +497,7 @@ impl OverviewService {
             title: "CPU Usage".to_string(),
             value: format!("{:.1}%", snapshot.avg_cpu_usage),
             status: cpu_status,
-            description: "Average CPU usage across all BE nodes".to_string(),
+            description: "Average CPU usage across all compute nodes".to_string(),
         });
 
         // Disk Usage Card
@@ -1135,7 +1135,7 @@ impl OverviewService {
 
         let mut alerts = Vec::new();
         let status = if be_nodes_online < be_nodes_total {
-            alerts.push(format!("{} BE节点离线", be_nodes_total - be_nodes_online));
+            alerts.push(format!("{} 计算节点离线", be_nodes_total - be_nodes_online));
             HealthStatus::Critical
         } else if compaction_score > 100.0 {
             alerts.push(format!("Compaction Score过高: {:.1}", compaction_score));
@@ -1816,9 +1816,9 @@ impl OverviewService {
             alerts.push(Alert {
                 level: AlertLevel::Critical,
                 category: "节点状态".to_string(),
-                message: format!("{} BE节点离线", health.be_nodes_total - health.be_nodes_online),
+                message: format!("{} 计算节点离线", health.be_nodes_total - health.be_nodes_online),
                 timestamp: Utc::now(),
-                action: Some("检查BE节点状态并重启".to_string()),
+                action: Some("检查计算节点状态并重启".to_string()),
             });
         }
 
@@ -1829,7 +1829,7 @@ impl OverviewService {
                 category: "Compaction".to_string(),
                 message: format!("Compaction Score过高: {:.1}", health.compaction_score),
                 timestamp: Utc::now(),
-                action: Some("检查磁盘IO性能，考虑增加BE节点".to_string()),
+                action: Some("检查磁盘IO性能，考虑增加计算节点".to_string()),
             });
         }
 

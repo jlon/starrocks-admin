@@ -1,38 +1,1660 @@
-@import '../../../../@theme/styles/themes';
+// ============================================
+// Profile Queries Component Styles
+// ============================================
 
-@include nb-install-component() {
-  .profile-scroll-container {
-    max-height: 70vh;
-    overflow-y: auto;
-    position: relative;
-
-    // 容器：相对定位，包裹 pre 与复制按钮
-    .profile-pre-wrapper {
-      position: relative;
-      display: block;
-      width: 100%;
+// ============================================
+// Metric Hint Icon Style
+// ============================================
+.metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  
+  .metric-hint {
+    font-size: 0.875rem;
+    color: rgba(143, 150, 170, 0.6);
+    cursor: help;
+    transition: color 0.15s ease;
+    flex-shrink: 0;
+    
+    &:hover {
+      color: rgba(143, 150, 170, 0.9);
     }
+  }
+}
 
-    // 复制按钮：绝对定位到右上角
-    .profile-copy-overlay {
-      position: absolute;
-      top: 0.5rem;
-      right: 0.5rem !important;
-      left: auto !important;
-      z-index: 10;
+// ============================================
+// Profile Dialog Header - Compact Single Row
+// ============================================
+.profile-dialog-header-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem !important;
+  border-bottom: 1px solid var(--border-basic-color-3, #e4e9f2);
+  min-height: auto !important;
+  
+  .header-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0; // Allow text truncation
+    
+    .header-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text-basic-color, #222b45);
+      white-space: nowrap;
     }
     
-    .profile-content-text {
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    .header-query-id {
+      font-size: 0.75rem;
+      color: var(--text-hint-color, #8f9bb3);
+      font-family: var(--font-family-monospace, monospace);
+      background: var(--background-basic-color-2, #f7f9fc);
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 300px;
+    }
+  }
+  
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+}
+
+// ============================================
+// DAG Visualization Styles
+// ============================================
+
+// Scrollbar mixin (matching tab-bar component style from @theme)
+@mixin themed-scrollbar {
+  // Firefox
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 150, 170, 0.45) transparent;
+
+  // Webkit browsers (Chrome, Safari, Edge)
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(143, 150, 170, 0.45);
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(143, 150, 170, 0.65);
+  }
+}
+
+// Profile scroll container
+.profile-scroll-container {
+  max-height: 70vh;
+  overflow-y: auto;
+  position: relative;
+  @include themed-scrollbar;
+
+  .profile-pre-wrapper {
+    position: relative;
+    display: block;
+    width: 100%;
+  }
+
+  .profile-copy-overlay {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem !important;
+    left: auto !important;
+    z-index: 10;
+  }
+  
+  .profile-content-text {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+    padding: 1rem;
+    padding-top: 2rem;
+    background-color: #f7f9fc;
+    border-radius: 4px;
+  }
+}
+
+// ============================================
+// DAG Container - 包裹整个 DAG 区域
+// ============================================
+.dag-container {
+  position: relative;
+  width: 100%;
+  height: 100%;  // Fill parent container (tab-content)
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+// ============================================
+// DAG Layout - 两栏布局
+// ============================================
+.dag-layout {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;  // Prevent expansion beyond parent
+  background-color: #f5f7fa;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+
+  &.fullscreen-mode {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1000;
+  }
+}
+
+// ============================================
+// Center Panel - Graph
+// ============================================
+.dag-center-panel {
+  flex: 1 1 0;  // Allow shrink and grow, basis 0
+  min-width: 0;  // Critical: allow flex item to shrink below content size
+  position: relative;
+  background-color: #f5f7fa;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  
+  .dag-toolbar {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    padding: 4px;
+    display: flex;
+    gap: 4px;
+  }
+  
+  .graph-viewport {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    // Center content logic
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    @include themed-scrollbar;
+  }
+  
+  .graph-content {
+    position: relative;
+    // Ensure it takes up space but allows centering
+    transition: transform 0.1s ease-out;
+  }
+}
+
+// ============================================
+// DAG Node - 复刻图1样式
+// ============================================
+.dag-node {
+  position: absolute;
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+  z-index: 10;
+  min-width: 200px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+  
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  }
+  
+  &.selected {
+    border: 2px solid #1890ff;
+  }
+
+  // Node Header - Dynamic colors
+  .node-header {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e8e8e8;
+    position: relative;
+    
+    &.header-gray {
+      background: #e8ecef;
+      .node-title { color: #333; }
+    }
+    
+    &.header-orange {
+      background: #fa8c16;
+      .node-title { color: #fff; }
+    }
+    
+    &.header-red {
+      background: #cf1322;
+      .node-title { color: #fff; }
+    }
+    
+    .node-title {
+      font-weight: 600;
+      font-size: 13px;
+    }
+    
+    .top-mark {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-top: 12px solid #faad14;
+    }
+
+    .diagnostic-indicator {
+      position: absolute;
+      top: -8px;
+      left: -8px;
+      font-size: 14px;
+      line-height: 1;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+      z-index: 1;
+    }
+  }
+
+  .node-body {
+    padding: 8px 12px;
+    background: #fff;
+    
+    .id-row {
+      color: #8c8c8c;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+    
+    // Horizontal layout for time and percentage (Figure 1)
+    .metric-row-horizontal {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      
+      .time-value {
+        font-size: 11px;
+        color: #666;
+      }
+      
+      .pct-value {
+        font-size: 14px;
+        font-weight: bold;
+        color: #333;
+      }
+    }
+  }
+
+  .node-bottom-progress {
+    height: 3px;
+    background: #f0f0f0;
+    
+    .progress-bar {
+      height: 100%;
+    }
+  }
+
+  // Top 1 Node (RED)
+  &.is-top-1 {
+    border-color: #cf1322;
+    
+    .node-header.header-red {
+      background: #cf1322;
+    }
+    
+    .node-body {
+      background: #fff1f0;
+      
+      .pct-value {
+        color: #cf1322;
+        font-size: 16px;
+      }
+    }
+    
+    .node-bottom-progress {
+      display: none;
+    }
+  }
+}
+
+// ============================================
+// Edges SVG - Lines (Figure 1 style)
+// ============================================
+.edges-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+  
+  .edge-path {
+    fill: none;
+    stroke-width: 2.5px; // Thicker line
+  }
+}
+
+// ============================================
+// Arrows Layer (DOM) - Dynamic size via JS
+// ============================================
+.arrows-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.arrow-head-dom {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left-style: solid;
+  border-left-color: transparent;
+  border-right-style: solid;
+  border-right-color: transparent;
+  border-bottom-style: solid;
+  // Size and color set dynamically via style binding
+  transform-origin: center bottom;
+}
+
+// ============================================
+// Edge Labels Layer
+// ============================================
+.edge-labels-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.edge-label-text {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  color: #595959;
+  white-space: nowrap;
+  pointer-events: none;
+  background: #f5f7fa;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+
+// ============================================
+// Resize Handle
+// ============================================
+.resize-handle {
+  width: 8px;
+  height: 100%; // Must have height to be clickable
+  cursor: col-resize;
+  z-index: 30;
+  background: transparent;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  
+  &:hover {
+    background: rgba(24, 144, 255, 0.3);
+  }
+  
+  &:active {
+    background: rgba(24, 144, 255, 0.5);
+  }
+  
+  &.collapsed {
+    display: none;
+  }
+}
+
+// ============================================
+// Right Panel - 完全复刻图1右侧
+// ============================================
+.dag-right-panel {
+  // Fixed dimensions - prevent content from expanding panel
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  
+  // Layout
+  background: #fff;
+  border-left: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  
+  // Critical: prevent flex item from growing beyond set width
+  flex-grow: 0;
+  flex-shrink: 0;
+  
+  // Overflow control - scroll vertically, hide horizontal overflow
+  overflow-y: auto;
+  overflow-x: hidden;
+  @include themed-scrollbar;
+
+  // Force all children to respect parent width
+  > * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .right-section {
+    border-bottom: 1px solid #f0f0f0;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;  // Prevent section from shrinking
+    
+    .section-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      background: #fafafa;
+      border-bottom: 1px solid #f0f0f0;
+      box-sizing: border-box;
+      
+      .title {
+        font-weight: 600;
+        font-size: 13px;
+        color: #333;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      
+      .link {
+        margin-left: 12px;
+        color: #1890ff;
+        font-size: 12px;
+        cursor: pointer;
+        flex-shrink: 0;
+        
+        &:hover { text-decoration: underline; }
+      }
+      
+      .collapse-toggle {
+        margin-left: auto;
+        color: #1890ff;
+        font-size: 12px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      
+      .warning-badge {
+        margin-left: 8px;
+        background: #ff4d4f;
+        color: #fff;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        flex-shrink: 0;
+      }
+    }
+    
+    .section-body {
+      padding: 12px 16px;
+      overflow-x: hidden;  // Prevent horizontal scroll/expansion
+      overflow-y: visible;  // Allow content to show (parent handles scroll)
+      box-sizing: border-box;
+    }
+  }
+  
+  // Node detail section needs no horizontal padding for alignment
+  .node-detail-section {
+    .section-body {
+      padding: 12px 0 !important;
+    }
+  }
+
+  // Top 10 Table
+  .top10-table {
+    width: 100%;
+    table-layout: fixed;  // Fixed layout to respect width
+    border-collapse: collapse;
+    font-size: 12px;
+    box-sizing: border-box;
+    
+    th {
+      text-align: left;
+      padding: 6px 8px;
+      color: #8c8c8c;
+      font-weight: normal;
+      border-bottom: 1px solid #f0f0f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    td {
+      padding: 8px;
+      border-bottom: 1px solid #f5f5f5;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    tr {
+      cursor: pointer;
+      
+      &:hover { background: #fafafa; }
+      &.selected { background: #e6f7ff; }
+    }
+    
+    .node-name {
+      color: #333;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .node-time, .node-memory {
+      text-align: right;
+      color: #666;
+      width: 80px;  // Fixed width for value column
+    }
+  }
+
+  // Summary Section
+  .summary-section {
+    .summary-row {
+      margin-bottom: 8px;
+      
+      .label {
+        font-size: 12px;
+        color: #333;
+        font-weight: 500;
+      }
+    }
+    
+    .exec-time-bar {
+      display: flex;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      
+      .bar-fill {
+        height: 100%;
+        
+        &.io { background: #13c2c2; }
+        &.processing { background: #1890ff; }
+      }
+    }
+    
+    .metric-group {
+      margin-bottom: 12px;
+      
+      .metric-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 4px;
+        
+        .dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          margin-right: 8px;
+          
+          &.io { background: #13c2c2; }
+          &.processing { background: #1890ff; }
+        }
+        
+        .name {
+          font-size: 12px;
+          color: #333;
+        }
+        
+        .value {
+          margin-left: auto;
+          font-size: 12px;
+          color: #666;
+        }
+      }
+      
+      .metric-detail {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0 4px 16px;
+        font-size: 11px;
+        color: #8c8c8c;
+      }
+
+      // Sub-list for metrics under a group
+      .metric-sub-list {
+        padding-left: 16px;
+        
+        .metric-row-simple {
+          display: flex;
+          justify-content: space-between;
+          padding: 4px 0;
+          font-size: 11px;
+          border-bottom: 1px solid #f5f5f5;
+          
+          .metric-label {
+            color: #8c8c8c;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            
+            .metric-hint {
+              font-size: 10px;
+              color: #bfbfbf;
+              cursor: help;
+            }
+          }
+          
+          span:last-child {
+            color: #595959;
+          }
+        }
+      }
+    }
+
+    // IO Statistics group
+    .io-stats-group {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed #e8e8e8;
+      
+      .metric-header .name {
+        font-weight: 600;
+        color: #333;
+      }
+    }
+
+    // Diagnosis summary link
+    .diagnosis-summary-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      margin: 12px 0;
+      background: rgba(255, 170, 0, 0.08);
+      border-radius: 4px;
+      border-left: 3px solid #ffaa00;
+      
+      .diag-icon {
+        font-size: 14px;
+      }
+      
+      .diag-text {
+        font-size: 12px;
+        color: #595959;
+      }
+      
+      .diag-link {
+        margin-left: auto;
+        color: #1890ff;
+        font-size: 12px;
+        cursor: pointer;
+        
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+
+    // Other metrics section
+    .other-metrics {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed #e8e8e8;
+    }
+    
+    .metrics-list-simple {
+      max-height: 400px;
+      overflow-y: auto;
+      overflow-x: hidden;  // Prevent horizontal expansion
+      padding-right: 4px;
+      box-sizing: border-box;
+      @include themed-scrollbar;
+      
+      .metric-row-simple {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        font-size: 12px;
+        border-bottom: 1px solid #f5f5f5;
+        box-sizing: border-box;
+        min-width: 0;  // Allow flex items to shrink below content size
+        
+        span:first-child {
+          color: #666;
+          flex-shrink: 0;
+          max-width: 50%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        span:last-child {
+          color: #333;
+          text-align: right;
+          min-width: 0;  // Allow shrinking
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+    }
+  }
+
+  // Diagnosis Section
+  .diagnosis-section {
+    .diagnosis-list {
+      .diagnosis-item {
+        display: flex;
+        align-items: flex-start;
+        padding: 8px 0;
+        
+        .icon {
+          margin-right: 8px;
+          font-size: 14px;
+        }
+        
+        .text {
+          font-size: 12px;
+          color: #333;
+          line-height: 1.5;
+        }
+      }
+      
+      // Detailed diagnosis item with rule info and parameters
+      .diagnosis-item-detailed {
+        padding: 12px;
+        margin-bottom: 8px;
+        background: rgba(143, 150, 170, 0.04);
+        border-radius: 6px;
+        border-left: 3px solid transparent;
+        
+        &:hover {
+          background: rgba(143, 150, 170, 0.08);
+        }
+        
+        .diag-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+          
+          .diag-badge {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            
+            &.badge-danger {
+              background: rgba(255, 61, 113, 0.15);
+              color: #ff3d71;
+            }
+            &.badge-warning {
+              background: rgba(255, 170, 0, 0.15);
+              color: #ffaa00;
+            }
+            &.badge-info {
+              background: rgba(0, 149, 255, 0.15);
+              color: #0095ff;
+            }
+          }
+          
+          .diag-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #222b45;
+          }
+
+          .node-count-badge {
+            margin-left: auto;
+            font-size: 10px;
+            color: #8f9bb3;
+            background: rgba(143, 155, 179, 0.1);
+            padding: 2px 6px;
+            border-radius: 10px;
+          }
+        }
+        
+        .diag-message {
+          font-size: 12px;
+          color: #333;
+          line-height: 1.5;
+          margin-bottom: 6px;
+        }
+
+        .diag-reason {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+          font-size: 11px;
+          color: #666;
+          background: rgba(0, 149, 255, 0.05);
+          border-left: 2px solid #0095ff;
+          padding: 8px 10px;
+          margin-bottom: 8px;
+          border-radius: 0 4px 4px 0;
+          line-height: 1.5;
+
+          nb-icon {
+            font-size: 14px;
+            flex-shrink: 0;
+            margin-top: 1px;
+          }
+
+          .reason-text {
+            flex: 1;
+          }
+        }
+
+        .diag-affected-nodes {
+          display: flex;
+          align-items: flex-start;
+          gap: 4px;
+          font-size: 11px;
+          margin-bottom: 8px;
+          flex-wrap: wrap;
+          
+          nb-icon {
+            font-size: 12px;
+            flex-shrink: 0;
+          }
+        }
+        
+        .diag-node {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          margin-bottom: 8px;
+          
+          nb-icon {
+            font-size: 12px;
+          }
+        }
+        
+        .diag-suggestions {
+          margin-bottom: 8px;
+          
+          .diag-suggestion {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            font-size: 11px;
+            color: #555;
+            padding: 2px 0;
+            
+            .icon {
+              font-size: 12px;
+            }
+          }
+        }
+        
+        .diag-params {
+          background: rgba(0, 149, 255, 0.05);
+          border-radius: 4px;
+          padding: 8px;
+          
+          .param-item {
+            margin-bottom: 8px;
+            
+            &:last-child {
+              margin-bottom: 0;
+            }
+            
+            .param-header {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              margin-bottom: 4px;
+              
+              nb-icon {
+                font-size: 14px;
+              }
+              
+              .param-name {
+                font-size: 12px;
+                font-weight: 600;
+                color: #222b45;
+              }
+              
+              .param-type {
+                font-size: 9px;
+                padding: 1px 4px;
+                border-radius: 2px;
+                background: rgba(143, 150, 170, 0.15);
+                color: #666;
+              }
+            }
+            
+            .param-description {
+              font-size: 11px;
+              margin-bottom: 4px;
+              padding-left: 20px;
+              color: #666;
+              line-height: 1.4;
+            }
+            
+            .param-impact {
+              display: flex;
+              align-items: flex-start;
+              gap: 4px;
+              font-size: 11px;
+              margin-bottom: 6px;
+              padding-left: 20px;
+              
+              nb-icon {
+                font-size: 12px;
+                flex-shrink: 0;
+                margin-top: 1px;
+              }
+              
+              .impact-text {
+                color: #00d68f;
+                line-height: 1.4;
+              }
+            }
+            
+            .param-value-row {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              font-size: 11px;
+              margin-bottom: 4px;
+              padding-left: 20px;
+              flex-wrap: wrap;
+              
+              code {
+                background: rgba(143, 150, 170, 0.1);
+                padding: 1px 4px;
+                border-radius: 2px;
+                font-family: 'Monaco', 'Menlo', monospace;
+              }
+              
+              .recommended-value {
+                color: #0095ff;
+                font-weight: 600;
+              }
+            }
+            
+            .param-value {
+              font-size: 11px;
+              margin-bottom: 4px;
+              
+              code {
+                background: rgba(143, 150, 170, 0.1);
+                padding: 1px 4px;
+                border-radius: 2px;
+                font-family: 'Monaco', 'Menlo', monospace;
+                color: #0095ff;
+              }
+            }
+            
+            .param-command {
+              padding-left: 20px;
+              
+              .command-text {
+                display: block;
+                font-size: 11px;
+                padding: 6px 8px;
+                background: #1a1a2e;
+                color: #00d68f;
+                border-radius: 4px;
+                font-family: 'Monaco', 'Menlo', monospace;
+                cursor: pointer;
+                transition: background 0.15s ease;
+                word-break: break-all;
+                
+                &:hover {
+                  background: #252542;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    .empty-diagnosis {
+      color: #999;
       font-size: 12px;
-      line-height: 1.4;
-      white-space: pre-wrap;
-      word-break: break-all;
-      margin: 0;
-      padding: 1rem;
-      padding-top: 2rem; // avoid overlap with copy button
-      background-color: nb-theme(background-basic-color-1);
-      border-radius: nb-theme(border-radius);
+      text-align: center;
+      padding: 20px 0;
+    }
+  }
+  
+  // Node Detail Section (when node is selected)
+  .node-detail-section {
+    .section-header {
+      .title {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+    
+    .node-detail-tabs {
+      ::ng-deep {
+        nb-tabset {
+          // Remove any default padding
+          padding: 0;
+        }
+        
+        .tabset {
+          padding: 0.25rem 0;
+          gap: 0.125rem;
+          border-bottom: 1px solid rgba(143, 150, 170, 0.1);
+          
+          .tab {
+            .tab-link {
+              padding: 0.375rem 0.75rem;
+              border-radius: 4px;
+              font-size: 0.6875rem;
+              font-weight: 500;
+              text-transform: uppercase;
+              letter-spacing: 0.025em;
+              color: rgba(34, 43, 69, 0.55);
+              background: transparent;
+              transition: all 0.15s ease;
+              
+              // 移除下划线
+              &::before {
+                display: none !important;
+              }
+              
+              &:hover:not(.active) {
+                background: rgba(143, 150, 170, 0.06);
+                color: rgba(34, 43, 69, 0.75);
+              }
+            }
+            
+            &.active .tab-link {
+              background: rgba(143, 150, 170, 0.1);
+              color: #222b45;
+              font-weight: 600;
+              
+              &::before {
+                display: none !important;
+              }
+            }
+          }
+        }
+        
+        .tab-content {
+          // Remove horizontal padding to align with tabs
+          padding: 0.5rem 0 0.5rem 0 !important;
+          margin: 0;
+        }
+        
+        // Ensure tab content wrapper has no extra padding
+        .content-container, nb-tab {
+          padding: 0 !important;
+          margin: 0;
+        }
+      }
+    }
+    
+    .metrics-list-simple {
+      // No max-height, let content expand naturally
+      // Align with tab titles (no extra padding)
+      
+      .metric-row-simple {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 6px 0;
+        font-size: 12px;
+        border-bottom: 1px solid #f5f5f5;
+        gap: 16px;
+        
+        .metric-label {
+          color: #666;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          
+          .metric-hint {
+            font-size: 12px;
+            color: #8f9bb3;
+            cursor: help;
+          }
+        }
+        
+        span:last-child {
+          color: #333;
+          font-family: 'Monaco', 'Menlo', monospace;
+          font-size: 11px;
+          text-align: right;
+          word-break: break-all;
+          flex: 1;
+          min-width: 0;
+        }
+      }
+    }
+    
+    .badge-danger {
+      background: #ff4d4f;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+    }
+
+    // Node-specific diagnostics list
+    .node-diagnostics-list {
+      .node-diag-item {
+        padding: 10px;
+        margin-bottom: 8px;
+        background: rgba(143, 150, 170, 0.04);
+        border-radius: 6px;
+        border-left: 3px solid #faad14;
+
+        .node-diag-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+
+          .diag-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+
+            &.badge-danger {
+              background: rgba(255, 77, 79, 0.15);
+              color: #ff4d4f;
+            }
+            &.badge-warning {
+              background: rgba(250, 173, 20, 0.15);
+              color: #d48806;
+            }
+            &.badge-info {
+              background: rgba(0, 149, 255, 0.15);
+              color: #0095ff;
+            }
+          }
+
+          .diag-name {
+            font-size: 11px;
+            font-weight: 600;
+            color: #222b45;
+          }
+        }
+
+        .node-diag-message {
+          font-size: 11px;
+          color: #333;
+          line-height: 1.5;
+          margin-bottom: 6px;
+        }
+
+        .node-diag-reason {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+          font-size: 10px;
+          color: #666;
+          background: rgba(0, 149, 255, 0.05);
+          border-left: 2px solid #0095ff;
+          padding: 6px 8px;
+          margin-bottom: 6px;
+          border-radius: 0 4px 4px 0;
+          line-height: 1.4;
+
+          nb-icon {
+            font-size: 12px;
+            flex-shrink: 0;
+          }
+        }
+
+        .node-diag-suggestions {
+          .suggestion-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
+            font-size: 10px;
+            color: #555;
+            padding: 2px 0;
+
+            .icon {
+              font-size: 10px;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// ============================================
+// Profile Incomplete Icon (in Summary title)
+// ============================================
+.profile-incomplete-icon {
+  font-size: 0.875rem;
+  margin-left: 0.25rem;
+  cursor: help;
+  vertical-align: middle;
+}
+
+// ============================================
+// Node Detail Section (when node is selected)
+// ============================================
+.node-detail-section {
+  .node-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    
+    .node-title-area {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      
+      .title {
+        font-weight: 600;
+        font-size: 14px;
+        color: #222b45;
+      }
+      
+      .node-id {
+        font-size: 11px;
+        color: #8f9bb3;
+      }
+    }
+    
+    .close-btn {
+      cursor: pointer;
+      color: #8f9bb3;
+      font-size: 14px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      
+      &:hover {
+        background: rgba(143, 155, 179, 0.1);
+        color: #222b45;
+      }
+    }
+  }
+  
+  .node-progress-section {
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 8px;
+    
+    .exec-time-bar {
+      display: flex;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      background: #f0f0f0;
+      margin-bottom: 8px;
+      
+      .bar-fill {
+        height: 100%;
+        
+        &.io { background: #13c2c2; }
+        &.processing { background: #1890ff; }
+      }
+    }
+    
+    .progress-legend {
+      display: flex;
+      gap: 16px;
+      
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        
+        .dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          
+          &.io { background: #13c2c2; }
+          &.processing { background: #1890ff; }
+        }
+        
+        .legend-label {
+          font-size: 11px;
+          color: #8c8c8c;
+        }
+        
+        .legend-value {
+          font-size: 11px;
+          color: #333;
+          font-weight: 500;
+        }
+      }
+    }
+  }
+  
+  .node-detail-tabs {
+    ::ng-deep {
+      .tabset {
+        border-bottom: 1px solid #edf1f7;
+        
+        .tab-link {
+          font-size: 12px;
+          padding: 8px 12px;
+        }
+      }
+      
+      .tab-content {
+        padding: 8px 0;
+      }
+    }
+  }
+  
+  .metric-category-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8f9bb3;
+    text-transform: uppercase;
+    padding: 8px 0 4px;
+    margin-top: 8px;
+    border-top: 1px dashed #edf1f7;
+    
+    &:first-child {
+      margin-top: 0;
+      border-top: none;
+    }
+  }
+
+  // Node detail content (节点详情 Tab)
+  .node-detail-content {
+    .operator-section {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #edf1f7;
+      
+      &:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+      }
+      
+      .operator-header {
+        font-size: 12px;
+        font-weight: 600;
+        color: #222b45;
+        padding: 8px 0;
+        background: rgba(143, 155, 179, 0.08);
+        padding-left: 8px;
+        margin: 0 -8px 8px;
+        border-radius: 4px;
+      }
+      
+      .metrics-group {
+        margin-bottom: 8px;
+        
+        .metrics-group-header {
+          font-size: 11px;
+          font-weight: 600;
+          color: #8f9bb3;
+          padding: 4px 0;
+        }
+      }
+    }
+  }
+
+  // Pipeline content (Pipeline Tab)
+  .pipeline-content {
+    .pipeline-section {
+      margin-bottom: 16px;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+      
+      .pipeline-section-header {
+        font-size: 12px;
+        font-weight: 600;
+        color: #222b45;
+        padding: 8px 0;
+        background: rgba(143, 155, 179, 0.08);
+        padding-left: 8px;
+        margin: 0 -8px 8px;
+        border-radius: 4px;
+      }
+    }
+  }
+
+  // Node Tab Content (like official UI)
+  .node-tab-content {
+    // Remove any inherited padding
+    padding: 0 !important;
+    margin: 0;
+    
+    .metric-section {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f0f0f0;
+      
+      &:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+      }
+      
+      .section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #222b45;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        .count-badge {
+          background: #faad14;
+          color: #fff;
+          font-size: 10px;
+          padding: 2px 6px;
+          border-radius: 10px;
+        }
+      }
+      
+      // Execution time bar
+      .exec-time-bar-container {
+        margin-bottom: 10px;
+        
+        .exec-time-bar {
+          display: flex;
+          height: 8px;
+          border-radius: 4px;
+          overflow: hidden;
+          background: #f0f0f0;
+          
+          .bar-fill {
+            height: 100%;
+            
+            &.cpu { background: #52c41a; }
+            &.secondary { background: #faad14; }
+          }
+        }
+      }
+      
+      .exec-time-legend {
+        .legend-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 0;
+          font-size: 12px;
+          
+          .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            
+            &.cpu { background: #52c41a; }
+            &.secondary { background: #faad14; }
+          }
+          
+          .legend-label {
+            color: #666;
+            min-width: 80px;
+            flex-shrink: 0;
+          }
+          
+          .legend-value {
+            color: #1890ff;
+            font-family: 'Monaco', 'Menlo', monospace;
+            flex: 1;
+            text-align: left;
+          }
+          
+          .legend-percent {
+            color: #333;
+            font-weight: 500;
+          }
+        }
+      }
+      
+      // Metric rows
+      .metric-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 5px 0;
+        font-size: 12px;
+        
+        .metric-label {
+          color: #666;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          
+          .metric-hint {
+            font-size: 12px;
+            color: #8f9bb3;
+            cursor: help;
+          }
+        }
+        
+        .metric-value {
+          color: #333;
+          font-family: 'Monaco', 'Menlo', monospace;
+          font-size: 11px;
+          text-align: right;
+          word-break: break-all;
+          
+          &.index-value {
+            color: #1890ff;
+          }
+          
+          &.time-value {
+            color: #faad14;
+          }
+        }
+        
+        &.over-consuming {
+          .metric-label {
+            color: #333;
+          }
+          
+          &.indented {
+            padding-left: 16px;
+            
+            .metric-label {
+              color: #666;
+            }
+          }
+        }
+      }
+    }
+    
+    // Diagnostics section
+    .diagnostics-section {
+      .diagnosis-list-inline {
+        .diag-item-inline {
+          padding: 10px;
+          margin-bottom: 8px;
+          background: rgba(250, 173, 20, 0.08);
+          border-radius: 6px;
+          border-left: 3px solid #faad14;
+          
+          &:last-child {
+            margin-bottom: 0;
+          }
+          
+          .diag-header-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            
+            .diag-badge-inline {
+              font-size: 10px;
+              padding: 2px 6px;
+              border-radius: 3px;
+              font-weight: 600;
+              
+              &.badge-danger { background: #ff4d4f; color: #fff; }
+              &.badge-warning { background: #faad14; color: #fff; }
+              &.badge-info { background: #1890ff; color: #fff; }
+            }
+            
+            .diag-name-inline {
+              font-size: 12px;
+              font-weight: 500;
+              color: #222b45;
+            }
+          }
+          
+          .diag-message-inline {
+            font-size: 11px;
+            color: #666;
+            line-height: 1.5;
+          }
+          
+          .diag-suggestions-inline {
+            margin-top: 8px;
+            
+            .suggestion-item {
+              font-size: 11px;
+              color: #52c41a;
+              padding: 2px 0;
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -9,6 +9,7 @@ pub mod mysql_pool_manager;
 pub mod organization_service;
 pub mod overview_service;
 pub mod permission_service;
+pub mod profile_analyzer;
 pub mod role_service;
 pub mod starrocks_client;
 pub mod system_function_service;

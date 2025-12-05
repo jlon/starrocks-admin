@@ -48,48 +48,823 @@
 
 <!-- Profile Detail Dialog Template -->
 <ng-template #profileDetailDialog let-data let-ref="dialogRef">
-  <nb-card accent="info">
-    <nb-card-header>
-      <div class="d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center">
-          <nb-icon icon="file-text-outline" status="info" class="me-2"></nb-icon>
-          <h5 class="mb-0">Query Profile 详情</h5>
-        </div>
-        <button nbButton ghost status="basic" size="small" (click)="ref.close()">
+  <nb-card class="profile-dialog-card" 
+           [ngStyle]="{'width': '90vw', 'max-width': '1400px', 'height': '85vh', 'overflow': 'hidden'}">
+    <nb-card-header class="profile-dialog-header-compact">
+      <div class="header-title-row">
+        <span class="header-title">Query Profile</span>
+        <span class="header-query-id" *ngIf="currentQueryId">{{ currentQueryId }}</span>
+      </div>
+      <div class="header-actions">
+        <button nbButton ghost status="primary" size="tiny" (click)="refreshAnalysis()" [disabled]="profileDetailLoading">
+          <nb-icon icon="refresh-outline"></nb-icon>
+        </button>
+        <button nbButton ghost status="basic" size="tiny" (click)="ref.close()">
           <nb-icon icon="close-outline"></nb-icon>
         </button>
       </div>
     </nb-card-header>
-    <nb-card-body>
-      <nb-card accent="basic">
-        <nb-card-body class="profile-scroll-container position-relative">
-          <div *ngIf="profileDetailLoading" class="text-center py-4">
-            <nb-spinner status="primary" size="large"></nb-spinner>
-            <p class="mt-3 text-hint">加载 Profile 详情中...</p>
-          </div>
-
-          <div class="profile-copy-overlay" *ngIf="!profileDetailLoading" style="position: absolute; top: 0.5rem; right: 0.5rem; left: auto; z-index: 10;">
-            <button
-              nbButton
-              status="basic"
-              size="small"
-              (click)="copyProfileToClipboard()"
-              [disabled]="!currentProfileDetail"
-              nbTooltip="复制到剪贴板"
-              nbTooltipPlacement="left"
-            >
-              <nb-icon icon="copy-outline"></nb-icon>
-            </button>
-          </div>
-          <div *ngIf="!profileDetailLoading" class="profile-pre-wrapper">
-            <div *ngIf="!currentProfileDetail || currentProfileDetail.trim() === ''" class="text-center py-4 text-hint">
-              <nb-icon icon="file-text-outline" status="basic" class="mb-2"></nb-icon>
-              <p>暂无 Profile 数据</p>
+    <nb-card-body class="p-0">
+      <nb-tabset>
+        <!-- Tab 1: DAG 执行分析 (默认) -->
+        <nb-tab tabTitle="执行分析" tabIcon="activity-outline">
+          <div class="dag-container">
+            <div *ngIf="analysisLoading" class="text-center py-5">
+              <nb-spinner status="primary" size="large"></nb-spinner>
+              <p class="mt-3 text-hint">正在分析 Profile...</p>
             </div>
-            <pre *ngIf="currentProfileDetail && currentProfileDetail.trim() !== ''" class="profile-content-text">{{ currentProfileDetail }}</pre>
+            
+            <div *ngIf="!analysisLoading && analysisError" class="text-center py-5">
+              <nb-icon icon="alert-triangle-outline" status="warning" class="mb-2" style="font-size: 2rem;"></nb-icon>
+              <p class="text-hint">{{ analysisError }}</p>
+              <p class="text-hint" style="font-size: 12px;">
+                提示: StarRocks 的 Profile 数据会定期清理，较早的查询可能已无法获取详细分析。
+              </p>
+            </div>
+            
+            <div *ngIf="!analysisLoading && !analysisError && analysisData" class="dag-layout" [class.fullscreen-mode]="isFullscreen">
+
+              <!-- Center Panel: Graph (No left panel, like Figure 1) -->
+              <div class="dag-center-panel" 
+                   (wheel)="onWheel($event)"
+                   (mousedown)="startPan($event)"
+                   (window:mousemove)="pan($event)"
+                   (window:mouseup)="endPan()"
+                   (click)="onDagPanelClick($event)">
+                <!-- Toolbar -->
+                <div class="dag-toolbar">
+                  <button nbButton size="tiny" status="basic" ghost (click)="toggleFullscreen()" [nbTooltip]="isFullscreen ? '退出全屏' : '全屏'">
+                    <nb-icon [icon]="isFullscreen ? 'collapse-outline' : 'expand-outline'"></nb-icon>
+                  </button>
+                  <button nbButton size="tiny" status="basic" ghost (click)="zoomIn()" nbTooltip="放大">
+                    <nb-icon icon="plus-outline"></nb-icon>
+                  </button>
+                  <button nbButton size="tiny" status="basic" ghost (click)="zoomOut()" nbTooltip="缩小">
+                    <nb-icon icon="minus-outline"></nb-icon>
+                  </button>
+                  <button nbButton size="tiny" status="basic" ghost (click)="resetZoom()" nbTooltip="重置">
+                    <nb-icon icon="maximize-outline"></nb-icon>
+                  </button>
+                  <button nbButton size="tiny" status="basic" ghost (click)="toggleGraphDirection()" [nbTooltip]="graphDirection === 'BT' ? '切换为横向' : '切换为纵向'">
+                    <nb-icon [icon]="graphDirection === 'BT' ? 'swap-outline' : 'flip-2-outline'"></nb-icon>
+                  </button>
+                  <button nbButton size="tiny" status="basic" ghost (click)="exportDagAsPng()" nbTooltip="导出图片">
+                    <nb-icon icon="download-outline"></nb-icon>
+                  </button>
+                </div>
+                
+                <div class="graph-viewport">
+                  <div class="graph-content" 
+                       [style.width.px]="graphWidth" 
+                       [style.height.px]="graphHeight"
+                       [style.transform]="'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + zoomLevel + ')'"
+                       [style.transformOrigin]="'center center'">
+                    
+                    <!-- Edges - Lines with dynamic width based on rows -->
+                    <svg class="edges-svg" [attr.width]="graphWidth" [attr.height]="graphHeight">
+                      <!-- Arrow marker definitions -->
+                      <defs>
+                        <marker *ngFor="let edge of graphEdges"
+                                [attr.id]="edge.markerId"
+                                [attr.markerWidth]="edge.arrowSize"
+                                [attr.markerHeight]="edge.arrowSize"
+                                [attr.refX]="edge.arrowSize"
+                                [attr.refY]="edge.arrowSize / 2"
+                                orient="auto"
+                                markerUnits="userSpaceOnUse">
+                          <!-- Triangle pointing RIGHT (orient=auto rotates to path direction) -->
+                          <polygon [attr.points]="'0,0 ' + edge.arrowSize + ',' + (edge.arrowSize/2) + ' 0,' + edge.arrowSize"
+                                   [attr.fill]="edge.strokeColor"/>
+                        </marker>
+                      </defs>
+                      <g *ngFor="let edge of graphEdges">
+                        <path [attr.d]="getEdgePath(edge.points)" 
+                              class="edge-path" 
+                              [attr.stroke]="edge.strokeColor"
+                              [attr.stroke-width]="edge.strokeWidth"
+                              [attr.marker-end]="'url(#' + edge.markerId + ')'" />
+                      </g>
+                    </svg>
+                    
+                    <!-- Edge Labels -->
+                    <div class="edge-labels-layer">
+                      <ng-container *ngFor="let edge of graphEdges">
+                        <div *ngIf="edge.labelFormatted"
+                             class="edge-label-text"
+                             [style.left.px]="edge.labelPos?.x"
+                             [style.top.px]="edge.labelPos?.y">
+                          {{ edge.labelFormatted }}
+                        </div>
+                      </ng-container>
+                    </div>
+                    
+                    <!-- Nodes - 复刻图1样式 -->
+                    <div *ngFor="let node of graphNodes" 
+                         class="dag-node" [attr.data-node-id]="node.id"
+                         [ngClass]="{
+                           'selected': selectedNode?.id === node.id,
+                           'is-top-1': getNodeRank(node) === 1, 
+                           'is-top-node': getNodeRank(node) > 0
+                         }"
+                         [style.left.px]="node.x - (node.width/2)"
+                         [style.top.px]="node.y - (node.height/2)"
+                         [style.width.px]="node.width"
+                         (click)="selectNode(node, $event)">
+                      
+                      <!-- Header with dynamic color -->
+                      <div class="node-header" [ngClass]="getNodeHeaderClass(node)">
+                        <!-- Diagnostic warning indicator (left side) -->
+                        <div *ngIf="node.has_diagnostic" class="diagnostic-indicator" nbTooltip="该节点有诊断建议">⚠️</div>
+                        <span class="node-title">{{ node.operator_name }}</span>
+                        <!-- Top N mark (right corner) -->
+                        <div *ngIf="getNodeRank(node) > 1" class="top-mark" nbTooltip="Top {{ getNodeRank(node) }} 耗时节点"></div>
+                      </div>
+                      
+                      <!-- Body -->
+                      <div class="node-body">
+                        <div class="node-row id-row">
+                          <span>plan_node_id={{ node.plan_node_id }}</span>
+                        </div>
+                        <!-- Horizontal layout: Time | Percentage (复刻图1) -->
+                        <div class="node-row metric-row-horizontal">
+                          <span class="time-value">耗时: {{ formatDurationNs(node.metrics?.operator_total_time) }}</span>
+                          <span class="pct-value">{{ node.time_percentage | number:'1.2-2' }}%</span>
+                        </div>
+                      </div>
+
+                      <!-- Bottom Progress Line -->
+                      <div class="node-bottom-progress" *ngIf="getNodeRank(node) !== 1">
+                         <div class="progress-bar" [style.width.%]="node.time_percentage" [style.background]="getProgressColor(node)"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Right Panel: Dynamic content based on selection -->
+              <div class="resize-handle" (mousedown)="startResizeRight($event)" [class.collapsed]="isRightPanelCollapsed"></div>
+              
+              <div class="dag-right-panel" [style.width.px]="isRightPanelCollapsed ? 40 : rightPanelWidth" [class.collapsed]="isRightPanelCollapsed">
+                
+                <!-- Top 10 By Time/Memory Section (only when no node selected) -->
+                <div class="right-section top10-section" *ngIf="!selectedNode">
+                  <div class="section-header">
+                    <span class="title">Top 10 By {{ showMemoryView ? 'Memory' : 'Time' }}</span>
+                    <span class="link" (click)="toggleMemoryView()">⇄ {{ showMemoryView ? 'Time' : 'Memory' }}</span>
+                    <span class="collapse-toggle" (click)="toggleTop10()">{{ isTop10Collapsed ? '∨ 展开' : '∧ 收起' }}</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isTop10Collapsed && !isRightPanelCollapsed">
+                    <!-- Time View -->
+                    <table class="top10-table" *ngIf="!showMemoryView">
+                      <thead>
+                        <tr>
+                          <th>节点</th>
+                          <th>时间</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let node of top10NodesByTime; let i = index" 
+                            (click)="selectNodeById(node.id)" 
+                            [class.selected]="selectedNode?.id === node.id">
+                          <td class="node-name">{{ node.operator_name }}</td>
+                          <td class="node-time">{{ node.time_percentage | number:'1.2-2' }}%</td>
+                        </tr>
+                        <tr *ngIf="!top10NodesByTime?.length">
+                          <td colspan="2" class="text-center text-hint">暂无数据</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <!-- Memory View -->
+                    <table class="top10-table" *ngIf="showMemoryView">
+                      <thead>
+                        <tr>
+                          <th>节点</th>
+                          <th>内存</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let node of top10NodesByMemory; let i = index" 
+                            (click)="selectNodeById(node.id)" 
+                            [class.selected]="selectedNode?.id === node.id">
+                          <td class="node-name">{{ node.operator_name }}</td>
+                          <td class="node-memory">{{ formatBytes(node.metrics?.memory_usage) }}</td>
+                        </tr>
+                        <tr *ngIf="!top10NodesByMemory?.length">
+                          <td colspan="2" class="text-center text-hint">暂无数据</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Summary Section (when no node selected) -->
+                <div class="right-section summary-section" *ngIf="!selectedNode">
+                  <div class="section-header">
+                    <span class="title">
+                      总览
+                      <nb-icon 
+                        *ngIf="analysisData?.summary?.is_profile_complete === false"
+                        icon="alert-triangle-outline" 
+                        status="warning"
+                        class="profile-incomplete-icon"
+                        [nbTooltip]="analysisData?.summary?.profile_completeness_warning || 'Profile 数据不完整，部分指标可能缺失'"
+                        nbTooltipPlacement="left">
+                      </nb-icon>
+                    </span>
+                    <span class="collapse-toggle" (click)="toggleSummary()">{{ isSummaryCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isSummaryCollapsed && !isRightPanelCollapsed">
+                    <!-- Execution Time Bar -->
+                    <div class="summary-row">
+                      <span class="label">Execution time</span>
+                    </div>
+                    <div class="exec-time-bar">
+                      <div class="bar-fill io" [style.width.%]="getScanTimePercentage()"></div>
+                      <div class="bar-fill processing" [style.width.%]="getCpuTimePercentage()"></div>
+                    </div>
+                    
+                    <!-- IO Section (blue dot) - for disaggregated storage -->
+                    <div class="metric-group" *ngIf="hasIoMetrics()">
+                      <div class="metric-header">
+                        <span class="dot io"></span>
+                        <span class="name">IO</span>
+                        <span class="value">{{ formatTimeWithPercent(analysisData?.summary?.query_cumulative_scan_time, getScanTimePercentage()) }}</span>
+                      </div>
+                      <div class="metric-sub-list">
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.io_seek_time">
+                          <span class="metric-label">
+                            IoSeekTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('IoSeekTime')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.io_seek_time }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.local_disk_read_io_time">
+                          <span class="metric-label">
+                            LocalDiskReadIOTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('LocalDiskReadIOTime')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.local_disk_read_io_time }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.remote_read_io_time">
+                          <span class="metric-label">
+                            RemoteReadIOTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('RemoteReadIOTime')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.remote_read_io_time }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Processing Section (yellow dot) -->
+                    <div class="metric-group">
+                      <div class="metric-header">
+                        <span class="dot processing"></span>
+                        <span class="name">Processing</span>
+                        <span class="value">{{ formatTimeWithPercent(analysisData?.summary?.query_cumulative_cpu_time, getCpuTimePercentage()) }}</span>
+                      </div>
+                      <div class="metric-sub-list">
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_execution_wall_time">
+                          <span class="metric-label">
+                            ExecutionWallTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('ExecutionWallTime')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.query_execution_wall_time }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.collect_profile_time">
+                          <span class="metric-label">
+                            CollectProfileTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('CollectProfileTime')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.collect_profile_time }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.planner_total_time">
+                          <span class="metric-label">
+                            PlannerTotalTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="'查询计划生成总耗时'"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.planner_total_time }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_cpu_time">
+                          <span class="metric-label">
+                            QueryCpuTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('QueryCpuTime')"></nb-icon>
+                          </span>
+                          <span>{{ formatTimeWithPercent(analysisData?.summary?.query_cumulative_cpu_time, getCpuTimePercentage()) }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_peak_schedule_time">
+                          <span class="metric-label">
+                            QueryScheduleTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('PeakScheduleTime')"></nb-icon>
+                          </span>
+                          <span>{{ formatTimeWithPercent(analysisData?.summary?.query_peak_schedule_time, getScheduleTimePercentage()) }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_scan_time">
+                          <span class="metric-label">
+                            QueryScanTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('QueryScanTime')"></nb-icon>
+                          </span>
+                          <span>{{ formatTimeWithPercent(analysisData?.summary?.query_cumulative_scan_time, getScanTimePercentage()) }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_cumulative_network_time">
+                          <span class="metric-label">
+                            QueryNetworkTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('QueryNetworkTime')"></nb-icon>
+                          </span>
+                          <span>{{ formatTimeWithPercent(analysisData?.summary?.query_cumulative_network_time, getNetworkTimePercentage()) }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.result_deliver_time">
+                          <span class="metric-label">
+                            ResultDeliverTime
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('ResultDeliverTime')"></nb-icon>
+                          </span>
+                          <span>{{ formatTimeWithPercent(analysisData?.summary?.result_deliver_time, getResultDeliverTimePercentage()) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Diagnosis Summary Link -->
+                    <div class="diagnosis-summary-link" *ngIf="analysisData?.aggregated_diagnostics?.length">
+                      <span class="diag-icon">⚠️</span>
+                      <span class="diag-text">存在有诊断建议的算子</span>
+                      <span class="diag-link" (click)="scrollToDiagnosis()">详情</span>
+                    </div>
+                    
+                    <!-- IO Statistics Section -->
+                    <div class="metric-group io-stats-group" *ngIf="hasIoStatistics()">
+                      <div class="metric-header">
+                        <span class="name">IO</span>
+                      </div>
+                      <div class="metric-sub-list">
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.total_raw_rows_read">
+                          <span class="metric-label">
+                            RawRowsRead
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('RawRowsRead')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.total_raw_rows_read | number }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.total_bytes_read_display">
+                          <span class="metric-label">
+                            DiskReadBytes
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('BytesRead')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.total_bytes_read_display }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.pages_count_memory">
+                          <span class="metric-label">
+                            PagesCountMemory
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('PagesCountMemory')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.pages_count_memory | number }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.pages_count_local_disk">
+                          <span class="metric-label">
+                            PagesCountLocalDisk
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('PagesCountLocalDisk')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.pages_count_local_disk | number }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.pages_count_remote">
+                          <span class="metric-label">
+                            PagesCountRemote
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="getMetricDescription('PagesCountRemote')"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.pages_count_remote | number }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.result_rows">
+                          <span class="metric-label">
+                            ResultRows
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="'返回给客户端的结果行数'"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.result_rows | number }}</span>
+                        </div>
+                        <div class="metric-row-simple" *ngIf="analysisData?.summary?.result_bytes_display">
+                          <span class="metric-label">
+                            ResultBytes
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                     [nbTooltip]="'返回给客户端的结果数据量'"></nb-icon>
+                          </span>
+                          <span>{{ analysisData?.summary?.result_bytes_display }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Other Metrics -->
+                    <div class="metrics-list-simple other-metrics">
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_sum_memory_usage">
+                        <span class="metric-label">
+                          MemoryUsage
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('MemoryUsage')"></nb-icon>
+                        </span>
+                        <span>{{ analysisData?.summary?.query_sum_memory_usage }}</span>
+                      </div>
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.query_spill_bytes">
+                        <span class="metric-label">
+                          SpillBytes
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getMetricDescription('SpillBytes')"></nb-icon>
+                        </span>
+                        <span>{{ analysisData?.summary?.query_spill_bytes }}</span>
+                      </div>
+                      <!-- DataCache Hit Rate (for disaggregated storage-compute clusters) -->
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.datacache_hit_rate !== null">
+                        <span class="metric-label">
+                          DataCache命中率
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getDataCacheTooltip()"
+                                   nbTooltipPlacement="left"></nb-icon>
+                        </span>
+                        <span [class.text-success]="analysisData?.summary?.datacache_hit_rate >= 0.7"
+                              [class.text-warning]="analysisData?.summary?.datacache_hit_rate >= 0.3 && analysisData?.summary?.datacache_hit_rate < 0.7"
+                              [class.text-danger]="analysisData?.summary?.datacache_hit_rate < 0.3">
+                          {{ (analysisData?.summary?.datacache_hit_rate * 100).toFixed(1) }}%
+                        </span>
+                      </div>
+                      <!-- Fallback when no metrics available -->
+                      <div *ngIf="!hasAnyMetric()" class="text-hint text-center py-2">
+                        暂无指标数据
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Node Detail Section (when node is selected) -->
+                <div class="right-section node-detail-section" *ngIf="selectedNode">
+                  <div class="section-header node-detail-header">
+                    <div class="node-title-area">
+                      <span class="title">{{ selectedNode.operator_name }}</span>
+                      <span class="node-id">(plan_node_id={{ selectedNode.plan_node_id }})</span>
+                    </div>
+                    <span class="close-btn" (click)="clearNodeSelection()">✕</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isRightPanelCollapsed">
+                    <!-- Node Tabs using Nebular -->
+                    <nb-tabset class="node-detail-tabs">
+                      <!-- 节点 Tab (Core Metrics - like official UI) -->
+                      <nb-tab tabTitle="节点">
+                        <div class="node-tab-content">
+                          <!-- Execution time section (like official UI) -->
+                          <div class="metric-section" *ngIf="getExecutionTimeBreakdown() as execTime">
+                            <div class="section-title">Execution time</div>
+                            <div class="exec-time-bar-container">
+                              <div class="exec-time-bar">
+                                <ng-container *ngFor="let item of execTime.items">
+                                  <div class="bar-fill" [ngClass]="item.color" [style.width.%]="item.percent"></div>
+                                </ng-container>
+                              </div>
+                            </div>
+                            <div class="exec-time-legend">
+                              <div class="legend-row" *ngFor="let item of execTime.items">
+                                <span class="dot" [ngClass]="item.color"></span>
+                                <span class="legend-label">{{ item.label }}</span>
+                                <span class="legend-value">{{ item.time }}</span>
+                                <span class="legend-percent">{{ item.percent | number:'1.2-2' }}%</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <!-- Core Metrics section -->
+                          <div class="metric-section" *ngIf="getNodeCoreMetrics().length">
+                            <ng-container *ngFor="let metric of getNodeCoreMetrics()">
+                              <div class="metric-row">
+                                <span class="metric-label">
+                                  {{ metric.key }}
+                                  <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                           [nbTooltip]="getMetricDescription(metric.key)" 
+                                           *ngIf="getMetricDescription(metric.key)"></nb-icon>
+                                </span>
+                                <span class="metric-value">{{ metric.value }}</span>
+                              </div>
+                            </ng-container>
+                          </div>
+                          
+                          <!-- Memory section -->
+                          <div class="metric-section" *ngIf="getNodeMemoryMetrics().length">
+                            <div class="section-title">Memory</div>
+                            <ng-container *ngFor="let metric of getNodeMemoryMetrics()">
+                              <div class="metric-row">
+                                <span class="metric-label">{{ metric.key }}</span>
+                                <span class="metric-value">{{ metric.value }}</span>
+                              </div>
+                            </ng-container>
+                          </div>
+                          
+                          <!-- Indexes section (SCAN only) -->
+                          <div class="metric-section" *ngIf="getNodeIndexMetrics().length">
+                            <div class="section-title">Indexes</div>
+                            <ng-container *ngFor="let metric of getNodeIndexMetrics()">
+                              <div class="metric-row">
+                                <span class="metric-label">{{ metric.key }}</span>
+                                <span class="metric-value index-value">{{ metric.value }}</span>
+                              </div>
+                            </ng-container>
+                          </div>
+                          
+                          <!-- Over Consuming Metrics section -->
+                          <div class="metric-section" *ngIf="getOverConsumingMetrics().length">
+                            <div class="section-title">Over Consuming Metrics</div>
+                            <ng-container *ngFor="let metric of getOverConsumingMetrics()">
+                              <div class="metric-row over-consuming" [class.indented]="metric.indent === 1">
+                                <span class="metric-label">{{ metric.key }}</span>
+                                <span class="metric-value time-value">{{ metric.value }}</span>
+                              </div>
+                            </ng-container>
+                          </div>
+                          
+                          <!-- Node Diagnostics -->
+                          <div class="metric-section diagnostics-section" *ngIf="getNodeDiagnostics(selectedNode)?.length">
+                            <div class="section-title">
+                              诊断建议
+                              <span class="count-badge">{{ getNodeDiagnostics(selectedNode).length }}</span>
+                            </div>
+                            <div class="diagnosis-list-inline">
+                              <div *ngFor="let diag of getNodeDiagnostics(selectedNode)" class="diag-item-inline">
+                                <div class="diag-header-inline">
+                                  <span class="diag-badge-inline" [ngClass]="{
+                                    'badge-danger': diag.severity === 'Error',
+                                    'badge-warning': diag.severity === 'Warning',
+                                    'badge-info': diag.severity === 'Info'
+                                  }">{{ diag.rule_id }}</span>
+                                  <span class="diag-name-inline">{{ diag.rule_name }}</span>
+                                </div>
+                                <div class="diag-message-inline">{{ diag.message }}</div>
+                                <div class="diag-suggestions-inline" *ngIf="diag.suggestions?.length">
+                                  <div *ngFor="let suggestion of diag.suggestions" class="suggestion-item">
+                                    💡 {{ suggestion }}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </nb-tab>
+                      
+                      <!-- 节点详情 Tab (All Operators with CommonMetrics + UniqueMetrics) -->
+                      <nb-tab tabTitle="节点详情">
+                        <div class="metrics-list-simple node-detail-content">
+                          <!-- Show operators from pipeline (like official UI) -->
+                          <ng-container *ngFor="let operator of getNodeOperatorsFromPipeline(); let i = index">
+                            <div class="operator-section">
+                              <div class="operator-header">
+                                {{ operator.name }} 
+                                <span *ngIf="operator.plan_node_id">(plan_node_id={{ operator.plan_node_id }})</span>
+                                <span *ngIf="operator.operator_id"> (operator id={{ operator.operator_id }})</span>
+                              </div>
+                              
+                              <!-- CommonMetrics -->
+                              <div class="metrics-group" *ngIf="operator.common_metrics && objectKeys(operator.common_metrics).length">
+                                <div class="metrics-group-header">CommonMetrics:</div>
+                                <div class="metric-row-simple" *ngFor="let key of objectKeys(operator.common_metrics)">
+                                  <span class="metric-label">
+                                    {{ key }}
+                                    <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                             [nbTooltip]="getMetricDescription(key)" 
+                                             *ngIf="getMetricDescription(key)"></nb-icon>
+                                  </span>
+                                  <span>{{ operator.common_metrics[key] }}</span>
+                                </div>
+                              </div>
+                              
+                              <!-- UniqueMetrics -->
+                              <div class="metrics-group" *ngIf="operator.unique_metrics && objectKeys(operator.unique_metrics).length">
+                                <div class="metrics-group-header">UniqueMetrics:</div>
+                                <div class="metric-row-simple" *ngFor="let key of objectKeys(operator.unique_metrics)">
+                                  <span class="metric-label">
+                                    {{ key }}
+                                    <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                             [nbTooltip]="getMetricDescription(key)" 
+                                             *ngIf="getMetricDescription(key)"></nb-icon>
+                                  </span>
+                                  <span>{{ operator.unique_metrics[key] }}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </ng-container>
+                          
+                          <!-- Fallback: show node's own metrics if no operators found -->
+                          <ng-container *ngIf="!getNodeOperatorsFromPipeline().length">
+                            <ng-container *ngIf="selectedNode.metrics">
+                              <div class="metric-category-header">基础指标</div>
+                              <div class="metric-row-simple" *ngFor="let key of getMetricKeys(selectedNode.metrics)">
+                                <span class="metric-label">{{ key }}</span>
+                                <span>{{ formatMetricValue(key, selectedNode.metrics[key]) }}</span>
+                              </div>
+                            </ng-container>
+                            
+                            <ng-container *ngIf="selectedNode.unique_metrics && objectKeys(selectedNode.unique_metrics).length">
+                              <div class="metric-category-header">唯一指标</div>
+                              <div class="metric-row-simple" *ngFor="let key of objectKeys(selectedNode.unique_metrics)">
+                                <span class="metric-label">{{ key }}</span>
+                                <span>{{ formatMetricValue(key, selectedNode.unique_metrics[key]) }}</span>
+                              </div>
+                            </ng-container>
+                          </ng-container>
+                          
+                          <div *ngIf="!getNodeOperatorsFromPipeline().length && !selectedNode.metrics && !selectedNode.unique_metrics" 
+                               class="text-hint text-center py-2">
+                            暂无详细指标
+                          </div>
+                        </div>
+                      </nb-tab>
+                      
+                      <!-- Pipeline Tab (Fragment + Pipeline info like official UI) -->
+                      <nb-tab tabTitle="Pipeline">
+                        <div class="metrics-list-simple pipeline-content">
+                          <!-- Fragment Section -->
+                          <div class="pipeline-section" *ngIf="selectedNode.fragment_id">
+                            <div class="pipeline-section-header">
+                              Fragment {{ selectedNode.fragment_id }}:
+                            </div>
+                            
+                            <!-- Fragment basic info -->
+                            <ng-container *ngFor="let metric of getFragmentMetrics()">
+                              <div class="metric-row-simple">
+                                <span class="metric-label">
+                                  {{ metric.key }}
+                                  <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                           [nbTooltip]="getMetricDescription(metric.key)" 
+                                           *ngIf="getMetricDescription(metric.key)"></nb-icon>
+                                </span>
+                                <span>{{ metric.value }}</span>
+                              </div>
+                            </ng-container>
+                          </div>
+                          
+                          <!-- Pipeline Section -->
+                          <div class="pipeline-section" *ngIf="selectedNode.pipeline_id">
+                            <div class="pipeline-section-header">
+                              Pipeline (id={{ selectedNode.pipeline_id }}):
+                            </div>
+                            
+                            <!-- Pipeline metrics -->
+                            <ng-container *ngFor="let metric of getPipelineMetrics()">
+                              <div class="metric-row-simple">
+                                <span class="metric-label">
+                                  {{ metric.key }}
+                                  <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                           [nbTooltip]="getMetricDescription(metric.key)" 
+                                           *ngIf="getMetricDescription(metric.key)"></nb-icon>
+                                </span>
+                                <span>{{ metric.value }}</span>
+                              </div>
+                            </ng-container>
+                          </div>
+                          
+                          <!-- Fallback: basic node info if no fragment/pipeline -->
+                          <ng-container *ngIf="!selectedNode.fragment_id && !selectedNode.pipeline_id">
+                            <div class="metric-row-simple">
+                              <span class="metric-label">Depth</span>
+                              <span>{{ selectedNode.depth }}</span>
+                            </div>
+                            <div class="metric-row-simple">
+                              <span class="metric-label">NodeType</span>
+                              <span>{{ selectedNode.node_type }}</span>
+                            </div>
+                            
+                            <!-- Hotspot info -->
+                            <div class="metric-row-simple" *ngIf="selectedNode.is_hotspot">
+                              <span class="metric-label">IsHotspot</span>
+                              <span class="badge badge-danger">Yes</span>
+                            </div>
+                            
+                            <div class="text-hint text-center py-2">
+                              Pipeline 信息暂不可用
+                            </div>
+                          </ng-container>
+                        </div>
+                      </nb-tab>
+                    </nb-tabset>
+                  </div>
+                </div>
+
+                <!-- Diagnosis Section - Only show when NO node is selected (aggregated view) -->
+                <div class="right-section diagnosis-section" *ngIf="!selectedNode && getCurrentDiagnosticsCount() > 0">
+                  <div class="section-header">
+                    <span class="title">诊断建议</span>
+                    <span class="warning-badge">{{ getCurrentDiagnosticsCount() }}</span>
+                    <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
+                      <div *ngIf="analysisData?.aggregated_diagnostics?.length" class="diagnosis-list">
+                        <div *ngFor="let diag of analysisData?.aggregated_diagnostics" class="diagnosis-item-detailed">
+                          <div class="diag-header">
+                            <span class="diag-badge" [ngClass]="{
+                              'badge-danger': diag.severity === 'Error',
+                              'badge-warning': diag.severity === 'Warning',
+                              'badge-info': diag.severity === 'Info'
+                            }">{{ diag.rule_id }}</span>
+                            <span class="diag-name">{{ diag.rule_name }}</span>
+                            <span class="node-count-badge" *ngIf="diag.node_count > 1">×{{ diag.node_count }} 个节点</span>
+                          </div>
+                          <div class="diag-message">{{ diag.message }}</div>
+                          <div class="diag-reason" *ngIf="diag.reason">
+                            <nb-icon icon="info-outline" class="text-info"></nb-icon>
+                            <span class="reason-text">{{ diag.reason }}</span>
+                          </div>
+                          <div class="diag-affected-nodes" *ngIf="diag.affected_nodes?.length">
+                            <nb-icon icon="pin-outline" class="text-hint"></nb-icon>
+                            <span class="text-hint">涉及节点: {{ diag.affected_nodes.join(', ') }}</span>
+                          </div>
+                          <div class="diag-suggestions" *ngIf="diag.suggestions?.length">
+                            <div *ngFor="let suggestion of diag.suggestions" class="diag-suggestion">
+                              <span class="icon">💡</span>
+                              <span>{{ suggestion }}</span>
+                            </div>
+                          </div>
+                          <div class="diag-params" *ngIf="diag.parameter_suggestions?.length">
+                            <div *ngFor="let param of diag.parameter_suggestions" class="param-item">
+                              <div class="param-header">
+                                <nb-icon icon="settings-2-outline" class="text-primary"></nb-icon>
+                                <span class="param-name">{{ param.name }}</span>
+                                <span class="param-type badge badge-basic">{{ param.param_type }}</span>
+                              </div>
+                              <div class="param-description" *ngIf="param.description">
+                                <span class="text-hint">{{ param.description }}</span>
+                              </div>
+                              <div class="param-impact" *ngIf="param.impact">
+                                <nb-icon icon="trending-up-outline" class="text-success"></nb-icon>
+                                <span class="impact-text">{{ param.impact }}</span>
+                              </div>
+                              <div class="param-value-row">
+                                <span class="text-hint" *ngIf="param.current">当前值: <code>{{ param.current }}</code> →</span>
+                                <span class="text-hint">推荐值:</span>
+                                <code class="recommended-value">{{ param.recommended }}</code>
+                              </div>
+                              <div class="param-command" *ngIf="param.command">
+                                <code class="command-text" (click)="copyToClipboard(param.command)" nbTooltip="点击复制">{{ param.command }}</code>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div *ngIf="!analysisData?.aggregated_diagnostics?.length && analysisData?.suggestions?.length" class="diagnosis-list">
+                        <div *ngFor="let suggestion of analysisData?.suggestions" class="diagnosis-item">
+                          <span class="icon">💡</span>
+                          <span class="text">{{ suggestion }}</span>
+                        </div>
+                      </div>
+                      <div *ngIf="!analysisData?.aggregated_diagnostics?.length && !analysisData?.suggestions?.length" class="empty-diagnosis">
+                        暂无诊断建议
+                      </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
           </div>
-        </nb-card-body>
-      </nb-card>
+        </nb-tab>
+        
+        <!-- Tab 2: Profile 原始文本 -->
+        <nb-tab tabTitle="Profile详情" tabIcon="file-text-outline">
+          <nb-card accent="basic" class="m-0">
+            <nb-card-body class="profile-scroll-container position-relative">
+              <div *ngIf="profileDetailLoading" class="text-center py-4">
+                <nb-spinner status="primary" size="large"></nb-spinner>
+                <p class="mt-3 text-hint">加载 Profile 详情中...</p>
+              </div>
+
+              <div class="profile-copy-overlay" *ngIf="!profileDetailLoading" style="position: absolute; top: 0.5rem; right: 0.5rem; left: auto; z-index: 10;">
+                <button
+                  nbButton
+                  status="basic"
+                  size="small"
+                  (click)="copyProfileToClipboard()"
+                  [disabled]="!currentProfileDetail"
+                  nbTooltip="复制到剪贴板"
+                  nbTooltipPlacement="left"
+                >
+                  <nb-icon icon="copy-outline"></nb-icon>
+                </button>
+              </div>
+              <div *ngIf="!profileDetailLoading" class="profile-pre-wrapper">
+                <div *ngIf="!currentProfileDetail || currentProfileDetail.trim() === ''" class="text-center py-4 text-hint">
+                  <nb-icon icon="file-text-outline" status="basic" class="mb-2"></nb-icon>
+                  <p>暂无 Profile 数据</p>
+                </div>
+                <pre *ngIf="currentProfileDetail && currentProfileDetail.trim() !== ''" class="profile-content-text">{{ currentProfileDetail }}</pre>
+              </div>
+            </nb-card-body>
+          </nb-card>
+        </nb-tab>
+      </nb-tabset>
     </nb-card-body>
   </nb-card>
 </ng-template>

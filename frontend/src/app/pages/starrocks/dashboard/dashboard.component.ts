@@ -351,7 +351,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   navigateToBackends(clusterId?: number): void {
     if (!this.canViewBackends) {
-      this.toastrService.warning('您没有查看 Backend 节点的权限', '提示');
+      this.toastrService.warning('您没有查看计算节点的权限', '提示');
       return;
     }
     

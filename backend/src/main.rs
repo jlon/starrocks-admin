@@ -108,6 +108,7 @@ pub struct AppState {
         handlers::variables::update_variable,
         handlers::profile::list_profiles,
         handlers::profile::get_profile,
+        handlers::profile::analyze_profile_handler,
         handlers::system_management::get_system_functions,
         handlers::system_management::get_system_function_detail,
         handlers::system::get_runtime_info,
@@ -489,6 +490,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Profiles
         .route("/api/clusters/profiles", get(handlers::profile::list_profiles))
         .route("/api/clusters/profiles/:query_id", get(handlers::profile::get_profile))
+        .route(
+            "/api/clusters/profiles/:query_id/analyze",
+            get(handlers::profile::analyze_profile_handler),
+        )
         // Sessions
         .route("/api/clusters/sessions", get(handlers::sessions::get_sessions))
         .route("/api/clusters/sessions/:session_id", delete(handlers::sessions::kill_session))

@@ -518,8 +518,8 @@ export class ClusterOverviewComponent implements OnInit, OnDestroy, AfterViewIni
   
   getDiskCardDescription(): string {
     return this.selectedDiskMetric === 'percentage' 
-      ? 'BE节点本地磁盘最大使用率（点击切换）'
-      : '使用率最高的BE节点本地缓存数据量（点击切换）';
+      ? '计算节点本地磁盘最大使用率（点击切换）'
+      : '使用率最高节点的本地缓存数据量（点击切换）';
   }
   
   getDiskCardStatus(): string {

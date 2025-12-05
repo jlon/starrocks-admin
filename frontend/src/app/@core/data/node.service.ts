@@ -164,6 +164,104 @@ export interface ProfileDetail {
   profile_content: string;
 }
 
+export interface ProfileAnalysisNode {
+  id: string;
+  operator_name: string;
+  node_type: string;
+  plan_node_id: number;
+  parent_plan_node_id: number | null;
+  metrics: any;
+  children: string[];
+  depth: number;
+  is_hotspot: boolean;
+  hotspot_severity: string;
+  fragment_id: string;
+  pipeline_id: string;
+  time_percentage: number;
+  is_most_consuming: boolean;
+  is_second_most_consuming: boolean;
+  unique_metrics: any;
+  // Whether this node has diagnostic issues (for UI warning indicator)
+  has_diagnostic?: boolean;
+  // List of diagnostic rule IDs associated with this node
+  diagnostic_ids?: string[];
+}
+
+export interface ProfileExecutionTree {
+  root: ProfileAnalysisNode;
+  nodes: ProfileAnalysisNode[];
+}
+
+// Diagnostic result from rule engine
+export interface DiagnosticResult {
+  rule_id: string;
+  rule_name: string;
+  severity: string;
+  node_path: string;
+  // Plan node ID for associating with execution tree node
+  plan_node_id?: number;
+  // Summary of the diagnostic issue (诊断结果概要)
+  message: string;
+  // Detailed explanation of why this issue occurs (详细诊断原因)
+  reason: string;
+  // Recommended actions to fix the issue (建议措施)
+  suggestions: string[];
+  parameter_suggestions?: ParameterSuggestion[];
+}
+
+// Parameter suggestion with description and impact
+export interface ParameterSuggestion {
+  name: string;
+  param_type: string;
+  current?: string;
+  recommended: string;
+  command: string;
+  description: string;  // Human-readable description of what this parameter does
+  impact: string;       // Expected impact of changing this parameter
+}
+
+// Aggregated diagnostic for overview display
+export interface AggregatedDiagnostic {
+  rule_id: string;
+  rule_name: string;
+  severity: string;
+  // Aggregated summary message
+  message: string;
+  // Detailed explanation
+  reason: string;
+  // List of affected node paths
+  affected_nodes: string[];
+  // Number of affected nodes
+  node_count: number;
+  // Merged suggestions (deduplicated)
+  suggestions: string[];
+  parameter_suggestions?: ParameterSuggestion[];
+}
+
+export interface ProfileAnalysisResult {
+  hotspots: any[];
+  conclusion: string;
+  suggestions: string[];
+  performance_score: number;
+  execution_tree: ProfileExecutionTree;
+  summary: {
+    query_id: string;
+    top_time_consuming_nodes: Array<{
+      operator_name: string;
+      time_percentage: number;
+    }>;
+    [key: string]: any;
+  };
+  // Rule-based diagnostics with detailed reasons (all diagnostics)
+  diagnostics?: DiagnosticResult[];
+  // Aggregated diagnostics by rule_id for overview display
+  aggregated_diagnostics?: AggregatedDiagnostic[];
+  // Node-level diagnostics mapping (plan_node_id -> diagnostics)
+  node_diagnostics?: { [planNodeId: number]: DiagnosticResult[] };
+  // Raw profile content for PROFILE tab display
+  profile_content?: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -289,5 +387,9 @@ export class NodeService {
 
   getProfile(queryId: string): Observable<ProfileDetail> {
     return this.api.get<ProfileDetail>(`/clusters/profiles/${queryId}`);
+  }
+
+  analyzeProfile(queryId: string): Observable<ProfileAnalysisResult> {
+    return this.api.get<ProfileAnalysisResult>(`/clusters/profiles/${queryId}/analyze`);
   }
 }

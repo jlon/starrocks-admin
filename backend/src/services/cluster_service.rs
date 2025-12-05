@@ -412,6 +412,7 @@ impl ClusterService {
     // Get cluster health
     pub async fn get_cluster_health(&self, cluster_id: i64) -> ApiResult<ClusterHealth> {
         let cluster = self.get_cluster(cluster_id).await?;
+        let is_shared_data = cluster.is_shared_data();
         let client = StarRocksClient::new(cluster, self.mysql_pool_manager.clone());
 
         let mut checks = Vec::new();
@@ -463,7 +464,8 @@ impl ClusterService {
             },
         }
 
-        // Check Backend nodes
+        // Check compute nodes (BE in shared-nothing, CN in shared-data)
+        let node_type = if is_shared_data { "CN" } else { "BE" };
         match client.get_backends().await {
             Ok(backends) => {
                 let alive_count = backends.iter().filter(|b| b.alive == "true").count();
@@ -471,33 +473,33 @@ impl ClusterService {
 
                 if alive_count == total_count {
                     checks.push(HealthCheck {
-                        name: "Backend Nodes".to_string(),
+                        name: "Compute Nodes".to_string(),
                         status: "ok".to_string(),
-                        message: format!("All {} BE nodes are online", total_count),
+                        message: format!("All {} {} nodes are online", total_count, node_type),
                     });
                 } else if alive_count > 0 {
                     checks.push(HealthCheck {
-                        name: "Backend Nodes".to_string(),
+                        name: "Compute Nodes".to_string(),
                         status: "warning".to_string(),
-                        message: format!("{}/{} BE nodes are online", alive_count, total_count),
+                        message: format!("{}/{} {} nodes are online", alive_count, total_count, node_type),
                     });
                     if overall_status == HealthStatus::Healthy {
                         overall_status = HealthStatus::Warning;
                     }
                 } else {
                     checks.push(HealthCheck {
-                        name: "Backend Nodes".to_string(),
+                        name: "Compute Nodes".to_string(),
                         status: "critical".to_string(),
-                        message: "No BE nodes are online".to_string(),
+                        message: format!("No {} nodes are online", node_type),
                     });
                     overall_status = HealthStatus::Critical;
                 }
             },
             Err(e) => {
                 checks.push(HealthCheck {
-                    name: "Backend Nodes".to_string(),
+                    name: "Compute Nodes".to_string(),
                     status: "warning".to_string(),
-                    message: format!("Failed to check BE nodes: {}", e),
+                    message: format!("Failed to check {} nodes: {}", node_type, e),
                 });
                 if overall_status == HealthStatus::Healthy {
                     overall_status = HealthStatus::Warning;
@@ -555,7 +557,8 @@ impl ClusterService {
                             },
                         }
 
-                        // Try to check Backend nodes
+                        // Try to check compute nodes (BE in shared-nothing, CN in shared-data)
+                        let node_type = if cluster.is_shared_data() { "CN" } else { "BE" };
                         match client.get_backends().await {
                             Ok(backends) => {
                                 let alive_count =
@@ -564,26 +567,26 @@ impl ClusterService {
 
                                 if total_count == 0 {
                                     checks.push(HealthCheck {
-                                        name: "Backend Nodes".to_string(),
+                                        name: "Compute Nodes".to_string(),
                                         status: "warning".to_string(),
-                                        message: "No BE nodes found".to_string(),
+                                        message: format!("No {} nodes found", node_type),
                                     });
                                     if overall_status == HealthStatus::Healthy {
                                         overall_status = HealthStatus::Warning;
                                     }
                                 } else if alive_count == total_count {
                                     checks.push(HealthCheck {
-                                        name: "Backend Nodes".to_string(),
+                                        name: "Compute Nodes".to_string(),
                                         status: "ok".to_string(),
-                                        message: format!("All {} BE nodes are online", total_count),
+                                        message: format!("All {} {} nodes are online", total_count, node_type),
                                     });
                                 } else if alive_count > 0 {
                                     checks.push(HealthCheck {
-                                        name: "Backend Nodes".to_string(),
+                                        name: "Compute Nodes".to_string(),
                                         status: "warning".to_string(),
                                         message: format!(
-                                            "{}/{} BE nodes are online",
-                                            alive_count, total_count
+                                            "{}/{} {} nodes are online",
+                                            alive_count, total_count, node_type
                                         ),
                                     });
                                     if overall_status == HealthStatus::Healthy {
@@ -591,18 +594,18 @@ impl ClusterService {
                                     }
                                 } else {
                                     checks.push(HealthCheck {
-                                        name: "Backend Nodes".to_string(),
+                                        name: "Compute Nodes".to_string(),
                                         status: "critical".to_string(),
-                                        message: "No BE nodes are online".to_string(),
+                                        message: format!("No {} nodes are online", node_type),
                                     });
                                     overall_status = HealthStatus::Critical;
                                 }
                             },
                             Err(e) => {
                                 checks.push(HealthCheck {
-                                    name: "Backend Nodes".to_string(),
+                                    name: "Compute Nodes".to_string(),
                                     status: "warning".to_string(),
-                                    message: format!("Failed to check BE nodes: {}", e),
+                                    message: format!("Failed to check {} nodes: {}", node_type, e),
                                 });
                                 if overall_status == HealthStatus::Healthy {
                                     overall_status = HealthStatus::Warning;

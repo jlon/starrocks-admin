@@ -575,9 +575,17 @@
                                 <span class="param-name">{{ param.name }}</span>
                                 <span class="param-type badge badge-basic">{{ param.param_type }}</span>
                               </div>
-                              <div class="param-value">
+                              <div class="param-description" *ngIf="param.description">
+                                <span class="text-hint">{{ param.description }}</span>
+                              </div>
+                              <div class="param-impact" *ngIf="param.impact">
+                                <nb-icon icon="trending-up-outline" class="text-success"></nb-icon>
+                                <span class="impact-text">{{ param.impact }}</span>
+                              </div>
+                              <div class="param-value-row">
+                                <span class="text-hint" *ngIf="param.current">当前值: <code>{{ param.current }}</code> →</span>
                                 <span class="text-hint">推荐值:</span>
-                                <code>{{ param.recommended }}</code>
+                                <code class="recommended-value">{{ param.recommended }}</code>
                               </div>
                               <div class="param-command" *ngIf="param.command">
                                 <code class="command-text" (click)="copyToClipboard(param.command)" nbTooltip="点击复制">{{ param.command }}</code>
@@ -626,9 +634,17 @@
                                 <span class="param-name">{{ param.name }}</span>
                                 <span class="param-type badge badge-basic">{{ param.param_type }}</span>
                               </div>
-                              <div class="param-value">
+                              <div class="param-description" *ngIf="param.description">
+                                <span class="text-hint">{{ param.description }}</span>
+                              </div>
+                              <div class="param-impact" *ngIf="param.impact">
+                                <nb-icon icon="trending-up-outline" class="text-success"></nb-icon>
+                                <span class="impact-text">{{ param.impact }}</span>
+                              </div>
+                              <div class="param-value-row">
+                                <span class="text-hint" *ngIf="param.current">当前值: <code>{{ param.current }}</code> →</span>
                                 <span class="text-hint">推荐值:</span>
-                                <code>{{ param.recommended }}</code>
+                                <code class="recommended-value">{{ param.recommended }}</code>
                               </div>
                               <div class="param-command" *ngIf="param.command">
                                 <code class="command-text" (click)="copyToClipboard(param.command)" nbTooltip="点击复制">{{ param.command }}</code>

@@ -7,6 +7,47 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // ============================================================================
+// Session Variable Information
+// ============================================================================
+
+/// Information about a non-default session variable
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SessionVariableInfo {
+    /// Default value of the variable
+    #[serde(rename = "defaultValue")]
+    pub default_value: serde_json::Value,
+    /// Actual value set for this session
+    #[serde(rename = "actualValue")]
+    pub actual_value: serde_json::Value,
+}
+
+impl SessionVariableInfo {
+    /// Check if the actual value matches a given string value (case-insensitive for booleans)
+    pub fn actual_value_is(&self, expected: &str) -> bool {
+        match &self.actual_value {
+            serde_json::Value::Bool(b) => {
+                let expected_lower = expected.to_lowercase();
+                (*b && expected_lower == "true") || (!*b && expected_lower == "false")
+            }
+            serde_json::Value::String(s) => s.eq_ignore_ascii_case(expected),
+            serde_json::Value::Number(n) => n.to_string() == expected,
+            _ => false,
+        }
+    }
+    
+    /// Get actual value as string
+    pub fn actual_value_str(&self) -> String {
+        match &self.actual_value {
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Number(n) => n.to_string(),
+            serde_json::Value::Null => "null".to_string(),
+            _ => self.actual_value.to_string(),
+        }
+    }
+}
+
+// ============================================================================
 // Core Profile Structure
 // ============================================================================
 
@@ -39,6 +80,12 @@ pub struct ProfileSummary {
     pub default_db: Option<String>,
     
     pub variables: HashMap<String, String>,
+    
+    /// Non-default session variables with their default and actual values
+    /// Key: variable name, Value: (default_value, actual_value)
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    #[serde(default)]
+    pub non_default_variables: HashMap<String, SessionVariableInfo>,
     
     // Memory metrics
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -446,6 +493,12 @@ pub struct ParameterTuningSuggestion {
     pub current: Option<String>,
     pub recommended: String,
     pub command: String,
+    /// Human-readable description of what this parameter does
+    #[serde(default)]
+    pub description: String,
+    /// Expected impact of changing this parameter
+    #[serde(default)]
+    pub impact: String,
 }
 
 // ============================================================================

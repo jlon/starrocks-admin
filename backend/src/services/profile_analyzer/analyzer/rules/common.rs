@@ -117,13 +117,7 @@ impl DiagnosticRule for G002HighMemory {
                     "检查 HashTable 或中间结果是否过大".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "query_mem_limit".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "8589934592".to_string(),
-                        command: "SET query_mem_limit = 8589934592;".to_string(),
-                    },
+                    ParameterSuggestion::session("query_mem_limit", "8589934592"),
                 ],
             })
         } else {
@@ -176,13 +170,13 @@ impl DiagnosticRule for G003ExecutionSkew {
                     "考虑增加并行度".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "pipeline_dop".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "0".to_string(),
-                        command: "SET pipeline_dop = 0; -- 自适应并行度".to_string(),
-                    },
+                    ParameterSuggestion::new(
+                        "pipeline_dop",
+                        ParameterType::Session,
+                        None,
+                        "0",
+                        "SET pipeline_dop = 0; -- 自适应并行度"
+                    ),
                 ],
             })
         } else {
@@ -284,7 +278,8 @@ mod tests {
             diagnostic_ids: vec![],
         };
         
-        let context = RuleContext { node: &node };
+        let session_variables = std::collections::HashMap::new();
+        let context = RuleContext { node: &node, session_variables: &session_variables };
         let result = rule.evaluate(&context);
         
         assert!(result.is_some(), "G001 should trigger for 99.84% time percentage");

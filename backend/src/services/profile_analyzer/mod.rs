@@ -136,6 +136,8 @@ pub fn analyze_profile(profile_text: &str) -> Result<ProfileAnalysisResponse, St
                     current: p.current.clone(),
                     recommended: p.recommended.clone(),
                     command: p.command.clone(),
+                    description: p.description.clone(),
+                    impact: p.impact.clone(),
                 }
             }).collect(),
         }

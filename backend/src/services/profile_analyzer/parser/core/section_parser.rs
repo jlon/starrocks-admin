@@ -2,7 +2,7 @@
 //! 
 //! Parses Summary, Planner, and Execution sections from profile text.
 
-use crate::services::profile_analyzer::models::{ProfileSummary, PlannerInfo, ExecutionInfo};
+use crate::services::profile_analyzer::models::{ProfileSummary, PlannerInfo, ExecutionInfo, SessionVariableInfo};
 use crate::services::profile_analyzer::parser::error::{ParseError, ParseResult};
 use crate::services::profile_analyzer::parser::core::ValueParser;
 use once_cell::sync::Lazy;
@@ -29,6 +29,13 @@ impl SectionParser {
             }
         }
         
+        // Parse NonDefaultSessionVariables JSON if present
+        let non_default_variables = fields.get("NonDefaultSessionVariables")
+            .and_then(|json_str| {
+                serde_json::from_str::<HashMap<String, SessionVariableInfo>>(json_str).ok()
+            })
+            .unwrap_or_default();
+        
         Ok(ProfileSummary {
             query_id: fields.get("Query ID").cloned().unwrap_or_default(),
             start_time: fields.get("Start Time").cloned().unwrap_or_default(),
@@ -41,6 +48,7 @@ impl SectionParser {
             user: fields.get("User").cloned(),
             default_db: fields.get("Default Db").cloned(),
             variables: HashMap::new(),
+            non_default_variables,
             query_allocated_memory: None,
             query_peak_memory: None,
             total_time_ms: Self::parse_total_time_ms(&fields.get("Total").cloned().unwrap_or_default()),

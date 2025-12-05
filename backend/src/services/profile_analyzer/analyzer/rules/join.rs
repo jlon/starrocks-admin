@@ -136,13 +136,7 @@ impl DiagnosticRule for J003HashTableTooLarge {
                     "启用 Spill 功能避免 OOM".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_spill".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_spill = true;".to_string(),
-                    },
+                    ParameterSuggestion::session("enable_spill", "true"),
                 ],
             })
         } else {
@@ -187,20 +181,8 @@ impl DiagnosticRule for J004NoRuntimeFilter {
                     "检查 Build 端行数是否超过阈值".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_global_runtime_filter".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_global_runtime_filter = true;".to_string(),
-                    },
-                    ParameterSuggestion {
-                        name: "runtime_join_filter_push_down_limit".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "10000000".to_string(),
-                        command: "SET runtime_join_filter_push_down_limit = 10000000;".to_string(),
-                    },
+                    ParameterSuggestion::session("enable_global_runtime_filter", "true"),
+                    ParameterSuggestion::session("runtime_join_filter_push_down_limit", "10000000"),
                 ],
             })
         } else {
@@ -420,13 +402,13 @@ impl DiagnosticRule for J008RFMemoryHigh {
                 reason: "Runtime Filter 占用内存过高，可能是 Filter 数量过多或单个 Filter 过大。".to_string(),
                 suggestions: vec!["降低 runtime_filter_max_size 配置".to_string(), "检查 Join 键基数是否过高".to_string()],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "runtime_filter_max_size".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "67108864".to_string(),
-                        command: "SET runtime_filter_max_size = 67108864; -- 64MB".to_string(),
-                    },
+                    ParameterSuggestion::new(
+                        "runtime_filter_max_size",
+                        ParameterType::Session,
+                        None,
+                        "67108864",
+                        "SET runtime_filter_max_size = 67108864; -- 64MB"
+                    ),
                 ],
             })
         } else { None }

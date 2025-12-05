@@ -3,7 +3,73 @@
 //! Rules that evaluate the entire query profile.
 
 use crate::services::profile_analyzer::models::*;
-use super::{RuleSeverity, ParameterSuggestion, ParameterType, parse_duration_ms, format_bytes, format_duration_ms};
+use super::{RuleSeverity, ParameterSuggestion, ParameterType, parse_duration_ms, format_bytes, format_duration_ms, get_parameter_metadata};
+
+/// Known default values for common StarRocks session parameters
+fn get_parameter_default(name: &str) -> Option<&'static str> {
+    match name {
+        // DataCache related
+        "enable_scan_datacache" => Some("true"),
+        "enable_populate_datacache" => Some("true"),
+        
+        // Query optimization
+        "enable_query_cache" => Some("false"),
+        "enable_adaptive_sink_dop" => Some("false"),
+        "enable_runtime_adaptive_dop" => Some("false"),
+        "enable_spill" => Some("false"),
+        
+        _ => None,
+    }
+}
+
+/// Helper function to create a parameter suggestion only if not already set to recommended value
+/// Also checks against known default values to avoid redundant suggestions
+fn suggest_parameter_if_needed(
+    profile: &Profile,
+    name: &str,
+    recommended: &str,
+    command: &str,
+) -> Option<ParameterSuggestion> {
+    // Check if already set to recommended value
+    if let Some(info) = profile.summary.non_default_variables.get(name) {
+        if info.actual_value_is(recommended) {
+            return None; // Already configured correctly
+        }
+        // Get parameter metadata
+        let metadata = get_parameter_metadata(name);
+        // Return suggestion with current value
+        return Some(ParameterSuggestion {
+            name: name.to_string(),
+            param_type: ParameterType::Session,
+            current: Some(info.actual_value_str()),
+            recommended: recommended.to_string(),
+            command: command.to_string(),
+            description: metadata.description,
+            impact: metadata.impact,
+        });
+    }
+    
+    // Parameter not in non_default_variables, check if default matches recommendation
+    if let Some(default) = get_parameter_default(name) {
+        if default.eq_ignore_ascii_case(recommended) {
+            return None; // Using default value which matches recommendation
+        }
+    }
+    
+    // Get parameter metadata
+    let metadata = get_parameter_metadata(name);
+    
+    // Parameter not set and default doesn't match, suggest it
+    Some(ParameterSuggestion {
+        name: name.to_string(),
+        param_type: ParameterType::Session,
+        current: None,
+        recommended: recommended.to_string(),
+        command: command.to_string(),
+        description: metadata.description,
+        impact: metadata.impact,
+    })
+}
 
 /// Query-level rule trait
 pub trait QueryRule: Send + Sync {
@@ -52,20 +118,14 @@ impl QueryRule for Q001LongRunning {
                     "检查是否存在数据倾斜".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "query_timeout".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "600".to_string(),
-                        command: "SET query_timeout = 600;".to_string(),
-                    },
-                    ParameterSuggestion {
-                        name: "query_mem_limit".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "8589934592".to_string(),
-                        command: "SET query_mem_limit = 8589934592; -- 8GB".to_string(),
-                    },
+                    ParameterSuggestion::session("query_timeout", "600"),
+                    ParameterSuggestion::new(
+                        "query_mem_limit",
+                        ParameterType::Session,
+                        None,
+                        "8589934592",
+                        "SET query_mem_limit = 8589934592; -- 8GB"
+                    ),
                 ],
             })
         } else {
@@ -102,20 +162,14 @@ impl QueryRule for Q002HighMemory {
                     "优化查询减少中间结果".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_spill".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_spill = true;".to_string(),
-                    },
-                    ParameterSuggestion {
-                        name: "query_mem_limit".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "17179869184".to_string(),
-                        command: "SET query_mem_limit = 17179869184; -- 16GB".to_string(),
-                    },
+                    ParameterSuggestion::session("enable_spill", "true"),
+                    ParameterSuggestion::new(
+                        "query_mem_limit",
+                        ParameterType::Session,
+                        None,
+                        "17179869184",
+                        "SET query_mem_limit = 17179869184; -- 16GB"
+                    ),
                 ],
             })
         } else {
@@ -154,13 +208,13 @@ impl QueryRule for Q003QuerySpill {
                     "检查 Spill 是否影响性能".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "query_mem_limit".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "8589934592".to_string(),
-                        command: "SET query_mem_limit = 8589934592; -- 8GB".to_string(),
-                    },
+                    ParameterSuggestion::new(
+                        "query_mem_limit",
+                        ParameterType::Session,
+                        None,
+                        "8589934592",
+                        "SET query_mem_limit = 8589934592; -- 8GB"
+                    ),
                 ],
             })
         } else {
@@ -206,15 +260,13 @@ impl QueryRule for Q005ScanDominates {
                     "考虑创建物化视图".to_string(),
                     "检查存储性能".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_scan_datacache".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_scan_datacache = true;".to_string(),
-                    },
-                ],
+                // Only suggest if not already enabled
+                parameter_suggestions: suggest_parameter_if_needed(
+                    profile,
+                    "enable_scan_datacache",
+                    "true",
+                    "SET enable_scan_datacache = true;"
+                ).into_iter().collect(),
             })
         } else {
             None
@@ -287,13 +339,13 @@ impl QueryRule for Q004LowCPU {
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["检查是否存在等待".to_string(), "增加并行度".to_string()],
                 parameter_suggestions: vec![
-                    super::ParameterSuggestion {
-                        name: "pipeline_dop".to_string(),
-                        param_type: super::ParameterType::Session,
-                        current: None,
-                        recommended: "0".to_string(),
-                        command: "SET pipeline_dop = 0; -- auto".to_string(),
-                    },
+                    ParameterSuggestion::new(
+                        "pipeline_dop",
+                        ParameterType::Session,
+                        None,
+                        "0",
+                        "SET pipeline_dop = 0; -- auto"
+                    ),
                 ],
             })
         } else { None }
@@ -320,13 +372,7 @@ impl QueryRule for Q007ProfileCollectSlow {
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["降低 pipeline_profile_level".to_string()],
                 parameter_suggestions: vec![
-                    super::ParameterSuggestion {
-                        name: "pipeline_profile_level".to_string(),
-                        param_type: super::ParameterType::Session,
-                        current: None,
-                        recommended: "1".to_string(),
-                        command: "SET pipeline_profile_level = 1;".to_string(),
-                    },
+                    ParameterSuggestion::session("pipeline_profile_level", "1"),
                 ],
             })
         } else { None }

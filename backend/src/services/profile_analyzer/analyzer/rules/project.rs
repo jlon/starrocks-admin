@@ -68,13 +68,13 @@ impl DiagnosticRule for L001LocalExchangeMemory {
                     "调整 pipeline_dop 参数".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "pipeline_dop".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "0".to_string(),
-                        command: "SET pipeline_dop = 0; -- auto".to_string(),
-                    },
+                    ParameterSuggestion::new(
+                        "pipeline_dop",
+                        ParameterType::Session,
+                        None,
+                        "0",
+                        "SET pipeline_dop = 0; -- auto"
+                    ),
                 ],
             })
         } else { None }

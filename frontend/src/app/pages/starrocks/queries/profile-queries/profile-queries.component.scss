@@ -883,6 +883,56 @@
               }
             }
             
+            .param-description {
+              font-size: 11px;
+              margin-bottom: 4px;
+              padding-left: 20px;
+              color: #666;
+              line-height: 1.4;
+            }
+            
+            .param-impact {
+              display: flex;
+              align-items: flex-start;
+              gap: 4px;
+              font-size: 11px;
+              margin-bottom: 6px;
+              padding-left: 20px;
+              
+              nb-icon {
+                font-size: 12px;
+                flex-shrink: 0;
+                margin-top: 1px;
+              }
+              
+              .impact-text {
+                color: #00d68f;
+                line-height: 1.4;
+              }
+            }
+            
+            .param-value-row {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              font-size: 11px;
+              margin-bottom: 4px;
+              padding-left: 20px;
+              flex-wrap: wrap;
+              
+              code {
+                background: rgba(143, 150, 170, 0.1);
+                padding: 1px 4px;
+                border-radius: 2px;
+                font-family: 'Monaco', 'Menlo', monospace;
+              }
+              
+              .recommended-value {
+                color: #0095ff;
+                font-weight: 600;
+              }
+            }
+            
             .param-value {
               font-size: 11px;
               margin-bottom: 4px;
@@ -897,6 +947,8 @@
             }
             
             .param-command {
+              padding-left: 20px;
+              
               .command-text {
                 display: block;
                 font-size: 11px;

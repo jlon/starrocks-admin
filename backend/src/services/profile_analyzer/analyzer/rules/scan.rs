@@ -170,20 +170,8 @@ impl DiagnosticRule for S007ColdStorage {
                     "检查网络带宽（如果是远程存储）".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "storage_page_cache_limit".to_string(),
-                        param_type: ParameterType::BE,
-                        current: None,
-                        recommended: "30%".to_string(),
-                        command: "# 修改 be.conf: storage_page_cache_limit = 30%".to_string(),
-                    },
-                    ParameterSuggestion {
-                        name: "io_tasks_per_scan_operator".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "8".to_string(),
-                        command: "SET io_tasks_per_scan_operator = 8;".to_string(),
-                    },
+                    ParameterSuggestion::be("storage_page_cache_limit", "30%"),
+                    ParameterSuggestion::session("io_tasks_per_scan_operator", "8"),
                 ],
             })
         } else {
@@ -243,22 +231,19 @@ impl DiagnosticRule for S009LowCacheHit {
                         "对热点数据执行缓存预热 (CACHE SELECT)".to_string(),
                         "检查是否有其他查询竞争缓存资源".to_string(),
                     ],
-                    parameter_suggestions: vec![
-                        ParameterSuggestion {
-                            name: "enable_scan_datacache".to_string(),
-                            param_type: ParameterType::Session,
-                            current: None,
-                            recommended: "true".to_string(),
-                            command: "SET enable_scan_datacache = true;".to_string(),
-                        },
-                        ParameterSuggestion {
-                            name: "enable_populate_datacache".to_string(),
-                            param_type: ParameterType::Session,
-                            current: None,
-                            recommended: "true".to_string(),
-                            command: "SET enable_populate_datacache = true;".to_string(),
-                        },
-                    ],
+                    // Only suggest parameters that are not already set to recommended values
+                    parameter_suggestions: [
+                        context.suggest_parameter(
+                            "enable_scan_datacache",
+                            "true",
+                            "SET enable_scan_datacache = true;"
+                        ),
+                        context.suggest_parameter(
+                            "enable_populate_datacache",
+                            "true",
+                            "SET enable_populate_datacache = true;"
+                        ),
+                    ].into_iter().flatten().collect(),
                 });
             }
         }
@@ -292,15 +277,12 @@ impl DiagnosticRule for S009LowCacheHit {
                         "增大 DataCache 容量 (datacache_disk_size)".to_string(),
                         "对热点数据执行缓存预热 (CACHE SELECT)".to_string(),
                     ],
-                    parameter_suggestions: vec![
-                        ParameterSuggestion {
-                            name: "enable_scan_datacache".to_string(),
-                            param_type: ParameterType::Session,
-                            current: None,
-                            recommended: "true".to_string(),
-                            command: "SET enable_scan_datacache = true;".to_string(),
-                        },
-                    ],
+                    // Only suggest if not already enabled
+                    parameter_suggestions: context.suggest_parameter(
+                        "enable_scan_datacache",
+                        "true",
+                        "SET enable_scan_datacache = true;"
+                    ).into_iter().collect(),
                 });
             }
         }
@@ -377,13 +359,7 @@ impl DiagnosticRule for S010RFNotEffective {
                     "确认 enable_global_runtime_filter 已启用".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_global_runtime_filter".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_global_runtime_filter = true;".to_string(),
-                    },
+                    ParameterSuggestion::session("enable_global_runtime_filter", "true"),
                 ],
             })
         } else {

@@ -42,20 +42,14 @@ impl DiagnosticRule for E001NetworkTransferLarge {
                     "检查网络带宽是否充足".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "parallel_fragment_exec_instance_num".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "4".to_string(),
-                        command: "SET parallel_fragment_exec_instance_num = 4;".to_string(),
-                    },
-                    ParameterSuggestion {
-                        name: "pipeline_dop".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "0".to_string(),
-                        command: "SET pipeline_dop = 0; -- auto".to_string(),
-                    },
+                    ParameterSuggestion::session("parallel_fragment_exec_instance_num", "4"),
+                    ParameterSuggestion::new(
+                        "pipeline_dop",
+                        ParameterType::Session,
+                        None,
+                        "0",
+                        "SET pipeline_dop = 0; -- auto"
+                    ),
                 ],
             })
         } else {

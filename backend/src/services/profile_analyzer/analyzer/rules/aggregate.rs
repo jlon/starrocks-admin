@@ -89,20 +89,14 @@ impl DiagnosticRule for A002HashTableTooLarge {
                     "启用 Spill 功能避免 OOM".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_spill".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_spill = true;".to_string(),
-                    },
-                    ParameterSuggestion {
-                        name: "streaming_preaggregation_mode".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "auto".to_string(),
-                        command: "SET streaming_preaggregation_mode = 'auto';".to_string(),
-                    },
+                    ParameterSuggestion::session("enable_spill", "true"),
+                    ParameterSuggestion::new(
+                        "streaming_preaggregation_mode",
+                        ParameterType::Session,
+                        None,
+                        "auto",
+                        "SET streaming_preaggregation_mode = 'auto';"
+                    ),
                 ],
             })
         } else {
@@ -147,13 +141,7 @@ impl DiagnosticRule for A004HighCardinality {
                     "考虑创建物化视图预聚合".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_sort_aggregate".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_sort_aggregate = true;".to_string(),
-                    },
+                    ParameterSuggestion::session("enable_sort_aggregate", "true"),
                 ],
             })
         } else {

@@ -84,8 +84,14 @@ impl RuleEngine {
         
         // Evaluate node-level rules
         if let Some(execution_tree) = &profile.execution_tree {
+            // Get session variables for context
+            let session_variables = &profile.summary.non_default_variables;
+            
             for node in &execution_tree.nodes {
-                let context = RuleContext { node };
+                let context = RuleContext { 
+                    node,
+                    session_variables,
+                };
                 
                 for rule in &self.rules {
                     if rule.applicable_to(node) {

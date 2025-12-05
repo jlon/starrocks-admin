@@ -1156,5 +1156,88 @@ Query:
             assert!((expected_hit_rate - 0.6326).abs() < 0.01, 
                 "Expected ~63.26%, got {:.2}%", expected_hit_rate * 100.0);
         }
+        
+        #[test]
+        fn test_session_variables_parsed() {
+            // Test that NonDefaultSessionVariables are correctly parsed
+            let profile_text = load_profile("test_profile.txt");
+            let result = analyze_profile(&profile_text).expect("Should analyze");
+            
+            let summary = result.summary.as_ref().expect("Should have summary");
+            
+            // Check that non_default_variables are parsed
+            println!("Non-default variables count: {}", summary.non_default_variables.len());
+            
+            // The test profile has enable_query_cache set to true
+            if let Some(info) = summary.non_default_variables.get("enable_query_cache") {
+                println!("enable_query_cache: default={:?}, actual={:?}", 
+                    info.default_value, info.actual_value);
+                assert!(info.actual_value_is("true"), "enable_query_cache should be true");
+            }
+            
+            // Check prefer_compute_node
+            if let Some(info) = summary.non_default_variables.get("prefer_compute_node") {
+                println!("prefer_compute_node: default={:?}, actual={:?}", 
+                    info.default_value, info.actual_value);
+                assert!(info.actual_value_is("true"), "prefer_compute_node should be true");
+            }
+        }
+        
+        #[test]
+        fn test_parameter_suggestion_with_defaults() {
+            use crate::services::profile_analyzer::analyzer::rules::RuleContext;
+            use crate::services::profile_analyzer::models::{ExecutionTreeNode, NodeType, HotSeverity, OperatorMetrics};
+            use std::collections::HashMap;
+            
+            // Test 1: Parameter not in non_default_variables but default matches recommendation
+            // enable_scan_datacache default is "true", recommending "true" should return None
+            let empty_vars = HashMap::new();
+            let node = ExecutionTreeNode {
+                id: "test-0".to_string(),
+                operator_name: "TEST".to_string(),
+                node_type: NodeType::Unknown,
+                plan_node_id: Some(0),
+                parent_plan_node_id: None,
+                metrics: OperatorMetrics::default(),
+                children: vec![],
+                depth: 0,
+                is_hotspot: false,
+                hotspot_severity: HotSeverity::Normal,
+                fragment_id: None,
+                pipeline_id: None,
+                time_percentage: None,
+                rows: None,
+                is_most_consuming: false,
+                is_second_most_consuming: false,
+                unique_metrics: HashMap::new(),
+                has_diagnostic: false,
+                diagnostic_ids: vec![],
+            };
+            
+            let context = RuleContext {
+                node: &node,
+                session_variables: &empty_vars,
+            };
+            
+            // enable_scan_datacache default is "true", so suggesting "true" should return None
+            let suggestion = context.suggest_parameter(
+                "enable_scan_datacache",
+                "true",
+                "SET enable_scan_datacache = true;"
+            );
+            assert!(suggestion.is_none(), 
+                "Should not suggest enable_scan_datacache=true when default is already true");
+            
+            // enable_query_cache default is "false", so suggesting "true" should return Some
+            let suggestion = context.suggest_parameter(
+                "enable_query_cache",
+                "true",
+                "SET enable_query_cache = true;"
+            );
+            assert!(suggestion.is_some(), 
+                "Should suggest enable_query_cache=true when default is false");
+            
+            println!("Parameter suggestion with defaults test passed!");
+        }
     }
 }

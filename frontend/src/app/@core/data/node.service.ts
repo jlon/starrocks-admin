@@ -206,13 +206,18 @@ export interface DiagnosticResult {
   reason: string;
   // Recommended actions to fix the issue (建议措施)
   suggestions: string[];
-  parameter_suggestions?: Array<{
-    name: string;
-    param_type: string;
-    current?: string;
-    recommended: string;
-    command: string;
-  }>;
+  parameter_suggestions?: ParameterSuggestion[];
+}
+
+// Parameter suggestion with description and impact
+export interface ParameterSuggestion {
+  name: string;
+  param_type: string;
+  current?: string;
+  recommended: string;
+  command: string;
+  description: string;  // Human-readable description of what this parameter does
+  impact: string;       // Expected impact of changing this parameter
 }
 
 // Aggregated diagnostic for overview display
@@ -230,13 +235,7 @@ export interface AggregatedDiagnostic {
   node_count: number;
   // Merged suggestions (deduplicated)
   suggestions: string[];
-  parameter_suggestions?: Array<{
-    name: string;
-    param_type: string;
-    current?: string;
-    recommended: string;
-    command: string;
-  }>;
+  parameter_suggestions?: ParameterSuggestion[];
 }
 
 export interface ProfileAnalysisResult {

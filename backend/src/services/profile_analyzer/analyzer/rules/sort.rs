@@ -82,20 +82,8 @@ impl DiagnosticRule for T002SortSpill {
                     "检查是否可以优化查询减少排序数据".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "query_mem_limit".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "8589934592".to_string(),
-                        command: "SET query_mem_limit = 8589934592;".to_string(),
-                    },
-                    ParameterSuggestion {
-                        name: "enable_spill".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_spill = true;".to_string(),
-                    },
+                    ParameterSuggestion::session("query_mem_limit", "8589934592"),
+                    ParameterSuggestion::session("enable_spill", "true"),
                 ],
             })
         } else {
@@ -142,13 +130,7 @@ impl DiagnosticRule for T003SortMemoryHigh {
                     "考虑分批处理".to_string(),
                 ],
                 parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_spill".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_spill = true;".to_string(),
-                    },
+                    ParameterSuggestion::session("enable_spill", "true"),
                 ],
             })
         } else {

@@ -1255,19 +1255,26 @@ Query:
             let summary = result.summary.expect("Summary should exist");
             
             // Verify completeness detection
+            // Now we count Fragments, not individual Instance IDs
             println!("Profile completeness analysis:");
             println!("  is_profile_async: {:?}", summary.is_profile_async);
-            println!("  retry_times: {:?}", summary.retry_times);
-            println!("  total_instance_count: {:?}", summary.total_instance_count);
-            println!("  missing_instance_count: {:?}", summary.missing_instance_count);
+            println!("  total_fragment_count: {:?}", summary.total_instance_count);
+            println!("  missing_fragment_count: {:?}", summary.missing_instance_count);
             println!("  is_profile_complete: {:?}", summary.is_profile_complete);
             println!("  warning: {:?}", summary.profile_completeness_warning);
             
-            // test_profile.txt has MissingInstanceIds, so it should be incomplete
+            // test_profile.txt has MissingInstanceIds in some Fragments
             assert_eq!(summary.is_profile_async, Some(true), "Should detect async profile");
-            assert!(summary.missing_instance_count.unwrap_or(0) > 0, "Should detect missing instances");
+            assert!(summary.missing_instance_count.unwrap_or(0) > 0, "Should detect missing fragments");
             assert_eq!(summary.is_profile_complete, Some(false), "Should be marked as incomplete");
             assert!(summary.profile_completeness_warning.is_some(), "Should have warning message");
+            
+            // Verify the counts are reasonable (not inflated by counting all Instance IDs)
+            let total = summary.total_instance_count.unwrap_or(0);
+            let missing = summary.missing_instance_count.unwrap_or(0);
+            println!("  Fragment stats: {}/{} missing", missing, total);
+            assert!(total < 50, "Total fragments should be reasonable (< 50), got {}", total);
+            assert!(missing < total, "Missing should be less than total");
             
             println!("Profile completeness detection test passed!");
         }

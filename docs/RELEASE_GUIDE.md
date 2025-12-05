@@ -129,11 +129,13 @@ Each release includes:
 - `starrocks-admin-macos-amd64.tar.gz` - macOS Intel
 - `starrocks-admin-macos-arm64.tar.gz` - macOS Apple Silicon
 
-### Docker Images
-- `ghcr.io/jlon/starrocks-admin:latest`
-- `ghcr.io/jlon/starrocks-admin:1.0.0`
-- `ghcr.io/jlon/starrocks-admin:1.0`
-- `ghcr.io/jlon/starrocks-admin:1`
+### Docker Images (Built by docker-publish workflow)
+- `ghcr.io/jlon/starrocks-admin:latest` - Latest stable release
+- `ghcr.io/jlon/starrocks-admin:1.0.0` - Specific version
+- `ghcr.io/jlon/starrocks-admin:1.0` - Minor version
+- `ghcr.io/jlon/starrocks-admin:1` - Major version
+- `ghcr.io/jlon/starrocks-admin:main` - Latest main branch build
+- Multi-platform support: `linux/amd64`, `linux/arm64`
 
 ### Helm Chart
 - `starrocks-admin-helm-1.0.0.tgz`
@@ -185,11 +187,24 @@ Runs on every push and PR to `main` and `develop` branches:
 ### Release Workflow (`.github/workflows/release.yml`)
 
 Runs when a version tag is pushed:
-- Builds for multiple platforms
-- Creates GitHub Release
-- Uploads release artifacts
-- Builds and pushes Docker images
+- Builds for multiple platforms (Linux, macOS Intel/ARM)
+- Creates GitHub Release with detailed notes
+- Uploads binary release artifacts (.tar.gz)
 - Publishes Helm chart
+
+### Docker Publish Workflow (`.github/workflows/docker-publish.yml`)
+
+Runs automatically on:
+- Version tag push (e.g., `v1.0.0`)
+- Push to `main` branch
+- Pull requests to `main`
+- Manual trigger
+
+Features:
+- Multi-platform builds (linux/amd64, linux/arm64)
+- Semantic versioning tags (e.g., `1.0.0`, `1.0`, `1`, `latest`)
+- GitHub Container Registry (GHCR) publishing
+- Build caching for faster builds
 
 ## Examples
 

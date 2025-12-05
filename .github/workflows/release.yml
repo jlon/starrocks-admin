@@ -55,11 +55,19 @@ jobs:
           open http://localhost:8080
           ```
           
-          #### Docker
+          #### Docker (Multi-platform: amd64/arm64)
           ```bash
+          # Pull the image (automatically built by docker-publish workflow)
           docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          
+          # Or use semantic version tags
+          docker pull ghcr.io/${{ github.repository }}:latest
+          
+          # Run the container
           docker run -d -p 8080:8080 ghcr.io/${{ github.repository }}:${{ github.ref_name }}
           ```
+          
+          > **Note:** Docker images are built automatically by the `docker-publish` workflow and support both amd64 and arm64 architectures.
           
           ### 📋 System Requirements
           - Linux x86_64 or macOS (ARM64/x86_64)
@@ -140,47 +148,8 @@ jobs:
         asset_name: ${{ matrix.artifact_name }}.tar.gz
         asset_content_type: application/gzip
 
-  build-docker:
-    name: Build and Push Docker Image
-    needs: create-release
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ghcr.io/${{ github.repository }}
-        tags: |
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
-          type=raw,value=latest
-
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: deploy/docker/Dockerfile
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        platforms: linux/amd64,linux/arm64
+  # Note: Docker image building is handled by docker-publish.yml workflow
+  # which is automatically triggered when a tag is pushed
 
   publish-helm-chart:
     name: Publish Helm Chart

@@ -22,27 +22,35 @@ That's it! GitHub Actions will handle the rest.
 
 ## What Happens Next?
 
-After you push the tag, GitHub Actions will automatically:
+After you push the tag, **two GitHub Actions workflows** will run automatically:
+
+### 1. Release Workflow (`.github/workflows/release.yml`)
 
 1. **Build binaries** for:
    - Linux (x86_64)
    - macOS (Intel)
    - macOS (Apple Silicon)
 
-2. **Create Docker images** with tags:
-   - `ghcr.io/jlon/starrocks-admin:latest`
-   - `ghcr.io/jlon/starrocks-admin:0.1.0`
-   - `ghcr.io/jlon/starrocks-admin:0.1`
-   - `ghcr.io/jlon/starrocks-admin:0`
-
-3. **Package Helm chart**:
+2. **Package Helm chart**:
    - `starrocks-admin-helm-0.1.0.tgz`
 
-4. **Create GitHub Release** with:
+3. **Create GitHub Release** with:
    - Release notes
    - All binary packages
    - Helm chart
    - Installation instructions
+
+### 2. Docker Publish Workflow (`.github/workflows/docker-publish.yml`)
+
+1. **Build Docker images** for multiple platforms:
+   - `linux/amd64` (Intel/AMD processors)
+   - `linux/arm64` (ARM processors, Apple Silicon, AWS Graviton)
+
+2. **Push to GitHub Container Registry** with tags:
+   - `ghcr.io/jlon/starrocks-admin:latest`
+   - `ghcr.io/jlon/starrocks-admin:0.1.0`
+   - `ghcr.io/jlon/starrocks-admin:0.1`
+   - `ghcr.io/jlon/starrocks-admin:0`
 
 ## Monitoring Progress
 

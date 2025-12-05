@@ -136,6 +136,10 @@
     "no_update_permission": "You don't have permission to edit clusters",
     "no_delete_permission": "You don't have permission to delete clusters",
     "create_failed_warning": "Cluster created, but health check failed. Please check configuration",
+    "fill_connection_info": "Please fill in complete connection information (FE address, port, username, password)",
+    "health_check_warning": "Health check found issues",
+    "health_check_failed": "Health check failed",
+    "connection_failed": "Connection Failed",
     "success": "Success",
     "error": "Error",
     "form": {
@@ -199,7 +203,9 @@
     "password_mismatch": "Passwords do not match",
     "cancel": "Cancel",
     "saving": "Saving...",
-    "save_changes": "Save Changes"
+    "save_changes": "Save Changes",
+    "password_change_success": "Password changed successfully, please login again",
+    "user_info_update_success": "User information updated successfully"
   },
   "header": {
     "theme": "Theme",
@@ -392,7 +398,12 @@
     "role_description": "Role Description",
     "menu_permissions": "Menu Permissions",
     "no_permissions": "No permissions available",
-    "no_permission_hint": "You don't have permission to view roles. Please contact administrator for authorization."
+    "no_permission_hint": "You don't have permission to view roles. Please contact administrator for authorization.",
+    "loading_organizations": "Loading organizations, please try again later",
+    "loading_current_org": "Loading current organization, please try again later",
+    "role_delete_success": "Role deleted",
+    "role_create_success": "Role created successfully",
+    "role_update_success": "Role updated successfully"
   },
   "users": {
     "title": "User Management",

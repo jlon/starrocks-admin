@@ -158,7 +158,10 @@ export class UserSettingsComponent implements OnInit {
         
         // If password was changed, logout and redirect to login
         if (isChangingPassword) {
-          this.toastrService.success('密码修改成功，请重新登录', '成功');
+          this.toastrService.success(
+            this.translate.instant('user_settings.password_change_success'),
+            this.translate.instant('common.success')
+          );
           setTimeout(() => {
             // Clear auth data and redirect to login
             localStorage.removeItem('jwt_token');
@@ -167,7 +170,10 @@ export class UserSettingsComponent implements OnInit {
           }, 1500);
         } else {
           // Just show success message
-          this.toastrService.success('用户信息更新成功', '成功');
+          this.toastrService.success(
+            this.translate.instant('user_settings.user_info_update_success'),
+            this.translate.instant('common.success')
+          );
           
           // Fetch latest user info from database to ensure we have the latest data
           this.authService.getMe().subscribe({

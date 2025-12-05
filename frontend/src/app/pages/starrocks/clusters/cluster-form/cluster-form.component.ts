@@ -234,7 +234,10 @@ export class ClusterFormComponent implements OnInit {
       const missingFields = requiredFields.filter(field => !this.clusterForm.get(field)?.value);
       
       if (missingFields.length > 0) {
-        this.toastrService.warning('请先填写完整的连接信息（FE地址、端口、用户名、密码）', '提示');
+        this.toastrService.warning(
+          this.translate.instant('cluster.fill_connection_info'),
+          this.translate.instant('common.warning')
+        );
         return;
       }
     }
@@ -276,10 +279,16 @@ export class ClusterFormComponent implements OnInit {
       );
     } else if (health.status === 'warning') {
       const details = health.checks.map((c: any) => c.name + ': ' + c.message).join('\n');
-      this.toastrService.warning('健康检查发现问题\n' + details, '警告');
+      this.toastrService.warning(
+        this.translate.instant('cluster.health_check_warning') + '\n' + details,
+        this.translate.instant('common.warning')
+      );
     } else {
       const details = health.checks.map((c: any) => c.name + ': ' + c.message).join('\n');
-      this.toastrService.danger('健康检查失败\n' + details, '连接失败');
+      this.toastrService.danger(
+        this.translate.instant('cluster.health_check_failed') + '\n' + details,
+        this.translate.instant('cluster.connection_failed')
+      );
     }
     this.loading = false;
   }

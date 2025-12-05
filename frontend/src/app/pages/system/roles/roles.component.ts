@@ -75,13 +75,19 @@ export class RolesComponent implements OnInit, OnDestroy {
 
     if (this.isSuperAdmin && !this.organizations.length) {
       this.loadOrganizations();
-      this.toastrService.info('正在加载组织列表，请稍后重试', '提示');
+      this.toastrService.info(
+        this.translate.instant('roles.loading_organizations'),
+        this.translate.instant('common.info')
+      );
       return;
     }
 
     if (!this.isSuperAdmin && !this.currentOrganization) {
       this.loadCurrentOrganization();
-      this.toastrService.info('正在获取所属组织，请稍后重试', '提示');
+      this.toastrService.info(
+        this.translate.instant('roles.loading_current_org'),
+        this.translate.instant('common.info')
+      );
       return;
     }
 
@@ -161,7 +167,10 @@ export class RolesComponent implements OnInit, OnDestroy {
 
       this.roleService.deleteRole(role.id).subscribe({
         next: () => {
-          this.toastrService.success('角色已删除', '成功');
+          this.toastrService.success(
+            this.translate.instant('roles.role_delete_success'),
+            this.translate.instant('common.success')
+          );
           this.rolePermissionCache.delete(role.id);
           this.loadRoles();
         },
@@ -189,7 +198,10 @@ export class RolesComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (role) => {
-          this.toastrService.success('角色创建成功', '成功');
+          this.toastrService.success(
+            this.translate.instant('roles.role_create_success'),
+            this.translate.instant('common.success')
+          );
           if (role) {
             this.rolePermissionCache.set(role.id, [...result.permissionIds]);
           }
@@ -211,7 +223,10 @@ export class RolesComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: () => {
-          this.toastrService.success('角色更新成功', '成功');
+          this.toastrService.success(
+            this.translate.instant('roles.role_update_success'),
+            this.translate.instant('common.success')
+          );
           this.rolePermissionCache.set(role.id, [...result.permissionIds]);
           this.loadRoles();
         },

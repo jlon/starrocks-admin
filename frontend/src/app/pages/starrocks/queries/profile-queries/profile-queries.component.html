@@ -50,20 +50,16 @@
 <ng-template #profileDetailDialog let-data let-ref="dialogRef">
   <nb-card class="profile-dialog-card" 
            [ngStyle]="{'width': '90vw', 'max-width': '1400px', 'height': '85vh', 'overflow': 'hidden'}">
-    <nb-card-header class="profile-dialog-header">
-      <div class="header-left">
-        <h5>Query Profile 详情</h5>
-        <p class="header-subtitle" *ngIf="currentQueryId">
-          <nb-icon icon="hash-outline" class="subtitle-icon"></nb-icon>
-          {{ currentQueryId }}
-        </p>
+    <nb-card-header class="profile-dialog-header-compact">
+      <div class="header-title-row">
+        <span class="header-title">Query Profile</span>
+        <span class="header-query-id" *ngIf="currentQueryId">{{ currentQueryId }}</span>
       </div>
       <div class="header-actions">
-        <button nbButton outline status="primary" size="small" (click)="refreshAnalysis()" [disabled]="profileDetailLoading">
+        <button nbButton ghost status="primary" size="tiny" (click)="refreshAnalysis()" [disabled]="profileDetailLoading">
           <nb-icon icon="refresh-outline"></nb-icon>
-          刷新
         </button>
-        <button nbButton ghost status="basic" (click)="ref.close()">
+        <button nbButton ghost status="basic" size="tiny" (click)="ref.close()">
           <nb-icon icon="close-outline"></nb-icon>
         </button>
       </div>

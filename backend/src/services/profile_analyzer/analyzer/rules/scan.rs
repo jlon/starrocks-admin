@@ -387,7 +387,8 @@ impl DiagnosticRule for S011SoftDeletes {
     fn name(&self) -> &str { "累积软删除过多" }
     
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("SCAN")
+        // Only applicable to OLAP_SCAN (internal tables), not CONNECTOR_SCAN (external tables)
+        node.operator_name.to_uppercase().contains("OLAP_SCAN")
     }
     
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
@@ -401,6 +402,26 @@ impl DiagnosticRule for S011SoftDeletes {
         let ratio = del_vec_rows / raw_rows;
         
         if ratio > 0.3 {
+            // Extract table name from unique_metrics
+            let table_name = context.node.unique_metrics.get("Table")
+                .map(|s| s.as_str())
+                .unwrap_or("unknown_table");
+            
+            // Parse table name to get db.table format
+            let (db_name, tbl_name) = if table_name.contains('.') {
+                let parts: Vec<&str> = table_name.splitn(2, '.').collect();
+                (parts[0], *parts.get(1).unwrap_or(&""))
+            } else {
+                ("", table_name)
+            };
+            
+            // Generate Compaction command (correct syntax: ALTER TABLE <table> COMPACT)
+            let compaction_cmd = if db_name.is_empty() {
+                format!("ALTER TABLE {} COMPACT;", tbl_name)
+            } else {
+                format!("ALTER TABLE {}.{} COMPACT;", db_name, tbl_name)
+            };
+            
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -410,14 +431,17 @@ impl DiagnosticRule for S011SoftDeletes {
                     context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
-                    "软删除行占比 {:.1}%，建议执行 Compaction",
-                    ratio * 100.0
+                    "表 {} 软删除行占比 {:.1}%，建议执行 Compaction",
+                    table_name, ratio * 100.0
                 ),
-                reason: "表中存在大量软删除记录，扫描时需要过滤这些已删除的行。建议执行 Compaction 清理删除标记。".to_string(),
+                reason: format!(
+                    "表 {} 中存在大量软删除记录 ({:.0} 行)，扫描时需要过滤这些已删除的行，影响查询性能。建议执行 Compaction 清理删除标记。",
+                    table_name, del_vec_rows
+                ),
                 suggestions: vec![
-                    "执行手动 Compaction 清理软删除".to_string(),
-                    "检查 Compaction 调度是否正常".to_string(),
-                    "考虑调整 Compaction 策略".to_string(),
+                    format!("执行 Compaction: {}", compaction_cmd),
+                    "检查 Compaction 状态: SHOW PROC '/compactions';".to_string(),
+                    format!("查看表 Tablet 状态: SHOW TABLET FROM {};", table_name),
                 ],
                 parameter_suggestions: vec![],
             })

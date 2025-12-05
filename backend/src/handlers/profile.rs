@@ -61,9 +61,14 @@ pub async fn list_profiles(
         columns.len()
     );
 
-    // Convert rows to ProfileListItem
+    // Convert rows to ProfileListItem, filtering out Aborted queries
     let profiles: Vec<ProfileListItem> = rows
         .into_iter()
+        .filter(|row| {
+            // Filter out Aborted state (index 3 is State column)
+            let state = row.get(3).map(|s| s.as_str()).unwrap_or("");
+            !state.eq_ignore_ascii_case("aborted")
+        })
         .map(|row| {
             // SHOW PROFILELIST returns: QueryId, StartTime, Time, State, Statement
             ProfileListItem {
@@ -76,7 +81,7 @@ pub async fn list_profiles(
         })
         .collect();
 
-    tracing::info!("Successfully converted {} profiles", profiles.len());
+    tracing::info!("Successfully converted {} profiles (Aborted filtered)", profiles.len());
     Ok(Json(profiles))
 }
 

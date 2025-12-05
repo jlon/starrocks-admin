@@ -54,6 +54,19 @@ pub use models::*;
 pub use parser::ProfileComposer;
 pub use analyzer::RuleEngine;
 
+use std::collections::HashMap;
+
+/// Cluster session variables fetched from the live cluster
+/// These are the actual current values, not just non-default ones
+pub type ClusterVariables = HashMap<String, String>;
+
+/// Analysis context containing optional cluster variables
+#[derive(Default)]
+pub struct AnalysisContext {
+    /// Live cluster variables (actual current values)
+    pub cluster_variables: Option<ClusterVariables>,
+}
+
 /// Analyze a profile text and return complete analysis results
 /// 
 /// This is the main entry point for profile analysis. It:
@@ -89,9 +102,17 @@ pub use analyzer::RuleEngine;
 ///     }
 /// }
 /// ```
+/// Simple analysis without cluster context (for backward compatibility and tests)
+#[allow(dead_code)]
 pub fn analyze_profile(profile_text: &str) -> Result<ProfileAnalysisResponse, String> {
-    use std::collections::HashMap;
-    
+    analyze_profile_with_context(profile_text, &AnalysisContext::default())
+}
+
+/// Analyze a profile with additional context (e.g., live cluster variables)
+pub fn analyze_profile_with_context(
+    profile_text: &str,
+    context: &AnalysisContext,
+) -> Result<ProfileAnalysisResponse, String> {
     let mut composer = ProfileComposer::new();
     let profile = composer.parse(profile_text)
         .map_err(|e| format!("解析Profile失败: {:?}", e))?;
@@ -114,9 +135,12 @@ pub fn analyze_profile(profile_text: &str) -> Result<ProfileAnalysisResponse, St
     let summary = Some(summary);
     let mut execution_tree = execution_tree;
     
-    // Run RuleEngine for diagnostics
+    // Run RuleEngine for diagnostics with optional cluster variables
     let rule_engine = RuleEngine::new();
-    let rule_diagnostics = rule_engine.analyze(&profile);
+    let rule_diagnostics = rule_engine.analyze_with_cluster_variables(
+        &profile,
+        context.cluster_variables.as_ref()
+    );
     
     // Convert rule diagnostics to API response format
     let diagnostics: Vec<DiagnosticResult> = rule_diagnostics.iter().map(|d| {

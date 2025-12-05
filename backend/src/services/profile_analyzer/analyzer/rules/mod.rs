@@ -204,18 +204,6 @@ impl ParameterSuggestion {
             impact: metadata.impact,
         }
     }
-    
-    /// Create a session parameter suggestion
-    pub fn session(name: &str, recommended: &str) -> Self {
-        let command = format!("SET {} = {};", name, recommended);
-        Self::new(name, ParameterType::Session, None, recommended, &command)
-    }
-    
-    /// Create a BE parameter suggestion
-    pub fn be(name: &str, recommended: &str) -> Self {
-        let command = format!("# 修改 be.conf: {} = {}", name, recommended);
-        Self::new(name, ParameterType::BE, None, recommended, &command)
-    }
 }
 
 /// A diagnostic result from rule evaluation
@@ -269,6 +257,11 @@ pub struct RuleContext<'a> {
     pub node: &'a ExecutionTreeNode,
     /// Non-default session variables from profile summary
     pub session_variables: &'a std::collections::HashMap<String, SessionVariableInfo>,
+    /// Cluster information for smart recommendations
+    pub cluster_info: Option<ClusterInfo>,
+    /// Live cluster variables (actual current values from cluster)
+    /// Takes precedence over session_variables for parameter recommendations
+    pub cluster_variables: Option<&'a std::collections::HashMap<String, String>>,
 }
 
 impl<'a> RuleContext<'a> {
@@ -301,8 +294,16 @@ impl<'a> RuleContext<'a> {
             .unwrap_or(false)
     }
     
-    /// Get current value of a session variable as string, or None if not set
+    /// Get current value of a session variable as string
+    /// Priority: cluster_variables > session_variables (non-default) > None
     pub fn get_variable_value(&self, name: &str) -> Option<String> {
+        // First check live cluster variables (most accurate)
+        if let Some(cluster_vars) = self.cluster_variables {
+            if let Some(value) = cluster_vars.get(name) {
+                return Some(value.clone());
+            }
+        }
+        // Fallback to profile's non-default variables
         self.session_variables.get(name)
             .map(|info| info.actual_value_str())
     }
@@ -341,6 +342,180 @@ impl<'a> RuleContext<'a> {
             command: command.to_string(),
             description: metadata.description,
             impact: metadata.impact,
+        })
+    }
+    
+    /// Smart parameter suggestion that considers cluster info and current values
+    /// Returns None if:
+    /// - Current value already meets or exceeds recommendation
+    /// - Query is too small to benefit from the change
+    /// - Parameter is already set to recommended value
+    pub fn suggest_parameter_smart(&self, name: &str) -> Option<ParameterSuggestion> {
+        let cluster_info = self.cluster_info.as_ref();
+        
+        // Get current value
+        let current_str = self.get_variable_value(name);
+        let default_str = get_parameter_default(name).map(|s| s.to_string());
+        let effective_value = current_str.as_ref().or(default_str.as_ref());
+        
+        let current_i64 = effective_value.and_then(|v| v.parse::<i64>().ok());
+        let current_bool = effective_value.map(|v| v.eq_ignore_ascii_case("true"));
+        
+        // Calculate smart recommendation based on parameter
+        let (recommended, reason, param_type) = match name {
+            // ========== 并行度相关 ==========
+            "parallel_fragment_exec_instance_num" => {
+                let be_count = cluster_info.map(|c| c.backend_num).unwrap_or(1).max(1);
+                let recommended = be_count.min(16) as i64;
+                let current = current_i64.unwrap_or(1);
+                
+                if current >= recommended {
+                    return None;
+                }
+                
+                // Don't recommend for small queries (< 100MB)
+                if cluster_info.map(|c| c.total_scan_bytes < 100_000_000).unwrap_or(true) {
+                    return None;
+                }
+                
+                (recommended.to_string(), format!("根据集群 {} 个 BE 节点推荐", be_count), ParameterType::Session)
+            }
+            
+            "pipeline_dop" => {
+                let current = current_i64.unwrap_or(0);
+                if current == 0 {
+                    return None; // Already auto
+                }
+                ("0".to_string(), "推荐使用自动模式，系统会根据 CPU 核数自动调整".to_string(), ParameterType::Session)
+            }
+            
+            "io_tasks_per_scan_operator" => {
+                let current = current_i64.unwrap_or(4);
+                let total_bytes = cluster_info.map(|c| c.total_scan_bytes).unwrap_or(0);
+                let is_large_scan = total_bytes > 1_000_000_000; // > 1GB
+                let recommended = if is_large_scan { 8 } else { 4 };
+                
+                if current >= recommended || !is_large_scan {
+                    return None;
+                }
+                
+                (recommended.to_string(), "大数据量扫描，建议增加 IO 并行度".to_string(), ParameterType::Session)
+            }
+            
+            // ========== 内存相关 ==========
+            "query_mem_limit" => {
+                let current = current_i64.unwrap_or(0);
+                let total_bytes = cluster_info.map(|c| c.total_scan_bytes).unwrap_or(0);
+                
+                // Recommend based on scan size: 2x scan size, min 4GB, max 32GB
+                let recommended = if total_bytes > 0 {
+                    let suggested = (total_bytes * 2).max(4 * 1024 * 1024 * 1024).min(32 * 1024 * 1024 * 1024);
+                    suggested as i64
+                } else {
+                    8 * 1024 * 1024 * 1024 // Default 8GB
+                };
+                
+                if current >= recommended {
+                    return None;
+                }
+                
+                let recommended_gb = recommended / (1024 * 1024 * 1024);
+                (recommended.to_string(), format!("根据数据量推荐 {}GB 内存限制", recommended_gb), ParameterType::Session)
+            }
+            
+            "enable_spill" => {
+                let current = current_bool.unwrap_or(false);
+                if current {
+                    return None; // Already enabled
+                }
+                ("true".to_string(), "启用后可避免大查询 OOM".to_string(), ParameterType::Session)
+            }
+            
+            // ========== 查询优化 ==========
+            "query_timeout" => {
+                let current = current_i64.unwrap_or(300);
+                // Only recommend if current is default (300s) and query might be long
+                if current >= 600 {
+                    return None;
+                }
+                ("600".to_string(), "延长超时时间以支持复杂查询".to_string(), ParameterType::Session)
+            }
+            
+            "enable_query_cache" => {
+                let current = current_bool.unwrap_or(false);
+                if current {
+                    return None;
+                }
+                ("true".to_string(), "启用查询缓存可加速重复查询".to_string(), ParameterType::Session)
+            }
+            
+            // ========== Runtime Filter ==========
+            "enable_global_runtime_filter" => {
+                let current = current_bool.unwrap_or(true);
+                if current {
+                    return None;
+                }
+                ("true".to_string(), "启用全局 Runtime Filter 提升 Join 性能".to_string(), ParameterType::Session)
+            }
+            
+            "runtime_join_filter_push_down_limit" => {
+                let current = current_i64.unwrap_or(1024000);
+                if current >= 10_000_000 {
+                    return None;
+                }
+                ("10000000".to_string(), "增大 RF 下推阈值以支持更大的 Build 端".to_string(), ParameterType::Session)
+            }
+            
+            // ========== DataCache ==========
+            "enable_scan_datacache" => {
+                let current = current_bool.unwrap_or(true);
+                if current {
+                    return None;
+                }
+                ("true".to_string(), "启用 DataCache 提升存算分离性能".to_string(), ParameterType::Session)
+            }
+            
+            "enable_populate_datacache" => {
+                let current = current_bool.unwrap_or(true);
+                if current {
+                    return None;
+                }
+                ("true".to_string(), "启用缓存填充以预热缓存".to_string(), ParameterType::Session)
+            }
+            
+            // ========== Profile ==========
+            "pipeline_profile_level" => {
+                let current = current_i64.unwrap_or(1);
+                if current <= 1 {
+                    return None;
+                }
+                ("1".to_string(), "降低 Profile 级别减少收集开销".to_string(), ParameterType::Session)
+            }
+            
+            // ========== BE 参数 ==========
+            "storage_page_cache_limit" => {
+                // BE parameter, always suggest if IO is bottleneck
+                ("30%".to_string(), "增大页缓存提升热数据读取性能".to_string(), ParameterType::BE)
+            }
+            
+            _ => return None, // No smart recommendation for this parameter
+        };
+        
+        let current = self.get_variable_value(name);
+        let metadata = get_parameter_metadata(name);
+        let command = match param_type {
+            ParameterType::Session => format!("SET {} = {};", name, recommended),
+            ParameterType::BE => format!("-- BE config: {} = {}", name, recommended),
+        };
+        
+        Some(ParameterSuggestion {
+            name: name.to_string(),
+            param_type,
+            current,
+            recommended,
+            command,
+            description: metadata.description,
+            impact: format!("{} ({})", metadata.impact, reason),
         })
     }
 }

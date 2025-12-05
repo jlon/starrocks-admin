@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::models::{ProfileDetail, ProfileListItem};
 use crate::services::MySQLClient;
-use crate::services::profile_analyzer::{analyze_profile, ProfileAnalysisResponse};
+use crate::services::profile_analyzer::{analyze_profile_with_context, AnalysisContext, ClusterVariables, ProfileAnalysisResponse};
 use crate::utils::{ApiResult, error::ApiError};
 
 /// Validate and sanitize query_id to prevent SQL injection
@@ -191,9 +191,58 @@ pub async fn analyze_profile_handler(
 
     tracing::info!("Profile content length: {} bytes for query {}", profile_content.len(), safe_query_id);
 
-    // Parse the profile and return analysis
-    // Note: analyze_profile() only accepts string input, never reads from files
-    analyze_profile(&profile_content)
+    // Fetch live cluster session variables for smart parameter recommendations
+    let cluster_variables = fetch_cluster_variables(&mysql_client).await;
+    
+    // Build analysis context with cluster variables
+    let context = AnalysisContext {
+        cluster_variables,
+    };
+
+    // Parse the profile and return analysis with cluster context
+    analyze_profile_with_context(&profile_content, &context)
         .map(Json)
         .map_err(|e| ApiError::internal_error(format!("Analysis failed: {}", e)))
+}
+
+/// Fetch relevant session variables from the cluster
+/// Returns None if query fails (graceful degradation)
+async fn fetch_cluster_variables(mysql_client: &MySQLClient) -> Option<ClusterVariables> {
+    // Query only the parameters we care about for smart recommendations
+    let params = [
+        "query_mem_limit",
+        "query_timeout",
+        "enable_spill",
+        "pipeline_dop",
+        "parallel_fragment_exec_instance_num",
+        "io_tasks_per_scan_operator",
+        "enable_global_runtime_filter",
+        "runtime_join_filter_push_down_limit",
+        "enable_scan_datacache",
+        "enable_populate_datacache",
+        "enable_query_cache",
+        "pipeline_profile_level",
+    ];
+    
+    let sql = format!(
+        "SHOW VARIABLES WHERE Variable_name IN ({})",
+        params.iter().map(|p| format!("'{}'", p)).collect::<Vec<_>>().join(",")
+    );
+    
+    match mysql_client.query_raw(&sql).await {
+        Ok((_, rows)) => {
+            let mut variables = ClusterVariables::new();
+            for row in rows {
+                if row.len() >= 2 {
+                    variables.insert(row[0].clone(), row[1].clone());
+                }
+            }
+            tracing::debug!("Fetched {} cluster variables for smart recommendations", variables.len());
+            Some(variables)
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch cluster variables: {}, using defaults", e);
+            None
+        }
+    }
 }

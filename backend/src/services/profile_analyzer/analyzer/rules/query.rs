@@ -18,6 +18,11 @@ fn get_parameter_default(name: &str) -> Option<&'static str> {
         "enable_runtime_adaptive_dop" => Some("false"),
         "enable_spill" => Some("false"),
         
+        // Parallelism
+        "parallel_fragment_exec_instance_num" => Some("1"),
+        "pipeline_dop" => Some("0"),
+        "io_tasks_per_scan_operator" => Some("4"),
+        
         _ => None,
     }
 }
@@ -78,6 +83,91 @@ pub trait QueryRule: Send + Sync {
     fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic>;
 }
 
+/// Smart parameter suggestion for query-level rules
+/// Considers current values and cluster info
+fn suggest_query_parameter(profile: &Profile, name: &str) -> Option<ParameterSuggestion> {
+    let cluster_info = profile.get_cluster_info();
+    
+    // Get current value
+    let current_str = profile.summary.non_default_variables.get(name)
+        .map(|v| v.actual_value_str());
+    let current_i64 = current_str.as_ref()
+        .and_then(|v| v.parse::<i64>().ok())
+        .or_else(|| get_parameter_default(name).and_then(|s| s.parse::<i64>().ok()));
+    let current_bool = current_str.as_ref()
+        .map(|v| v.eq_ignore_ascii_case("true"))
+        .or_else(|| get_parameter_default(name).map(|s| s.eq_ignore_ascii_case("true")));
+    
+    let (recommended, reason) = match name {
+        "query_timeout" => {
+            let current = current_i64.unwrap_or(300);
+            if current >= 600 {
+                return None;
+            }
+            ("600".to_string(), "延长超时时间以支持复杂查询".to_string())
+        }
+        
+        "query_mem_limit" => {
+            let current = current_i64.unwrap_or(0);
+            let total_bytes = cluster_info.total_scan_bytes;
+            
+            // Recommend based on scan size: 2x scan size, min 4GB, max 32GB
+            let recommended = if total_bytes > 0 {
+                let suggested = (total_bytes * 2).max(4 * 1024 * 1024 * 1024).min(32 * 1024 * 1024 * 1024);
+                suggested as i64
+            } else {
+                8 * 1024 * 1024 * 1024 // Default 8GB
+            };
+            
+            if current >= recommended {
+                return None;
+            }
+            
+            let recommended_gb = recommended / (1024 * 1024 * 1024);
+            (recommended.to_string(), format!("根据数据量推荐 {}GB 内存限制", recommended_gb))
+        }
+        
+        "enable_spill" => {
+            let current = current_bool.unwrap_or(false);
+            if current {
+                return None;
+            }
+            ("true".to_string(), "启用后可避免大查询 OOM".to_string())
+        }
+        
+        "pipeline_profile_level" => {
+            let current = current_i64.unwrap_or(1);
+            if current <= 1 {
+                return None;
+            }
+            ("1".to_string(), "降低 Profile 级别减少收集开销".to_string())
+        }
+        
+        "pipeline_dop" => {
+            let current = current_i64.unwrap_or(0);
+            if current == 0 {
+                return None;
+            }
+            ("0".to_string(), "推荐使用自动模式".to_string())
+        }
+        
+        _ => return None,
+    };
+    
+    let metadata = get_parameter_metadata(name);
+    let command = format!("SET {} = {};", name, recommended);
+    
+    Some(ParameterSuggestion {
+        name: name.to_string(),
+        param_type: ParameterType::Session,
+        current: current_str,
+        recommended,
+        command,
+        description: metadata.description,
+        impact: format!("{} ({})", metadata.impact, reason),
+    })
+}
+
 /// Query-level diagnostic result
 #[derive(Debug, Clone)]
 pub struct QueryDiagnostic {
@@ -117,16 +207,16 @@ impl QueryRule for Q001LongRunning {
                     "考虑优化查询计划".to_string(),
                     "检查是否存在数据倾斜".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("query_timeout", "600"),
-                    ParameterSuggestion::new(
-                        "query_mem_limit",
-                        ParameterType::Session,
-                        None,
-                        "8589934592",
-                        "SET query_mem_limit = 8589934592; -- 8GB"
-                    ),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = suggest_query_parameter(profile, "query_timeout") {
+                        suggestions.push(s);
+                    }
+                    if let Some(s) = suggest_query_parameter(profile, "query_mem_limit") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -161,16 +251,16 @@ impl QueryRule for Q002HighMemory {
                     "考虑启用 Spill 功能".to_string(),
                     "优化查询减少中间结果".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("enable_spill", "true"),
-                    ParameterSuggestion::new(
-                        "query_mem_limit",
-                        ParameterType::Session,
-                        None,
-                        "17179869184",
-                        "SET query_mem_limit = 17179869184; -- 16GB"
-                    ),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = suggest_query_parameter(profile, "enable_spill") {
+                        suggestions.push(s);
+                    }
+                    if let Some(s) = suggest_query_parameter(profile, "query_mem_limit") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -207,15 +297,13 @@ impl QueryRule for Q003QuerySpill {
                     "优化查询减少中间结果".to_string(),
                     "检查 Spill 是否影响性能".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::new(
-                        "query_mem_limit",
-                        ParameterType::Session,
-                        None,
-                        "8589934592",
-                        "SET query_mem_limit = 8589934592; -- 8GB"
-                    ),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = suggest_query_parameter(profile, "query_mem_limit") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -338,15 +426,13 @@ impl QueryRule for Q004LowCPU {
                 message: format!("CPU 利用率仅 {:.1}%，可能存在等待或 IO 瓶颈", ratio * 100.0),
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["检查是否存在等待".to_string(), "增加并行度".to_string()],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::new(
-                        "pipeline_dop",
-                        ParameterType::Session,
-                        None,
-                        "0",
-                        "SET pipeline_dop = 0; -- auto"
-                    ),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = suggest_query_parameter(profile, "pipeline_dop") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else { None }
     }
@@ -371,9 +457,13 @@ impl QueryRule for Q007ProfileCollectSlow {
                 message: format!("Profile 收集时间 {:.1}ms", collect_time / 1_000_000.0),
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["降低 pipeline_profile_level".to_string()],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("pipeline_profile_level", "1"),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = suggest_query_parameter(profile, "pipeline_profile_level") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else { None }
     }

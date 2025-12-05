@@ -169,10 +169,16 @@ impl DiagnosticRule for S007ColdStorage {
                     "增大 PageCache 缓存".to_string(),
                     "检查网络带宽（如果是远程存储）".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::be("storage_page_cache_limit", "30%"),
-                    ParameterSuggestion::session("io_tasks_per_scan_operator", "8"),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("storage_page_cache_limit") {
+                        suggestions.push(s);
+                    }
+                    if let Some(s) = context.suggest_parameter_smart("io_tasks_per_scan_operator") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -358,9 +364,13 @@ impl DiagnosticRule for S010RFNotEffective {
                     "检查 Join 条件是否适合生成 RF".to_string(),
                     "确认 enable_global_runtime_filter 已启用".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("enable_global_runtime_filter", "true"),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("enable_global_runtime_filter") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None

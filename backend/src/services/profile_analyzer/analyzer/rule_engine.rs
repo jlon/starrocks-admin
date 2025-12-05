@@ -55,8 +55,19 @@ impl RuleEngine {
         }
     }
     
-    /// Analyze a profile and return diagnostics
+    /// Analyze a profile and return diagnostics (for backward compatibility and tests)
+    #[allow(dead_code)]
     pub fn analyze(&self, profile: &Profile) -> Vec<Diagnostic> {
+        self.analyze_with_cluster_variables(profile, None)
+    }
+    
+    /// Analyze a profile with optional live cluster variables
+    /// cluster_variables: actual current values from the cluster (takes precedence)
+    pub fn analyze_with_cluster_variables(
+        &self, 
+        profile: &Profile,
+        cluster_variables: Option<&std::collections::HashMap<String, String>>
+    ) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
         
         // Evaluate query-level rules first
@@ -86,11 +97,15 @@ impl RuleEngine {
         if let Some(execution_tree) = &profile.execution_tree {
             // Get session variables for context
             let session_variables = &profile.summary.non_default_variables;
+            // Get cluster info for smart recommendations
+            let cluster_info = Some(profile.get_cluster_info());
             
             for node in &execution_tree.nodes {
                 let context = RuleContext { 
                     node,
                     session_variables,
+                    cluster_info: cluster_info.clone(),
+                    cluster_variables,
                 };
                 
                 for rule in &self.rules {

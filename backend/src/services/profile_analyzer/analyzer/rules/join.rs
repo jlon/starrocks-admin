@@ -135,9 +135,13 @@ impl DiagnosticRule for J003HashTableTooLarge {
                     "考虑使用 Runtime Filter 减少数据量".to_string(),
                     "启用 Spill 功能避免 OOM".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("enable_spill", "true"),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("enable_spill") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -180,10 +184,16 @@ impl DiagnosticRule for J004NoRuntimeFilter {
                     "检查 Join 条件是否适合生成 RF".to_string(),
                     "检查 Build 端行数是否超过阈值".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("enable_global_runtime_filter", "true"),
-                    ParameterSuggestion::session("runtime_join_filter_push_down_limit", "10000000"),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("enable_global_runtime_filter") {
+                        suggestions.push(s);
+                    }
+                    if let Some(s) = context.suggest_parameter_smart("runtime_join_filter_push_down_limit") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None

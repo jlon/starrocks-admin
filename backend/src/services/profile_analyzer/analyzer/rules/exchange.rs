@@ -41,16 +41,18 @@ impl DiagnosticRule for E001NetworkTransferLarge {
                     "考虑使用 Colocate Join 避免 Shuffle".to_string(),
                     "检查网络带宽是否充足".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("parallel_fragment_exec_instance_num", "4"),
-                    ParameterSuggestion::new(
-                        "pipeline_dop",
-                        ParameterType::Session,
-                        None,
-                        "0",
-                        "SET pipeline_dop = 0; -- auto"
-                    ),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    // Use smart recommendation for parallel_fragment_exec_instance_num
+                    if let Some(s) = context.suggest_parameter_smart("parallel_fragment_exec_instance_num") {
+                        suggestions.push(s);
+                    }
+                    // Use smart recommendation for pipeline_dop
+                    if let Some(s) = context.suggest_parameter_smart("pipeline_dop") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None

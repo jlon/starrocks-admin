@@ -116,9 +116,13 @@ impl DiagnosticRule for G002HighMemory {
                     "考虑分批处理".to_string(),
                     "检查 HashTable 或中间结果是否过大".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("query_mem_limit", "8589934592"),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("query_mem_limit") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -169,15 +173,13 @@ impl DiagnosticRule for G003ExecutionSkew {
                     "检查分桶键选择是否合理".to_string(),
                     "考虑增加并行度".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::new(
-                        "pipeline_dop",
-                        ParameterType::Session,
-                        None,
-                        "0",
-                        "SET pipeline_dop = 0; -- 自适应并行度"
-                    ),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("pipeline_dop") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -279,7 +281,7 @@ mod tests {
         };
         
         let session_variables = std::collections::HashMap::new();
-        let context = RuleContext { node: &node, session_variables: &session_variables };
+        let context = RuleContext { node: &node, session_variables: &session_variables, cluster_info: None, cluster_variables: None };
         let result = rule.evaluate(&context);
         
         assert!(result.is_some(), "G001 should trigger for 99.84% time percentage");

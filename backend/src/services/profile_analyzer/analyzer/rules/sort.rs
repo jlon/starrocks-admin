@@ -81,10 +81,16 @@ impl DiagnosticRule for T002SortSpill {
                     "添加 LIMIT 减少排序数据量".to_string(),
                     "检查是否可以优化查询减少排序数据".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("query_mem_limit", "8589934592"),
-                    ParameterSuggestion::session("enable_spill", "true"),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("query_mem_limit") {
+                        suggestions.push(s);
+                    }
+                    if let Some(s) = context.suggest_parameter_smart("enable_spill") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -129,9 +135,13 @@ impl DiagnosticRule for T003SortMemoryHigh {
                     "启用 Spill 功能避免 OOM".to_string(),
                     "考虑分批处理".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("enable_spill", "true"),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("enable_spill") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None

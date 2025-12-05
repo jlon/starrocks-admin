@@ -67,15 +67,13 @@ impl DiagnosticRule for L001LocalExchangeMemory {
                     "检查上下游算子的数据流是否平衡".to_string(),
                     "调整 pipeline_dop 参数".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::new(
-                        "pipeline_dop",
-                        ParameterType::Session,
-                        None,
-                        "0",
-                        "SET pipeline_dop = 0; -- auto"
-                    ),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("pipeline_dop") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else { None }
     }

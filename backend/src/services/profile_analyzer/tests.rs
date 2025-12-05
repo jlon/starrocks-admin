@@ -1217,6 +1217,8 @@ Query:
             let context = RuleContext {
                 node: &node,
                 session_variables: &empty_vars,
+                cluster_info: None,
+                cluster_variables: None,
             };
             
             // enable_scan_datacache default is "true", so suggesting "true" should return None

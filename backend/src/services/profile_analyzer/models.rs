@@ -48,6 +48,44 @@ impl SessionVariableInfo {
 }
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Parse a bytes value string (e.g., "1.5 GB", "100 MB", "1024") to u64 bytes
+fn parse_bytes_value(value: &str) -> Option<u64> {
+    let value = value.trim();
+    
+    // Try to parse as plain number first
+    if let Ok(n) = value.parse::<u64>() {
+        return Some(n);
+    }
+    
+    // Parse with unit suffix (e.g., "1.5 GB", "100 MB")
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    if parts.len() >= 1 {
+        let num_str = parts[0].replace(",", "");
+        let num: f64 = num_str.parse().ok()?;
+        
+        let multiplier = if parts.len() >= 2 {
+            match parts[1].to_uppercase().as_str() {
+                "B" => 1u64,
+                "KB" | "K" => 1024,
+                "MB" | "M" => 1024 * 1024,
+                "GB" | "G" => 1024 * 1024 * 1024,
+                "TB" | "T" => 1024 * 1024 * 1024 * 1024,
+                _ => 1,
+            }
+        } else {
+            1
+        };
+        
+        return Some((num * multiplier as f64) as u64);
+    }
+    
+    None
+}
+
+// ============================================================================
 // Core Profile Structure
 // ============================================================================
 
@@ -59,6 +97,60 @@ pub struct Profile {
     pub execution: ExecutionInfo,
     pub fragments: Vec<Fragment>,
     pub execution_tree: Option<ExecutionTree>,
+}
+
+impl Profile {
+    /// Get cluster information from the profile
+    /// Extracts BE count, instance count, and total scan bytes
+    pub fn get_cluster_info(&self) -> ClusterInfo {
+        use std::collections::HashSet;
+        
+        // Collect unique backend addresses across all fragments
+        let mut backends: HashSet<String> = HashSet::new();
+        let mut total_instances = 0u32;
+        
+        for fragment in &self.fragments {
+            for addr in &fragment.backend_addresses {
+                backends.insert(addr.clone());
+            }
+            total_instances += fragment.instance_ids.len() as u32;
+        }
+        
+        // Extract total scan bytes from execution tree if available
+        // Look for BytesRead or CompressedBytesReadTotal in unique_metrics
+        let total_scan_bytes = self.execution_tree.as_ref()
+            .map(|tree| {
+                tree.nodes.iter()
+                    .filter(|n| n.operator_name.to_uppercase().contains("SCAN"))
+                    .filter_map(|n| {
+                        // Try different metric names for bytes read
+                        n.unique_metrics.get("BytesRead")
+                            .or_else(|| n.unique_metrics.get("CompressedBytesReadTotal"))
+                            .or_else(|| n.unique_metrics.get("RawRowsRead"))
+                            .and_then(|v| parse_bytes_value(v))
+                    })
+                    .sum::<u64>()
+            })
+            .unwrap_or(0);
+        
+        ClusterInfo {
+            backend_num: backends.len() as u32,
+            instance_num: total_instances,
+            total_scan_bytes,
+        }
+    }
+}
+
+/// Cluster information extracted from profile
+#[derive(Debug, Clone, Default)]
+pub struct ClusterInfo {
+    /// Number of unique backends participating in the query
+    pub backend_num: u32,
+    /// Total number of fragment instances (reserved for future use)
+    #[allow(dead_code)]
+    pub instance_num: u32,
+    /// Total bytes scanned across all scan operators
+    pub total_scan_bytes: u64,
 }
 
 /// Query summary information extracted from profile header

@@ -88,16 +88,13 @@ impl DiagnosticRule for A002HashTableTooLarge {
                     "考虑使用物化视图预聚合".to_string(),
                     "启用 Spill 功能避免 OOM".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("enable_spill", "true"),
-                    ParameterSuggestion::new(
-                        "streaming_preaggregation_mode",
-                        ParameterType::Session,
-                        None,
-                        "auto",
-                        "SET streaming_preaggregation_mode = 'auto';"
-                    ),
-                ],
+                parameter_suggestions: {
+                    let mut suggestions = Vec::new();
+                    if let Some(s) = context.suggest_parameter_smart("enable_spill") {
+                        suggestions.push(s);
+                    }
+                    suggestions
+                },
             })
         } else {
             None
@@ -140,9 +137,7 @@ impl DiagnosticRule for A004HighCardinality {
                     "考虑使用流式聚合".to_string(),
                     "考虑创建物化视图预聚合".to_string(),
                 ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::session("enable_sort_aggregate", "true"),
-                ],
+                parameter_suggestions: vec![],
             })
         } else {
             None

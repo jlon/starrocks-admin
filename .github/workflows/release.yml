@@ -13,6 +13,8 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
@@ -24,14 +26,57 @@ jobs:
 
     - name: Create Release
       id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref }}
-        release_name: StarRocks Admin ${{ github.ref_name }}
+        name: StarRocks Admin ${{ github.ref_name }}
         draft: false
         prerelease: false
+        body: |
+          ## StarRocks Admin ${{ github.ref_name }}
+          
+          ### 🚀 What's New
+          
+          Please see the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          
+          ### 📦 Installation
+          
+          #### Quick Start (Recommended)
+          ```bash
+          # Download and extract
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/starrocks-admin-linux-amd64.tar.gz
+          tar -xzf starrocks-admin-linux-amd64.tar.gz
+          cd starrocks-admin
+          
+          # Start the service
+          ./bin/starrocks-admin.sh start
+          
+          # Access the application
+          open http://localhost:8080
+          ```
+          
+          #### Docker (Multi-platform: amd64/arm64)
+          ```bash
+          # Pull the image (automatically built by docker-publish workflow)
+          docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          
+          # Or use semantic version tags
+          docker pull ghcr.io/${{ github.repository }}:latest
+          
+          # Run the container
+          docker run -d -p 8080:8080 ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          ```
+          
+          > **Note:** Docker images are built automatically by the `docker-publish` workflow and support both amd64 and arm64 architectures.
+          
+          ### 📋 System Requirements
+          - Linux x86_64 or macOS (ARM64/x86_64)
+          - 2GB RAM minimum
+          - 1GB disk space
+          
+          ### 🔗 Links
+          - [Documentation](https://github.com/${{ github.repository }}/blob/main/README.md)
+          - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/docs/INSTALLATION.md)
+          - [Configuration Guide](https://github.com/${{ github.repository }}/blob/main/docs/CONFIGURATION.md)
         body: |
           ## StarRocks Admin ${{ github.ref_name }}
           
@@ -82,6 +127,8 @@ jobs:
   build-and-upload:
     name: Build and Upload Assets
     needs: create-release
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -139,14 +186,9 @@ jobs:
           bin conf lib data logs migrations
 
     - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: build/dist/${{ matrix.artifact_name }}.tar.gz
-        asset_name: ${{ matrix.artifact_name }}.tar.gz
-        asset_content_type: application/gzip
+        files: build/dist/${{ matrix.artifact_name }}.tar.gz
 
   # Note: Docker image building is handled by docker-publish.yml workflow
   # which is automatically triggered when a tag is pushed
@@ -154,6 +196,8 @@ jobs:
   publish-helm-chart:
     name: Publish Helm Chart
     needs: create-release
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     
     steps:
@@ -171,11 +215,6 @@ jobs:
         helm package . --version ${{ needs.create-release.outputs.version }}
 
     - name: Upload Helm chart to release
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: deploy/chart/starrocks-admin-${{ needs.create-release.outputs.version }}.tgz
-        asset_name: starrocks-admin-helm-${{ needs.create-release.outputs.version }}.tgz
-        asset_content_type: application/gzip
+        files: deploy/chart/starrocks-admin-${{ needs.create-release.outputs.version }}.tgz

@@ -1206,6 +1206,22 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     if (val < 1024 * 1024 * 1024) return (val / (1024 * 1024)).toFixed(2) + ' MB';
     return (val / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
   }
+
+  // Get diagnostics for a specific node by plan_node_id
+  getNodeDiagnostics(node: any): any[] {
+    if (!node?.plan_node_id || !this.analysisData?.node_diagnostics) {
+      return [];
+    }
+    return this.analysisData.node_diagnostics[node.plan_node_id] || [];
+  }
+
+  // Get current diagnostics count based on context (node-specific or aggregated)
+  getCurrentDiagnosticsCount(): number {
+    if (this.selectedNode) {
+      return this.getNodeDiagnostics(this.selectedNode)?.length || 0;
+    }
+    return this.analysisData?.aggregated_diagnostics?.length || 0;
+  }
   
   // Get edge path for SVG
   getEdgePath(points: {x: number, y: number}[]): string {

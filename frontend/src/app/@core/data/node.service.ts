@@ -181,11 +181,62 @@ export interface ProfileAnalysisNode {
   is_most_consuming: boolean;
   is_second_most_consuming: boolean;
   unique_metrics: any;
+  // Whether this node has diagnostic issues (for UI warning indicator)
+  has_diagnostic?: boolean;
+  // List of diagnostic rule IDs associated with this node
+  diagnostic_ids?: string[];
 }
 
 export interface ProfileExecutionTree {
   root: ProfileAnalysisNode;
   nodes: ProfileAnalysisNode[];
+}
+
+// Diagnostic result from rule engine
+export interface DiagnosticResult {
+  rule_id: string;
+  rule_name: string;
+  severity: string;
+  node_path: string;
+  // Plan node ID for associating with execution tree node
+  plan_node_id?: number;
+  // Summary of the diagnostic issue (诊断结果概要)
+  message: string;
+  // Detailed explanation of why this issue occurs (详细诊断原因)
+  reason: string;
+  // Recommended actions to fix the issue (建议措施)
+  suggestions: string[];
+  parameter_suggestions?: Array<{
+    name: string;
+    param_type: string;
+    current?: string;
+    recommended: string;
+    command: string;
+  }>;
+}
+
+// Aggregated diagnostic for overview display
+export interface AggregatedDiagnostic {
+  rule_id: string;
+  rule_name: string;
+  severity: string;
+  // Aggregated summary message
+  message: string;
+  // Detailed explanation
+  reason: string;
+  // List of affected node paths
+  affected_nodes: string[];
+  // Number of affected nodes
+  node_count: number;
+  // Merged suggestions (deduplicated)
+  suggestions: string[];
+  parameter_suggestions?: Array<{
+    name: string;
+    param_type: string;
+    current?: string;
+    recommended: string;
+    command: string;
+  }>;
 }
 
 export interface ProfileAnalysisResult {
@@ -202,6 +253,12 @@ export interface ProfileAnalysisResult {
     }>;
     [key: string]: any;
   };
+  // Rule-based diagnostics with detailed reasons (all diagnostics)
+  diagnostics?: DiagnosticResult[];
+  // Aggregated diagnostics by rule_id for overview display
+  aggregated_diagnostics?: AggregatedDiagnostic[];
+  // Node-level diagnostics mapping (plan_node_id -> diagnostics)
+  node_diagnostics?: { [planNodeId: number]: DiagnosticResult[] };
   // Raw profile content for PROFILE tab display
   profile_content?: string;
 }

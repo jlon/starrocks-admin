@@ -25,7 +25,9 @@ impl DiagnosticRule for I001ImportDataSkew {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("导入存在数据倾斜，PushChunkNum max/min 比率为 {:.2}", ratio),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "检查上游算子是否存在数据倾斜".to_string(),
                     "优化分桶键选择".to_string(),
@@ -59,7 +61,9 @@ impl DiagnosticRule for I002ImportRPCLatency {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("导入 RPC 客户端耗时是服务端的 {:.1} 倍，网络传输可能是瓶颈", ratio),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "启用数据压缩减少网络传输量".to_string(),
                     "检查网络带宽和延迟".to_string(),
@@ -93,7 +97,9 @@ impl DiagnosticRule for I003ImportFilteredRows {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("导入过滤了 {:.0} 行 ({:.1}%)，可能存在数据质量问题", filtered, ratio * 100.0),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "检查数据格式是否符合表结构".to_string(),
                     "检查是否有空值或类型不匹配".to_string(),

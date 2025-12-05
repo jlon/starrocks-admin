@@ -27,11 +27,13 @@ impl DiagnosticRule for G001MostConsuming {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "🔴 算子 {} 占用 {:.1}% 的执行时间（最耗时节点）",
                     context.node.operator_name, percentage
                 ),
                 suggestions: get_operator_suggestions(&context.node.operator_name),
+                reason: "算子执行时间占整体查询时间比例过高，是查询的主要瓶颈。优化该算子可获得最大收益。".to_string(),
                 parameter_suggestions: vec![],
             })
         } else {
@@ -64,11 +66,13 @@ impl DiagnosticRule for G001bSecondConsuming {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "🟠 算子 {} 占用 {:.1}% 的执行时间（次耗时节点）",
                     context.node.operator_name, percentage
                 ),
                 suggestions: get_operator_suggestions(&context.node.operator_name),
+                reason: "算子执行时间占整体查询时间比例过高，是查询的主要瓶颈。优化该算子可获得最大收益。".to_string(),
                 parameter_suggestions: vec![],
             })
         } else {
@@ -101,10 +105,12 @@ impl DiagnosticRule for G002HighMemory {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "算子 {} 内存使用过高: {}",
                     context.node.operator_name, format_bytes(memory)
                 ),
+                reason: "算子内存使用过高，可能导致查询失败或触发 Spill。检查是否存在数据膨胀或中间结果过大。".to_string(),
                 suggestions: vec![
                     "检查是否存在数据膨胀".to_string(),
                     "考虑分批处理".to_string(),
@@ -158,10 +164,12 @@ impl DiagnosticRule for G003ExecutionSkew {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "算子 {} 存在执行时间倾斜，max/avg 比率为 {:.2}",
                     context.node.operator_name, ratio
                 ),
+                reason: "算子在多个实例间执行时间差异大，部分实例成为瓶颈。通常是数据分布不均匀导致。".to_string(),
                 suggestions: vec![
                     "检查数据分布是否均匀".to_string(),
                     "检查分桶键选择是否合理".to_string(),

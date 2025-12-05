@@ -27,10 +27,12 @@ impl DiagnosticRule for T001SortRowsTooLarge {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "排序行数过多 ({:.0} 行)，可能导致性能问题",
                     input_rows
                 ),
+                reason: "排序数据量过大，消耗大量 CPU 和内存资源。考虑添加过滤条件减少排序数据量或使用 TopN 优化。".to_string(),
                 suggestions: vec![
                     "添加 LIMIT 限制结果集大小".to_string(),
                     "检查是否可以使用 Top-N 优化".to_string(),
@@ -68,10 +70,12 @@ impl DiagnosticRule for T002SortSpill {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "Sort 发生磁盘溢写，溢写数据量 {}",
                     format_bytes(spill_bytes as u64)
                 ),
+                reason: "排序数据量超出内存限制，触发磁盘溢写。Spill 会显著降低排序性能。".to_string(),
                 suggestions: vec![
                     "增加内存限制以避免 Spill".to_string(),
                     "添加 LIMIT 减少排序数据量".to_string(),
@@ -126,10 +130,12 @@ impl DiagnosticRule for T003SortMemoryHigh {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "排序内存使用 {}",
                     format_bytes(memory as u64)
                 ),
+                reason: "排序占用内存过高，可能导致内存压力或影响其他算子。".to_string(),
                 suggestions: vec![
                     "添加 LIMIT 减少排序数据量".to_string(),
                     "启用 Spill 功能避免 OOM".to_string(),
@@ -176,10 +182,12 @@ impl DiagnosticRule for W001WindowMemoryHigh {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "窗口函数内存使用 {}",
                     format_bytes(memory)
                 ),
+                reason: "窗口函数占用内存过高，可能是窗口分区过大或窗口函数状态过大。".to_string(),
                 suggestions: vec![
                     "检查 PARTITION BY 基数是否过高".to_string(),
                     "考虑减少窗口大小".to_string(),
@@ -215,7 +223,9 @@ impl DiagnosticRule for T004SortMergingTimeLong {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("Sort 合并阶段占比过高 ({:.1}%)", ratio * 100.0),
+                reason: "多路归并排序时间过长，可能是归并路数过多或单路数据量大。".to_string(),
                 suggestions: vec!["检查并行度设置是否合理".to_string(), "考虑减少分区数量".to_string()],
                 parameter_suggestions: vec![],
             })
@@ -245,7 +255,9 @@ impl DiagnosticRule for T005MergeWaitingLong {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("Merge 等待上游时间占比 {:.1}%", ratio * 100.0),
+                reason: "Merge 算子等待上游数据时间过长，上游算子可能存在性能瓶颈。".to_string(),
                 suggestions: vec!["首先优化生产者 operator".to_string(), "扩大管道缓冲区".to_string()],
                 parameter_suggestions: vec![],
             })

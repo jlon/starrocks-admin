@@ -190,6 +190,13 @@ pub struct ExecutionTreeNode {
     
     #[serde(skip_serializing_if = "HashMap::is_empty", default)]
     pub unique_metrics: HashMap<String, String>,
+    
+    /// Whether this node has diagnostic issues (for UI warning indicator)
+    #[serde(default)]
+    pub has_diagnostic: bool,
+    /// List of diagnostic rule IDs associated with this node
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub diagnostic_ids: Vec<String>,
 }
 
 /// Node type classification for visualization styling
@@ -358,22 +365,61 @@ pub struct ProfileAnalysisResponse {
     pub performance_score: f64,
     pub execution_tree: Option<ExecutionTree>,
     pub summary: Option<ProfileSummary>,
-    /// Rule-based diagnostics with parameter suggestions
+    /// Rule-based diagnostics with parameter suggestions (all diagnostics)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DiagnosticResult>,
+    /// Aggregated diagnostics by rule_id for overview display
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aggregated_diagnostics: Vec<AggregatedDiagnostic>,
+    /// Node-level diagnostics mapping (plan_node_id -> diagnostics)
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub node_diagnostics: std::collections::HashMap<i32, Vec<DiagnosticResult>>,
     /// Raw profile content for display in PROFILE tab
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile_content: Option<String>,
 }
 
+/// Aggregated diagnostic for overview display
+/// Groups multiple diagnostics of the same rule_id together
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AggregatedDiagnostic {
+    pub rule_id: String,
+    pub rule_name: String,
+    pub severity: String,
+    /// Aggregated summary message
+    pub message: String,
+    /// Detailed explanation
+    pub reason: String,
+    /// List of affected node paths
+    pub affected_nodes: Vec<String>,
+    /// Number of affected nodes
+    pub node_count: usize,
+    /// Merged suggestions (deduplicated)
+    pub suggestions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_suggestions: Vec<ParameterTuningSuggestion>,
+}
+
 /// Diagnostic result from rule engine
+/// 
+/// Structure follows Aliyun EMR StarRocks diagnostic standard:
+/// - message: 诊断结果概要说明 (Summary of the issue)
+/// - reason: 详细诊断原因说明 (Detailed explanation of why this happens)
+/// - suggestions: 建议措施 (Recommended actions)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticResult {
     pub rule_id: String,
     pub rule_name: String,
     pub severity: String,
     pub node_path: String,
+    /// Plan node ID for associating with execution tree node
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_node_id: Option<i32>,
+    /// Summary of the diagnostic issue (诊断结果概要)
     pub message: String,
+    /// Detailed explanation of why this issue occurs (详细诊断原因)
+    pub reason: String,
+    /// Recommended actions to fix the issue (建议措施)
     pub suggestions: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameter_suggestions: Vec<ParameterTuningSuggestion>,

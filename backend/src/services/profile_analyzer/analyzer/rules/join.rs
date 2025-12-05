@@ -34,10 +34,12 @@ impl DiagnosticRule for J001ResultExplosion {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "Join 结果膨胀 {:.1} 倍 (输出 {:.0} 行 / 探测 {:.0} 行)",
                     ratio, output_rows, probe_rows
                 ),
+                reason: "Join 输出结果显著大于输入，通常是缺少 Join 条件导致 Cross Join，或 Join 条件错误导致 1:N 匹配。".to_string(),
                 suggestions: vec![
                     "检查 JOIN 条件是否缺失或不完整".to_string(),
                     "检查是否存在多对多关系".to_string(),
@@ -76,10 +78,12 @@ impl DiagnosticRule for J002BuildLargerThanProbe {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "Build 端行数 ({:.0}) 大于 Probe 端 ({:.0})，Join 顺序可能不优",
                     build_rows, probe_rows
                 ),
+                reason: "在 Hash Join 中，Build 端数据量大于 Probe 端，导致 HashTable 过大。优化器可能因统计信息不准确选择了错误的 Build 端。".to_string(),
                 suggestions: vec![
                     "执行 ANALYZE TABLE 更新统计信息".to_string(),
                     "检查优化器是否选择了正确的 Join 顺序".to_string(),
@@ -120,10 +124,12 @@ impl DiagnosticRule for J003HashTableTooLarge {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "HashTable 内存使用 {}，可能导致内存压力",
                     format_bytes(hash_memory as u64)
                 ),
+                reason: "Join 的 HashTable 占用内存过大，可能导致内存压力或触发 Spill。".to_string(),
                 suggestions: vec![
                     "检查 Build 端数据量是否过大".to_string(),
                     "考虑使用 Runtime Filter 减少数据量".to_string(),
@@ -169,10 +175,12 @@ impl DiagnosticRule for J004NoRuntimeFilter {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "Join 未生成 Runtime Filter，Build 端有 {:.0} 行",
                     build_rows
                 ),
+                reason: "Runtime Filter 未生效或效果差，Scan 端未能有效过滤数据。可能是 Filter 构建失败或选择性差。".to_string(),
                 suggestions: vec![
                     "检查 enable_global_runtime_filter 是否启用".to_string(),
                     "检查 Join 条件是否适合生成 RF".to_string(),
@@ -227,10 +235,12 @@ impl DiagnosticRule for J009NonEquiJoin {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "使用了 {} 算子，可能是非等式 Join 导致",
                     context.node.operator_name
                 ),
+                reason: "Join 条件包含非等式条件，无法使用 Hash Join，退化为 Nested Loop Join，性能较差。".to_string(),
                 suggestions: vec![
                     "检查 JOIN 条件是否包含等式条件".to_string(),
                     "尝试将非等式条件转换为等式条件".to_string(),
@@ -274,10 +284,12 @@ impl DiagnosticRule for J010ProbeCacheUnfriendly {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "HashTable ({}) 超过 L3 缓存，探测行数 ({:.0}) 远大于构建行数 ({:.0})，可能存在缓存不友好",
                     format_bytes(hash_memory as u64), probe_rows, build_rows
                 ),
+                reason: "Hash 表探测时缓存命中率低，可能是 HashTable 过大超出 CPU 缓存或探测数据访问模式不友好。".to_string(),
                 suggestions: vec![
                     "考虑交换 Join 左右表顺序".to_string(),
                     "使用 Hint 指定 Join 顺序".to_string(),
@@ -310,7 +322,9 @@ impl DiagnosticRule for J005HashCollision {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("Hash 表碰撞严重，平均每桶 {:.1} 个键", keys_per_bucket),
+                reason: "Hash 表存在大量冲突，导致探测效率下降。可能是 Join 键分布不均匀或 Hash 函数效果差。".to_string(),
                 suggestions: vec!["优化 Join 键选择".to_string(), "检查数据是否存在大量重复值".to_string()],
                 parameter_suggestions: vec![],
             })
@@ -340,7 +354,9 @@ impl DiagnosticRule for J006ShuffleSkew {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("Join 数据分布倾斜，max/avg 比率为 {:.2}", ratio),
+                reason: "Shuffle Join 的数据分布不均匀，部分节点处理更多数据。通常是 Join 键存在热点值。".to_string(),
                 suggestions: vec!["切换到更高基数的连接键".to_string(), "对键添加盐值".to_string()],
                 parameter_suggestions: vec![],
             })
@@ -369,7 +385,9 @@ impl DiagnosticRule for J007PartitionProbeOverhead {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("分区探测开销占比 {:.1}%，分区数为 {:.0}", probe_overhead / search_time * 100.0, partition_nums),
+                reason: "分区探测开销过高，可能是分区数过多或分区策略不当。".to_string(),
                 suggestions: vec!["检查分区数是否合理".to_string(), "考虑增加内存限制避免过度分区".to_string()],
                 parameter_suggestions: vec![],
             })
@@ -397,7 +415,9 @@ impl DiagnosticRule for J008RFMemoryHigh {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("Runtime Filter 内存占用 {}", format_bytes(rf_bytes as u64)),
+                reason: "Runtime Filter 占用内存过高，可能是 Filter 数量过多或单个 Filter 过大。".to_string(),
                 suggestions: vec!["降低 runtime_filter_max_size 配置".to_string(), "检查 Join 键基数是否过高".to_string()],
                 parameter_suggestions: vec![
                     ParameterSuggestion {

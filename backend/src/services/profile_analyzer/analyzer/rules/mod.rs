@@ -56,13 +56,24 @@ pub enum ParameterType {
 }
 
 /// A diagnostic result from rule evaluation
+/// 
+/// Structure follows Aliyun EMR StarRocks diagnostic standard:
+/// - message: 诊断结果概要说明 (Summary of the issue)
+/// - reason: 详细诊断原因说明 (Detailed explanation of why this happens)
+/// - suggestions: 建议措施 (Recommended actions)
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
     pub rule_id: String,
     pub rule_name: String,
     pub severity: RuleSeverity,
     pub node_path: String,
+    /// Plan node ID for associating diagnostic with execution tree node
+    pub plan_node_id: Option<i32>,
+    /// Summary of the diagnostic issue (诊断结果概要)
     pub message: String,
+    /// Detailed explanation of why this issue occurs (详细诊断原因)
+    pub reason: String,
+    /// Recommended actions to fix the issue (建议措施)
     pub suggestions: Vec<String>,
     pub parameter_suggestions: Vec<ParameterSuggestion>,
 }

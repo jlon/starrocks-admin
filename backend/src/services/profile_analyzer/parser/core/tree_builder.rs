@@ -65,7 +65,14 @@ impl TreeBuilder {
                 
                 sink_idx
             } else {
-                id_to_idx.get(&topology.root_id).copied().unwrap_or(0)
+                // Bug fix: If sink name is found but sink node doesn't exist in nodes,
+                // fall back to topology root with proper error handling
+                id_to_idx.get(&topology.root_id)
+                    .copied()
+                    .ok_or_else(|| ParseError::TreeError(
+                        format!("Sink node '{}' not found in nodes and topology root {} not found", 
+                                sink_name, topology.root_id)
+                    ))?
             }
         } else {
             id_to_idx.get(&topology.root_id)

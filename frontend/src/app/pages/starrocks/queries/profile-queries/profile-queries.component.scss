@@ -282,6 +282,16 @@
       border-left: 12px solid transparent;
       border-top: 12px solid #faad14;
     }
+
+    .diagnostic-indicator {
+      position: absolute;
+      top: -8px;
+      left: -8px;
+      font-size: 14px;
+      line-height: 1;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+      z-index: 1;
+    }
   }
 
   .node-body {
@@ -751,6 +761,15 @@
             font-weight: 600;
             color: #222b45;
           }
+
+          .node-count-badge {
+            margin-left: auto;
+            font-size: 10px;
+            color: #8f9bb3;
+            background: rgba(143, 155, 179, 0.1);
+            padding: 2px 6px;
+            border-radius: 10px;
+          }
         }
         
         .diag-message {
@@ -758,6 +777,44 @@
           color: #333;
           line-height: 1.5;
           margin-bottom: 6px;
+        }
+
+        .diag-reason {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+          font-size: 11px;
+          color: #666;
+          background: rgba(0, 149, 255, 0.05);
+          border-left: 2px solid #0095ff;
+          padding: 8px 10px;
+          margin-bottom: 8px;
+          border-radius: 0 4px 4px 0;
+          line-height: 1.5;
+
+          nb-icon {
+            font-size: 14px;
+            flex-shrink: 0;
+            margin-top: 1px;
+          }
+
+          .reason-text {
+            flex: 1;
+          }
+        }
+
+        .diag-affected-nodes {
+          display: flex;
+          align-items: flex-start;
+          gap: 4px;
+          font-size: 11px;
+          margin-bottom: 8px;
+          flex-wrap: wrap;
+          
+          nb-icon {
+            font-size: 12px;
+            flex-shrink: 0;
+          }
         }
         
         .diag-node {
@@ -967,6 +1024,91 @@
       padding: 2px 6px;
       border-radius: 3px;
       font-size: 10px;
+    }
+
+    // Node-specific diagnostics list
+    .node-diagnostics-list {
+      .node-diag-item {
+        padding: 10px;
+        margin-bottom: 8px;
+        background: rgba(143, 150, 170, 0.04);
+        border-radius: 6px;
+        border-left: 3px solid #faad14;
+
+        .node-diag-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+
+          .diag-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+
+            &.badge-danger {
+              background: rgba(255, 77, 79, 0.15);
+              color: #ff4d4f;
+            }
+            &.badge-warning {
+              background: rgba(250, 173, 20, 0.15);
+              color: #d48806;
+            }
+            &.badge-info {
+              background: rgba(0, 149, 255, 0.15);
+              color: #0095ff;
+            }
+          }
+
+          .diag-name {
+            font-size: 11px;
+            font-weight: 600;
+            color: #222b45;
+          }
+        }
+
+        .node-diag-message {
+          font-size: 11px;
+          color: #333;
+          line-height: 1.5;
+          margin-bottom: 6px;
+        }
+
+        .node-diag-reason {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+          font-size: 10px;
+          color: #666;
+          background: rgba(0, 149, 255, 0.05);
+          border-left: 2px solid #0095ff;
+          padding: 6px 8px;
+          margin-bottom: 6px;
+          border-radius: 0 4px 4px 0;
+          line-height: 1.4;
+
+          nb-icon {
+            font-size: 12px;
+            flex-shrink: 0;
+          }
+        }
+
+        .node-diag-suggestions {
+          .suggestion-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
+            font-size: 10px;
+            color: #555;
+            padding: 2px 0;
+
+            .icon {
+              font-size: 10px;
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -171,12 +171,14 @@ pub async fn analyze_profile_handler(
     let safe_query_id = sanitize_query_id(&query_id)?;
     tracing::info!("Analyzing profile for query {} in cluster {}", safe_query_id, cluster.id);
 
-    // Fetch profile content from StarRocks
+    // Fetch profile content from StarRocks database (NOT from test files)
+    // This ensures each query_id gets its actual profile data
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
     let sql = format!("SELECT get_query_profile('{}')", safe_query_id);
     let (_, rows) = mysql_client.query_raw(&sql).await?;
 
+    // Extract profile content from database result
     let profile_content = rows
         .first()
         .and_then(|row| row.first())
@@ -187,9 +189,10 @@ pub async fn analyze_profile_handler(
         return Err(ApiError::not_found(format!("Profile not found for query: {}", safe_query_id)));
     }
 
-    tracing::info!("Profile content length: {} bytes", profile_content.len());
+    tracing::info!("Profile content length: {} bytes for query {}", profile_content.len(), safe_query_id);
 
     // Parse the profile and return analysis
+    // Note: analyze_profile() only accepts string input, never reads from files
     analyze_profile(&profile_content)
         .map(Json)
         .map_err(|e| ApiError::internal_error(format!("Analysis failed: {}", e)))

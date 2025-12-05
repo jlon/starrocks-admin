@@ -68,7 +68,9 @@ impl RuleEngine {
                         rule_name: diag.rule_name,
                         severity: diag.severity,
                         node_path: "Query".to_string(),
+                        plan_node_id: None,
                         message: diag.message,
+                        reason: diag.reason,
                         suggestions: diag.suggestions,
                         parameter_suggestions: if self.config.include_parameters {
                             diag.parameter_suggestions

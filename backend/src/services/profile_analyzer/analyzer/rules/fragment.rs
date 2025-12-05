@@ -22,7 +22,9 @@ impl DiagnosticRule for F001ExecutionTimeSkew {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("实例执行时间存在倾斜，max/avg 比率为 {:.2}", ratio),
+                reason: "Fragment 执行时间过长，是查询的主要瓶颈。需要分析 Fragment 内的算子找出具体问题。".to_string(),
                 suggestions: vec!["检查数据分布".to_string(), "优化分桶策略".to_string()],
                 parameter_suggestions: vec![],
             })
@@ -50,7 +52,9 @@ impl DiagnosticRule for F002MemorySkew {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("实例内存分配不均，max/avg 比率为 {:.2}", ratio),
+                reason: "Fragment 内存使用过高，可能导致查询失败。".to_string(),
                 suggestions: vec!["检查数据倾斜".to_string()],
                 parameter_suggestions: vec![],
             })
@@ -75,7 +79,9 @@ impl DiagnosticRule for F003PrepareTimeLong {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("Fragment 准备时间 {:.1}s", prepare_time / 1_000_000_000.0),
+                reason: "Fragment 各实例执行时间差异大，存在数据倾斜或资源不均。".to_string(),
                 suggestions: vec!["检查元数据加载".to_string()],
                 parameter_suggestions: vec![],
             })

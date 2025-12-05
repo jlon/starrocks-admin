@@ -176,6 +176,8 @@ impl ProfileComposer {
                     is_most_consuming: false,
                     is_second_most_consuming: false,
                     unique_metrics: aggregated_op.unique_metrics.clone(),
+                    has_diagnostic: false,
+                    diagnostic_ids: Vec::new(),
                 }
             } else {
                 ExecutionTreeNode {
@@ -196,6 +198,8 @@ impl ProfileComposer {
                     is_most_consuming: false,
                     is_second_most_consuming: false,
                     unique_metrics: HashMap::new(),
+                    has_diagnostic: false,
+                    diagnostic_ids: Vec::new(),
                 }
             };
             
@@ -245,6 +249,8 @@ impl ProfileComposer {
                                 is_most_consuming: false,
                                 is_second_most_consuming: false,
                                 unique_metrics: operator.unique_metrics.clone(),
+                                has_diagnostic: false,
+                                diagnostic_ids: Vec::new(),
                             };
                             
                             nodes.push(sink_node);
@@ -301,6 +307,8 @@ impl ProfileComposer {
                         is_most_consuming: false,
                         is_second_most_consuming: false,
                         unique_metrics: HashMap::new(),
+                    has_diagnostic: false,
+                    diagnostic_ids: Vec::new(),
                     };
                     
                     nodes.push(node);

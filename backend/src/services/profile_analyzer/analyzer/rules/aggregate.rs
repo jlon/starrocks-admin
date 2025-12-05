@@ -34,10 +34,12 @@ impl DiagnosticRule for A001AggregationSkew {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "聚合存在数据倾斜，max/avg 比率为 {:.2}",
                     ratio
                 ),
+                reason: "聚合算子多个实例处理的数据量存在明显差异，部分实例成为瓶颈。通常是 GROUP BY 键的数据分布不均匀导致。".to_string(),
                 suggestions: vec![
                     "检查 GROUP BY 键的数据分布".to_string(),
                     "考虑使用两阶段聚合".to_string(),
@@ -75,10 +77,12 @@ impl DiagnosticRule for A002HashTableTooLarge {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "聚合 HashTable 内存使用 {}",
                     format_bytes(memory)
                 ),
+                reason: "HashTable 占用内存过大，可能导致内存压力或触发 Spill。通常是 GROUP BY 键基数过高或聚合函数状态过大。".to_string(),
                 suggestions: vec![
                     "检查 GROUP BY 基数是否过高".to_string(),
                     "考虑使用物化视图预聚合".to_string(),
@@ -131,10 +135,12 @@ impl DiagnosticRule for A004HighCardinality {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "GROUP BY 基数过高 ({:.0} 个分组)",
                     hash_size
                 ),
+                reason: "GROUP BY 键的基数过高，导致 HashTable 条目过多，内存使用增加且聚合效率下降。".to_string(),
                 suggestions: vec![
                     "检查 GROUP BY 键的选择是否合理".to_string(),
                     "考虑使用流式聚合".to_string(),
@@ -178,7 +184,9 @@ impl DiagnosticRule for A003DataSkew {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("聚合存在数据倾斜，max/avg 比率为 {:.2}", ratio),
+                reason: "聚合算子的输入数据在各个实例间分布不均匀，导致部分实例处理更多数据。".to_string(),
                 suggestions: vec!["优化分组键选择".to_string(), "考虑对热点键单独处理".to_string()],
                 parameter_suggestions: vec![],
             })
@@ -208,7 +216,9 @@ impl DiagnosticRule for A005ExpensiveKeyExpr {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("GROUP BY 键表达式计算占比过高 ({:.1}%)", ratio * 100.0),
+                reason: "GROUP BY 键包含复杂表达式，每行数据都需要计算表达式，增加 CPU 开销。建议将表达式提前计算或使用生成列。".to_string(),
                 suggestions: vec![
                     "在子查询中物化复杂表达式".to_string(),
                     "将表达式提升为生成列".to_string(),

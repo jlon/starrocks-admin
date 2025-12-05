@@ -30,10 +30,12 @@ impl DiagnosticRule for E001NetworkTransferLarge {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "网络传输数据量 {}，可能存在网络瓶颈",
                     format_bytes(bytes_sent as u64)
                 ),
+                reason: "网络传输数据量过大，占用大量网络带宽和时间。可能是 Shuffle 数据量大或缺少有效的数据裁剪。".to_string(),
                 suggestions: vec![
                     "检查是否可以减少 Shuffle 数据量".to_string(),
                     "考虑使用 Colocate Join 避免 Shuffle".to_string(),
@@ -93,10 +95,12 @@ impl DiagnosticRule for E002NetworkTimeHigh {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "网络时间占比 {:.1}%，可能存在网络瓶颈",
                     ratio * 100.0
                 ),
+                reason: "网络传输时间占比过高，查询瓶颈在网络。可能是网络带宽不足或跨机房传输。".to_string(),
                 suggestions: vec![
                     "检查网络带宽和延迟".to_string(),
                     "考虑使用 Colocate Join".to_string(),
@@ -141,10 +145,12 @@ impl DiagnosticRule for E003ShuffleSkew {
                 node_path: format!("{} (plan_node_id={})", 
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "Shuffle 存在数据倾斜，max/avg 比率为 {:.2}",
                     ratio
                 ),
+                reason: "Shuffle 数据在各节点间分布不均匀，部分节点接收更多数据。通常是 Shuffle 键存在热点值。".to_string(),
                 suggestions: vec![
                     "检查分区键选择是否合理".to_string(),
                     "考虑使用 Skew Join 优化".to_string(),

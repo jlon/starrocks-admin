@@ -19,6 +19,7 @@ pub struct QueryDiagnostic {
     pub rule_name: String,
     pub severity: RuleSeverity,
     pub message: String,
+    pub reason: String,
     pub suggestions: Vec<String>,
     pub parameter_suggestions: Vec<ParameterSuggestion>,
 }
@@ -44,6 +45,7 @@ impl QueryRule for Q001LongRunning {
                     "查询执行时间 {}，超过 60 秒阈值",
                     format_duration_ms(total_time_ms)
                 ),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "检查是否存在性能瓶颈算子".to_string(),
                     "考虑优化查询计划".to_string(),
@@ -93,6 +95,7 @@ impl QueryRule for Q002HighMemory {
                     "查询峰值内存 {}，超过 10GB 阈值",
                     format_bytes(peak_memory)
                 ),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "检查是否存在大表 Join".to_string(),
                     "考虑启用 Spill 功能".to_string(),
@@ -144,6 +147,7 @@ impl QueryRule for Q003QuerySpill {
                     "查询发生磁盘溢写，溢写数据量 {}",
                     format_bytes(spill_bytes)
                 ),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "增加内存限制以减少 Spill".to_string(),
                     "优化查询减少中间结果".to_string(),
@@ -195,6 +199,7 @@ impl QueryRule for Q005ScanDominates {
                     "扫描时间占比 {:.1}%，查询瓶颈在数据扫描",
                     ratio * 100.0
                 ),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "添加过滤条件减少扫描数据量".to_string(),
                     "检查分区裁剪是否生效".to_string(),
@@ -247,6 +252,7 @@ impl QueryRule for Q006NetworkDominates {
                     "网络时间占比 {:.1}%，查询瓶颈在网络传输",
                     ratio * 100.0
                 ),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "考虑使用 Colocate Join 减少 Shuffle".to_string(),
                     "检查网络带宽".to_string(),
@@ -278,6 +284,7 @@ impl QueryRule for Q004LowCPU {
                 rule_name: self.name().to_string(),
                 severity: super::RuleSeverity::Warning,
                 message: format!("CPU 利用率仅 {:.1}%，可能存在等待或 IO 瓶颈", ratio * 100.0),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["检查是否存在等待".to_string(), "增加并行度".to_string()],
                 parameter_suggestions: vec![
                     super::ParameterSuggestion {
@@ -310,6 +317,7 @@ impl QueryRule for Q007ProfileCollectSlow {
                 rule_name: self.name().to_string(),
                 severity: super::RuleSeverity::Info,
                 message: format!("Profile 收集时间 {:.1}ms", collect_time / 1_000_000.0),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["降低 pipeline_profile_level".to_string()],
                 parameter_suggestions: vec![
                     super::ParameterSuggestion {
@@ -343,6 +351,7 @@ impl QueryRule for Q008ScheduleTimeLong {
                 rule_name: self.name().to_string(),
                 severity: super::RuleSeverity::Warning,
                 message: format!("调度时间占比 {:.1}%，Pipeline 调度可能存在瓶颈", ratio * 100.0),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["检查 Pipeline 调度瓶颈".to_string(), "增加并行度".to_string()],
                 parameter_suggestions: vec![],
             })
@@ -370,6 +379,7 @@ impl QueryRule for Q009ResultDeliverySlow {
                 rule_name: self.name().to_string(),
                 severity: super::RuleSeverity::Info,
                 message: format!("结果传输时间占比 {:.1}%", ratio * 100.0),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["检查网络带宽".to_string(), "减少结果集大小".to_string()],
                 parameter_suggestions: vec![],
             })

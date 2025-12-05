@@ -24,7 +24,9 @@ impl DiagnosticRule for P001ProjectExprHigh {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("Project 表达式计算占比过高 ({:.1}%)", ratio * 100.0),
+                reason: "Project 算子执行时间过长，可能是表达式计算复杂或数据量大。".to_string(),
                 suggestions: vec![
                     "简化 SELECT 中的复杂表达式".to_string(),
                     "将复杂计算移到物化视图中预计算".to_string(),
@@ -58,7 +60,9 @@ impl DiagnosticRule for L001LocalExchangeMemory {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                plan_node_id: context.node.plan_node_id,
                 message: format!("LocalExchange 内存使用 {}", format_bytes(memory as u64)),
+                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "检查上下游算子的数据流是否平衡".to_string(),
                     "调整 pipeline_dop 参数".to_string(),

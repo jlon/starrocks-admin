@@ -177,8 +177,11 @@
                       
                       <!-- Header with dynamic color -->
                       <div class="node-header" [ngClass]="getNodeHeaderClass(node)">
+                        <!-- Diagnostic warning indicator (left side) -->
+                        <div *ngIf="node.has_diagnostic" class="diagnostic-indicator" nbTooltip="该节点有诊断建议">⚠️</div>
                         <span class="node-title">{{ node.operator_name }}</span>
-                        <div *ngIf="getNodeRank(node) > 1" class="top-mark"></div>
+                        <!-- Top N mark (right corner) -->
+                        <div *ngIf="getNodeRank(node) > 1" class="top-mark" nbTooltip="Top {{ getNodeRank(node) }} 耗时节点"></div>
                       </div>
                       
                       <!-- Body -->
@@ -521,69 +524,153 @@
                           </div>
                         </div>
                       </nb-tab>
+
+                      <!-- Diagnostics Tab - Node specific diagnostics -->
+                      <nb-tab [tabTitle]="'诊断' + (getNodeDiagnostics(selectedNode)?.length ? ' (' + getNodeDiagnostics(selectedNode)?.length + ')' : '')">
+                        <div class="node-diagnostics-list" *ngIf="getNodeDiagnostics(selectedNode)?.length; else noDiagnostics">
+                          <div *ngFor="let diag of getNodeDiagnostics(selectedNode)" class="node-diag-item">
+                            <div class="node-diag-header">
+                              <span class="diag-badge" [ngClass]="{
+                                'badge-danger': diag.severity === 'Error',
+                                'badge-warning': diag.severity === 'Warning',
+                                'badge-info': diag.severity === 'Info'
+                              }">{{ diag.rule_id }}</span>
+                              <span class="diag-name">{{ diag.rule_name }}</span>
+                            </div>
+                            <div class="node-diag-message">{{ diag.message }}</div>
+                            <div class="node-diag-reason" *ngIf="diag.reason">
+                              <nb-icon icon="info-outline" class="text-info"></nb-icon>
+                              <span>{{ diag.reason }}</span>
+                            </div>
+                            <div class="node-diag-suggestions" *ngIf="diag.suggestions?.length">
+                              <div *ngFor="let suggestion of diag.suggestions" class="suggestion-item">
+                                <span class="icon">💡</span>
+                                <span>{{ suggestion }}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <ng-template #noDiagnostics>
+                          <div class="text-hint text-center py-3">
+                            该节点暂无诊断建议
+                          </div>
+                        </ng-template>
+                      </nb-tab>
                     </nb-tabset>
                   </div>
                 </div>
 
-                <!-- Diagnosis Section -->
+                <!-- Diagnosis Section - Context-aware (Node-specific or Aggregated) -->
                 <div class="right-section diagnosis-section">
                   <div class="section-header">
-                    <span class="title">诊断建议</span>
-                    <span class="warning-badge" *ngIf="analysisData?.diagnostics?.length">{{ analysisData?.diagnostics?.length }}</span>
+                    <span class="title">{{ selectedNode ? '节点诊断' : '诊断建议' }}</span>
+                    <span class="warning-badge" *ngIf="getCurrentDiagnosticsCount()">{{ getCurrentDiagnosticsCount() }}</span>
                     <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
-                    <!-- Show detailed diagnostics if available -->
-                    <div *ngIf="analysisData?.diagnostics?.length" class="diagnosis-list">
-                      <div *ngFor="let diag of analysisData?.diagnostics" class="diagnosis-item-detailed">
-                        <div class="diag-header">
-                          <span class="diag-badge" [ngClass]="{
-                            'badge-danger': diag.severity === 'Error',
-                            'badge-warning': diag.severity === 'Warning',
-                            'badge-info': diag.severity === 'Info'
-                          }">{{ diag.rule_id }}</span>
-                          <span class="diag-name">{{ diag.rule_name }}</span>
-                        </div>
-                        <div class="diag-message">{{ diag.message }}</div>
-                        <div class="diag-node" *ngIf="diag.node_path">
-                          <nb-icon icon="pin-outline" class="text-hint"></nb-icon>
-                          <span class="text-hint">{{ diag.node_path }}</span>
-                        </div>
-                        <div class="diag-suggestions" *ngIf="diag.suggestions?.length">
-                          <div *ngFor="let suggestion of diag.suggestions" class="diag-suggestion">
-                            <span class="icon">💡</span>
-                            <span>{{ suggestion }}</span>
+                    
+                    <!-- When node is selected: show node-specific diagnostics -->
+                    <ng-container *ngIf="selectedNode">
+                      <div *ngIf="getNodeDiagnostics(selectedNode)?.length" class="diagnosis-list">
+                        <div *ngFor="let diag of getNodeDiagnostics(selectedNode)" class="diagnosis-item-detailed">
+                          <div class="diag-header">
+                            <span class="diag-badge" [ngClass]="{
+                              'badge-danger': diag.severity === 'Error',
+                              'badge-warning': diag.severity === 'Warning',
+                              'badge-info': diag.severity === 'Info'
+                            }">{{ diag.rule_id }}</span>
+                            <span class="diag-name">{{ diag.rule_name }}</span>
                           </div>
-                        </div>
-                        <!-- Parameter tuning suggestions -->
-                        <div class="diag-params" *ngIf="diag.parameter_suggestions?.length">
-                          <div *ngFor="let param of diag.parameter_suggestions" class="param-item">
-                            <div class="param-header">
-                              <nb-icon icon="settings-2-outline" class="text-primary"></nb-icon>
-                              <span class="param-name">{{ param.name }}</span>
-                              <span class="param-type badge badge-basic">{{ param.param_type }}</span>
+                          <div class="diag-message">{{ diag.message }}</div>
+                          <div class="diag-reason" *ngIf="diag.reason">
+                            <nb-icon icon="info-outline" class="text-info"></nb-icon>
+                            <span class="reason-text">{{ diag.reason }}</span>
+                          </div>
+                          <div class="diag-suggestions" *ngIf="diag.suggestions?.length">
+                            <div *ngFor="let suggestion of diag.suggestions" class="diag-suggestion">
+                              <span class="icon">💡</span>
+                              <span>{{ suggestion }}</span>
                             </div>
-                            <div class="param-value">
-                              <span class="text-hint">推荐值:</span>
-                              <code>{{ param.recommended }}</code>
-                            </div>
-                            <div class="param-command" *ngIf="param.command">
-                              <code class="command-text" (click)="copyToClipboard(param.command)" nbTooltip="点击复制">{{ param.command }}</code>
+                          </div>
+                          <div class="diag-params" *ngIf="diag.parameter_suggestions?.length">
+                            <div *ngFor="let param of diag.parameter_suggestions" class="param-item">
+                              <div class="param-header">
+                                <nb-icon icon="settings-2-outline" class="text-primary"></nb-icon>
+                                <span class="param-name">{{ param.name }}</span>
+                                <span class="param-type badge badge-basic">{{ param.param_type }}</span>
+                              </div>
+                              <div class="param-value">
+                                <span class="text-hint">推荐值:</span>
+                                <code>{{ param.recommended }}</code>
+                              </div>
+                              <div class="param-command" *ngIf="param.command">
+                                <code class="command-text" (click)="copyToClipboard(param.command)" nbTooltip="点击复制">{{ param.command }}</code>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                    <!-- Fallback to simple suggestions if no diagnostics -->
-                    <div *ngIf="!analysisData?.diagnostics?.length && analysisData?.suggestions?.length" class="diagnosis-list">
-                      <div *ngFor="let suggestion of analysisData?.suggestions" class="diagnosis-item">
-                        <span class="icon">💡</span>
-                        <span class="text">{{ suggestion }}</span>
+                      <div *ngIf="!getNodeDiagnostics(selectedNode)?.length" class="empty-diagnosis">
+                        该节点暂无诊断建议
                       </div>
-                    </div>
-                    <div *ngIf="!analysisData?.diagnostics?.length && !analysisData?.suggestions?.length" class="empty-diagnosis">
-                      暂无诊断建议
-                    </div>
+                    </ng-container>
+
+                    <!-- When no node selected: show aggregated diagnostics -->
+                    <ng-container *ngIf="!selectedNode">
+                      <div *ngIf="analysisData?.aggregated_diagnostics?.length" class="diagnosis-list">
+                        <div *ngFor="let diag of analysisData?.aggregated_diagnostics" class="diagnosis-item-detailed">
+                          <div class="diag-header">
+                            <span class="diag-badge" [ngClass]="{
+                              'badge-danger': diag.severity === 'Error',
+                              'badge-warning': diag.severity === 'Warning',
+                              'badge-info': diag.severity === 'Info'
+                            }">{{ diag.rule_id }}</span>
+                            <span class="diag-name">{{ diag.rule_name }}</span>
+                            <span class="node-count-badge" *ngIf="diag.node_count > 1">×{{ diag.node_count }} 个节点</span>
+                          </div>
+                          <div class="diag-message">{{ diag.message }}</div>
+                          <div class="diag-reason" *ngIf="diag.reason">
+                            <nb-icon icon="info-outline" class="text-info"></nb-icon>
+                            <span class="reason-text">{{ diag.reason }}</span>
+                          </div>
+                          <div class="diag-affected-nodes" *ngIf="diag.affected_nodes?.length">
+                            <nb-icon icon="pin-outline" class="text-hint"></nb-icon>
+                            <span class="text-hint">涉及节点: {{ diag.affected_nodes.join(', ') }}</span>
+                          </div>
+                          <div class="diag-suggestions" *ngIf="diag.suggestions?.length">
+                            <div *ngFor="let suggestion of diag.suggestions" class="diag-suggestion">
+                              <span class="icon">💡</span>
+                              <span>{{ suggestion }}</span>
+                            </div>
+                          </div>
+                          <div class="diag-params" *ngIf="diag.parameter_suggestions?.length">
+                            <div *ngFor="let param of diag.parameter_suggestions" class="param-item">
+                              <div class="param-header">
+                                <nb-icon icon="settings-2-outline" class="text-primary"></nb-icon>
+                                <span class="param-name">{{ param.name }}</span>
+                                <span class="param-type badge badge-basic">{{ param.param_type }}</span>
+                              </div>
+                              <div class="param-value">
+                                <span class="text-hint">推荐值:</span>
+                                <code>{{ param.recommended }}</code>
+                              </div>
+                              <div class="param-command" *ngIf="param.command">
+                                <code class="command-text" (click)="copyToClipboard(param.command)" nbTooltip="点击复制">{{ param.command }}</code>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div *ngIf="!analysisData?.aggregated_diagnostics?.length && analysisData?.suggestions?.length" class="diagnosis-list">
+                        <div *ngFor="let suggestion of analysisData?.suggestions" class="diagnosis-item">
+                          <span class="icon">💡</span>
+                          <span class="text">{{ suggestion }}</span>
+                        </div>
+                      </div>
+                      <div *ngIf="!analysisData?.aggregated_diagnostics?.length && !analysisData?.suggestions?.length" class="empty-diagnosis">
+                        暂无诊断建议
+                      </div>
+                    </ng-container>
                   </div>
                 </div>
 

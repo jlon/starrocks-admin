@@ -3,7 +3,7 @@
 //! Orchestrates all parsing components to produce a complete Profile structure.
 
 use crate::services::profile_analyzer::models::{
-    Profile, ExecutionTreeNode, Fragment,
+    Profile, ProfileSummary, ExecutionTreeNode, Fragment,
     TopologyGraph, TopNode, OperatorMetrics, HotSeverity,
     constants::time_thresholds,
 };
@@ -78,6 +78,9 @@ impl ProfileComposer {
         // Compute top time-consuming nodes
         let top_nodes = Self::compute_top_time_consuming_nodes(&execution_tree.nodes, 3);
         summary.top_time_consuming_nodes = Some(top_nodes);
+        
+        // Analyze profile completeness (check for MissingInstanceIds)
+        Self::analyze_profile_completeness(text, &mut summary);
         
         Ok(Profile {
             summary,
@@ -498,6 +501,59 @@ impl ProfileComposer {
                 }
             })
             .collect()
+    }
+    
+    /// Analyze profile completeness by checking for MissingInstanceIds
+    /// This detects when profile data is incomplete due to async collection
+    fn analyze_profile_completeness(text: &str, summary: &mut ProfileSummary) {
+        use regex::Regex;
+        use once_cell::sync::Lazy;
+        
+        static MISSING_INSTANCE_REGEX: Lazy<Regex> = 
+            Lazy::new(|| Regex::new(r"MissingInstanceIds:\s*([^\n]+)").unwrap());
+        static INSTANCE_IDS_REGEX: Lazy<Regex> = 
+            Lazy::new(|| Regex::new(r"InstanceIds:\s*([^\n]+)").unwrap());
+        
+        // Count total instances and missing instances
+        let mut total_instances = 0;
+        let mut missing_instances = 0;
+        
+        // Count InstanceIds (each UUID is one instance)
+        for cap in INSTANCE_IDS_REGEX.captures_iter(text) {
+            if let Some(ids_str) = cap.get(1) {
+                let ids = ids_str.as_str().trim();
+                if !ids.is_empty() {
+                    total_instances += ids.split(',').count();
+                }
+            }
+        }
+        
+        // Count MissingInstanceIds
+        for cap in MISSING_INSTANCE_REGEX.captures_iter(text) {
+            if let Some(ids_str) = cap.get(1) {
+                let ids = ids_str.as_str().trim();
+                if !ids.is_empty() {
+                    missing_instances += ids.split(',').count();
+                }
+            }
+        }
+        
+        // Update summary with completeness info
+        summary.total_instance_count = if total_instances > 0 { Some(total_instances as i32) } else { None };
+        summary.missing_instance_count = if missing_instances > 0 { Some(missing_instances as i32) } else { None };
+        
+        // Determine if profile is complete
+        let is_complete = missing_instances == 0;
+        summary.is_profile_complete = Some(is_complete);
+        
+        // Generate warning message if incomplete
+        if !is_complete && total_instances > 0 {
+            let missing_pct = (missing_instances as f64 / total_instances as f64 * 100.0).round() as i32;
+            summary.profile_completeness_warning = Some(format!(
+                "Profile 数据不完整: {} 个实例中有 {} 个 ({}%) 的数据缺失。这通常是因为异步 Profile 收集尚未完成，建议稍后重新查询。",
+                total_instances, missing_instances, missing_pct
+            ));
+        }
     }
 }
 

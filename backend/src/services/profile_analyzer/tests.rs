@@ -1241,5 +1241,35 @@ Query:
             
             println!("Parameter suggestion with defaults test passed!");
         }
+        
+        #[test]
+        fn test_profile_completeness_detection() {
+            use crate::services::profile_analyzer::analyze_profile;
+            
+            // Load test_profile.txt which has MissingInstanceIds
+            let profile_path = "tests/fixtures/profiles/test_profile.txt";
+            let content = std::fs::read_to_string(profile_path)
+                .expect("Failed to read test_profile.txt");
+            
+            let result = analyze_profile(&content).expect("Failed to analyze profile");
+            let summary = result.summary.expect("Summary should exist");
+            
+            // Verify completeness detection
+            println!("Profile completeness analysis:");
+            println!("  is_profile_async: {:?}", summary.is_profile_async);
+            println!("  retry_times: {:?}", summary.retry_times);
+            println!("  total_instance_count: {:?}", summary.total_instance_count);
+            println!("  missing_instance_count: {:?}", summary.missing_instance_count);
+            println!("  is_profile_complete: {:?}", summary.is_profile_complete);
+            println!("  warning: {:?}", summary.profile_completeness_warning);
+            
+            // test_profile.txt has MissingInstanceIds, so it should be incomplete
+            assert_eq!(summary.is_profile_async, Some(true), "Should detect async profile");
+            assert!(summary.missing_instance_count.unwrap_or(0) > 0, "Should detect missing instances");
+            assert_eq!(summary.is_profile_complete, Some(false), "Should be marked as incomplete");
+            assert!(summary.profile_completeness_warning.is_some(), "Should have warning message");
+            
+            println!("Profile completeness detection test passed!");
+        }
     }
 }

@@ -86,6 +86,17 @@ impl SectionParser {
             datacache_bytes_remote_display: None,
             
             top_time_consuming_nodes: None,
+            
+            // Profile completeness (parsed from Summary section)
+            is_profile_async: fields.get("IsProfileAsync")
+                .map(|v| v.eq_ignore_ascii_case("true")),
+            retry_times: fields.get("Retry Times")
+                .and_then(|v| v.parse().ok()),
+            // These will be filled later from Fragment analysis
+            missing_instance_count: None,
+            total_instance_count: None,
+            is_profile_complete: None,
+            profile_completeness_warning: None,
         })
     }
     

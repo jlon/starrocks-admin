@@ -71,8 +71,12 @@ impl RuleEngine {
         let mut diagnostics = Vec::new();
         
         // Evaluate query-level rules first
+        let query_ctx = super::rules::query::QueryRuleContext::with_cluster_variables(
+            profile, 
+            cluster_variables
+        );
         for rule in get_query_rules() {
-            if let Some(diag) = rule.evaluate(profile) {
+            if let Some(diag) = rule.evaluate(&query_ctx) {
                 if diag.severity >= self.config.min_severity {
                     diagnostics.push(Diagnostic {
                         rule_id: diag.rule_id,

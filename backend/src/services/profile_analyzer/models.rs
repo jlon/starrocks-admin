@@ -240,6 +240,26 @@ pub struct ProfileSummary {
     // Top time-consuming nodes for quick overview
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_time_consuming_nodes: Option<Vec<TopNode>>,
+    
+    // Profile completeness indicators
+    /// Whether the profile is collected asynchronously
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_profile_async: Option<bool>,
+    /// Number of retry attempts for profile collection
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_times: Option<i32>,
+    /// Number of missing BE instances (profile data not received)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missing_instance_count: Option<i32>,
+    /// Total number of BE instances involved in the query
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_instance_count: Option<i32>,
+    /// Whether the profile data is complete (no missing instances)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_profile_complete: Option<bool>,
+    /// Warning message if profile is incomplete
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_completeness_warning: Option<String>,
 }
 
 /// Top time-consuming node for quick performance overview

@@ -501,7 +501,10 @@ impl<'a> RuleContext<'a> {
             _ => return None, // No smart recommendation for this parameter
         };
         
-        let current = self.get_variable_value(name);
+        // Get current value: cluster_variables > session_variables > default
+        let current = self.get_variable_value(name)
+            .or_else(|| get_parameter_default(name).map(|s| s.to_string()));
+        
         let metadata = get_parameter_metadata(name);
         let command = match param_type {
             ParameterType::Session => format!("SET {} = {};", name, recommended),

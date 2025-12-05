@@ -1164,3 +1164,27 @@
     }
   }
 }
+
+// ============================================
+// Profile Completeness Warning
+// ============================================
+.profile-warning {
+  margin-bottom: 0.5rem;
+  
+  nb-alert {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    
+    nb-icon {
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    
+    span {
+      line-height: 1.4;
+    }
+  }
+}

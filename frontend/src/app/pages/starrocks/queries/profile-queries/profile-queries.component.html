@@ -255,6 +255,14 @@
                   </div>
                 </div>
 
+                <!-- Profile Completeness Warning -->
+                <div class="profile-warning" *ngIf="analysisData?.summary?.is_profile_complete === false">
+                  <nb-alert status="warning" closable="false" class="mb-2">
+                    <nb-icon icon="alert-triangle-outline"></nb-icon>
+                    <span>{{ analysisData?.summary?.profile_completeness_warning || 'Profile 数据不完整，部分指标可能缺失' }}</span>
+                  </nb-alert>
+                </div>
+
                 <!-- Summary Section (when no node selected) -->
                 <div class="right-section summary-section" *ngIf="!selectedNode">
                   <div class="section-header">

@@ -27,145 +27,130 @@ fn get_parameter_default(name: &str) -> Option<&'static str> {
     }
 }
 
-/// Helper function to create a parameter suggestion only if not already set to recommended value
-/// Also checks against known default values to avoid redundant suggestions
-fn suggest_parameter_if_needed(
-    profile: &Profile,
-    name: &str,
-    recommended: &str,
-    command: &str,
-) -> Option<ParameterSuggestion> {
-    // Check if already set to recommended value
-    if let Some(info) = profile.summary.non_default_variables.get(name) {
-        if info.actual_value_is(recommended) {
-            return None; // Already configured correctly
+// Note: suggest_parameter_if_needed is replaced by QueryRuleContext::suggest_parameter
+
+/// Query-level rule context containing all information needed for evaluation
+pub struct QueryRuleContext<'a> {
+    pub profile: &'a Profile,
+    /// Live cluster variables (actual current values from cluster)
+    pub cluster_variables: Option<&'a std::collections::HashMap<String, String>>,
+}
+
+impl<'a> QueryRuleContext<'a> {
+    #[allow(dead_code)]
+    pub fn new(profile: &'a Profile) -> Self {
+        Self { profile, cluster_variables: None }
+    }
+    
+    pub fn with_cluster_variables(
+        profile: &'a Profile,
+        cluster_variables: Option<&'a std::collections::HashMap<String, String>>
+    ) -> Self {
+        Self { profile, cluster_variables }
+    }
+    
+    /// Get current value of a parameter
+    /// Priority: cluster_variables > non_default_variables > default
+    pub fn get_variable_value(&self, name: &str) -> Option<String> {
+        // First check live cluster variables (most accurate)
+        if let Some(vars) = self.cluster_variables {
+            if let Some(value) = vars.get(name) {
+                return Some(value.clone());
+            }
         }
-        // Get parameter metadata
+        // Then check profile's non-default variables
+        if let Some(info) = self.profile.summary.non_default_variables.get(name) {
+            return Some(info.actual_value_str());
+        }
+        // Finally use known default
+        get_parameter_default(name).map(|s| s.to_string())
+    }
+    
+    /// Get current value as i64
+    #[allow(dead_code)]
+    pub fn get_variable_i64(&self, name: &str) -> Option<i64> {
+        self.get_variable_value(name).and_then(|v| v.parse().ok())
+    }
+    
+    /// Get current value as bool
+    #[allow(dead_code)]
+    pub fn get_variable_bool(&self, name: &str) -> Option<bool> {
+        self.get_variable_value(name).map(|v| v.eq_ignore_ascii_case("true"))
+    }
+    
+    /// Create a smart parameter suggestion
+    /// Returns None if current value already meets recommendation
+    pub fn suggest_parameter(&self, name: &str) -> Option<ParameterSuggestion> {
+        let cluster_info = self.profile.get_cluster_info();
+        let current_str = self.get_variable_value(name);
+        let current_i64 = current_str.as_ref().and_then(|v| v.parse::<i64>().ok());
+        let current_bool = current_str.as_ref().map(|v| v.eq_ignore_ascii_case("true"));
+        
+        let (recommended, reason) = match name {
+            "query_timeout" => {
+                let current = current_i64.unwrap_or(300);
+                if current >= 600 { return None; }
+                ("600".to_string(), "延长超时时间以支持复杂查询".to_string())
+            }
+            
+            "query_mem_limit" => {
+                let current = current_i64.unwrap_or(0);
+                let total_bytes = cluster_info.total_scan_bytes;
+                let recommended = if total_bytes > 0 {
+                    (total_bytes * 2).max(4 * 1024 * 1024 * 1024).min(32 * 1024 * 1024 * 1024) as i64
+                } else {
+                    8 * 1024 * 1024 * 1024
+                };
+                if current >= recommended { return None; }
+                let gb = recommended / (1024 * 1024 * 1024);
+                (recommended.to_string(), format!("根据数据量推荐 {}GB 内存限制", gb))
+            }
+            
+            "enable_spill" => {
+                if current_bool.unwrap_or(false) { return None; }
+                ("true".to_string(), "启用后可避免大查询 OOM".to_string())
+            }
+            
+            "pipeline_profile_level" => {
+                let current = current_i64.unwrap_or(1);
+                if current <= 1 { return None; }
+                ("1".to_string(), "降低 Profile 级别减少收集开销".to_string())
+            }
+            
+            "pipeline_dop" => {
+                let current = current_i64.unwrap_or(0);
+                if current == 0 { return None; }
+                ("0".to_string(), "推荐使用自动模式".to_string())
+            }
+            
+            "enable_scan_datacache" => {
+                if current_bool.unwrap_or(true) { return None; }
+                ("true".to_string(), "启用 DataCache 提升存算分离性能".to_string())
+            }
+            
+            _ => return None,
+        };
+        
         let metadata = get_parameter_metadata(name);
-        // Return suggestion with current value
-        return Some(ParameterSuggestion {
+        let command = format!("SET {} = {};", name, recommended);
+        Some(ParameterSuggestion {
             name: name.to_string(),
             param_type: ParameterType::Session,
-            current: Some(info.actual_value_str()),
-            recommended: recommended.to_string(),
-            command: command.to_string(),
+            current: current_str, // Always has value from get_variable_value
+            recommended,
+            command,
             description: metadata.description,
-            impact: metadata.impact,
-        });
+            impact: format!("{} ({})", metadata.impact, reason),
+        })
     }
-    
-    // Parameter not in non_default_variables, check if default matches recommendation
-    if let Some(default) = get_parameter_default(name) {
-        if default.eq_ignore_ascii_case(recommended) {
-            return None; // Using default value which matches recommendation
-        }
-    }
-    
-    // Get parameter metadata
-    let metadata = get_parameter_metadata(name);
-    
-    // Parameter not set and default doesn't match, suggest it
-    Some(ParameterSuggestion {
-        name: name.to_string(),
-        param_type: ParameterType::Session,
-        current: None,
-        recommended: recommended.to_string(),
-        command: command.to_string(),
-        description: metadata.description,
-        impact: metadata.impact,
-    })
 }
 
 /// Query-level rule trait
 pub trait QueryRule: Send + Sync {
     fn id(&self) -> &str;
     fn name(&self) -> &str;
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic>;
-}
-
-/// Smart parameter suggestion for query-level rules
-/// Considers current values and cluster info
-fn suggest_query_parameter(profile: &Profile, name: &str) -> Option<ParameterSuggestion> {
-    let cluster_info = profile.get_cluster_info();
-    
-    // Get current value
-    let current_str = profile.summary.non_default_variables.get(name)
-        .map(|v| v.actual_value_str());
-    let current_i64 = current_str.as_ref()
-        .and_then(|v| v.parse::<i64>().ok())
-        .or_else(|| get_parameter_default(name).and_then(|s| s.parse::<i64>().ok()));
-    let current_bool = current_str.as_ref()
-        .map(|v| v.eq_ignore_ascii_case("true"))
-        .or_else(|| get_parameter_default(name).map(|s| s.eq_ignore_ascii_case("true")));
-    
-    let (recommended, reason) = match name {
-        "query_timeout" => {
-            let current = current_i64.unwrap_or(300);
-            if current >= 600 {
-                return None;
-            }
-            ("600".to_string(), "延长超时时间以支持复杂查询".to_string())
-        }
-        
-        "query_mem_limit" => {
-            let current = current_i64.unwrap_or(0);
-            let total_bytes = cluster_info.total_scan_bytes;
-            
-            // Recommend based on scan size: 2x scan size, min 4GB, max 32GB
-            let recommended = if total_bytes > 0 {
-                let suggested = (total_bytes * 2).max(4 * 1024 * 1024 * 1024).min(32 * 1024 * 1024 * 1024);
-                suggested as i64
-            } else {
-                8 * 1024 * 1024 * 1024 // Default 8GB
-            };
-            
-            if current >= recommended {
-                return None;
-            }
-            
-            let recommended_gb = recommended / (1024 * 1024 * 1024);
-            (recommended.to_string(), format!("根据数据量推荐 {}GB 内存限制", recommended_gb))
-        }
-        
-        "enable_spill" => {
-            let current = current_bool.unwrap_or(false);
-            if current {
-                return None;
-            }
-            ("true".to_string(), "启用后可避免大查询 OOM".to_string())
-        }
-        
-        "pipeline_profile_level" => {
-            let current = current_i64.unwrap_or(1);
-            if current <= 1 {
-                return None;
-            }
-            ("1".to_string(), "降低 Profile 级别减少收集开销".to_string())
-        }
-        
-        "pipeline_dop" => {
-            let current = current_i64.unwrap_or(0);
-            if current == 0 {
-                return None;
-            }
-            ("0".to_string(), "推荐使用自动模式".to_string())
-        }
-        
-        _ => return None,
-    };
-    
-    let metadata = get_parameter_metadata(name);
-    let command = format!("SET {} = {};", name, recommended);
-    
-    Some(ParameterSuggestion {
-        name: name.to_string(),
-        param_type: ParameterType::Session,
-        current: current_str,
-        recommended,
-        command,
-        description: metadata.description,
-        impact: format!("{} ({})", metadata.impact, reason),
-    })
+    /// Evaluate the rule with full context including cluster variables
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic>;
 }
 
 /// Query-level diagnostic result
@@ -188,9 +173,9 @@ impl QueryRule for Q001LongRunning {
     fn id(&self) -> &str { "Q001" }
     fn name(&self) -> &str { "查询执行时间过长" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
-        let total_time_ms = profile.summary.total_time_ms
-            .or_else(|| parse_duration_ms(&profile.summary.total_time))?;
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
+        let total_time_ms = ctx.profile.summary.total_time_ms
+            .or_else(|| parse_duration_ms(&ctx.profile.summary.total_time))?;
         
         if total_time_ms > 60_000.0 {
             Some(QueryDiagnostic {
@@ -209,10 +194,10 @@ impl QueryRule for Q001LongRunning {
                 ],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = suggest_query_parameter(profile, "query_timeout") {
+                    if let Some(s) = ctx.suggest_parameter( "query_timeout") {
                         suggestions.push(s);
                     }
-                    if let Some(s) = suggest_query_parameter(profile, "query_mem_limit") {
+                    if let Some(s) = ctx.suggest_parameter( "query_mem_limit") {
                         suggestions.push(s);
                     }
                     suggestions
@@ -232,8 +217,8 @@ impl QueryRule for Q002HighMemory {
     fn id(&self) -> &str { "Q002" }
     fn name(&self) -> &str { "查询内存使用过高" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
-        let peak_memory = profile.summary.query_peak_memory?;
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
+        let peak_memory = ctx.profile.summary.query_peak_memory?;
         const TEN_GB: u64 = 10 * 1024 * 1024 * 1024;
         
         if peak_memory > TEN_GB {
@@ -253,10 +238,10 @@ impl QueryRule for Q002HighMemory {
                 ],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = suggest_query_parameter(profile, "enable_spill") {
+                    if let Some(s) = ctx.suggest_parameter( "enable_spill") {
                         suggestions.push(s);
                     }
-                    if let Some(s) = suggest_query_parameter(profile, "query_mem_limit") {
+                    if let Some(s) = ctx.suggest_parameter( "query_mem_limit") {
                         suggestions.push(s);
                     }
                     suggestions
@@ -276,8 +261,8 @@ impl QueryRule for Q003QuerySpill {
     fn id(&self) -> &str { "Q003" }
     fn name(&self) -> &str { "查询发生落盘" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
-        let spill_bytes_str = profile.summary.query_spill_bytes.as_ref()?;
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
+        let spill_bytes_str = ctx.profile.summary.query_spill_bytes.as_ref()?;
         
         // Parse spill bytes (e.g., "1.5 GB", "0.000 B")
         let spill_bytes = parse_spill_bytes(spill_bytes_str)?;
@@ -299,7 +284,7 @@ impl QueryRule for Q003QuerySpill {
                 ],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = suggest_query_parameter(profile, "query_mem_limit") {
+                    if let Some(s) = ctx.suggest_parameter( "query_mem_limit") {
                         suggestions.push(s);
                     }
                     suggestions
@@ -319,12 +304,12 @@ impl QueryRule for Q005ScanDominates {
     fn id(&self) -> &str { "Q005" }
     fn name(&self) -> &str { "扫描时间占比过高" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
-        let scan_time_ms = profile.summary.query_cumulative_scan_time_ms
-            .or_else(|| profile.summary.query_cumulative_scan_time.as_ref()
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
+        let scan_time_ms = ctx.profile.summary.query_cumulative_scan_time_ms
+            .or_else(|| ctx.profile.summary.query_cumulative_scan_time.as_ref()
                 .and_then(|s| parse_duration_ms(s)))?;
-        let total_time_ms = profile.summary.total_time_ms
-            .or_else(|| parse_duration_ms(&profile.summary.total_time))?;
+        let total_time_ms = ctx.profile.summary.total_time_ms
+            .or_else(|| parse_duration_ms(&ctx.profile.summary.total_time))?;
         
         if total_time_ms == 0.0 {
             return None;
@@ -349,12 +334,8 @@ impl QueryRule for Q005ScanDominates {
                     "检查存储性能".to_string(),
                 ],
                 // Only suggest if not already enabled
-                parameter_suggestions: suggest_parameter_if_needed(
-                    profile,
-                    "enable_scan_datacache",
-                    "true",
-                    "SET enable_scan_datacache = true;"
-                ).into_iter().collect(),
+                parameter_suggestions: ctx.suggest_parameter("enable_scan_datacache")
+                    .into_iter().collect(),
             })
         } else {
             None
@@ -370,12 +351,12 @@ impl QueryRule for Q006NetworkDominates {
     fn id(&self) -> &str { "Q006" }
     fn name(&self) -> &str { "网络时间占比过高" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
-        let network_time_ms = profile.summary.query_cumulative_network_time_ms
-            .or_else(|| profile.summary.query_cumulative_network_time.as_ref()
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
+        let network_time_ms = ctx.profile.summary.query_cumulative_network_time_ms
+            .or_else(|| ctx.profile.summary.query_cumulative_network_time.as_ref()
                 .and_then(|s| parse_duration_ms(s)))?;
-        let total_time_ms = profile.summary.total_time_ms
-            .or_else(|| parse_duration_ms(&profile.summary.total_time))?;
+        let total_time_ms = ctx.profile.summary.total_time_ms
+            .or_else(|| parse_duration_ms(&ctx.profile.summary.total_time))?;
         
         if total_time_ms == 0.0 {
             return None;
@@ -413,9 +394,9 @@ impl QueryRule for Q004LowCPU {
     fn id(&self) -> &str { "Q004" }
     fn name(&self) -> &str { "CPU 利用率低" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
-        let cpu_time = profile.summary.query_cumulative_cpu_time_ms?;
-        let wall_time = profile.summary.query_execution_wall_time_ms?;
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
+        let cpu_time = ctx.profile.summary.query_cumulative_cpu_time_ms?;
+        let wall_time = ctx.profile.summary.query_execution_wall_time_ms?;
         if wall_time == 0.0 { return None; }
         let ratio = cpu_time / wall_time;
         if ratio < 0.3 {
@@ -428,7 +409,7 @@ impl QueryRule for Q004LowCPU {
                 suggestions: vec!["检查是否存在等待".to_string(), "增加并行度".to_string()],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = suggest_query_parameter(profile, "pipeline_dop") {
+                    if let Some(s) = ctx.suggest_parameter( "pipeline_dop") {
                         suggestions.push(s);
                     }
                     suggestions
@@ -445,9 +426,9 @@ impl QueryRule for Q007ProfileCollectSlow {
     fn id(&self) -> &str { "Q007" }
     fn name(&self) -> &str { "Profile 收集慢" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         // Check CollectProfileTime from variables or execution metrics
-        let collect_time = profile.execution.metrics.get("CollectProfileTime")
+        let collect_time = ctx.profile.execution.metrics.get("CollectProfileTime")
             .and_then(|v| v.parse::<f64>().ok())?;
         if collect_time > 100_000_000.0 { // 100ms in ns
             Some(QueryDiagnostic {
@@ -459,7 +440,7 @@ impl QueryRule for Q007ProfileCollectSlow {
                 suggestions: vec!["降低 pipeline_profile_level".to_string()],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = suggest_query_parameter(profile, "pipeline_profile_level") {
+                    if let Some(s) = ctx.suggest_parameter( "pipeline_profile_level") {
                         suggestions.push(s);
                     }
                     suggestions
@@ -476,9 +457,9 @@ impl QueryRule for Q008ScheduleTimeLong {
     fn id(&self) -> &str { "Q008" }
     fn name(&self) -> &str { "调度时间过长" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
-        let schedule_time = profile.summary.query_peak_schedule_time_ms?;
-        let wall_time = profile.summary.query_execution_wall_time_ms?;
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
+        let schedule_time = ctx.profile.summary.query_peak_schedule_time_ms?;
+        let wall_time = ctx.profile.summary.query_execution_wall_time_ms?;
         if wall_time == 0.0 { return None; }
         let ratio = schedule_time / wall_time;
         if ratio > 0.3 {
@@ -502,11 +483,11 @@ impl QueryRule for Q009ResultDeliverySlow {
     fn id(&self) -> &str { "Q009" }
     fn name(&self) -> &str { "结果传输慢" }
     
-    fn evaluate(&self, profile: &Profile) -> Option<QueryDiagnostic> {
+    fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         // Check ResultDeliverTime from execution metrics
-        let deliver_time = profile.execution.metrics.get("ResultDeliverTime")
+        let deliver_time = ctx.profile.execution.metrics.get("ResultDeliverTime")
             .and_then(|v| v.parse::<f64>().ok())?;
-        let wall_time = profile.summary.query_execution_wall_time_ms? * 1_000_000.0; // to ns
+        let wall_time = ctx.profile.summary.query_execution_wall_time_ms? * 1_000_000.0; // to ns
         if wall_time == 0.0 { return None; }
         let ratio = deliver_time / wall_time;
         if ratio > 0.2 {

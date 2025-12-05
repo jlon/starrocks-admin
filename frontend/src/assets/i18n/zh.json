@@ -124,6 +124,18 @@
     "create_warning": "集群已创建，但健康检查发现问题。请检查配置",
     "test_success": "健康检查通过",
     "test_warning": "健康检查发现问题",
+    "connection_success": "连接成功",
+    "health_check_passed": "健康检查通过",
+    "no_activate_permission": "您没有激活集群的权限",
+    "already_active": "此集群已是活跃状态",
+    "no_view_detail_permission": "您没有查看集群详情的权限",
+    "no_view_backends_permission": "您没有查看计算节点的权限",
+    "no_view_frontends_permission": "您没有查看 Frontend 节点的权限",
+    "no_view_queries_permission": "您没有查看查询信息的权限",
+    "no_create_permission": "您没有创建集群的权限",
+    "no_update_permission": "您没有编辑集群的权限",
+    "no_delete_permission": "您没有删除集群的权限",
+    "create_failed_warning": "集群已创建，但健康检查失败。请检查配置",
     "success": "成功",
     "error": "错误",
     "form": {
@@ -315,7 +327,8 @@
       "disk_used_pct": "磁盘使用率",
       "cpu_used_pct": "CPU使用率",
       "mem_used_pct": "内存使用率",
-      "num_running_queries": "运行查询数"
+      "num_running_queries": "运行查询数",
+      "node_delete_success": "{{nodeType}} 节点 {{itemName}} 已删除"
     }
   },
   "sessions": {
@@ -346,7 +359,11 @@
     "clear_sleeping_partial": "成功清除 {{success}} 个，失败 {{fail}} 个",
     "batch_kill_success": "成功查杀 {{count}} 个会话",
     "batch_kill_partial": "成功查杀 {{success}} 个，失败 {{fail}} 个",
-    "partial_success": "部分成功"
+    "partial_success": "部分成功",
+    "no_sleeping_connections": "当前没有睡眠连接",
+    "clear_sleeping_failed": "清除睡眠连接失败",
+    "no_sessions_to_kill": "当前没有可查杀的会话",
+    "batch_kill_failed": "批量查杀失败"
   },
   "variables": {
     "title": "变量管理",
@@ -539,7 +556,15 @@
   "system_management": {
     "title": "功能卡片",
     "add_function": "添加功能",
-    "no_data": "暂无数据"
+    "no_data": "暂无数据",
+    "function_add_success": "功能添加成功",
+    "function_update_success": "功能更新成功",
+    "function_delete_success": "功能已删除",
+    "category_order_saved": "分类顺序已保存",
+    "function_order_saved": "功能顺序已保存",
+    "add_to_favorites": "已添加到收藏",
+    "remove_from_favorites": "已取消收藏",
+    "category_delete_success": "分类删除成功"
   },
   "errors": {
     "load_failed": "加载失败",
@@ -596,10 +621,47 @@
     "execution_failed": "执行失败",
     "no_data_returned": "查询未返回任何数据",
     "copy_to_clipboard": "复制到剪贴板",
+    "copied_to_clipboard": "已复制到剪贴板",
+    "copy_success": "复制成功",
+    "copy_failed": "复制失败，请手动复制",
+    "export_success": "导出成功",
+    "export_chart_success": "图表已导出",
+    "profile_copied": "Profile 内容已复制到剪贴板",
+    "hint": "提示",
     "filter_slow_only": "仅显示慢查询（≥5分钟）",
     "filter_high_cost_only": "仅显示高消耗查询（≥1GB）",
     "batch_kill_selected": "批量查杀当前显示",
     "rows": "行",
-    "per_page": "每页显示："
+    "per_page": "每页显示：",
+    "query_kill_success": "查询 {{id}} 已成功查杀",
+    "compaction_trigger_success": "Compaction任务已触发",
+    "view_no_compaction": "视图不支持手动触发Compaction",
+    "mv_compaction_auto": "物化视图的Compaction由系统自动管理，不建议手动触发",
+    "view_no_buckets": "视图是逻辑表，没有分桶信息",
+    "no_table_schema": "未返回表结构信息",
+    "no_create_statement": "未获取到建表语句",
+    "invalid_node_info": "节点信息无效",
+    "view_no_partitions": "视图是逻辑表，没有物理分区信息",
+    "view_no_compaction_score": "视图是逻辑表，没有Compaction Score信息",
+    "invalid_bucket_count": "请输入有效的分桶数",
+    "same_bucket_count": "新分桶数与当前分桶数相同，无需调整",
+    "view_no_transactions": "视图是逻辑表，不涉及物理事务",
+    "select_partition": "请至少选择一个分区",
+    "load_databases_failed": "加载数据库列表失败",
+    "select_queries_to_kill": "请选择要查杀的查询",
+    "batch_kill_queries_failed": "批量查杀失败",
+    "batch_kill_queries_partial": "成功查杀 {{success}} 个，失败 {{fail}} 个",
+    "no_queries_to_kill": "当前没有可查杀的查询",
+    "enter_sql": "请输入SQL语句",
+    "select_catalog": "请先选择 Catalog",
+    "databases_loading": "数据库列表加载中，请稍候...",
+    "select_database": "请选择数据库",
+    "format_failed": "格式化失败，使用原始SQL",
+    "select_result_to_export": "请选择要导出的结果",
+    "no_data_to_export": "没有数据可导出",
+    "export_failed": "导出图片失败",
+    "load_export_module_failed": "加载导出模块失败",
+    "no_chart_content": "无法找到图表内容",
+    "export_chart_failed": "导出失败"
   }
 }

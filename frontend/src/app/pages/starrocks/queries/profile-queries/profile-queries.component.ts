@@ -2036,7 +2036,10 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   exportDagAsPng(): void {
     const graphContent = document.querySelector('.graph-content') as HTMLElement;
     if (!graphContent) {
-      this.toastrService.warning('无法找到图表内容', '导出失败');
+      this.toastrService.warning(
+        this.translate.instant('queries.no_chart_content'),
+        this.translate.instant('queries.export_chart_failed')
+      );
       return;
     }
 
@@ -2054,14 +2057,23 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         link.download = `profile-dag-${this.currentQueryId || 'export'}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
-        this.toastrService.success('图表已导出', '导出成功');
+        this.toastrService.success(
+          this.translate.instant('queries.export_chart_success'),
+          this.translate.instant('queries.export_success')
+        );
       }).catch(err => {
         console.error('Export failed:', err);
-        this.toastrService.danger('导出图片失败', '错误');
+        this.toastrService.danger(
+          this.translate.instant('queries.export_failed'),
+          this.translate.instant('common.error')
+        );
       });
     }).catch(err => {
       console.error('Failed to load html2canvas:', err);
-      this.toastrService.danger('加载导出模块失败', '错误');
+      this.toastrService.danger(
+        this.translate.instant('queries.load_export_module_failed'),
+        this.translate.instant('common.error')
+      );
     });
   }
 
@@ -2278,7 +2290,10 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(this.currentProfileDetail)
         .then(() => {
-          this.toastrService.success('Profile 内容已复制到剪贴板', '复制成功');
+          this.toastrService.success(
+            this.translate.instant('queries.profile_copied'),
+            this.translate.instant('queries.copy_success')
+          );
         })
         .catch(err => {
           console.error('Failed to copy:', err);
@@ -2303,13 +2318,22 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     try {
       const successful = document.execCommand('copy');
       if (successful) {
-        this.toastrService.success('Profile 内容已复制到剪贴板', '复制成功');
+        this.toastrService.success(
+          this.translate.instant('queries.profile_copied'),
+          this.translate.instant('queries.copy_success')
+        );
       } else {
-        this.toastrService.warning('复制失败，请手动复制', '提示');
+        this.toastrService.warning(
+          this.translate.instant('queries.copy_failed'),
+          this.translate.instant('queries.hint')
+        );
       }
     } catch (err) {
       console.error('Failed to copy:', err);
-      this.toastrService.warning('复制失败，请手动复制', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.copy_failed'),
+        this.translate.instant('queries.hint')
+      );
     } finally {
       document.body.removeChild(textArea);
     }
@@ -2322,11 +2346,17 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text)
         .then(() => {
-          this.toastrService.success('已复制到剪贴板', '复制成功');
+          this.toastrService.success(
+            this.translate.instant('queries.copied_to_clipboard'),
+            this.translate.instant('queries.copy_success')
+          );
         })
         .catch(err => {
           console.error('Failed to copy:', err);
-          this.toastrService.warning('复制失败', '提示');
+          this.toastrService.warning(
+            this.translate.instant('queries.copy_failed'),
+            this.translate.instant('queries.hint')
+          );
         });
     } else {
       // Fallback
@@ -2338,9 +2368,15 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       textArea.select();
       try {
         document.execCommand('copy');
-        this.toastrService.success('已复制到剪贴板', '复制成功');
+        this.toastrService.success(
+          this.translate.instant('queries.copied_to_clipboard'),
+          this.translate.instant('queries.copy_success')
+        );
       } catch (err) {
-        this.toastrService.warning('复制失败', '提示');
+        this.toastrService.warning(
+          this.translate.instant('queries.copy_failed'),
+          this.translate.instant('queries.hint')
+        );
       } finally {
         document.body.removeChild(textArea);
       }

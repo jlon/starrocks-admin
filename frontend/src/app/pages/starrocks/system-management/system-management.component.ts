@@ -303,7 +303,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
         next: (newFunction) => {
           this.customFunctions.push(newFunction);
           this.mergeAndOrganizeFunctions();
-          this.toastrService.success('功能添加成功', '成功');
+          this.toastrService.success(
+            this.translate.instant('system_management.function_add_success'),
+            this.translate.instant('common.success')
+          );
         },
         error: (error) => {
           console.error('Failed to create function:', error);
@@ -329,7 +332,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
             this.customFunctions[index] = updatedFunction;
             this.mergeAndOrganizeFunctions();
           }
-          this.toastrService.success('功能更新成功', '成功');
+          this.toastrService.success(
+            this.translate.instant('system_management.function_update_success'),
+            this.translate.instant('common.success')
+          );
         },
         error: (error) => {
           console.error('Failed to update function:', error);
@@ -393,7 +399,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: () => {
-            this.toastrService.success('分类顺序已保存', '成功');
+            this.toastrService.success(
+              this.translate.instant('system_management.category_order_saved'),
+              this.translate.instant('common.success')
+            );
           },
           error: (error) => {
             console.error('Failed to save category orders:', error);
@@ -423,7 +432,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: () => {
-            this.toastrService.success('功能顺序已保存', '成功');
+            this.toastrService.success(
+              this.translate.instant('system_management.function_order_saved'),
+              this.translate.instant('common.success')
+            );
           },
           error: (error) => {
             console.error('Failed to save function orders:', error);
@@ -446,8 +458,12 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
             this.mergeAndOrganizeFunctions();
           }
           this.toastrService.success(
-            updatedFunction.isFavorited ? '已添加到收藏' : '已取消收藏',
-            '成功'
+            this.translate.instant(
+              updatedFunction.isFavorited 
+                ? 'system_management.add_to_favorites' 
+                : 'system_management.remove_from_favorites'
+            ),
+            this.translate.instant('common.success')
           );
         },
         error: (error) => {
@@ -474,7 +490,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
                 // 从本地数据中移除
                 this.customFunctions = this.customFunctions.filter(f => f.id !== functionId);
                 this.mergeAndOrganizeFunctions();
-                this.toastrService.success('功能已删除', '成功');
+                this.toastrService.success(
+                  this.translate.instant('system_management.function_delete_success'),
+                  this.translate.instant('common.success')
+                );
               },
               error: (error) => {
                 console.error('Failed to delete function:', error);
@@ -837,7 +856,9 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
       if (confirmed) {
         this.systemFunctionService.deleteCategory(categoryName).subscribe({
           next: () => {
-            this.toastrService.success('分类删除成功');
+            this.toastrService.success(
+              this.translate.instant('system_management.category_delete_success')
+            );
             this.loadSystemFunctions(); // 重新加载功能列表
           },
           error: (error) => {

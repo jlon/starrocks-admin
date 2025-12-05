@@ -154,12 +154,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   toggleActiveCluster(clusterCard: ClusterCard) {
     if (!this.canActivateCluster) {
-      this.toastrService.warning('您没有激活集群的权限', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.no_activate_permission'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
     if (clusterCard.isActive) {
-      this.toastrService.warning('此集群已是活跃状态', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.already_active'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     this.clusterContext.setActiveCluster(clusterCard.cluster);
@@ -358,7 +364,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   navigateToCluster(clusterId?: number): void {
     if (!this.canViewClusterDetails) {
-      this.toastrService.warning('您没有查看集群详情的权限', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.no_view_detail_permission'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     const commands = clusterId ? ['/pages/starrocks/clusters', clusterId] : ['/pages/starrocks/clusters'];
@@ -367,7 +376,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   navigateToBackends(clusterId?: number): void {
     if (!this.canViewBackends) {
-      this.toastrService.warning('您没有查看计算节点的权限', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.no_view_backends_permission'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     
@@ -391,7 +403,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   navigateToFrontends(clusterId?: number): void {
     if (!this.canViewFrontends) {
-      this.toastrService.warning('您没有查看 Frontend 节点的权限', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.no_view_frontends_permission'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     
@@ -415,7 +430,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   navigateToQueries(clusterId?: number): void {
     if (!this.canViewQueries) {
-      this.toastrService.warning('您没有查看查询信息的权限', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.no_view_queries_permission'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     // 查询执行页不接收 ID，组件内部会使用 ActiveCluster 或自己解析
@@ -424,7 +442,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   addCluster(): void {
     if (!this.canCreateCluster) {
-      this.toastrService.warning('您没有创建集群的权限', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.no_create_permission'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     this.router.navigate(['/pages/starrocks/clusters/new']);
@@ -432,7 +453,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   editCluster(cluster: Cluster): void {
     if (!this.canUpdateCluster) {
-      this.toastrService.warning('您没有编辑集群的权限', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.no_update_permission'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     this.router.navigate(['/pages/starrocks/clusters', cluster.id, 'edit']);
@@ -440,7 +464,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   deleteCluster(cluster: Cluster): void {
     if (!this.canDeleteCluster) {
-      this.toastrService.warning('您没有删除集群的权限', '提示');
+      this.toastrService.warning(
+        this.translate.instant('cluster.no_delete_permission'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     this.confirmDialogService.confirmDelete(cluster.name)

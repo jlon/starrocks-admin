@@ -124,6 +124,18 @@
     "create_warning": "Cluster created, but health check found issues. Please check configuration",
     "test_success": "Health check passed",
     "test_warning": "Health check found issues",
+    "connection_success": "Connection Success",
+    "health_check_passed": "Health check passed",
+    "no_activate_permission": "You don't have permission to activate clusters",
+    "already_active": "This cluster is already active",
+    "no_view_detail_permission": "You don't have permission to view cluster details",
+    "no_view_backends_permission": "You don't have permission to view backend nodes",
+    "no_view_frontends_permission": "You don't have permission to view frontend nodes",
+    "no_view_queries_permission": "You don't have permission to view queries",
+    "no_create_permission": "You don't have permission to create clusters",
+    "no_update_permission": "You don't have permission to edit clusters",
+    "no_delete_permission": "You don't have permission to delete clusters",
+    "create_failed_warning": "Cluster created, but health check failed. Please check configuration",
     "success": "Success",
     "error": "Error",
     "form": {
@@ -315,7 +327,8 @@
       "disk_used_pct": "Disk Usage",
       "cpu_used_pct": "CPU Usage",
       "mem_used_pct": "Memory Usage",
-      "num_running_queries": "Running Queries"
+      "num_running_queries": "Running Queries",
+      "node_delete_success": "{{nodeType}} node {{itemName}} deleted"
     }
   },
   "sessions": {
@@ -346,7 +359,11 @@
     "clear_sleeping_partial": "Cleared {{success}} connections, {{fail}} failed",
     "batch_kill_success": "Successfully killed {{count}} sessions",
     "batch_kill_partial": "Killed {{success}} sessions, {{fail}} failed",
-    "partial_success": "Partial Success"
+    "partial_success": "Partial Success",
+    "no_sleeping_connections": "No sleeping connections",
+    "clear_sleeping_failed": "Failed to clear sleeping connections",
+    "no_sessions_to_kill": "No sessions to kill",
+    "batch_kill_failed": "Batch kill failed"
   },
   "variables": {
     "title": "Variables",
@@ -539,7 +556,15 @@
   "system_management": {
     "title": "Feature Cards",
     "add_function": "Add Function",
-    "no_data": "No data"
+    "no_data": "No data",
+    "function_add_success": "Function added successfully",
+    "function_update_success": "Function updated successfully",
+    "function_delete_success": "Function deleted",
+    "category_order_saved": "Category order saved",
+    "function_order_saved": "Function order saved",
+    "add_to_favorites": "Added to favorites",
+    "remove_from_favorites": "Removed from favorites",
+    "category_delete_success": "Category deleted successfully"
   },
   "errors": {
     "load_failed": "Load failed",
@@ -596,10 +621,47 @@
     "execution_failed": "Execution Failed",
     "no_data_returned": "Query returned no data",
     "copy_to_clipboard": "Copy to clipboard",
+    "copied_to_clipboard": "Copied to clipboard",
+    "copy_success": "Copy Success",
+    "copy_failed": "Copy failed, please copy manually",
+    "export_success": "Export Success",
+    "export_chart_success": "Chart exported",
+    "profile_copied": "Profile content copied to clipboard",
+    "hint": "Hint",
     "filter_slow_only": "Show slow queries only (≥5min)",
     "filter_high_cost_only": "Show high cost queries only (≥1GB)",
     "batch_kill_selected": "Batch Kill Displayed",
     "rows": "rows",
-    "per_page": "Per page:"
+    "per_page": "Per page:",
+    "query_kill_success": "Query {{id}} killed successfully",
+    "compaction_trigger_success": "Compaction task triggered",
+    "view_no_compaction": "Views don't support manual compaction",
+    "mv_compaction_auto": "Materialized view compaction is managed automatically, manual trigger not recommended",
+    "view_no_buckets": "Views are logical tables with no bucket information",
+    "no_table_schema": "No table schema returned",
+    "no_create_statement": "Failed to get CREATE statement",
+    "invalid_node_info": "Invalid node information",
+    "view_no_partitions": "Views are logical tables with no physical partitions",
+    "view_no_compaction_score": "Views are logical tables with no compaction score",
+    "invalid_bucket_count": "Please enter a valid bucket count",
+    "same_bucket_count": "New bucket count is same as current, no adjustment needed",
+    "view_no_transactions": "Views are logical tables with no physical transactions",
+    "select_partition": "Please select at least one partition",
+    "load_databases_failed": "Failed to load database list",
+    "select_queries_to_kill": "Please select queries to kill",
+    "batch_kill_queries_failed": "Batch kill failed",
+    "batch_kill_queries_partial": "Killed {{success}} queries, {{fail}} failed",
+    "no_queries_to_kill": "No queries to kill",
+    "enter_sql": "Please enter SQL statement",
+    "select_catalog": "Please select a catalog first",
+    "databases_loading": "Loading databases, please wait...",
+    "select_database": "Please select a database",
+    "format_failed": "Format failed, using original SQL",
+    "select_result_to_export": "Please select result to export",
+    "no_data_to_export": "No data to export",
+    "export_failed": "Failed to export chart",
+    "load_export_module_failed": "Failed to load export module",
+    "no_chart_content": "Cannot find chart content",
+    "export_chart_failed": "Export Failed"
   }
 }

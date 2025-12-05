@@ -153,7 +153,10 @@ export class ClusterListComponent implements OnInit {
       next: (health) => {
         if (health.status === 'healthy') {
           const details = health.checks.map(c => `${c.name}: ${c.message}`).join('\n');
-          this.toastrService.success(details, '健康检查通过');
+          this.toastrService.success(
+            details,
+            this.translate.instant('cluster.health_check_passed')
+          );
         } else if (health.status === 'warning') {
           const details = health.checks.map(c => `${c.name}: ${c.message}`).join('\n');
           this.toastrService.warning(details, '健康检查警告');

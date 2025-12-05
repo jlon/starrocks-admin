@@ -164,8 +164,11 @@ export class BackendsComponent implements OnInit, OnDestroy {
           .subscribe({
             next: () => {
               this.toastr.success(
-                `${nodeType} 节点 ${itemName} 已删除`,
-                '成功'
+                this.translate.instant('nodes.backend.node_delete_success', { 
+                  nodeType: nodeType, 
+                  itemName: itemName 
+                }),
+                this.translate.instant('common.success')
               );
               event.confirm.resolve();
               this.loadBackends();

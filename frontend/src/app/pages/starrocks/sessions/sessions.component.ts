@@ -376,7 +376,10 @@ export class SessionsComponent implements OnInit, OnDestroy {
         });
 
         if (sleepingSessions.length === 0) {
-          this.toastrService.info('当前没有睡眠连接', '提示');
+          this.toastrService.info(
+            this.translate.instant('sessions.no_sleeping_connections'),
+            this.translate.instant('common.info')
+          );
           return;
         }
 
@@ -425,7 +428,10 @@ export class SessionsComponent implements OnInit, OnDestroy {
                   if (successCount > 0) {
                     this.toastrService.warning(`成功清除 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
                   } else {
-                    this.toastrService.danger('清除睡眠连接失败', '错误');
+                    this.toastrService.danger(
+                      this.translate.instant('sessions.clear_sleeping_failed'),
+                      this.translate.instant('common.error')
+                    );
                   }
                   this.loadSessions();
                 }
@@ -446,7 +452,10 @@ export class SessionsComponent implements OnInit, OnDestroy {
   // Batch kill all displayed sessions
   batchKillAllSessions(): void {
     if (this.sessions.length === 0) {
-      this.toastrService.warning('当前没有可查杀的会话', '提示');
+      this.toastrService.warning(
+        this.translate.instant('sessions.no_sessions_to_kill'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -495,7 +504,10 @@ export class SessionsComponent implements OnInit, OnDestroy {
               if (successCount > 0) {
                 this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
               } else {
-                this.toastrService.danger('批量查杀失败', '错误');
+                this.toastrService.danger(
+                  this.translate.instant('sessions.batch_kill_failed'),
+                  this.translate.instant('common.error')
+                );
               }
               this.loadSessions();
             }

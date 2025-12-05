@@ -64,6 +64,7 @@
     "dagre": "^0.8.5",
     "echarts": "^4.9.0",
     "eva-icons": "^1.1.3",
+    "html2canvas": "^1.4.1",
     "intl": "1.2.5",
     "ionicons": "2.0.1",
     "leaflet": "1.2.0",

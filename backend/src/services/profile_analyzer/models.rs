@@ -1,5 +1,5 @@
 //! Profile analysis data models
-//! 
+//!
 //! These models represent the structured data extracted from StarRocks query profiles.
 //! They are designed to be serializable for API responses and optimized for frontend visualization.
 
@@ -28,13 +28,13 @@ impl SessionVariableInfo {
             serde_json::Value::Bool(b) => {
                 let expected_lower = expected.to_lowercase();
                 (*b && expected_lower == "true") || (!*b && expected_lower == "false")
-            }
+            },
             serde_json::Value::String(s) => s.eq_ignore_ascii_case(expected),
             serde_json::Value::Number(n) => n.to_string() == expected,
             _ => false,
         }
     }
-    
+
     /// Get actual value as string
     pub fn actual_value_str(&self) -> String {
         match &self.actual_value {
@@ -54,18 +54,18 @@ impl SessionVariableInfo {
 /// Parse a bytes value string (e.g., "1.5 GB", "100 MB", "1024") to u64 bytes
 fn parse_bytes_value(value: &str) -> Option<u64> {
     let value = value.trim();
-    
+
     // Try to parse as plain number first
     if let Ok(n) = value.parse::<u64>() {
         return Some(n);
     }
-    
+
     // Parse with unit suffix (e.g., "1.5 GB", "100 MB")
     let parts: Vec<&str> = value.split_whitespace().collect();
     if parts.len() >= 1 {
         let num_str = parts[0].replace(",", "");
         let num: f64 = num_str.parse().ok()?;
-        
+
         let multiplier = if parts.len() >= 2 {
             match parts[1].to_uppercase().as_str() {
                 "B" => 1u64,
@@ -78,10 +78,10 @@ fn parse_bytes_value(value: &str) -> Option<u64> {
         } else {
             1
         };
-        
+
         return Some((num * multiplier as f64) as u64);
     }
-    
+
     None
 }
 
@@ -104,27 +104,31 @@ impl Profile {
     /// Extracts BE count, instance count, and total scan bytes
     pub fn get_cluster_info(&self) -> ClusterInfo {
         use std::collections::HashSet;
-        
+
         // Collect unique backend addresses across all fragments
         let mut backends: HashSet<String> = HashSet::new();
         let mut total_instances = 0u32;
-        
+
         for fragment in &self.fragments {
             for addr in &fragment.backend_addresses {
                 backends.insert(addr.clone());
             }
             total_instances += fragment.instance_ids.len() as u32;
         }
-        
+
         // Extract total scan bytes from execution tree if available
         // Look for BytesRead or CompressedBytesReadTotal in unique_metrics
-        let total_scan_bytes = self.execution_tree.as_ref()
+        let total_scan_bytes = self
+            .execution_tree
+            .as_ref()
             .map(|tree| {
-                tree.nodes.iter()
+                tree.nodes
+                    .iter()
                     .filter(|n| n.operator_name.to_uppercase().contains("SCAN"))
                     .filter_map(|n| {
                         // Try different metric names for bytes read
-                        n.unique_metrics.get("BytesRead")
+                        n.unique_metrics
+                            .get("BytesRead")
                             .or_else(|| n.unique_metrics.get("CompressedBytesReadTotal"))
                             .or_else(|| n.unique_metrics.get("RawRowsRead"))
                             .and_then(|v| parse_bytes_value(v))
@@ -132,7 +136,7 @@ impl Profile {
                     .sum::<u64>()
             })
             .unwrap_or(0);
-        
+
         ClusterInfo {
             backend_num: backends.len() as u32,
             instance_num: total_instances,
@@ -163,22 +167,22 @@ pub struct ProfileSummary {
     pub query_state: String,
     pub starrocks_version: String,
     pub sql_statement: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_db: Option<String>,
-    
+
     pub variables: HashMap<String, String>,
-    
+
     /// Non-default session variables with their default and actual values
     /// Key: variable name, Value: (default_value, actual_value)
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     #[serde(default)]
     pub non_default_variables: HashMap<String, SessionVariableInfo>,
-    
+
     // Memory metrics
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_allocated_memory: Option<u64>,
@@ -188,7 +192,7 @@ pub struct ProfileSummary {
     pub query_sum_memory_usage: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_deallocated_memory_usage: Option<String>,
-    
+
     // Time metrics
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_time_ms: Option<f64>,
@@ -220,14 +224,58 @@ pub struct ProfileSummary {
     pub result_deliver_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result_deliver_time_ms: Option<f64>,
-    
+
+    // Planner metrics
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub planner_total_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub planner_total_time_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collect_profile_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collect_profile_time_ms: Option<f64>,
+
+    // IO metrics (aggregated from scan nodes, for disaggregated storage)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub io_seek_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub io_seek_time_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_disk_read_io_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_disk_read_io_time_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_read_io_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_read_io_time_ms: Option<f64>,
+
+    // Aggregated IO statistics
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_raw_rows_read: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_bytes_read: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_bytes_read_display: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pages_count_memory: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pages_count_local_disk: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pages_count_remote: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_rows: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_bytes_display: Option<String>,
+
     // Spill metrics
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_spill_bytes: Option<String>,
-    
+
     // DataCache metrics (for disaggregated storage-compute clusters)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub datacache_hit_rate: Option<f64>,  // 0.0 - 1.0
+    pub datacache_hit_rate: Option<f64>, // 0.0 - 1.0
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datacache_bytes_local: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -236,11 +284,11 @@ pub struct ProfileSummary {
     pub datacache_bytes_local_display: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datacache_bytes_remote_display: Option<String>,
-    
+
     // Top time-consuming nodes for quick overview
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_time_consuming_nodes: Option<Vec<TopNode>>,
-    
+
     // Profile completeness indicators
     /// Whether the profile is collected asynchronously
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -343,14 +391,14 @@ pub struct ExecutionTreeNode {
     pub depth: usize,
     pub is_hotspot: bool,
     pub hotspot_severity: HotSeverity,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fragment_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pipeline_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_percentage: Option<f64>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rows: Option<u64>,
 
@@ -358,10 +406,10 @@ pub struct ExecutionTreeNode {
     pub is_most_consuming: bool,
     #[serde(default)]
     pub is_second_most_consuming: bool,
-    
+
     #[serde(skip_serializing_if = "HashMap::is_empty", default)]
     pub unique_metrics: HashMap<String, String>,
-    
+
     /// Whether this node has diagnostic issues (for UI warning indicator)
     #[serde(default)]
     pub has_diagnostic: bool,
@@ -410,12 +458,12 @@ pub struct OperatorMetrics {
     pub operator_total_time_min: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operator_total_time_max: Option<u64>,
-    
+
     pub push_chunk_num: Option<u64>,
     pub push_row_num: Option<u64>,
     pub pull_chunk_num: Option<u64>,
     pub pull_row_num: Option<u64>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub push_total_time: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -428,10 +476,10 @@ pub struct OperatorMetrics {
     pub pull_total_time_min: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pull_total_time_max: Option<u64>,
-    
+
     pub memory_usage: Option<u64>,
     pub output_chunk_bytes: Option<u64>,
-    
+
     pub specialized: OperatorSpecializedMetrics,
 }
 
@@ -548,6 +596,9 @@ pub struct ProfileAnalysisResponse {
     /// Raw profile content for display in PROFILE tab
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile_content: Option<String>,
+    /// Fragment and Pipeline information for node detail view
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fragments: Vec<Fragment>,
 }
 
 /// Aggregated diagnostic for overview display
@@ -572,7 +623,7 @@ pub struct AggregatedDiagnostic {
 }
 
 /// Diagnostic result from rule engine
-/// 
+///
 /// Structure follows Aliyun EMR StarRocks diagnostic standard:
 /// - message: 诊断结果概要说明 (Summary of the issue)
 /// - reason: 详细诊断原因说明 (Detailed explanation of why this happens)

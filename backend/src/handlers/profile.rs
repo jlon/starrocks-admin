@@ -6,18 +6,32 @@ use std::sync::Arc;
 
 use crate::models::{ProfileDetail, ProfileListItem};
 use crate::services::MySQLClient;
-use crate::services::profile_analyzer::{analyze_profile_with_context, AnalysisContext, ClusterVariables, ProfileAnalysisResponse};
+use crate::services::profile_analyzer::{
+    AnalysisContext, ClusterVariables, ProfileAnalysisResponse, analyze_profile_with_context,
+};
 use crate::utils::{ApiResult, error::ApiError};
 
 /// Validate and sanitize query_id to prevent SQL injection
 /// StarRocks query_id format: UUID like "12345678-1234-1234-1234-123456789abc"
-fn sanitize_query_id(query_id: &str) -> Result<&str, ApiError> {
+/// 
+/// Returns the sanitized (trimmed) query_id as a String.
+/// The sanitized version is what should be used for:
+/// - SQL queries (security)
+/// - API responses (consistency)
+/// - Error messages (clarity)
+fn sanitize_query_id(query_id: &str) -> Result<String, ApiError> {
     let id = query_id.trim();
     // Allow alphanumeric, hyphens, and underscores (UUID format)
-    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if id.is_empty()
+        || id.len() > 64
+        || !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(ApiError::invalid_data("Invalid query_id format"));
     }
-    Ok(id)
+    // Return owned String to avoid lifetime issues and ensure consistency
+    Ok(id.to_string())
 }
 
 // List all query profiles for a cluster
@@ -117,7 +131,19 @@ pub async fn get_profile(
     };
 
     // Sanitize query_id to prevent SQL injection
+    // Note: This trims whitespace and validates format. The sanitized version
+    // is used consistently for SQL queries, responses, and error messages.
     let safe_query_id = sanitize_query_id(&query_id)?;
+    
+    // Log original vs sanitized if they differ (for debugging)
+    if query_id.trim() != query_id {
+        tracing::debug!(
+            "Query ID sanitized: '{}' -> '{}'",
+            query_id,
+            safe_query_id
+        );
+    }
+    
     tracing::info!("Fetching profile detail for query {} in cluster {}", safe_query_id, cluster.id);
 
     // Get connection pool and execute SELECT get_query_profile()
@@ -135,12 +161,20 @@ pub async fn get_profile(
         .unwrap_or_default();
 
     if profile_content.trim().is_empty() {
-        return Err(ApiError::not_found(format!("Profile not found for query: {}", safe_query_id)));
+        return Err(ApiError::not_found(format!(
+            "Profile not found for query: {}",
+            safe_query_id
+        )));
     }
 
     tracing::info!("Profile content length: {} bytes", profile_content.len());
 
-    Ok(Json(ProfileDetail { query_id: safe_query_id.to_string(), profile_content }))
+    // Return sanitized query_id in response for consistency
+    // This ensures the API contract is clear: responses use the sanitized (trimmed) version
+    Ok(Json(ProfileDetail {
+        query_id: safe_query_id,
+        profile_content,
+    }))
 }
 
 /// Analyze a query profile and return structured visualization data
@@ -169,11 +203,26 @@ pub async fn analyze_profile_handler(
     let cluster = if org_ctx.is_super_admin {
         state.cluster_service.get_active_cluster().await?
     } else {
-        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
     };
 
     // Sanitize query_id to prevent SQL injection
+    // Note: This trims whitespace and validates format. The sanitized version
+    // is used consistently for SQL queries, responses, and error messages.
     let safe_query_id = sanitize_query_id(&query_id)?;
+    
+    // Log original vs sanitized if they differ (for debugging)
+    if query_id.trim() != query_id {
+        tracing::debug!(
+            "Query ID sanitized: '{}' -> '{}'",
+            query_id,
+            safe_query_id
+        );
+    }
+    
     tracing::info!("Analyzing profile for query {} in cluster {}", safe_query_id, cluster.id);
 
     // Fetch profile content from StarRocks database (NOT from test files)
@@ -191,18 +240,24 @@ pub async fn analyze_profile_handler(
         .unwrap_or_default();
 
     if profile_content.trim().is_empty() {
-        return Err(ApiError::not_found(format!("Profile not found for query: {}", safe_query_id)));
+        return Err(ApiError::not_found(format!(
+            "Profile not found for query: {}",
+            safe_query_id
+        )));
     }
 
-    tracing::info!("Profile content length: {} bytes for query {}", profile_content.len(), safe_query_id);
+    tracing::info!(
+        "Profile content length: {} bytes for query {}",
+        profile_content.len(),
+        safe_query_id
+    );
 
     // Fetch live cluster session variables for smart parameter recommendations
+    // Graceful degradation: if fetching fails, analysis continues without variables
     let cluster_variables = fetch_cluster_variables(&mysql_client).await;
-    
+
     // Build analysis context with cluster variables
-    let context = AnalysisContext {
-        cluster_variables,
-    };
+    let context = AnalysisContext { cluster_variables };
 
     // Parse the profile and return analysis with cluster context
     analyze_profile_with_context(&profile_content, &context)
@@ -210,43 +265,62 @@ pub async fn analyze_profile_handler(
         .map_err(|e| ApiError::internal_error(format!("Analysis failed: {}", e)))
 }
 
+/// Parameters we query from cluster for smart recommendations
+/// These are used to provide context-aware parameter suggestions
+const CLUSTER_VARIABLE_NAMES: &[&str] = &[
+    "query_mem_limit",
+    "query_timeout",
+    "enable_spill",
+    "pipeline_dop",
+    "parallel_fragment_exec_instance_num",
+    "io_tasks_per_scan_operator",
+    "enable_global_runtime_filter",
+    "runtime_join_filter_push_down_limit",
+    "enable_scan_datacache",
+    "enable_populate_datacache",
+    "enable_query_cache",
+    "pipeline_profile_level",
+];
+
 /// Fetch relevant session variables from the cluster
-/// Returns None if query fails (graceful degradation)
+/// 
+/// Returns `None` if query fails (graceful degradation).
+/// This allows analysis to continue even if variable fetching fails,
+/// though parameter recommendations may be less accurate.
 async fn fetch_cluster_variables(mysql_client: &MySQLClient) -> Option<ClusterVariables> {
-    // Query only the parameters we care about for smart recommendations
-    let params = [
-        "query_mem_limit",
-        "query_timeout",
-        "enable_spill",
-        "pipeline_dop",
-        "parallel_fragment_exec_instance_num",
-        "io_tasks_per_scan_operator",
-        "enable_global_runtime_filter",
-        "runtime_join_filter_push_down_limit",
-        "enable_scan_datacache",
-        "enable_populate_datacache",
-        "enable_query_cache",
-        "pipeline_profile_level",
-    ];
-    
+    // Build SQL query with parameterized variable names
+    // Note: Variable names are constants, so SQL injection is not a concern here
     let sql = format!(
         "SHOW VARIABLES WHERE Variable_name IN ({})",
-        params.iter().map(|p| format!("'{}'", p)).collect::<Vec<_>>().join(",")
+        CLUSTER_VARIABLE_NAMES
+            .iter()
+            .map(|name| format!("'{}'", name))
+            .collect::<Vec<_>>()
+            .join(",")
     );
-    
+
     match mysql_client.query_raw(&sql).await {
         Ok((_, rows)) => {
             let mut variables = ClusterVariables::new();
             for row in rows {
+                // SHOW VARIABLES returns: Variable_name, Value
                 if row.len() >= 2 {
-                    variables.insert(row[0].clone(), row[1].clone());
+                    let var_name = row[0].clone();
+                    let var_value = row[1].clone();
+                    variables.insert(var_name, var_value);
                 }
             }
-            tracing::debug!("Fetched {} cluster variables for smart recommendations", variables.len());
+            tracing::debug!(
+                "Fetched {} cluster variables for smart recommendations",
+                variables.len()
+            );
             Some(variables)
         }
         Err(e) => {
-            tracing::warn!("Failed to fetch cluster variables: {}, using defaults", e);
+            tracing::warn!(
+                "Failed to fetch cluster variables: {}, analysis will continue without them",
+                e
+            );
             None
         }
     }

@@ -62,7 +62,8 @@ impl MaterializedViewService {
             FROM information_schema.materialized_views mv
             LEFT JOIN information_schema.tables t 
                 ON mv.TABLE_SCHEMA = t.TABLE_SCHEMA AND mv.TABLE_NAME = t.TABLE_NAME
-            WHERE mv.TABLE_SCHEMA NOT IN ('information_schema', '_statistics_')".to_string()
+            WHERE mv.TABLE_SCHEMA NOT IN ('information_schema', '_statistics_')"
+                .to_string()
         };
 
         tracing::info!("Querying materialized views using information_schema");
@@ -513,12 +514,11 @@ impl MaterializedViewService {
                     .get("last_refresh_state")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
-                rows: row
-                    .get("rows")
-                    .and_then(|v| {
-                        // Try as i64 first, then as string
-                        v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
-                    }),
+                rows: row.get("rows").and_then(|v| {
+                    // Try as i64 first, then as string
+                    v.as_i64()
+                        .or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
+                }),
                 text: row
                     .get("text")
                     .and_then(|v| v.as_str())

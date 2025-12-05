@@ -530,7 +530,13 @@
       overflow-x: hidden;  // Prevent horizontal scroll/expansion
       overflow-y: visible;  // Allow content to show (parent handles scroll)
       box-sizing: border-box;
-      @include themed-scrollbar;
+    }
+  }
+  
+  // Node detail section needs no horizontal padding for alignment
+  .node-detail-section {
+    .section-body {
+      padding: 12px 0 !important;
     }
   }
 
@@ -647,6 +653,87 @@
         font-size: 11px;
         color: #8c8c8c;
       }
+
+      // Sub-list for metrics under a group
+      .metric-sub-list {
+        padding-left: 16px;
+        
+        .metric-row-simple {
+          display: flex;
+          justify-content: space-between;
+          padding: 4px 0;
+          font-size: 11px;
+          border-bottom: 1px solid #f5f5f5;
+          
+          .metric-label {
+            color: #8c8c8c;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            
+            .metric-hint {
+              font-size: 10px;
+              color: #bfbfbf;
+              cursor: help;
+            }
+          }
+          
+          span:last-child {
+            color: #595959;
+          }
+        }
+      }
+    }
+
+    // IO Statistics group
+    .io-stats-group {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed #e8e8e8;
+      
+      .metric-header .name {
+        font-weight: 600;
+        color: #333;
+      }
+    }
+
+    // Diagnosis summary link
+    .diagnosis-summary-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      margin: 12px 0;
+      background: rgba(255, 170, 0, 0.08);
+      border-radius: 4px;
+      border-left: 3px solid #ffaa00;
+      
+      .diag-icon {
+        font-size: 14px;
+      }
+      
+      .diag-text {
+        font-size: 12px;
+        color: #595959;
+      }
+      
+      .diag-link {
+        margin-left: auto;
+        color: #1890ff;
+        font-size: 12px;
+        cursor: pointer;
+        
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+
+    // Other metrics section
+    .other-metrics {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed #e8e8e8;
     }
     
     .metrics-list-simple {
@@ -982,6 +1069,11 @@
     
     .node-detail-tabs {
       ::ng-deep {
+        nb-tabset {
+          // Remove any default padding
+          padding: 0;
+        }
+        
         .tabset {
           padding: 0.25rem 0;
           gap: 0.125rem;
@@ -1023,39 +1115,54 @@
         }
         
         .tab-content {
-          padding: 0.5rem 0;
+          // Remove horizontal padding to align with tabs
+          padding: 0.5rem 0 0.5rem 0 !important;
+          margin: 0;
+        }
+        
+        // Ensure tab content wrapper has no extra padding
+        .content-container, nb-tab {
+          padding: 0 !important;
+          margin: 0;
         }
       }
     }
     
     .metrics-list-simple {
-      max-height: 300px;
-      overflow-y: auto;
-      padding-right: 8px; // Prevent content from being hidden by scrollbar
-      @include themed-scrollbar;
+      // No max-height, let content expand naturally
+      // Align with tab titles (no extra padding)
       
       .metric-row-simple {
         display: flex;
         justify-content: space-between;
-        padding: 5px 0;
-        font-size: 11px;
+        align-items: flex-start;
+        padding: 6px 0;
+        font-size: 12px;
         border-bottom: 1px solid #f5f5f5;
-        gap: 12px; // Add gap between label and value
+        gap: 16px;
         
-        span:first-child {
+        .metric-label {
           color: #666;
-          max-width: 160px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
           flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          
+          .metric-hint {
+            font-size: 12px;
+            color: #8f9bb3;
+            cursor: help;
+          }
         }
+        
         span:last-child {
           color: #333;
           font-family: 'Monaco', 'Menlo', monospace;
-          font-size: 10px;
+          font-size: 11px;
           text-align: right;
           word-break: break-all;
+          flex: 1;
+          min-width: 0;
         }
       }
     }
@@ -1163,4 +1270,391 @@
   margin-left: 0.25rem;
   cursor: help;
   vertical-align: middle;
+}
+
+// ============================================
+// Node Detail Section (when node is selected)
+// ============================================
+.node-detail-section {
+  .node-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    
+    .node-title-area {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      
+      .title {
+        font-weight: 600;
+        font-size: 14px;
+        color: #222b45;
+      }
+      
+      .node-id {
+        font-size: 11px;
+        color: #8f9bb3;
+      }
+    }
+    
+    .close-btn {
+      cursor: pointer;
+      color: #8f9bb3;
+      font-size: 14px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      
+      &:hover {
+        background: rgba(143, 155, 179, 0.1);
+        color: #222b45;
+      }
+    }
+  }
+  
+  .node-progress-section {
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 8px;
+    
+    .exec-time-bar {
+      display: flex;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      background: #f0f0f0;
+      margin-bottom: 8px;
+      
+      .bar-fill {
+        height: 100%;
+        
+        &.io { background: #13c2c2; }
+        &.processing { background: #1890ff; }
+      }
+    }
+    
+    .progress-legend {
+      display: flex;
+      gap: 16px;
+      
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        
+        .dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          
+          &.io { background: #13c2c2; }
+          &.processing { background: #1890ff; }
+        }
+        
+        .legend-label {
+          font-size: 11px;
+          color: #8c8c8c;
+        }
+        
+        .legend-value {
+          font-size: 11px;
+          color: #333;
+          font-weight: 500;
+        }
+      }
+    }
+  }
+  
+  .node-detail-tabs {
+    ::ng-deep {
+      .tabset {
+        border-bottom: 1px solid #edf1f7;
+        
+        .tab-link {
+          font-size: 12px;
+          padding: 8px 12px;
+        }
+      }
+      
+      .tab-content {
+        padding: 8px 0;
+      }
+    }
+  }
+  
+  .metric-category-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8f9bb3;
+    text-transform: uppercase;
+    padding: 8px 0 4px;
+    margin-top: 8px;
+    border-top: 1px dashed #edf1f7;
+    
+    &:first-child {
+      margin-top: 0;
+      border-top: none;
+    }
+  }
+
+  // Node detail content (节点详情 Tab)
+  .node-detail-content {
+    .operator-section {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #edf1f7;
+      
+      &:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+      }
+      
+      .operator-header {
+        font-size: 12px;
+        font-weight: 600;
+        color: #222b45;
+        padding: 8px 0;
+        background: rgba(143, 155, 179, 0.08);
+        padding-left: 8px;
+        margin: 0 -8px 8px;
+        border-radius: 4px;
+      }
+      
+      .metrics-group {
+        margin-bottom: 8px;
+        
+        .metrics-group-header {
+          font-size: 11px;
+          font-weight: 600;
+          color: #8f9bb3;
+          padding: 4px 0;
+        }
+      }
+    }
+  }
+
+  // Pipeline content (Pipeline Tab)
+  .pipeline-content {
+    .pipeline-section {
+      margin-bottom: 16px;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+      
+      .pipeline-section-header {
+        font-size: 12px;
+        font-weight: 600;
+        color: #222b45;
+        padding: 8px 0;
+        background: rgba(143, 155, 179, 0.08);
+        padding-left: 8px;
+        margin: 0 -8px 8px;
+        border-radius: 4px;
+      }
+    }
+  }
+
+  // Node Tab Content (like official UI)
+  .node-tab-content {
+    // Remove any inherited padding
+    padding: 0 !important;
+    margin: 0;
+    
+    .metric-section {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f0f0f0;
+      
+      &:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+      }
+      
+      .section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #222b45;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        .count-badge {
+          background: #faad14;
+          color: #fff;
+          font-size: 10px;
+          padding: 2px 6px;
+          border-radius: 10px;
+        }
+      }
+      
+      // Execution time bar
+      .exec-time-bar-container {
+        margin-bottom: 10px;
+        
+        .exec-time-bar {
+          display: flex;
+          height: 8px;
+          border-radius: 4px;
+          overflow: hidden;
+          background: #f0f0f0;
+          
+          .bar-fill {
+            height: 100%;
+            
+            &.cpu { background: #52c41a; }
+            &.secondary { background: #faad14; }
+          }
+        }
+      }
+      
+      .exec-time-legend {
+        .legend-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 0;
+          font-size: 12px;
+          
+          .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            
+            &.cpu { background: #52c41a; }
+            &.secondary { background: #faad14; }
+          }
+          
+          .legend-label {
+            color: #666;
+            min-width: 80px;
+            flex-shrink: 0;
+          }
+          
+          .legend-value {
+            color: #1890ff;
+            font-family: 'Monaco', 'Menlo', monospace;
+            flex: 1;
+            text-align: left;
+          }
+          
+          .legend-percent {
+            color: #333;
+            font-weight: 500;
+          }
+        }
+      }
+      
+      // Metric rows
+      .metric-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 5px 0;
+        font-size: 12px;
+        
+        .metric-label {
+          color: #666;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          
+          .metric-hint {
+            font-size: 12px;
+            color: #8f9bb3;
+            cursor: help;
+          }
+        }
+        
+        .metric-value {
+          color: #333;
+          font-family: 'Monaco', 'Menlo', monospace;
+          font-size: 11px;
+          text-align: right;
+          word-break: break-all;
+          
+          &.index-value {
+            color: #1890ff;
+          }
+          
+          &.time-value {
+            color: #faad14;
+          }
+        }
+        
+        &.over-consuming {
+          .metric-label {
+            color: #333;
+          }
+          
+          &.indented {
+            padding-left: 16px;
+            
+            .metric-label {
+              color: #666;
+            }
+          }
+        }
+      }
+    }
+    
+    // Diagnostics section
+    .diagnostics-section {
+      .diagnosis-list-inline {
+        .diag-item-inline {
+          padding: 10px;
+          margin-bottom: 8px;
+          background: rgba(250, 173, 20, 0.08);
+          border-radius: 6px;
+          border-left: 3px solid #faad14;
+          
+          &:last-child {
+            margin-bottom: 0;
+          }
+          
+          .diag-header-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            
+            .diag-badge-inline {
+              font-size: 10px;
+              padding: 2px 6px;
+              border-radius: 3px;
+              font-weight: 600;
+              
+              &.badge-danger { background: #ff4d4f; color: #fff; }
+              &.badge-warning { background: #faad14; color: #fff; }
+              &.badge-info { background: #1890ff; color: #fff; }
+            }
+            
+            .diag-name-inline {
+              font-size: 12px;
+              font-weight: 500;
+              color: #222b45;
+            }
+          }
+          
+          .diag-message-inline {
+            font-size: 11px;
+            color: #666;
+            line-height: 1.5;
+          }
+          
+          .diag-suggestions-inline {
+            margin-top: 8px;
+            
+            .suggestion-item {
+              font-size: 11px;
+              color: #52c41a;
+              padding: 2px 0;
+            }
+          }
+        }
+      }
+    }
+  }
 }

@@ -80,6 +80,23 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   isDiagnosisCollapsed = false;
   showMemoryView = false; // Toggle between Time and Memory view
   
+  // Graph direction: 'BT' (bottom-to-top) or 'LR' (left-to-right)
+  graphDirection: 'BT' | 'LR' = 'BT';
+  
+  // Node detail view state (when a node is selected)
+  selectedNodeTab: 'core' | 'detail' | 'pipeline' = 'core';
+  
+  // Core metrics by operator type
+  private coreMetricsByType: { [key: string]: string[] } = {
+    'SCAN': ['RawRowsRead', 'BytesRead', 'CompressedBytesRead', 'ScanTime', 'IOTime', 'Table', 'Rollup', 'TabletCount', 'PushdownPredicates', 'BitmapIndexFilterRows', 'BloomFilterFilterRows', 'RuntimeInFilterRows', 'RuntimeBloomFilterRows'],
+    'JOIN': ['BuildRows', 'ProbeRows', 'HashTableMemoryUsage', 'RuntimeFilterNum', 'JoinType', 'DistributionMode', 'HashTableSize', 'ProbeTime', 'BuildTime'],
+    'AGGREGATE': ['InputRowCount', 'OutputRowCount', 'HashTableMemoryUsage', 'AggFuncComputeTime', 'GroupByKeyCount', 'StreamingTime', 'HashTableIteratorTime'],
+    'EXCHANGE': ['ShuffleRowsPerBuffer', 'NetworkTime', 'WaitTime', 'OverallThroughput', 'PeakBufferUsage'],
+    'SORT': ['SortKeys', 'SortType', 'TopNLimit', 'SortTime', 'MergeTime'],
+    'PROJECT': ['ExprComputeTime', 'CommonSubExprComputeTime'],
+    'DEFAULT': ['OperatorTotalTime', 'PullRowNum', 'PushRowNum', 'PeakMemoryUsage']
+  };
+  
   private nodeRankMap: Map<string, number> = new Map(); // Node rank by time percentage
   objectKeys = Object.keys; // Helper for template
 
@@ -150,6 +167,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     'PendingTime': 'Driver因为输入或者前置条件不满足等待的时间',
     'ScheduleTime': 'Driver调度等待时间',
     'InputEmptyTime': '输入为空的等待时间',
+    'FirstInputEmptyTime': '首次输入为空的等待时间',
     'OutputFullTime': '输出满的等待时间',
     'PreconditionBlockTime': '前置条件阻塞时间',
     'PipelineID': 'Pipeline标识符',
@@ -157,6 +175,24 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     'NodeType': '节点类型',
     'IsHotspot': '是否为热点节点',
     'HotspotSeverity': '热点严重程度',
+    'IsGroupExecution': '是否为分组执行',
+    'BlockByInputEmpty': '因输入为空而阻塞的次数',
+    'BlockByOutputFull': '因输出满而阻塞的次数',
+    'BlockByPrecondition': '因前置条件不满足而阻塞的次数',
+    'DegreeOfParallelism': '并行度',
+    'TotalDegreeOfParallelism': '总并行度',
+    'PeakDriverQueueSize': 'Driver队列峰值大小',
+    'ScheduleCount': '调度次数',
+    'YieldByLocalWait': '因本地等待而让出的次数',
+    'YieldByPreempt': '因抢占而让出的次数',
+    'YieldByTimeLimit': '因时间限制而让出的次数',
+    'EnableEventScheduler': '是否启用事件调度器',
+    'InitialProcessDriverCount': '初始处理Driver数量',
+    'InitialProcessMem': '初始处理内存',
+    'JITCounter': 'JIT编译计数',
+    'JITTotalCostTime': 'JIT编译总耗时',
+    'QueryMemoryLimit': '查询内存限制',
+    'BackendProfileMergeTime': 'BE端Profile合并时间',
 
     // ============================================
     // Operator 通用指标
@@ -166,10 +202,30 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     'PullRowNum': 'Operator累积输入行数',
     'PullChunkNum': 'Operator累积输入Chunk数',
     'PushChunkNum': 'Operator累积输出Chunk数',
+    'PullTotalTime': 'Pull操作总耗时',
+    'PushTotalTime': 'Push操作总耗时',
     'PeakMemoryUsage': 'Operator最大内存使用量',
     'OutputRows': 'Operator输出行数',
     'TimePercentage': '该Operator耗时占总耗时的百分比',
     'OutputChunkBytes': 'Operator输出Chunk的字节数',
+    'IsSubordinate': '是否为从属Operator',
+    'ConjunctsInputRows': '谓词输入行数',
+    'ConjunctsOutputRows': '谓词输出行数',
+    'ConjunctsTime': '谓词计算耗时',
+    'RuntimeFilterNum': 'Runtime Filter数量',
+    'RuntimeInFilterNum': 'Runtime In Filter数量',
+    'JoinRuntimeFilterEvaluate': 'Join Runtime Filter评估次数',
+    'JoinRuntimeFilterHashTime': 'Join Runtime Filter哈希计算耗时',
+    'JoinRuntimeFilterInputRows': 'Join Runtime Filter输入行数',
+    'JoinRuntimeFilterOutputRows': 'Join Runtime Filter输出行数',
+    'JoinRuntimeFilterTime': 'Join Runtime Filter耗时',
+    'SetFinishingTime': '设置完成状态耗时',
+    'RequestReceived': '接收的请求数',
+    'SinkType': 'Sink类型',
+    'AppendChunkTime': '追加Chunk耗时',
+    'ResultRendTime': '结果渲染耗时',
+    'TupleConvertTime': '元组转换耗时',
+    'NumSentRows': '发送的行数',
 
     // ============================================
     // Scan Operator (OLAP/Connector)
@@ -255,6 +311,10 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     'ShortKeyRangeNumber': 'Short Key范围数',
     'RemainingRowsAfterShortKeyFilter': 'Short Key过滤后剩余行数',
     'MemAllocFailed': '内存分配失败次数',
+    'IOStatistics': 'IO统计信息',
+    'ReadPKIndex': '读取主键索引耗时',
+    'BitmapIndexIteratorInit': 'Bitmap索引迭代器初始化耗时',
+    'RawInputBytes': '原始输入字节数',
 
     // ============================================
     // Exchange Operator
@@ -338,11 +398,9 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     'BuildHashTableTime': '构建Hash Table耗时',
     'CopyRightTableChunkTime': '复制右表Chunk耗时',
     'RuntimeFilterBuildTime': 'Runtime Filter构建时间',
-    'RuntimeFilterNum': 'Runtime Filter个数',
     'BuildConjunctEvaluateTime': 'Build Conjunct评估耗时',
     'BuildRowsCounter': 'Build行计数',
     'RuntimeBloomFilterNum': 'Runtime Bloom Filter个数',
-    'RuntimeInFilterNum': 'Runtime In Filter个数',
 
     // ============================================
     // Window Function Operator
@@ -428,19 +486,22 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     'LocalDiskReadIOTime': '从本地缓存读取数据产生的I/O耗时，该指标仅适用于存算分离实例',
     'RemoteReadIOTime': '从远端OSS读取数据产生的I/O耗时，该指标仅适用于存算分离实例',
 
-    // ============================================
-    // 其他常用指标
-    // ============================================
-    'SinkType': 'Sink类型',
-    'AppendChunkTime': '追加Chunk耗时',
-    'TupleConvertTime': 'Tuple转换耗时',
-    'ResultRendTime': '结果渲染耗时',
-    'NumSentRows': '发送的行数',
   };
 
-  // Get metric description
+  // Get metric description (case-insensitive matching)
   getMetricDescription(key: string): string | null {
-    return this.metricDescriptions[key] || null;
+    // Direct match first
+    if (this.metricDescriptions[key]) {
+      return this.metricDescriptions[key];
+    }
+    // Case-insensitive match
+    const lowerKey = key.toLowerCase();
+    for (const [k, v] of Object.entries(this.metricDescriptions)) {
+      if (k.toLowerCase() === lowerKey) {
+        return v;
+      }
+    }
+    return null;
   }
 
   // Profile management settings
@@ -756,7 +817,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   buildGraph(tree: any): void {
     const g = new dagre.graphlib.Graph();
     g.setGraph({ 
-      rankdir: 'BT',
+      rankdir: this.graphDirection,
       marginx: 40, 
       marginy: 40,
       nodesep: 80,  // Increase node separation
@@ -1101,11 +1162,57 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
                     this.analysisData?.summary?.query_execution_wall_time_ms || 1;
     return totalMs > 0 ? Math.min((cpuMs / totalMs) * 100, 100) : 0;
   }
+
+  // Calculate schedule time percentage
+  getScheduleTimePercentage(): number {
+    const scheduleMs = this.analysisData?.summary?.query_peak_schedule_time_ms || 0;
+    const totalMs = this.analysisData?.summary?.query_execution_wall_time_ms || 1;
+    return totalMs > 0 ? Math.min((scheduleMs / totalMs) * 100, 100) : 0;
+  }
+
+  // Calculate network time percentage
+  getNetworkTimePercentage(): number {
+    const networkMs = this.analysisData?.summary?.query_cumulative_network_time_ms || 0;
+    const totalMs = this.analysisData?.summary?.query_execution_wall_time_ms || 1;
+    return totalMs > 0 ? Math.min((networkMs / totalMs) * 100, 100) : 0;
+  }
+
+  // Calculate result deliver time percentage
+  getResultDeliverTimePercentage(): number {
+    const deliverMs = this.analysisData?.summary?.result_deliver_time_ms || 0;
+    const totalMs = this.analysisData?.summary?.query_execution_wall_time_ms || 1;
+    return totalMs > 0 ? Math.min((deliverMs / totalMs) * 100, 100) : 0;
+  }
   
   // Format time string with percentage
   formatTimeWithPercent(timeStr: string | undefined, percent: number): string {
     if (!timeStr) return '-';
-    return `${percent.toFixed(2)}%(${timeStr})`;
+    return `${percent.toFixed(1)}%(${timeStr})`;
+  }
+
+  // Check if IO metrics are available (for disaggregated storage)
+  hasIoMetrics(): boolean {
+    const s = this.analysisData?.summary;
+    return !!(s?.io_seek_time || s?.local_disk_read_io_time || s?.remote_read_io_time);
+  }
+
+  // Check if IO statistics are available
+  hasIoStatistics(): boolean {
+    const s = this.analysisData?.summary;
+    return !!(s?.total_raw_rows_read || s?.total_bytes_read || 
+              s?.pages_count_memory || s?.pages_count_local_disk || s?.pages_count_remote ||
+              s?.result_rows || s?.result_bytes);
+  }
+
+  // Scroll to diagnosis section
+  scrollToDiagnosis(): void {
+    this.isDiagnosisCollapsed = false;
+    setTimeout(() => {
+      const diagSection = document.querySelector('.diagnosis-section');
+      if (diagSection) {
+        diagSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   }
   
   // Check if any summary metric is available
@@ -1161,6 +1268,431 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       return value.toLocaleString();
     }
     return String(value);
+  }
+
+  // ============================================
+  // Node Detail View Methods
+  // ============================================
+
+  // Get operator type from node name
+  getOperatorType(node: any): string {
+    if (!node?.operator_name) return 'DEFAULT';
+    const name = node.operator_name.toUpperCase();
+    if (name.includes('SCAN')) return 'SCAN';
+    if (name.includes('JOIN')) return 'JOIN';
+    if (name.includes('AGG')) return 'AGGREGATE';
+    if (name.includes('EXCHANGE')) return 'EXCHANGE';
+    if (name.includes('SORT') || name.includes('TOP')) return 'SORT';
+    if (name.includes('PROJECT')) return 'PROJECT';
+    return 'DEFAULT';
+  }
+
+  // Get execution time breakdown - dynamically detect from node's own metrics
+  // If node has ScanTime -> show CPUTime + ScanTime
+  // If node has NetworkTime -> show CPUTime + NetworkTime
+  // Otherwise -> show CPUTime only (100%)
+  getExecutionTimeBreakdown(): { items: { label: string; time: string; percent: number; color: string }[] } | null {
+    if (!this.selectedNode) return null;
+    
+    const allMetrics = this.getAllNodeMetrics();
+    const items: { label: string; time: string; percent: number; color: string }[] = [];
+    
+    // Get CPUTime from OperatorTotalTime
+    const cpuTimeStr = allMetrics['__MAX_OF_OperatorTotalTime'] || allMetrics['OperatorTotalTime'] || '0ns';
+    const cpuTimeNs = this.parseTimeToNs(cpuTimeStr);
+    
+    // Dynamically detect secondary time from the node's own metrics
+    let secondaryTimeStr = '';
+    let secondaryLabel = '';
+    let secondaryTimeNs = 0;
+    
+    // Check what time metrics this node actually has
+    if (allMetrics['ScanTime'] && this.parseTimeToNs(allMetrics['ScanTime']) > 0) {
+      secondaryTimeStr = allMetrics['ScanTime'];
+      secondaryLabel = 'ScanTime';
+      secondaryTimeNs = this.parseTimeToNs(secondaryTimeStr);
+    } else if (allMetrics['NetworkTime'] && this.parseTimeToNs(allMetrics['NetworkTime']) > 0) {
+      secondaryTimeStr = allMetrics['NetworkTime'];
+      secondaryLabel = 'NetworkTime';
+      secondaryTimeNs = this.parseTimeToNs(secondaryTimeStr);
+    }
+    
+    const totalTimeNs = cpuTimeNs + secondaryTimeNs || 1;
+    
+    // Add CPUTime
+    items.push({
+      label: 'CPUTime',
+      time: cpuTimeStr,
+      percent: secondaryTimeNs > 0 ? (cpuTimeNs / totalTimeNs) * 100 : 100,
+      color: 'cpu'
+    });
+    
+    // Add secondary time if this node has it
+    if (secondaryLabel && secondaryTimeNs > 0) {
+      items.push({
+        label: secondaryLabel,
+        time: secondaryTimeStr,
+        percent: (secondaryTimeNs / totalTimeNs) * 100,
+        color: 'secondary'
+      });
+    }
+    
+    return { items };
+  }
+
+  // Get all metrics from node (combining all sources)
+  private getAllNodeMetrics(): { [key: string]: any } {
+    if (!this.selectedNode) return {};
+    
+    // Combine metrics from node itself
+    const result: { [key: string]: any } = {
+      ...this.selectedNode.metrics,
+      ...this.selectedNode.unique_metrics,
+      ...this.selectedNode.aggregated_metrics
+    };
+    
+    // Also get metrics from operators in pipeline
+    const operators = this.getNodeOperatorsFromPipeline();
+    for (const op of operators) {
+      if (op.common_metrics) {
+        Object.assign(result, op.common_metrics);
+      }
+      if (op.unique_metrics) {
+        Object.assign(result, op.unique_metrics);
+      }
+    }
+    
+    return result;
+  }
+
+  // Get core metrics - directly from node's unique_metrics (no hardcoding!)
+  // Filter out: time metrics (shown in Over Consuming), memory metrics (shown in Memory section), index metrics (shown in Indexes)
+  getNodeCoreMetrics(): { key: string; value: any }[] {
+    if (!this.selectedNode) return [];
+    
+    const allMetrics = this.getAllNodeMetrics();
+    const result: { key: string; value: any }[] = [];
+    
+    // Keys to exclude (shown in other sections)
+    const excludePatterns = [
+      /Time$/i, /^__/, /Memory/i, /Peak/i, /FilterRows$/i,
+      /^OperatorTotalTime$/, /^PullTotalTime$/, /^PushTotalTime$/
+    ];
+    
+    // Priority keys to show first (common important metrics)
+    const priorityKeys = [
+      'RowsRead', 'BytesRead', 'CompressedBytesRead', 'ScanTime', 'IOTime',
+      'Table', 'Rollup', 'Predicates',
+      'BytesSent', 'BytesReceived', 'NetworkTime', 'WaitTime', 'OverallThroughput', 'PartType',
+      'PullRowNum', 'PushRowNum', 'OutputRows'
+    ];
+    
+    // First add priority keys that exist
+    for (const key of priorityKeys) {
+      const value = allMetrics[key];
+      if (value !== undefined && value !== null && value !== '' && value !== '0' && value !== '0.000 B') {
+        // Skip if matches exclude pattern
+        if (!excludePatterns.some(p => p.test(key))) {
+          result.push({ key, value });
+        }
+      }
+    }
+    
+    // Then add other unique_metrics that weren't added
+    const addedKeys = new Set(result.map(r => r.key));
+    for (const [key, value] of Object.entries(allMetrics)) {
+      if (addedKeys.has(key)) continue;
+      if (value === undefined || value === null || value === '') continue;
+      if (excludePatterns.some(p => p.test(key))) continue;
+      
+      // Only add non-zero values
+      if (value !== '0' && value !== '0.000 B' && value !== 0) {
+        result.push({ key, value });
+      }
+    }
+    
+    return result;
+  }
+
+  // Get memory metrics - dynamically find all memory-related metrics from node
+  getNodeMemoryMetrics(): { key: string; value: any }[] {
+    if (!this.selectedNode) return [];
+    
+    const allMetrics = this.getAllNodeMetrics();
+    const result: { key: string; value: any }[] = [];
+    
+    // Find all metrics containing Memory or Peak (memory-related)
+    for (const [key, value] of Object.entries(allMetrics)) {
+      if (key.startsWith('__')) continue; // Skip aggregation keys
+      if (!/Memory|Peak/i.test(key)) continue;
+      if (value === undefined || value === null || value === '') continue;
+      if (value === '0' || value === '0.000 B' || value === 0 || value === '0Bytes') continue;
+      
+      result.push({ key, value });
+    }
+    
+    return result;
+  }
+
+  // Get index metrics - dynamically find all *FilterRows metrics from node
+  getNodeIndexMetrics(): { key: string; value: any }[] {
+    if (!this.selectedNode) return [];
+    
+    const allMetrics = this.getAllNodeMetrics();
+    const result: { key: string; value: any }[] = [];
+    
+    // Index display name mapping
+    const indexMapping: { [key: string]: string } = {
+      'ShortKeyFilterRows': 'ShortKey',
+      'ZoneMapIndexFilterRows': 'ZoneMap',
+      'SegmentZoneMapFilterRows': 'ZoneMap',
+      'SegmentRuntimeZoneMapFilterRows': 'RuntimeZoneMap',
+      'BitmapIndexFilterRows': 'Bitmap',
+      'BloomFilterFilterRows': 'Bloom'
+    };
+    
+    // Find all FilterRows metrics
+    for (const [sourceKey, displayKey] of Object.entries(indexMapping)) {
+      const value = allMetrics[sourceKey];
+      if (value !== undefined) {
+        result.push({ key: displayKey, value });
+      }
+    }
+    
+    return result;
+  }
+
+  // Get over consuming metrics - dynamically find all time-related metrics from node
+  // Format: "value[max=xxx, min=xxx]" like official UI
+  getOverConsumingMetrics(): { key: string; value: string; indent?: number }[] {
+    if (!this.selectedNode) return [];
+    
+    const allMetrics = this.getAllNodeMetrics();
+    const result: { key: string; value: string; indent?: number }[] = [];
+    
+    // Time pattern: ends with Time or contains time units (ns/us/ms/s/m/h)
+    const isTimeMetric = (key: string, value: any): boolean => {
+      if (key.startsWith('__')) return false;
+      if (!/Time$/i.test(key)) return false;
+      if (key === 'OperatorTotalTime') return false; // Already shown in Execution time
+      return true;
+    };
+    
+    // Collect all time metrics from this node
+    const timeMetrics: { key: string; value: string; timeNs: number }[] = [];
+    
+    for (const [key, value] of Object.entries(allMetrics)) {
+      if (!isTimeMetric(key, value)) continue;
+      if (value === undefined || value === null || value === '') continue;
+      
+      const timeNs = this.parseTimeToNs(value);
+      if (timeNs <= 0) continue;
+      
+      // Build display value with max/min if available
+      const maxVal = allMetrics[`__MAX_OF_${key}`];
+      const minVal = allMetrics[`__MIN_OF_${key}`];
+      let displayValue = String(value);
+      if (maxVal && minVal) {
+        displayValue = `${value}[max=${maxVal}, min=${minVal}]`;
+      }
+      
+      timeMetrics.push({ key, value: displayValue, timeNs });
+    }
+    
+    // Sort by time (descending) - show most time-consuming first
+    timeMetrics.sort((a, b) => b.timeNs - a.timeNs);
+    
+    // Add to result
+    for (const metric of timeMetrics) {
+      result.push({ key: metric.key, value: metric.value, indent: 0 });
+    }
+    
+    return result;
+  }
+
+  // Get all metrics for node detail view
+  getNodeDetailMetrics(): { category: string; metrics: { key: string; value: any; description?: string }[] }[] {
+    if (!this.selectedNode) return [];
+    
+    const categories: { category: string; metrics: { key: string; value: any; description?: string }[] }[] = [];
+    
+    // Unique metrics (non-aggregated)
+    if (this.selectedNode.unique_metrics && Object.keys(this.selectedNode.unique_metrics).length > 0) {
+      const metrics = Object.entries(this.selectedNode.unique_metrics)
+        .filter(([_, v]) => v !== null && v !== undefined)
+        .map(([key, value]) => ({
+          key,
+          value,
+          description: this.metricDescriptions[key]
+        }));
+      if (metrics.length > 0) {
+        categories.push({ category: '唯一指标', metrics });
+      }
+    }
+    
+    // Aggregated metrics (with min/max/avg)
+    if (this.selectedNode.aggregated_metrics && Object.keys(this.selectedNode.aggregated_metrics).length > 0) {
+      const metrics = Object.entries(this.selectedNode.aggregated_metrics)
+        .filter(([_, v]) => v !== null && v !== undefined)
+        .map(([key, value]) => ({
+          key,
+          value,
+          description: this.metricDescriptions[key]
+        }));
+      if (metrics.length > 0) {
+        categories.push({ category: '聚合指标', metrics });
+      }
+    }
+    
+    return categories;
+  }
+
+  // Get pipeline info for selected node
+  getNodePipelineInfo(): any[] {
+    if (!this.selectedNode) return [];
+    
+    // Pipeline info is typically in the node's children or specialized metrics
+    const pipelineMetrics = [
+      'DriverTotalTime', 'ActiveTime', 'PendingTime', 'ScheduleTime',
+      'InputEmptyTime', 'OutputFullTime', 'PreconditionBlockTime',
+      'LocalRfWaitingTime', 'PipelineID', 'DriverNum'
+    ];
+    
+    const result: { key: string; value: any }[] = [];
+    const allMetrics = {
+      ...this.selectedNode.unique_metrics,
+      ...this.selectedNode.aggregated_metrics
+    };
+    
+    for (const key of pipelineMetrics) {
+      if (allMetrics[key] !== undefined && allMetrics[key] !== null) {
+        result.push({ key, value: allMetrics[key] });
+      }
+    }
+    
+    return result;
+  }
+
+  // Parse time string to nanoseconds (e.g., "84.535us" -> 84535, "1s183ms" -> 1183000000)
+  private parseTimeToNs(timeStr: any): number {
+    if (!timeStr) return 0;
+    if (typeof timeStr === 'number') return timeStr;
+    
+    const str = String(timeStr).trim();
+    let totalNs = 0;
+    
+    // Match patterns like "1h30m", "1s183ms", "84.535us", "0ns"
+    const patterns = [
+      { regex: /([\d.]+)h/i, multiplier: 3600000000000 },
+      { regex: /([\d.]+)m(?!s)/i, multiplier: 60000000000 },
+      { regex: /([\d.]+)s(?!$)/i, multiplier: 1000000000 },
+      { regex: /([\d.]+)ms/i, multiplier: 1000000 },
+      { regex: /([\d.]+)us/i, multiplier: 1000 },
+      { regex: /([\d.]+)ns/i, multiplier: 1 },
+      { regex: /^([\d.]+)s$/i, multiplier: 1000000000 }, // Just seconds
+    ];
+    
+    for (const { regex, multiplier } of patterns) {
+      const match = str.match(regex);
+      if (match) {
+        totalNs += parseFloat(match[1]) * multiplier;
+      }
+    }
+    
+    return totalNs;
+  }
+
+  // Calculate IO percentage for node (IO time / Total time)
+  getNodeIoPercentage(): number {
+    if (!this.selectedNode) return 0;
+    
+    // Get IOTime from various sources
+    const ioTimeStr = this.selectedNode.aggregated_metrics?.IOTime || 
+                      this.selectedNode.unique_metrics?.IOTime ||
+                      this.selectedNode.metrics?.IOTime || 0;
+    const ioTimeNs = this.parseTimeToNs(ioTimeStr);
+    
+    // Get total operator time
+    const totalTimeNs = this.selectedNode.metrics?.operator_total_time_ns || 
+                        this.parseTimeToNs(this.selectedNode.metrics?.operator_total_time) || 1;
+    
+    return totalTimeNs > 0 ? Math.min((ioTimeNs / totalTimeNs) * 100, 100) : 0;
+  }
+
+  // Calculate Processing percentage for node (100% - IO%)
+  getNodeProcessingPercentage(): number {
+    if (!this.selectedNode) return 0;
+    const ioPercent = this.getNodeIoPercentage();
+    return Math.max(100 - ioPercent, 0);
+  }
+
+  // Clear node selection
+  clearNodeSelection(): void {
+    this.selectedNode = null;
+    this.selectedNodeTab = 'core';
+  }
+
+  // Select node and switch to detail view
+  selectNodeForDetail(node: any): void {
+    this.selectedNode = node;
+    this.selectedNodeTab = 'core';
+  }
+
+  // Get Fragment info for selected node
+  getNodeFragmentInfo(): any | null {
+    if (!this.selectedNode?.fragment_id || !this.analysisData?.fragments) return null;
+    return this.analysisData.fragments.find((f: any) => f.id === this.selectedNode.fragment_id);
+  }
+
+  // Get Fragment metrics (excluding pipelines and operators)
+  getFragmentMetrics(): { key: string; value: any }[] {
+    const fragment = this.getNodeFragmentInfo();
+    if (!fragment) return [];
+    
+    const result: { key: string; value: any }[] = [];
+    // Add basic fragment info
+    if (fragment.backend_addresses?.length) {
+      result.push({ key: 'BackendAddresses', value: fragment.backend_addresses.join(', ') });
+    }
+    if (fragment.instance_ids?.length) {
+      result.push({ key: 'InstanceNum', value: fragment.instance_ids.length });
+    }
+    return result;
+  }
+
+  // Get Pipeline info for selected node from fragments
+  getNodePipelineFromFragments(): any | null {
+    const fragment = this.getNodeFragmentInfo();
+    if (!fragment || !this.selectedNode?.pipeline_id) return null;
+    return fragment.pipelines?.find((p: any) => p.id === this.selectedNode.pipeline_id);
+  }
+
+  // Get Pipeline metrics
+  getPipelineMetrics(): { key: string; value: any }[] {
+    const pipeline = this.getNodePipelineFromFragments();
+    if (!pipeline?.metrics) return [];
+    
+    return Object.entries(pipeline.metrics)
+      .filter(([_, v]) => v !== null && v !== undefined)
+      .map(([key, value]) => ({ key, value }));
+  }
+
+  // Get operators for selected node from pipeline (for 节点详情 Tab)
+  getNodeOperatorsFromPipeline(): any[] {
+    const pipeline = this.getNodePipelineFromFragments();
+    if (!pipeline?.operators) return [];
+    
+    const planNodeId = this.selectedNode?.plan_node_id?.toString();
+    if (!planNodeId) return pipeline.operators;
+    
+    // Filter operators by plan_node_id
+    return pipeline.operators.filter((op: any) => op.plan_node_id === planNodeId);
+  }
+
+  // Get all operators in the pipeline (for full view)
+  getAllPipelineOperators(): any[] {
+    const pipeline = this.getNodePipelineFromFragments();
+    return pipeline?.operators || [];
   }
   
   // Format bytes to human readable
@@ -1258,6 +1790,48 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     setTimeout(() => {
         // Trigger resize event to re-layout if needed
         window.dispatchEvent(new Event('resize'));
+    });
+  }
+
+  // Toggle graph direction (BT <-> LR)
+  toggleGraphDirection(): void {
+    this.graphDirection = this.graphDirection === 'BT' ? 'LR' : 'BT';
+    // Rebuild graph with new direction
+    if (this.analysisData?.execution_tree) {
+      this.buildGraph(this.analysisData.execution_tree);
+    }
+  }
+
+  // Export DAG as PNG image
+  exportDagAsPng(): void {
+    const graphContent = document.querySelector('.graph-content') as HTMLElement;
+    if (!graphContent) {
+      this.toastrService.warning('无法找到图表内容', '导出失败');
+      return;
+    }
+
+    // Use html2canvas to capture the graph
+    import('html2canvas').then(html2canvasModule => {
+      const html2canvas = html2canvasModule.default;
+      html2canvas(graphContent, {
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher resolution
+        logging: false,
+        useCORS: true,
+      }).then(canvas => {
+        // Create download link
+        const link = document.createElement('a');
+        link.download = `profile-dag-${this.currentQueryId || 'export'}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        this.toastrService.success('图表已导出', '导出成功');
+      }).catch(err => {
+        console.error('Export failed:', err);
+        this.toastrService.danger('导出图片失败', '错误');
+      });
+    }).catch(err => {
+      console.error('Failed to load html2canvas:', err);
+      this.toastrService.danger('加载导出模块失败', '错误');
     });
   }
 

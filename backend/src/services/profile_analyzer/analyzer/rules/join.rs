@@ -9,23 +9,27 @@ use super::*;
 pub struct J001ResultExplosion;
 
 impl DiagnosticRule for J001ResultExplosion {
-    fn id(&self) -> &str { "J001" }
-    fn name(&self) -> &str { "Join 结果膨胀" }
-    
+    fn id(&self) -> &str {
+        "J001"
+    }
+    fn name(&self) -> &str {
+        "Join 结果膨胀"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("JOIN")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let output_rows = context.node.metrics.pull_row_num? as f64;
         let probe_rows = context.get_metric("ProbeRows")?;
-        
+
         if probe_rows == 0.0 {
             return None;
         }
-        
+
         let ratio = output_rows / probe_rows;
-        
+
         if ratio > 10.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -58,18 +62,22 @@ impl DiagnosticRule for J001ResultExplosion {
 pub struct J002BuildLargerThanProbe;
 
 impl DiagnosticRule for J002BuildLargerThanProbe {
-    fn id(&self) -> &str { "J002" }
-    fn name(&self) -> &str { "Join Build 端过大" }
-    
-    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("HASH") && 
-        node.operator_name.to_uppercase().contains("JOIN")
+    fn id(&self) -> &str {
+        "J002"
     }
-    
+    fn name(&self) -> &str {
+        "Join Build 端过大"
+    }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        node.operator_name.to_uppercase().contains("HASH")
+            && node.operator_name.to_uppercase().contains("JOIN")
+    }
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let build_rows = context.get_metric("BuildRows")?;
         let probe_rows = context.get_metric("ProbeRows")?;
-        
+
         if build_rows > probe_rows && build_rows > 100_000.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -102,34 +110,42 @@ impl DiagnosticRule for J002BuildLargerThanProbe {
 pub struct J003HashTableTooLarge;
 
 impl DiagnosticRule for J003HashTableTooLarge {
-    fn id(&self) -> &str { "J003" }
-    fn name(&self) -> &str { "HashTable 内存过大" }
-    
-    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("HASH") && 
-        node.operator_name.to_uppercase().contains("JOIN")
+    fn id(&self) -> &str {
+        "J003"
     }
-    
+    fn name(&self) -> &str {
+        "HashTable 内存过大"
+    }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        node.operator_name.to_uppercase().contains("HASH")
+            && node.operator_name.to_uppercase().contains("JOIN")
+    }
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
-        let hash_memory = context.get_metric("HashTableMemoryUsage")
+        let hash_memory = context
+            .get_metric("HashTableMemoryUsage")
             .or_else(|| context.get_memory_usage().map(|v| v as f64))?;
-        
+
         const ONE_GB: f64 = 1024.0 * 1024.0 * 1024.0;
-        
+
         if hash_memory > ONE_GB {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", 
+                node_path: format!(
+                    "{} (plan_node_id={})",
                     context.node.operator_name,
-                    context.node.plan_node_id.unwrap_or(-1)),
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "HashTable 内存使用 {}，可能导致内存压力",
                     format_bytes(hash_memory as u64)
                 ),
-                reason: "Join 的 HashTable 占用内存过大，可能导致内存压力或触发 Spill。".to_string(),
+                reason: "Join 的 HashTable 占用内存过大，可能导致内存压力或触发 Spill。"
+                    .to_string(),
                 suggestions: vec![
                     "检查 Build 端数据量是否过大".to_string(),
                     "考虑使用 Runtime Filter 减少数据量".to_string(),
@@ -154,17 +170,21 @@ impl DiagnosticRule for J003HashTableTooLarge {
 pub struct J004NoRuntimeFilter;
 
 impl DiagnosticRule for J004NoRuntimeFilter {
-    fn id(&self) -> &str { "J004" }
-    fn name(&self) -> &str { "未生成 Runtime Filter" }
-    
+    fn id(&self) -> &str {
+        "J004"
+    }
+    fn name(&self) -> &str {
+        "未生成 Runtime Filter"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("JOIN")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let rf_num = context.get_metric("RuntimeFilterNum").unwrap_or(0.0);
         let build_rows = context.get_metric("BuildRows").unwrap_or(0.0);
-        
+
         if rf_num == 0.0 && build_rows > 10_000.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -206,18 +226,22 @@ impl DiagnosticRule for J004NoRuntimeFilter {
 pub struct J009NonEquiJoin;
 
 impl DiagnosticRule for J009NonEquiJoin {
-    fn id(&self) -> &str { "J009" }
-    fn name(&self) -> &str { "非等式 Join 回退" }
-    
+    fn id(&self) -> &str {
+        "J009"
+    }
+    fn name(&self) -> &str {
+        "非等式 Join 回退"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         let name = node.operator_name.to_uppercase();
         name.contains("CROSS") || name.contains("NEST") || name.contains("LOOP")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let probe_rows = context.get_metric("ProbeRows").unwrap_or(0.0);
         let build_rows = context.get_metric("BuildRows").unwrap_or(0.0);
-        
+
         // Only warn if significant data volume
         if probe_rows > 1000.0 || build_rows > 1000.0 {
             Some(Diagnostic {
@@ -251,23 +275,28 @@ impl DiagnosticRule for J009NonEquiJoin {
 pub struct J010ProbeCacheUnfriendly;
 
 impl DiagnosticRule for J010ProbeCacheUnfriendly {
-    fn id(&self) -> &str { "J010" }
-    fn name(&self) -> &str { "探测缓存不友好" }
-    
-    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("HASH") && 
-        node.operator_name.to_uppercase().contains("JOIN")
+    fn id(&self) -> &str {
+        "J010"
     }
-    
+    fn name(&self) -> &str {
+        "探测缓存不友好"
+    }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        node.operator_name.to_uppercase().contains("HASH")
+            && node.operator_name.to_uppercase().contains("JOIN")
+    }
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
-        let hash_memory = context.get_metric("HashTableMemoryUsage")
+        let hash_memory = context
+            .get_metric("HashTableMemoryUsage")
             .or_else(|| context.get_memory_usage().map(|v| v as f64))?;
         let probe_rows = context.get_metric("ProbeRows")?;
         let build_rows = context.get_metric("BuildRows")?;
-        
+
         // L3 cache typically 30-50MB, use 50MB as threshold
         const L3_CACHE: f64 = 50.0 * 1024.0 * 1024.0;
-        
+
         if hash_memory > L3_CACHE && probe_rows > build_rows * 100.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -299,13 +328,17 @@ impl DiagnosticRule for J010ProbeCacheUnfriendly {
 pub struct J005HashCollision;
 
 impl DiagnosticRule for J005HashCollision {
-    fn id(&self) -> &str { "J005" }
-    fn name(&self) -> &str { "Hash 碰撞严重" }
-    
+    fn id(&self) -> &str {
+        "J005"
+    }
+    fn name(&self) -> &str {
+        "Hash 碰撞严重"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("JOIN")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let keys_per_bucket = context.get_metric("BuildKeysPerBucket%")?;
         if keys_per_bucket > 10.0 {
@@ -320,7 +353,9 @@ impl DiagnosticRule for J005HashCollision {
                 suggestions: vec!["优化 Join 键选择".to_string(), "检查数据是否存在大量重复值".to_string()],
                 parameter_suggestions: vec![],
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -328,17 +363,23 @@ impl DiagnosticRule for J005HashCollision {
 pub struct J006ShuffleSkew;
 
 impl DiagnosticRule for J006ShuffleSkew {
-    fn id(&self) -> &str { "J006" }
-    fn name(&self) -> &str { "Join Shuffle 倾斜" }
-    
+    fn id(&self) -> &str {
+        "J006"
+    }
+    fn name(&self) -> &str {
+        "Join Shuffle 倾斜"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("JOIN")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let max_probe = context.get_metric("__MAX_OF_ProbeRows")?;
         let min_probe = context.get_metric("__MIN_OF_ProbeRows").unwrap_or(0.0);
-        if min_probe == 0.0 { return None; }
+        if min_probe == 0.0 {
+            return None;
+        }
         let ratio = max_probe / ((max_probe + min_probe) / 2.0);
         if ratio > 3.0 {
             Some(Diagnostic {
@@ -352,7 +393,9 @@ impl DiagnosticRule for J006ShuffleSkew {
                 suggestions: vec!["切换到更高基数的连接键".to_string(), "对键添加盐值".to_string()],
                 parameter_suggestions: vec![],
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -360,13 +403,17 @@ impl DiagnosticRule for J006ShuffleSkew {
 pub struct J007PartitionProbeOverhead;
 
 impl DiagnosticRule for J007PartitionProbeOverhead {
-    fn id(&self) -> &str { "J007" }
-    fn name(&self) -> &str { "分区 Join 探测开销高" }
-    
+    fn id(&self) -> &str {
+        "J007"
+    }
+    fn name(&self) -> &str {
+        "分区 Join 探测开销高"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("JOIN")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let partition_nums = context.get_metric("PartitionNums")?;
         let probe_overhead = context.get_metric("PartitionProbeOverhead").unwrap_or(0.0);
@@ -376,14 +423,27 @@ impl DiagnosticRule for J007PartitionProbeOverhead {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
-                message: format!("分区探测开销占比 {:.1}%，分区数为 {:.0}", probe_overhead / search_time * 100.0, partition_nums),
+                message: format!(
+                    "分区探测开销占比 {:.1}%，分区数为 {:.0}",
+                    probe_overhead / search_time * 100.0,
+                    partition_nums
+                ),
                 reason: "分区探测开销过高，可能是分区数过多或分区策略不当。".to_string(),
-                suggestions: vec!["检查分区数是否合理".to_string(), "考虑增加内存限制避免过度分区".to_string()],
+                suggestions: vec![
+                    "检查分区数是否合理".to_string(),
+                    "考虑增加内存限制避免过度分区".to_string(),
+                ],
                 parameter_suggestions: vec![],
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -391,13 +451,17 @@ impl DiagnosticRule for J007PartitionProbeOverhead {
 pub struct J008RFMemoryHigh;
 
 impl DiagnosticRule for J008RFMemoryHigh {
-    fn id(&self) -> &str { "J008" }
-    fn name(&self) -> &str { "Runtime Filter 内存占用高" }
-    
+    fn id(&self) -> &str {
+        "J008"
+    }
+    fn name(&self) -> &str {
+        "Runtime Filter 内存占用高"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("JOIN")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let rf_bytes = context.get_metric("PartialRuntimeMembershipFilterBytes")?;
         const HUNDRED_MB: f64 = 100.0 * 1024.0 * 1024.0;
@@ -406,22 +470,94 @@ impl DiagnosticRule for J008RFMemoryHigh {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!("Runtime Filter 内存占用 {}", format_bytes(rf_bytes as u64)),
-                reason: "Runtime Filter 占用内存过高，可能是 Filter 数量过多或单个 Filter 过大。".to_string(),
-                suggestions: vec!["降低 runtime_filter_max_size 配置".to_string(), "检查 Join 键基数是否过高".to_string()],
-                parameter_suggestions: vec![
-                    ParameterSuggestion::new(
-                        "runtime_filter_max_size",
-                        ParameterType::Session,
-                        None,
-                        "67108864",
-                        "SET runtime_filter_max_size = 67108864; -- 64MB"
-                    ),
+                reason: "Runtime Filter 占用内存过高，可能是 Filter 数量过多或单个 Filter 过大。"
+                    .to_string(),
+                suggestions: vec![
+                    "降低 runtime_filter_max_size 配置".to_string(),
+                    "检查 Join 键基数是否过高".to_string(),
                 ],
+                parameter_suggestions: vec![ParameterSuggestion::new(
+                    "runtime_filter_max_size",
+                    ParameterType::Session,
+                    None,
+                    "67108864",
+                    "SET runtime_filter_max_size = 67108864; -- 64MB",
+                )],
             })
-        } else { None }
+        } else {
+            None
+        }
+    }
+}
+
+/// J011: Broadcast Join not recommended for large build table
+/// Condition: DistributionMode = BROADCAST and BuildRows > 1M or HashTableMemoryUsage > 100MB
+pub struct J011BroadcastNotRecommended;
+
+impl DiagnosticRule for J011BroadcastNotRecommended {
+    fn id(&self) -> &str {
+        "J011"
+    }
+    fn name(&self) -> &str {
+        "Join 不应使用 Broadcast"
+    }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        node.operator_name.to_uppercase().contains("JOIN")
+    }
+
+    fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
+        // Check if using Broadcast distribution
+        let dist_mode = context.node.unique_metrics.get("DistributionMode")?;
+        if !dist_mode.to_uppercase().contains("BROADCAST") {
+            return None;
+        }
+
+        // Check build side size
+        let build_rows = context.get_metric("BuildRows").unwrap_or(0.0);
+        let hash_table_memory = context.get_metric("HashTableMemoryUsage").unwrap_or(0.0);
+
+        // Thresholds: 1M rows or 100MB memory
+        let rows_threshold = 1_000_000.0;
+        let memory_threshold = 100.0 * 1024.0 * 1024.0; // 100MB
+
+        if build_rows > rows_threshold || hash_table_memory > memory_threshold {
+            Some(Diagnostic {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: RuleSeverity::Warning,
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
+                plan_node_id: context.node.plan_node_id,
+                message: format!(
+                    "Broadcast Join Build 端数据量过大 ({:.0} 行, {:.2} MB)",
+                    build_rows,
+                    hash_table_memory / 1024.0 / 1024.0
+                ),
+                reason: "当小表与大表 Join 时，Broadcast Join 会将小表广播到所有节点。\
+                    但当 Build 端数据量过大时，会增加网络和计算成本。\
+                    可能是统计信息不准确导致优化器错误估计了表大小。"
+                    .to_string(),
+                suggestions: vec![
+                    "在 JOIN 关键字后添加 [shuffle] Hint 限制使用 Broadcast Join".to_string(),
+                    "检查统计信息是否收集或过期，执行 ANALYZE TABLE".to_string(),
+                    "检查 Join 顺序是否合理".to_string(),
+                ],
+                parameter_suggestions: vec![],
+            })
+        } else {
+            None
+        }
     }
 }
 
@@ -438,5 +574,6 @@ pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
         Box::new(J008RFMemoryHigh),
         Box::new(J009NonEquiJoin),
         Box::new(J010ProbeCacheUnfriendly),
+        Box::new(J011BroadcastNotRecommended),
     ]
 }

@@ -113,18 +113,14 @@ impl MySQLSession {
                 .query::<mysql_async::Row, _>(&set_catalog_sql_quoted)
                 .await
                 .map_err(|e| {
-                    tracing::error!(
-                        "Failed to switch to catalog {}: {}",
-                        catalog,
-                        e
-                    );
+                    tracing::error!("Failed to switch to catalog {}: {}", catalog, e);
                     ApiError::internal_error(format!(
                         "Failed to switch to catalog {}: {}",
                         catalog, e
                     ))
                 })?;
         }
-        
+
         tracing::debug!("Successfully switched to catalog: {}", catalog);
         Ok(())
     }

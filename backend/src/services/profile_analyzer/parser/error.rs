@@ -7,19 +7,19 @@ use thiserror::Error;
 pub enum ParseError {
     #[error("Section not found: {0}")]
     SectionNotFound(String),
-    
+
     #[error("Invalid topology JSON: {0}")]
     TopologyError(String),
-    
+
     #[error("Tree build error: {0}")]
     TreeError(String),
-    
+
     #[error("Failed to parse number: {0}")]
     ParseNumberError(String),
-    
+
     #[error("Failed to parse duration: {0}")]
     ParseDurationError(String),
-    
+
     #[error("Failed to parse bytes: {0}")]
     ParseBytesError(String),
 }

@@ -284,7 +284,7 @@ impl RoleService {
     }
 
     /// Assign permissions to role (organization-scoped)
-    /// 
+    ///
     /// Automatically:
     ///   1. Associates API permissions with selected menu permissions (child APIs)
     ///   2. Grants all parent menu permissions for selected permissions (parent menus)
@@ -351,13 +351,15 @@ impl RoleService {
         let mut parent_count = 0;
         for permission_id in req.permission_ids.clone() {
             let mut current_id = permission_id;
-            
+
             // Walk up the parent chain
             while let Some(perm) = perm_map.get(&current_id) {
                 if let Some(parent_id) = perm.parent_id {
                     // Check if parent is a menu type
                     if let Some(parent_perm) = perm_map.get(&parent_id) {
-                        if parent_perm.r#type == "menu" && !extended_permission_ids.contains(&parent_id) {
+                        if parent_perm.r#type == "menu"
+                            && !extended_permission_ids.contains(&parent_id)
+                        {
                             extended_permission_ids.push(parent_id);
                             parent_count += 1;
                             tracing::debug!(

@@ -9,16 +9,20 @@ use super::*;
 pub struct G001MostConsuming;
 
 impl DiagnosticRule for G001MostConsuming {
-    fn id(&self) -> &str { "G001" }
-    fn name(&self) -> &str { "算子时间占比过高" }
-    
+    fn id(&self) -> &str {
+        "G001"
+    }
+    fn name(&self) -> &str {
+        "算子时间占比过高"
+    }
+
     fn applicable_to(&self, _node: &ExecutionTreeNode) -> bool {
         true // Applies to all nodes
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let percentage = context.get_time_percentage()?;
-        
+
         if percentage > 30.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -47,16 +51,20 @@ impl DiagnosticRule for G001MostConsuming {
 pub struct G001bSecondConsuming;
 
 impl DiagnosticRule for G001bSecondConsuming {
-    fn id(&self) -> &str { "G001b" }
-    fn name(&self) -> &str { "算子时间占比较高" }
-    
+    fn id(&self) -> &str {
+        "G001b"
+    }
+    fn name(&self) -> &str {
+        "算子时间占比较高"
+    }
+
     fn applicable_to(&self, _node: &ExecutionTreeNode) -> bool {
         true
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let percentage = context.get_time_percentage()?;
-        
+
         // Only trigger if between 15% and 30% (G001 handles > 30%)
         if percentage > 15.0 && percentage <= 30.0 {
             Some(Diagnostic {
@@ -86,17 +94,21 @@ impl DiagnosticRule for G001bSecondConsuming {
 pub struct G002HighMemory;
 
 impl DiagnosticRule for G002HighMemory {
-    fn id(&self) -> &str { "G002" }
-    fn name(&self) -> &str { "算子内存使用过高" }
-    
+    fn id(&self) -> &str {
+        "G002"
+    }
+    fn name(&self) -> &str {
+        "算子内存使用过高"
+    }
+
     fn applicable_to(&self, _node: &ExecutionTreeNode) -> bool {
         true
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let memory = context.get_memory_usage()?;
         const ONE_GB: u64 = 1024 * 1024 * 1024;
-        
+
         if memory > ONE_GB {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -135,39 +147,47 @@ impl DiagnosticRule for G002HighMemory {
 pub struct G003ExecutionSkew;
 
 impl DiagnosticRule for G003ExecutionSkew {
-    fn id(&self) -> &str { "G003" }
-    fn name(&self) -> &str { "算子执行时间倾斜" }
-    
+    fn id(&self) -> &str {
+        "G003"
+    }
+    fn name(&self) -> &str {
+        "算子执行时间倾斜"
+    }
+
     fn applicable_to(&self, _node: &ExecutionTreeNode) -> bool {
         true
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         // Check if we have min/max time metrics
         let max_time = context.node.metrics.operator_total_time_max?;
         let _min_time = context.node.metrics.operator_total_time_min.unwrap_or(0);
         let avg_time = context.node.metrics.operator_total_time?;
-        
+
         if avg_time == 0 {
             return None;
         }
-        
+
         let ratio = max_time as f64 / avg_time as f64;
-        
+
         if ratio > 2.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", 
+                node_path: format!(
+                    "{} (plan_node_id={})",
                     context.node.operator_name,
-                    context.node.plan_node_id.unwrap_or(-1)),
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
                     "算子 {} 存在执行时间倾斜，max/avg 比率为 {:.2}",
                     context.node.operator_name, ratio
                 ),
-                reason: "算子在多个实例间执行时间差异大，部分实例成为瓶颈。通常是数据分布不均匀导致。".to_string(),
+                reason:
+                    "算子在多个实例间执行时间差异大，部分实例成为瓶颈。通常是数据分布不均匀导致。"
+                        .to_string(),
                 suggestions: vec![
                     "检查数据分布是否均匀".to_string(),
                     "检查分桶键选择是否合理".to_string(),
@@ -190,7 +210,7 @@ impl DiagnosticRule for G003ExecutionSkew {
 /// Get operator-specific suggestions based on operator name
 fn get_operator_suggestions(operator_name: &str) -> Vec<String> {
     let name = operator_name.to_uppercase();
-    
+
     if name.contains("SCAN") {
         vec![
             "检查是否可以添加过滤条件减少扫描数据量".to_string(),
@@ -224,10 +244,7 @@ fn get_operator_suggestions(operator_name: &str) -> Vec<String> {
             "考虑使用物化视图预排序".to_string(),
         ]
     } else {
-        vec![
-            "检查该算子是否处理数据量过大".to_string(),
-            "考虑优化查询计划".to_string(),
-        ]
+        vec!["检查该算子是否处理数据量过大".to_string(), "考虑优化查询计划".to_string()]
     }
 }
 
@@ -244,9 +261,11 @@ pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::profile_analyzer::models::{ExecutionTreeNode, NodeType, OperatorMetrics, HotSeverity};
+    use crate::services::profile_analyzer::models::{
+        ExecutionTreeNode, HotSeverity, NodeType, OperatorMetrics,
+    };
     use std::collections::HashMap;
-    
+
     #[test]
     fn test_g001_threshold() {
         let rule = G001MostConsuming;
@@ -256,7 +275,7 @@ mod tests {
     #[test]
     fn test_g001_triggers_on_high_percentage() {
         let rule = G001MostConsuming;
-        
+
         // Create a node with 99.84% time percentage
         let node = ExecutionTreeNode {
             id: "test_node".to_string(),
@@ -279,11 +298,17 @@ mod tests {
             has_diagnostic: false,
             diagnostic_ids: vec![],
         };
-        
+
         let session_variables = std::collections::HashMap::new();
-        let context = RuleContext { node: &node, session_variables: &session_variables, cluster_info: None, cluster_variables: None };
+        let context = RuleContext {
+            node: &node,
+            session_variables: &session_variables,
+            cluster_info: None,
+            cluster_variables: None,
+            default_db: None,
+        };
         let result = rule.evaluate(&context);
-        
+
         assert!(result.is_some(), "G001 should trigger for 99.84% time percentage");
         let diag = result.unwrap();
         assert_eq!(diag.rule_id, "G001");

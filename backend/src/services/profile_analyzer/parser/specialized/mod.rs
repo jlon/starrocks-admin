@@ -1,19 +1,19 @@
 //! Specialized metrics parsers for different operator types
-//! 
+//!
 //! Each operator type has unique metrics that require specialized parsing.
 
 use crate::services::profile_analyzer::models::OperatorSpecializedMetrics;
 
-mod scan_parser;
+mod aggregate_parser;
 mod exchange_parser;
 mod join_parser;
-mod aggregate_parser;
+mod scan_parser;
 mod sink_parser;
 
-pub use scan_parser::ScanMetricsParser;
+pub use aggregate_parser::AggregateMetricsParser;
 pub use exchange_parser::ExchangeMetricsParser;
 pub use join_parser::JoinMetricsParser;
-pub use aggregate_parser::AggregateMetricsParser;
+pub use scan_parser::ScanMetricsParser;
 pub use sink_parser::SinkMetricsParser;
 
 /// Unified specialized metrics parser
@@ -30,7 +30,7 @@ impl SpecializedMetricsParser {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Parse specialized metrics based on operator type
     pub fn parse(&self, operator_name: &str, text: &str) -> OperatorSpecializedMetrics {
         match operator_name.to_uppercase().as_str() {

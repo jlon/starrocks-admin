@@ -2,8 +2,11 @@
 //!
 //! Rules that evaluate the entire query profile.
 
+use super::{
+    ParameterSuggestion, ParameterType, RuleSeverity, format_bytes, format_duration_ms,
+    get_parameter_metadata, parse_duration_ms,
+};
 use crate::services::profile_analyzer::models::*;
-use super::{RuleSeverity, ParameterSuggestion, ParameterType, parse_duration_ms, format_bytes, format_duration_ms, get_parameter_metadata};
 
 /// Known default values for common StarRocks session parameters
 fn get_parameter_default(name: &str) -> Option<&'static str> {
@@ -11,18 +14,18 @@ fn get_parameter_default(name: &str) -> Option<&'static str> {
         // DataCache related
         "enable_scan_datacache" => Some("true"),
         "enable_populate_datacache" => Some("true"),
-        
+
         // Query optimization
         "enable_query_cache" => Some("false"),
         "enable_adaptive_sink_dop" => Some("false"),
         "enable_runtime_adaptive_dop" => Some("false"),
         "enable_spill" => Some("false"),
-        
+
         // Parallelism
         "parallel_fragment_exec_instance_num" => Some("1"),
         "pipeline_dop" => Some("0"),
         "io_tasks_per_scan_operator" => Some("4"),
-        
+
         _ => None,
     }
 }
@@ -41,14 +44,14 @@ impl<'a> QueryRuleContext<'a> {
     pub fn new(profile: &'a Profile) -> Self {
         Self { profile, cluster_variables: None }
     }
-    
+
     pub fn with_cluster_variables(
         profile: &'a Profile,
-        cluster_variables: Option<&'a std::collections::HashMap<String, String>>
+        cluster_variables: Option<&'a std::collections::HashMap<String, String>>,
     ) -> Self {
         Self { profile, cluster_variables }
     }
-    
+
     /// Get current value of a parameter
     /// Priority: cluster_variables > non_default_variables > default
     pub fn get_variable_value(&self, name: &str) -> Option<String> {
@@ -65,19 +68,20 @@ impl<'a> QueryRuleContext<'a> {
         // Finally use known default
         get_parameter_default(name).map(|s| s.to_string())
     }
-    
+
     /// Get current value as i64
     #[allow(dead_code)]
     pub fn get_variable_i64(&self, name: &str) -> Option<i64> {
         self.get_variable_value(name).and_then(|v| v.parse().ok())
     }
-    
+
     /// Get current value as bool
     #[allow(dead_code)]
     pub fn get_variable_bool(&self, name: &str) -> Option<bool> {
-        self.get_variable_value(name).map(|v| v.eq_ignore_ascii_case("true"))
+        self.get_variable_value(name)
+            .map(|v| v.eq_ignore_ascii_case("true"))
     }
-    
+
     /// Create a smart parameter suggestion
     /// Returns None if current value already meets recommendation
     pub fn suggest_parameter(&self, name: &str) -> Option<ParameterSuggestion> {
@@ -85,52 +89,66 @@ impl<'a> QueryRuleContext<'a> {
         let current_str = self.get_variable_value(name);
         let current_i64 = current_str.as_ref().and_then(|v| v.parse::<i64>().ok());
         let current_bool = current_str.as_ref().map(|v| v.eq_ignore_ascii_case("true"));
-        
+
         let (recommended, reason) = match name {
             "query_timeout" => {
                 let current = current_i64.unwrap_or(300);
-                if current >= 600 { return None; }
+                if current >= 600 {
+                    return None;
+                }
                 ("600".to_string(), "延长超时时间以支持复杂查询".to_string())
-            }
-            
+            },
+
             "query_mem_limit" => {
                 let current = current_i64.unwrap_or(0);
                 let total_bytes = cluster_info.total_scan_bytes;
                 let recommended = if total_bytes > 0 {
-                    (total_bytes * 2).max(4 * 1024 * 1024 * 1024).min(32 * 1024 * 1024 * 1024) as i64
+                    (total_bytes * 2)
+                        .max(4 * 1024 * 1024 * 1024)
+                        .min(32 * 1024 * 1024 * 1024) as i64
                 } else {
                     8 * 1024 * 1024 * 1024
                 };
-                if current >= recommended { return None; }
+                if current >= recommended {
+                    return None;
+                }
                 let gb = recommended / (1024 * 1024 * 1024);
                 (recommended.to_string(), format!("根据数据量推荐 {}GB 内存限制", gb))
-            }
-            
+            },
+
             "enable_spill" => {
-                if current_bool.unwrap_or(false) { return None; }
+                if current_bool.unwrap_or(false) {
+                    return None;
+                }
                 ("true".to_string(), "启用后可避免大查询 OOM".to_string())
-            }
-            
+            },
+
             "pipeline_profile_level" => {
                 let current = current_i64.unwrap_or(1);
-                if current <= 1 { return None; }
+                if current <= 1 {
+                    return None;
+                }
                 ("1".to_string(), "降低 Profile 级别减少收集开销".to_string())
-            }
-            
+            },
+
             "pipeline_dop" => {
                 let current = current_i64.unwrap_or(0);
-                if current == 0 { return None; }
+                if current == 0 {
+                    return None;
+                }
                 ("0".to_string(), "推荐使用自动模式".to_string())
-            }
-            
+            },
+
             "enable_scan_datacache" => {
-                if current_bool.unwrap_or(true) { return None; }
+                if current_bool.unwrap_or(true) {
+                    return None;
+                }
                 ("true".to_string(), "启用 DataCache 提升存算分离性能".to_string())
-            }
-            
+            },
+
             _ => return None,
         };
-        
+
         let metadata = get_parameter_metadata(name);
         let command = format!("SET {} = {};", name, recommended);
         Some(ParameterSuggestion {
@@ -170,13 +188,20 @@ pub struct QueryDiagnostic {
 pub struct Q001LongRunning;
 
 impl QueryRule for Q001LongRunning {
-    fn id(&self) -> &str { "Q001" }
-    fn name(&self) -> &str { "查询执行时间过长" }
-    
+    fn id(&self) -> &str {
+        "Q001"
+    }
+    fn name(&self) -> &str {
+        "查询执行时间过长"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
-        let total_time_ms = ctx.profile.summary.total_time_ms
+        let total_time_ms = ctx
+            .profile
+            .summary
+            .total_time_ms
             .or_else(|| parse_duration_ms(&ctx.profile.summary.total_time))?;
-        
+
         if total_time_ms > 60_000.0 {
             Some(QueryDiagnostic {
                 rule_id: self.id().to_string(),
@@ -194,10 +219,10 @@ impl QueryRule for Q001LongRunning {
                 ],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = ctx.suggest_parameter( "query_timeout") {
+                    if let Some(s) = ctx.suggest_parameter("query_timeout") {
                         suggestions.push(s);
                     }
-                    if let Some(s) = ctx.suggest_parameter( "query_mem_limit") {
+                    if let Some(s) = ctx.suggest_parameter("query_mem_limit") {
                         suggestions.push(s);
                     }
                     suggestions
@@ -214,22 +239,23 @@ impl QueryRule for Q001LongRunning {
 pub struct Q002HighMemory;
 
 impl QueryRule for Q002HighMemory {
-    fn id(&self) -> &str { "Q002" }
-    fn name(&self) -> &str { "查询内存使用过高" }
-    
+    fn id(&self) -> &str {
+        "Q002"
+    }
+    fn name(&self) -> &str {
+        "查询内存使用过高"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         let peak_memory = ctx.profile.summary.query_peak_memory?;
         const TEN_GB: u64 = 10 * 1024 * 1024 * 1024;
-        
+
         if peak_memory > TEN_GB {
             Some(QueryDiagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                message: format!(
-                    "查询峰值内存 {}，超过 10GB 阈值",
-                    format_bytes(peak_memory)
-                ),
+                message: format!("查询峰值内存 {}，超过 10GB 阈值", format_bytes(peak_memory)),
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "检查是否存在大表 Join".to_string(),
@@ -238,10 +264,10 @@ impl QueryRule for Q002HighMemory {
                 ],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = ctx.suggest_parameter( "enable_spill") {
+                    if let Some(s) = ctx.suggest_parameter("enable_spill") {
                         suggestions.push(s);
                     }
-                    if let Some(s) = ctx.suggest_parameter( "query_mem_limit") {
+                    if let Some(s) = ctx.suggest_parameter("query_mem_limit") {
                         suggestions.push(s);
                     }
                     suggestions
@@ -258,24 +284,25 @@ impl QueryRule for Q002HighMemory {
 pub struct Q003QuerySpill;
 
 impl QueryRule for Q003QuerySpill {
-    fn id(&self) -> &str { "Q003" }
-    fn name(&self) -> &str { "查询发生落盘" }
-    
+    fn id(&self) -> &str {
+        "Q003"
+    }
+    fn name(&self) -> &str {
+        "查询发生落盘"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         let spill_bytes_str = ctx.profile.summary.query_spill_bytes.as_ref()?;
-        
+
         // Parse spill bytes (e.g., "1.5 GB", "0.000 B")
         let spill_bytes = parse_spill_bytes(spill_bytes_str)?;
-        
+
         if spill_bytes > 0 {
             Some(QueryDiagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
-                message: format!(
-                    "查询发生磁盘溢写，溢写数据量 {}",
-                    format_bytes(spill_bytes)
-                ),
+                message: format!("查询发生磁盘溢写，溢写数据量 {}", format_bytes(spill_bytes)),
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "增加内存限制以减少 Spill".to_string(),
@@ -284,7 +311,7 @@ impl QueryRule for Q003QuerySpill {
                 ],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = ctx.suggest_parameter( "query_mem_limit") {
+                    if let Some(s) = ctx.suggest_parameter("query_mem_limit") {
                         suggestions.push(s);
                     }
                     suggestions
@@ -301,31 +328,43 @@ impl QueryRule for Q003QuerySpill {
 pub struct Q005ScanDominates;
 
 impl QueryRule for Q005ScanDominates {
-    fn id(&self) -> &str { "Q005" }
-    fn name(&self) -> &str { "扫描时间占比过高" }
-    
+    fn id(&self) -> &str {
+        "Q005"
+    }
+    fn name(&self) -> &str {
+        "扫描时间占比过高"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
-        let scan_time_ms = ctx.profile.summary.query_cumulative_scan_time_ms
-            .or_else(|| ctx.profile.summary.query_cumulative_scan_time.as_ref()
-                .and_then(|s| parse_duration_ms(s)))?;
-        let total_time_ms = ctx.profile.summary.total_time_ms
+        let scan_time_ms = ctx
+            .profile
+            .summary
+            .query_cumulative_scan_time_ms
+            .or_else(|| {
+                ctx.profile
+                    .summary
+                    .query_cumulative_scan_time
+                    .as_ref()
+                    .and_then(|s| parse_duration_ms(s))
+            })?;
+        let total_time_ms = ctx
+            .profile
+            .summary
+            .total_time_ms
             .or_else(|| parse_duration_ms(&ctx.profile.summary.total_time))?;
-        
+
         if total_time_ms == 0.0 {
             return None;
         }
-        
+
         let ratio = scan_time_ms / total_time_ms;
-        
+
         if ratio > 0.8 {
             Some(QueryDiagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                message: format!(
-                    "扫描时间占比 {:.1}%，查询瓶颈在数据扫描",
-                    ratio * 100.0
-                ),
+                message: format!("扫描时间占比 {:.1}%，查询瓶颈在数据扫描", ratio * 100.0),
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "添加过滤条件减少扫描数据量".to_string(),
@@ -334,8 +373,10 @@ impl QueryRule for Q005ScanDominates {
                     "检查存储性能".to_string(),
                 ],
                 // Only suggest if not already enabled
-                parameter_suggestions: ctx.suggest_parameter("enable_scan_datacache")
-                    .into_iter().collect(),
+                parameter_suggestions: ctx
+                    .suggest_parameter("enable_scan_datacache")
+                    .into_iter()
+                    .collect(),
             })
         } else {
             None
@@ -348,31 +389,43 @@ impl QueryRule for Q005ScanDominates {
 pub struct Q006NetworkDominates;
 
 impl QueryRule for Q006NetworkDominates {
-    fn id(&self) -> &str { "Q006" }
-    fn name(&self) -> &str { "网络时间占比过高" }
-    
+    fn id(&self) -> &str {
+        "Q006"
+    }
+    fn name(&self) -> &str {
+        "网络时间占比过高"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
-        let network_time_ms = ctx.profile.summary.query_cumulative_network_time_ms
-            .or_else(|| ctx.profile.summary.query_cumulative_network_time.as_ref()
-                .and_then(|s| parse_duration_ms(s)))?;
-        let total_time_ms = ctx.profile.summary.total_time_ms
+        let network_time_ms = ctx
+            .profile
+            .summary
+            .query_cumulative_network_time_ms
+            .or_else(|| {
+                ctx.profile
+                    .summary
+                    .query_cumulative_network_time
+                    .as_ref()
+                    .and_then(|s| parse_duration_ms(s))
+            })?;
+        let total_time_ms = ctx
+            .profile
+            .summary
+            .total_time_ms
             .or_else(|| parse_duration_ms(&ctx.profile.summary.total_time))?;
-        
+
         if total_time_ms == 0.0 {
             return None;
         }
-        
+
         let ratio = network_time_ms / total_time_ms;
-        
+
         if ratio > 0.5 {
             Some(QueryDiagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                message: format!(
-                    "网络时间占比 {:.1}%，查询瓶颈在网络传输",
-                    ratio * 100.0
-                ),
+                message: format!("网络时间占比 {:.1}%，查询瓶颈在网络传输", ratio * 100.0),
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec![
                     "考虑使用 Colocate Join 减少 Shuffle".to_string(),
@@ -391,13 +444,19 @@ impl QueryRule for Q006NetworkDominates {
 pub struct Q004LowCPU;
 
 impl QueryRule for Q004LowCPU {
-    fn id(&self) -> &str { "Q004" }
-    fn name(&self) -> &str { "CPU 利用率低" }
-    
+    fn id(&self) -> &str {
+        "Q004"
+    }
+    fn name(&self) -> &str {
+        "CPU 利用率低"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         let cpu_time = ctx.profile.summary.query_cumulative_cpu_time_ms?;
         let wall_time = ctx.profile.summary.query_execution_wall_time_ms?;
-        if wall_time == 0.0 { return None; }
+        if wall_time == 0.0 {
+            return None;
+        }
         let ratio = cpu_time / wall_time;
         if ratio < 0.3 {
             Some(QueryDiagnostic {
@@ -409,13 +468,15 @@ impl QueryRule for Q004LowCPU {
                 suggestions: vec!["检查是否存在等待".to_string(), "增加并行度".to_string()],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = ctx.suggest_parameter( "pipeline_dop") {
+                    if let Some(s) = ctx.suggest_parameter("pipeline_dop") {
                         suggestions.push(s);
                     }
                     suggestions
                 },
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -423,14 +484,23 @@ impl QueryRule for Q004LowCPU {
 pub struct Q007ProfileCollectSlow;
 
 impl QueryRule for Q007ProfileCollectSlow {
-    fn id(&self) -> &str { "Q007" }
-    fn name(&self) -> &str { "Profile 收集慢" }
-    
+    fn id(&self) -> &str {
+        "Q007"
+    }
+    fn name(&self) -> &str {
+        "Profile 收集慢"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         // Check CollectProfileTime from variables or execution metrics
-        let collect_time = ctx.profile.execution.metrics.get("CollectProfileTime")
+        let collect_time = ctx
+            .profile
+            .execution
+            .metrics
+            .get("CollectProfileTime")
             .and_then(|v| v.parse::<f64>().ok())?;
-        if collect_time > 100_000_000.0 { // 100ms in ns
+        if collect_time > 100_000_000.0 {
+            // 100ms in ns
             Some(QueryDiagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -440,13 +510,15 @@ impl QueryRule for Q007ProfileCollectSlow {
                 suggestions: vec!["降低 pipeline_profile_level".to_string()],
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = ctx.suggest_parameter( "pipeline_profile_level") {
+                    if let Some(s) = ctx.suggest_parameter("pipeline_profile_level") {
                         suggestions.push(s);
                     }
                     suggestions
                 },
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -454,13 +526,19 @@ impl QueryRule for Q007ProfileCollectSlow {
 pub struct Q008ScheduleTimeLong;
 
 impl QueryRule for Q008ScheduleTimeLong {
-    fn id(&self) -> &str { "Q008" }
-    fn name(&self) -> &str { "调度时间过长" }
-    
+    fn id(&self) -> &str {
+        "Q008"
+    }
+    fn name(&self) -> &str {
+        "调度时间过长"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         let schedule_time = ctx.profile.summary.query_peak_schedule_time_ms?;
         let wall_time = ctx.profile.summary.query_execution_wall_time_ms?;
-        if wall_time == 0.0 { return None; }
+        if wall_time == 0.0 {
+            return None;
+        }
         let ratio = schedule_time / wall_time;
         if ratio > 0.3 {
             Some(QueryDiagnostic {
@@ -472,7 +550,9 @@ impl QueryRule for Q008ScheduleTimeLong {
                 suggestions: vec!["检查 Pipeline 调度瓶颈".to_string(), "增加并行度".to_string()],
                 parameter_suggestions: vec![],
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -480,15 +560,25 @@ impl QueryRule for Q008ScheduleTimeLong {
 pub struct Q009ResultDeliverySlow;
 
 impl QueryRule for Q009ResultDeliverySlow {
-    fn id(&self) -> &str { "Q009" }
-    fn name(&self) -> &str { "结果传输慢" }
-    
+    fn id(&self) -> &str {
+        "Q009"
+    }
+    fn name(&self) -> &str {
+        "结果传输慢"
+    }
+
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         // Check ResultDeliverTime from execution metrics
-        let deliver_time = ctx.profile.execution.metrics.get("ResultDeliverTime")
+        let deliver_time = ctx
+            .profile
+            .execution
+            .metrics
+            .get("ResultDeliverTime")
             .and_then(|v| v.parse::<f64>().ok())?;
         let wall_time = ctx.profile.summary.query_execution_wall_time_ms? * 1_000_000.0; // to ns
-        if wall_time == 0.0 { return None; }
+        if wall_time == 0.0 {
+            return None;
+        }
         let ratio = deliver_time / wall_time;
         if ratio > 0.2 {
             Some(QueryDiagnostic {
@@ -500,7 +590,9 @@ impl QueryRule for Q009ResultDeliverySlow {
                 suggestions: vec!["检查网络带宽".to_string(), "减少结果集大小".to_string()],
                 parameter_suggestions: vec![],
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -508,14 +600,14 @@ impl QueryRule for Q009ResultDeliverySlow {
 fn parse_spill_bytes(s: &str) -> Option<u64> {
     let s = s.trim();
     let parts: Vec<&str> = s.split_whitespace().collect();
-    
+
     if parts.len() != 2 {
         return None;
     }
-    
+
     let value: f64 = parts[0].parse().ok()?;
     let unit = parts[1].to_uppercase();
-    
+
     let multiplier = match unit.as_str() {
         "B" => 1u64,
         "KB" | "K" => 1024,
@@ -524,7 +616,7 @@ fn parse_spill_bytes(s: &str) -> Option<u64> {
         "TB" | "T" => 1024 * 1024 * 1024 * 1024,
         _ => return None,
     };
-    
+
     Some((value * multiplier as f64) as u64)
 }
 

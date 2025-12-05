@@ -3,16 +3,16 @@
 //! Implements the rule engine for Query Profile diagnostics.
 //! Rules are organized by operator type following the design document.
 
-pub mod common;
-pub mod scan;
-pub mod join;
 pub mod aggregate;
-pub mod sort;
+pub mod common;
 pub mod exchange;
-pub mod query;
 pub mod fragment;
+pub mod join;
 pub mod project;
+pub mod query;
+pub mod scan;
 pub mod sink;
+pub mod sort;
 
 use crate::services::profile_analyzer::models::*;
 
@@ -80,7 +80,7 @@ pub fn get_parameter_metadata(name: &str) -> ParameterMetadata {
             description: "DataCache 淘汰概率 (0-100)，控制缓存数据被淘汰的可能性".to_string(),
             impact: "降低该值可减少缓存抖动，但可能导致缓存空间不足".to_string(),
         },
-        
+
         // ========== 查询优化相关 ==========
         "enable_query_cache" => ParameterMetadata {
             description: "启用查询结果缓存，相同查询可直接返回缓存结果".to_string(),
@@ -98,7 +98,7 @@ pub fn get_parameter_metadata(name: &str) -> ParameterMetadata {
             description: "启用中间结果落盘，当内存不足时将数据写入磁盘".to_string(),
             impact: "可处理超大数据量查询，但会降低查询性能".to_string(),
         },
-        
+
         // ========== 扫描优化相关 ==========
         "enable_connector_adaptive_io_tasks" => ParameterMetadata {
             description: "启用连接器自适应 IO 任务数，根据数据量动态调整 IO 并行度".to_string(),
@@ -112,7 +112,7 @@ pub fn get_parameter_metadata(name: &str) -> ParameterMetadata {
             description: "每个连接器扫描算子的 IO 任务数，控制外部表扫描并行度".to_string(),
             impact: "增大可提升外部表扫描吞吐，但会增加远程存储压力".to_string(),
         },
-        
+
         // ========== Join 优化相关 ==========
         "hash_join_push_down_right_table" => ParameterMetadata {
             description: "启用 Hash Join 右表下推，将小表广播到各节点".to_string(),
@@ -122,7 +122,7 @@ pub fn get_parameter_metadata(name: &str) -> ParameterMetadata {
             description: "启用本地 Shuffle 聚合，在本地先进行预聚合".to_string(),
             impact: "可减少网络传输数据量，提升聚合性能".to_string(),
         },
-        
+
         // ========== Runtime Filter 相关 ==========
         "runtime_filter_on_exchange_node" => ParameterMetadata {
             description: "在 Exchange 节点启用 Runtime Filter，跨节点传递过滤条件".to_string(),
@@ -132,7 +132,7 @@ pub fn get_parameter_metadata(name: &str) -> ParameterMetadata {
             description: "全局 Runtime Filter 最大构建大小 (字节)".to_string(),
             impact: "增大可支持更大的 Filter，但会占用更多内存".to_string(),
         },
-        
+
         // ========== 并行执行相关 ==========
         "parallel_fragment_exec_instance_num" => ParameterMetadata {
             description: "每个 Fragment 的并行执行实例数".to_string(),
@@ -142,7 +142,7 @@ pub fn get_parameter_metadata(name: &str) -> ParameterMetadata {
             description: "Pipeline 执行并行度，0 表示自动".to_string(),
             impact: "手动设置可控制资源使用，自动模式根据 CPU 核数调整".to_string(),
         },
-        
+
         // ========== 内存相关 ==========
         "query_mem_limit" => ParameterMetadata {
             description: "单个查询的内存限制 (字节)".to_string(),
@@ -152,7 +152,7 @@ pub fn get_parameter_metadata(name: &str) -> ParameterMetadata {
             description: "查询超时时间 (秒)".to_string(),
             impact: "增大可允许长时间运行的查询，但可能占用资源过久".to_string(),
         },
-        
+
         // ========== 聚合相关 ==========
         "streaming_preaggregation_mode" => ParameterMetadata {
             description: "流式预聚合模式 (auto/force_streaming/force_preaggregation)".to_string(),
@@ -162,19 +162,19 @@ pub fn get_parameter_metadata(name: &str) -> ParameterMetadata {
             description: "启用排序聚合，适用于高基数 GROUP BY".to_string(),
             impact: "可减少内存使用，但需要额外排序开销".to_string(),
         },
-        
+
         // ========== Profile 相关 ==========
         "pipeline_profile_level" => ParameterMetadata {
             description: "Pipeline Profile 详细级别 (0-2)".to_string(),
             impact: "级别越高信息越详细，但收集开销也越大".to_string(),
         },
-        
+
         // ========== BE 参数 ==========
         "storage_page_cache_limit" => ParameterMetadata {
             description: "BE 存储页缓存大小限制".to_string(),
             impact: "增大可提升热数据读取性能，但会占用更多内存".to_string(),
         },
-        
+
         // ========== 默认 ==========
         _ => ParameterMetadata {
             description: format!("StarRocks 参数 {}", name),
@@ -192,7 +192,13 @@ pub struct ParameterMetadata {
 
 impl ParameterSuggestion {
     /// Create a new parameter suggestion with automatic metadata lookup
-    pub fn new(name: &str, param_type: ParameterType, current: Option<String>, recommended: &str, command: &str) -> Self {
+    pub fn new(
+        name: &str,
+        param_type: ParameterType,
+        current: Option<String>,
+        recommended: &str,
+        command: &str,
+    ) -> Self {
         let metadata = get_parameter_metadata(name);
         Self {
             name: name.to_string(),
@@ -207,7 +213,7 @@ impl ParameterSuggestion {
 }
 
 /// A diagnostic result from rule evaluation
-/// 
+///
 /// Structure follows Aliyun EMR StarRocks diagnostic standard:
 /// - message: 诊断结果概要说明 (Summary of the issue)
 /// - reason: 详细诊断原因说明 (Detailed explanation of why this happens)
@@ -233,7 +239,7 @@ impl Diagnostic {
     /// Convert to HotSpot for backward compatibility
     pub fn to_hotspot(&self) -> HotSpot {
         let mut all_suggestions = self.suggestions.clone();
-        
+
         // Add parameter suggestions as formatted strings
         for param in &self.parameter_suggestions {
             all_suggestions.push(format!(
@@ -241,7 +247,7 @@ impl Diagnostic {
                 param.name, param.recommended, param.command
             ));
         }
-        
+
         HotSpot {
             node_path: self.node_path.clone(),
             severity: self.severity.into(),
@@ -262,38 +268,46 @@ pub struct RuleContext<'a> {
     /// Live cluster variables (actual current values from cluster)
     /// Takes precedence over session_variables for parameter recommendations
     pub cluster_variables: Option<&'a std::collections::HashMap<String, String>>,
+    /// Default database from profile summary
+    pub default_db: Option<&'a str>,
 }
 
 impl<'a> RuleContext<'a> {
     /// Get a metric value from unique_metrics as f64
     pub fn get_metric(&self, name: &str) -> Option<f64> {
-        self.node.unique_metrics.get(name)
+        self.node
+            .unique_metrics
+            .get(name)
             .and_then(|v| parse_metric_value(v))
     }
-    
+
     /// Get operator total time in ms
     pub fn get_operator_time_ms(&self) -> Option<f64> {
-        self.node.metrics.operator_total_time.map(|ns| ns as f64 / 1_000_000.0)
+        self.node
+            .metrics
+            .operator_total_time
+            .map(|ns| ns as f64 / 1_000_000.0)
     }
-    
+
     /// Get time percentage
     pub fn get_time_percentage(&self) -> Option<f64> {
         self.node.time_percentage
     }
-    
+
     /// Get memory usage in bytes
     pub fn get_memory_usage(&self) -> Option<u64> {
         self.node.metrics.memory_usage
     }
-    
+
     /// Check if a session variable is already set to the expected value
     /// Returns true if the variable is set and matches the expected value
     pub fn is_variable_set_to(&self, name: &str, expected: &str) -> bool {
-        self.session_variables.get(name)
+        self.session_variables
+            .get(name)
             .map(|info| info.actual_value_is(expected))
             .unwrap_or(false)
     }
-    
+
     /// Get current value of a session variable as string
     /// Priority: cluster_variables > session_variables (non-default) > None
     pub fn get_variable_value(&self, name: &str) -> Option<String> {
@@ -304,21 +318,27 @@ impl<'a> RuleContext<'a> {
             }
         }
         // Fallback to profile's non-default variables
-        self.session_variables.get(name)
+        self.session_variables
+            .get(name)
             .map(|info| info.actual_value_str())
     }
-    
+
     /// Create a parameter suggestion only if the parameter is not already set to the recommended value
     /// Returns None if the parameter is already set to the recommended value (no suggestion needed)
-    /// 
+    ///
     /// Note: For parameters not in NonDefaultSessionVariables, we check against known defaults.
     /// If a parameter uses its default value and that default matches the recommendation, no suggestion is made.
-    pub fn suggest_parameter(&self, name: &str, recommended: &str, command: &str) -> Option<ParameterSuggestion> {
+    pub fn suggest_parameter(
+        &self,
+        name: &str,
+        recommended: &str,
+        command: &str,
+    ) -> Option<ParameterSuggestion> {
         // Check if already set to recommended value in non-default variables
         if self.is_variable_set_to(name, recommended) {
             return None; // Already configured correctly, no suggestion needed
         }
-        
+
         // If parameter is not in non_default_variables, check if default value matches recommendation
         if !self.session_variables.contains_key(name) {
             if let Some(default) = get_parameter_default(name) {
@@ -327,13 +347,13 @@ impl<'a> RuleContext<'a> {
                 }
             }
         }
-        
+
         // Get current value if set
         let current = self.get_variable_value(name);
-        
+
         // Get parameter metadata for description and impact
         let metadata = get_parameter_metadata(name);
-        
+
         Some(ParameterSuggestion {
             name: name.to_string(),
             param_type: ParameterType::Session,
@@ -344,7 +364,7 @@ impl<'a> RuleContext<'a> {
             impact: metadata.impact,
         })
     }
-    
+
     /// Smart parameter suggestion that considers cluster info and current values
     /// Returns None if:
     /// - Current value already meets or exceeds recommendation
@@ -352,15 +372,15 @@ impl<'a> RuleContext<'a> {
     /// - Parameter is already set to recommended value
     pub fn suggest_parameter_smart(&self, name: &str) -> Option<ParameterSuggestion> {
         let cluster_info = self.cluster_info.as_ref();
-        
+
         // Get current value
         let current_str = self.get_variable_value(name);
         let default_str = get_parameter_default(name).map(|s| s.to_string());
         let effective_value = current_str.as_ref().or(default_str.as_ref());
-        
+
         let current_i64 = effective_value.and_then(|v| v.parse::<i64>().ok());
         let current_bool = effective_value.map(|v| v.eq_ignore_ascii_case("true"));
-        
+
         // Calculate smart recommendation based on parameter
         let (recommended, reason, param_type) = match name {
             // ========== 并行度相关 ==========
@@ -368,69 +388,90 @@ impl<'a> RuleContext<'a> {
                 let be_count = cluster_info.map(|c| c.backend_num).unwrap_or(1).max(1);
                 let recommended = be_count.min(16) as i64;
                 let current = current_i64.unwrap_or(1);
-                
+
                 if current >= recommended {
                     return None;
                 }
-                
+
                 // Don't recommend for small queries (< 100MB)
-                if cluster_info.map(|c| c.total_scan_bytes < 100_000_000).unwrap_or(true) {
+                if cluster_info
+                    .map(|c| c.total_scan_bytes < 100_000_000)
+                    .unwrap_or(true)
+                {
                     return None;
                 }
-                
-                (recommended.to_string(), format!("根据集群 {} 个 BE 节点推荐", be_count), ParameterType::Session)
-            }
-            
+
+                (
+                    recommended.to_string(),
+                    format!("根据集群 {} 个 BE 节点推荐", be_count),
+                    ParameterType::Session,
+                )
+            },
+
             "pipeline_dop" => {
                 let current = current_i64.unwrap_or(0);
                 if current == 0 {
                     return None; // Already auto
                 }
-                ("0".to_string(), "推荐使用自动模式，系统会根据 CPU 核数自动调整".to_string(), ParameterType::Session)
-            }
-            
+                (
+                    "0".to_string(),
+                    "推荐使用自动模式，系统会根据 CPU 核数自动调整".to_string(),
+                    ParameterType::Session,
+                )
+            },
+
             "io_tasks_per_scan_operator" => {
                 let current = current_i64.unwrap_or(4);
                 let total_bytes = cluster_info.map(|c| c.total_scan_bytes).unwrap_or(0);
                 let is_large_scan = total_bytes > 1_000_000_000; // > 1GB
                 let recommended = if is_large_scan { 8 } else { 4 };
-                
+
                 if current >= recommended || !is_large_scan {
                     return None;
                 }
-                
-                (recommended.to_string(), "大数据量扫描，建议增加 IO 并行度".to_string(), ParameterType::Session)
-            }
-            
+
+                (
+                    recommended.to_string(),
+                    "大数据量扫描，建议增加 IO 并行度".to_string(),
+                    ParameterType::Session,
+                )
+            },
+
             // ========== 内存相关 ==========
             "query_mem_limit" => {
                 let current = current_i64.unwrap_or(0);
                 let total_bytes = cluster_info.map(|c| c.total_scan_bytes).unwrap_or(0);
-                
+
                 // Recommend based on scan size: 2x scan size, min 4GB, max 32GB
                 let recommended = if total_bytes > 0 {
-                    let suggested = (total_bytes * 2).max(4 * 1024 * 1024 * 1024).min(32 * 1024 * 1024 * 1024);
+                    let suggested = (total_bytes * 2)
+                        .max(4 * 1024 * 1024 * 1024)
+                        .min(32 * 1024 * 1024 * 1024);
                     suggested as i64
                 } else {
                     8 * 1024 * 1024 * 1024 // Default 8GB
                 };
-                
+
                 if current >= recommended {
                     return None;
                 }
-                
+
                 let recommended_gb = recommended / (1024 * 1024 * 1024);
-                (recommended.to_string(), format!("根据数据量推荐 {}GB 内存限制", recommended_gb), ParameterType::Session)
-            }
-            
+                (
+                    recommended.to_string(),
+                    format!("根据数据量推荐 {}GB 内存限制", recommended_gb),
+                    ParameterType::Session,
+                )
+            },
+
             "enable_spill" => {
                 let current = current_bool.unwrap_or(false);
                 if current {
                     return None; // Already enabled
                 }
                 ("true".to_string(), "启用后可避免大查询 OOM".to_string(), ParameterType::Session)
-            }
-            
+            },
+
             // ========== 查询优化 ==========
             "query_timeout" => {
                 let current = current_i64.unwrap_or(300);
@@ -438,79 +479,104 @@ impl<'a> RuleContext<'a> {
                 if current >= 600 {
                     return None;
                 }
-                ("600".to_string(), "延长超时时间以支持复杂查询".to_string(), ParameterType::Session)
-            }
-            
+                (
+                    "600".to_string(),
+                    "延长超时时间以支持复杂查询".to_string(),
+                    ParameterType::Session,
+                )
+            },
+
             "enable_query_cache" => {
                 let current = current_bool.unwrap_or(false);
                 if current {
                     return None;
                 }
-                ("true".to_string(), "启用查询缓存可加速重复查询".to_string(), ParameterType::Session)
-            }
-            
+                (
+                    "true".to_string(),
+                    "启用查询缓存可加速重复查询".to_string(),
+                    ParameterType::Session,
+                )
+            },
+
             // ========== Runtime Filter ==========
             "enable_global_runtime_filter" => {
                 let current = current_bool.unwrap_or(true);
                 if current {
                     return None;
                 }
-                ("true".to_string(), "启用全局 Runtime Filter 提升 Join 性能".to_string(), ParameterType::Session)
-            }
-            
+                (
+                    "true".to_string(),
+                    "启用全局 Runtime Filter 提升 Join 性能".to_string(),
+                    ParameterType::Session,
+                )
+            },
+
             "runtime_join_filter_push_down_limit" => {
                 let current = current_i64.unwrap_or(1024000);
                 if current >= 10_000_000 {
                     return None;
                 }
-                ("10000000".to_string(), "增大 RF 下推阈值以支持更大的 Build 端".to_string(), ParameterType::Session)
-            }
-            
+                (
+                    "10000000".to_string(),
+                    "增大 RF 下推阈值以支持更大的 Build 端".to_string(),
+                    ParameterType::Session,
+                )
+            },
+
             // ========== DataCache ==========
             "enable_scan_datacache" => {
                 let current = current_bool.unwrap_or(true);
                 if current {
                     return None;
                 }
-                ("true".to_string(), "启用 DataCache 提升存算分离性能".to_string(), ParameterType::Session)
-            }
-            
+                (
+                    "true".to_string(),
+                    "启用 DataCache 提升存算分离性能".to_string(),
+                    ParameterType::Session,
+                )
+            },
+
             "enable_populate_datacache" => {
                 let current = current_bool.unwrap_or(true);
                 if current {
                     return None;
                 }
                 ("true".to_string(), "启用缓存填充以预热缓存".to_string(), ParameterType::Session)
-            }
-            
+            },
+
             // ========== Profile ==========
             "pipeline_profile_level" => {
                 let current = current_i64.unwrap_or(1);
                 if current <= 1 {
                     return None;
                 }
-                ("1".to_string(), "降低 Profile 级别减少收集开销".to_string(), ParameterType::Session)
-            }
-            
+                (
+                    "1".to_string(),
+                    "降低 Profile 级别减少收集开销".to_string(),
+                    ParameterType::Session,
+                )
+            },
+
             // ========== BE 参数 ==========
             "storage_page_cache_limit" => {
                 // BE parameter, always suggest if IO is bottleneck
                 ("30%".to_string(), "增大页缓存提升热数据读取性能".to_string(), ParameterType::BE)
-            }
-            
+            },
+
             _ => return None, // No smart recommendation for this parameter
         };
-        
+
         // Get current value: cluster_variables > session_variables > default
-        let current = self.get_variable_value(name)
+        let current = self
+            .get_variable_value(name)
             .or_else(|| get_parameter_default(name).map(|s| s.to_string()));
-        
+
         let metadata = get_parameter_metadata(name);
         let command = match param_type {
             ParameterType::Session => format!("SET {} = {};", name, recommended),
             ParameterType::BE => format!("-- BE config: {} = {}", name, recommended),
         };
-        
+
         Some(ParameterSuggestion {
             name: name.to_string(),
             param_type,
@@ -531,30 +597,30 @@ fn get_parameter_default(name: &str) -> Option<&'static str> {
         "enable_scan_datacache" => Some("true"),
         "enable_populate_datacache" => Some("true"),
         "datacache_evict_probability" => Some("100"),
-        
+
         // Query optimization
         "enable_query_cache" => Some("false"),
         "enable_adaptive_sink_dop" => Some("false"),
         "enable_runtime_adaptive_dop" => Some("false"),
         "enable_spill" => Some("false"),
-        
+
         // Scan optimization
         "enable_connector_adaptive_io_tasks" => Some("true"),
         "io_tasks_per_scan_operator" => Some("4"),
         "connector_io_tasks_per_scan_operator" => Some("16"),
-        
+
         // Join optimization
         "hash_join_push_down_right_table" => Some("true"),
         "enable_local_shuffle_agg" => Some("true"),
-        
+
         // Runtime filter
         "runtime_filter_on_exchange_node" => Some("false"),
         "global_runtime_filter_build_max_size" => Some("67108864"),
-        
+
         // Parallel execution
         "parallel_fragment_exec_instance_num" => Some("1"),
         "pipeline_dop" => Some("0"),
-        
+
         _ => None,
     }
 }
@@ -563,13 +629,13 @@ fn get_parameter_default(name: &str) -> Option<&'static str> {
 pub trait DiagnosticRule: Send + Sync {
     /// Rule ID (e.g., "S001", "J001")
     fn id(&self) -> &str;
-    
+
     /// Rule name
     fn name(&self) -> &str;
-    
+
     /// Check if rule applies to this node
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool;
-    
+
     /// Evaluate the rule and return diagnostic if triggered
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic>;
 }
@@ -581,27 +647,28 @@ pub trait DiagnosticRule: Send + Sync {
 /// Parse metric value from string (handles various formats)
 pub fn parse_metric_value(value: &str) -> Option<f64> {
     let s = value.trim();
-    
+
     // Handle percentage
     if s.ends_with('%') {
         return s.trim_end_matches('%').parse().ok();
     }
-    
+
     // Handle bytes (e.g., "1.5 GB", "100 MB")
     if let Some(bytes) = parse_bytes(s) {
         return Some(bytes as f64);
     }
-    
+
     // Handle time (e.g., "1s500ms", "100ms")
     if let Some(ms) = parse_duration_ms(s) {
         return Some(ms);
     }
-    
+
     // Handle plain numbers with optional suffix
-    let numeric_part: String = s.chars()
+    let numeric_part: String = s
+        .chars()
         .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
         .collect();
-    
+
     numeric_part.parse().ok()
 }
 
@@ -609,14 +676,14 @@ pub fn parse_metric_value(value: &str) -> Option<f64> {
 pub fn parse_bytes(s: &str) -> Option<u64> {
     let s = s.trim();
     let parts: Vec<&str> = s.split_whitespace().collect();
-    
+
     if parts.len() != 2 {
         return None;
     }
-    
+
     let value: f64 = parts[0].parse().ok()?;
     let unit = parts[1].to_uppercase();
-    
+
     let multiplier = match unit.as_str() {
         "B" => 1u64,
         "KB" | "K" => 1024,
@@ -625,7 +692,7 @@ pub fn parse_bytes(s: &str) -> Option<u64> {
         "TB" | "T" => 1024 * 1024 * 1024 * 1024,
         _ => return None,
     };
-    
+
     Some((value * multiplier as f64) as u64)
 }
 
@@ -635,13 +702,13 @@ pub fn parse_duration_ms(s: &str) -> Option<f64> {
     if s.is_empty() {
         return None;
     }
-    
+
     let mut total_ms = 0.0;
     let mut num_buf = String::new();
     let mut found_unit = false;
     let chars: Vec<char> = s.chars().collect();
     let mut i = 0;
-    
+
     while i < chars.len() {
         let c = chars[i];
         if c.is_ascii_digit() || c == '.' {
@@ -650,7 +717,7 @@ pub fn parse_duration_ms(s: &str) -> Option<f64> {
         } else {
             let value: f64 = num_buf.parse().unwrap_or(0.0);
             num_buf.clear();
-            
+
             if c == 'h' {
                 total_ms += value * 3600.0 * 1000.0;
                 found_unit = true;
@@ -681,7 +748,7 @@ pub fn parse_duration_ms(s: &str) -> Option<f64> {
             }
         }
     }
-    
+
     if found_unit { Some(total_ms) } else { None }
 }
 
@@ -690,12 +757,12 @@ pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes as f64;
     let mut unit_index = 0;
-    
+
     while size >= 1024.0 && unit_index < UNITS.len() - 1 {
         size /= 1024.0;
         unit_index += 1;
     }
-    
+
     format!("{:.2} {}", size, UNITS[unit_index])
 }
 
@@ -721,36 +788,36 @@ pub fn format_duration_ms(ms: f64) -> String {
 /// Get all registered rules
 pub fn get_all_rules() -> Vec<Box<dyn DiagnosticRule>> {
     let mut rules: Vec<Box<dyn DiagnosticRule>> = Vec::new();
-    
+
     // Common rules (G001, G002, G003)
     rules.extend(common::get_rules());
-    
+
     // Scan rules (S001-S011)
     rules.extend(scan::get_rules());
-    
+
     // Join rules (J001-J010)
     rules.extend(join::get_rules());
-    
+
     // Aggregate rules (A001-A005)
     rules.extend(aggregate::get_rules());
-    
+
     // Sort rules (T001-T005, W001)
     rules.extend(sort::get_rules());
-    
+
     // Exchange rules (E001-E003)
     rules.extend(exchange::get_rules());
-    
+
     // Fragment rules (F001-F003)
     rules.extend(fragment::get_rules());
-    
+
     // Project/LocalExchange rules (P001, L001)
     rules.extend(project::get_rules());
-    
+
     // OlapTableSink rules (I001-I003)
     rules.extend(sink::get_rules());
-    
+
     // Query rules (Q001-Q009) - evaluated separately at query level
-    
+
     rules
 }
 

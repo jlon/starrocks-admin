@@ -9,23 +9,27 @@ use super::*;
 pub struct A001AggregationSkew;
 
 impl DiagnosticRule for A001AggregationSkew {
-    fn id(&self) -> &str { "A001" }
-    fn name(&self) -> &str { "聚合数据倾斜" }
-    
+    fn id(&self) -> &str {
+        "A001"
+    }
+    fn name(&self) -> &str {
+        "聚合数据倾斜"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("AGG")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let max_time = context.node.metrics.operator_total_time_max?;
         let avg_time = context.node.metrics.operator_total_time?;
-        
+
         if avg_time == 0 {
             return None;
         }
-        
+
         let ratio = max_time as f64 / avg_time as f64;
-        
+
         if ratio > 2.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -58,17 +62,21 @@ impl DiagnosticRule for A001AggregationSkew {
 pub struct A002HashTableTooLarge;
 
 impl DiagnosticRule for A002HashTableTooLarge {
-    fn id(&self) -> &str { "A002" }
-    fn name(&self) -> &str { "聚合 HashTable 过大" }
-    
+    fn id(&self) -> &str {
+        "A002"
+    }
+    fn name(&self) -> &str {
+        "聚合 HashTable 过大"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("AGG")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let memory = context.get_memory_usage()?;
         const ONE_GB: u64 = 1024 * 1024 * 1024;
-        
+
         if memory > ONE_GB {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -107,31 +115,37 @@ impl DiagnosticRule for A002HashTableTooLarge {
 pub struct A004HighCardinality;
 
 impl DiagnosticRule for A004HighCardinality {
-    fn id(&self) -> &str { "A004" }
-    fn name(&self) -> &str { "高基数 GROUP BY" }
-    
+    fn id(&self) -> &str {
+        "A004"
+    }
+    fn name(&self) -> &str {
+        "高基数 GROUP BY"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("AGG")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
-        let hash_size = context.get_metric("HashTableSize")
+        let hash_size = context
+            .get_metric("HashTableSize")
             .or_else(|| context.node.metrics.pull_row_num.map(|v| v as f64))?;
-        
+
         if hash_size > 10_000_000.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", 
+                node_path: format!(
+                    "{} (plan_node_id={})",
                     context.node.operator_name,
-                    context.node.plan_node_id.unwrap_or(-1)),
-                plan_node_id: context.node.plan_node_id,
-                message: format!(
-                    "GROUP BY 基数过高 ({:.0} 个分组)",
-                    hash_size
+                    context.node.plan_node_id.unwrap_or(-1)
                 ),
-                reason: "GROUP BY 键的基数过高，导致 HashTable 条目过多，内存使用增加且聚合效率下降。".to_string(),
+                plan_node_id: context.node.plan_node_id,
+                message: format!("GROUP BY 基数过高 ({:.0} 个分组)", hash_size),
+                reason:
+                    "GROUP BY 键的基数过高，导致 HashTable 条目过多，内存使用增加且聚合效率下降。"
+                        .to_string(),
                 suggestions: vec![
                     "检查 GROUP BY 键的选择是否合理".to_string(),
                     "考虑使用流式聚合".to_string(),
@@ -149,31 +163,44 @@ impl DiagnosticRule for A004HighCardinality {
 pub struct A003DataSkew;
 
 impl DiagnosticRule for A003DataSkew {
-    fn id(&self) -> &str { "A003" }
-    fn name(&self) -> &str { "聚合数据倾斜" }
-    
+    fn id(&self) -> &str {
+        "A003"
+    }
+    fn name(&self) -> &str {
+        "聚合数据倾斜"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("AGGREGATE")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let max_input = context.get_metric("__MAX_OF_InputRowCount")?;
         let min_input = context.get_metric("__MIN_OF_InputRowCount").unwrap_or(0.0);
-        if min_input == 0.0 { return None; }
+        if min_input == 0.0 {
+            return None;
+        }
         let ratio = max_input / ((max_input + min_input) / 2.0);
         if ratio > 2.0 {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!("聚合存在数据倾斜，max/avg 比率为 {:.2}", ratio),
-                reason: "聚合算子的输入数据在各个实例间分布不均匀，导致部分实例处理更多数据。".to_string(),
+                reason: "聚合算子的输入数据在各个实例间分布不均匀，导致部分实例处理更多数据。"
+                    .to_string(),
                 suggestions: vec!["优化分组键选择".to_string(), "考虑对热点键单独处理".to_string()],
                 parameter_suggestions: vec![],
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }
 
@@ -181,17 +208,23 @@ impl DiagnosticRule for A003DataSkew {
 pub struct A005ExpensiveKeyExpr;
 
 impl DiagnosticRule for A005ExpensiveKeyExpr {
-    fn id(&self) -> &str { "A005" }
-    fn name(&self) -> &str { "GROUP BY 键表达式计算开销高" }
-    
+    fn id(&self) -> &str {
+        "A005"
+    }
+    fn name(&self) -> &str {
+        "GROUP BY 键表达式计算开销高"
+    }
+
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("AGGREGATE")
     }
-    
+
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let expr_time = context.get_metric("ExprComputeTime")?;
         let agg_time = context.get_metric("AggFuncComputeTime").unwrap_or(1.0);
-        if agg_time == 0.0 { return None; }
+        if agg_time == 0.0 {
+            return None;
+        }
         let ratio = expr_time / agg_time;
         if ratio > 0.5 && expr_time > 100_000_000.0 {
             Some(Diagnostic {
@@ -209,7 +242,80 @@ impl DiagnosticRule for A005ExpensiveKeyExpr {
                 ],
                 parameter_suggestions: vec![],
             })
-        } else { None }
+        } else {
+            None
+        }
+    }
+}
+
+/// A006: Low local aggregation efficiency
+/// Condition: InputRowCount / OutputRowCount < 2.0 (aggregation reduces less than 50%)
+pub struct A006LowLocalAggregation;
+
+impl DiagnosticRule for A006LowLocalAggregation {
+    fn id(&self) -> &str {
+        "A006"
+    }
+    fn name(&self) -> &str {
+        "Aggregate 本地聚合度低"
+    }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        let name = node.operator_name.to_uppercase();
+        // Only apply to local/first-stage aggregation
+        name.contains("AGGREGATE") || name.contains("AGG")
+    }
+
+    fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
+        // Get input and output row counts
+        let input_rows = context.get_metric("InputRowCount")
+            .or_else(|| context.node.metrics.pull_row_num.map(|v| v as f64))?;
+        let output_rows = context.get_metric("OutputRowCount")
+            .or_else(|| context.node.metrics.push_row_num.map(|v| v as f64))?;
+
+        if output_rows == 0.0 || input_rows == 0.0 {
+            return None;
+        }
+
+        // Calculate aggregation ratio
+        let agg_ratio = input_rows / output_rows;
+
+        // If aggregation ratio < 2.0 (less than 50% reduction), local aggregation is ineffective
+        // Also check that we have significant data (> 10K rows)
+        if agg_ratio < 2.0 && input_rows > 10_000.0 {
+            Some(Diagnostic {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: RuleSeverity::Warning,
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
+                plan_node_id: context.node.plan_node_id,
+                message: format!(
+                    "本地聚合效果差，聚合比 {:.2}:1 (输入 {:.0} 行 → 输出 {:.0} 行)",
+                    agg_ratio, input_rows, output_rows
+                ),
+                reason: "在执行聚合操作时，各计算节点通常会先在本地聚合获取较小结果后再分发到其它节点。\
+                    但本地聚合未能有效缩减数据量时，不仅不能减少网络传输，反而会消耗大量计算资源。"
+                    .to_string(),
+                suggestions: vec![
+                    "如果聚合整体执行时间较长，考虑关闭二阶段聚合".to_string(),
+                    "检查 GROUP BY 键的基数是否过高".to_string(),
+                    "考虑在数据源端预聚合".to_string(),
+                ],
+                parameter_suggestions: vec![ParameterSuggestion::new(
+                    "new_planner_agg_stage",
+                    ParameterType::Session,
+                    None,
+                    "1",
+                    "SET new_planner_agg_stage = 1; -- 关闭二阶段聚合",
+                )],
+            })
+        } else {
+            None
+        }
     }
 }
 
@@ -221,5 +327,6 @@ pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
         Box::new(A003DataSkew),
         Box::new(A004HighCardinality),
         Box::new(A005ExpensiveKeyExpr),
+        Box::new(A006LowLocalAggregation),
     ]
 }

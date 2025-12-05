@@ -206,12 +206,18 @@ export class ClusterFormComponent implements OnInit {
             this.translate.instant('common.warning')
           );
         } else {
-          this.toastrService.warning('集群已创建，但健康检查失败。请检查配置', '警告');
+          this.toastrService.warning(
+            this.translate.instant('cluster.create_failed_warning'),
+            this.translate.instant('common.warning')
+          );
         }
         this.navigateToDashboardWithRefresh();
       },
       error: () => {
-        this.toastrService.warning('集群已创建，但健康检查失败。请检查配置', '警告');
+        this.toastrService.warning(
+          this.translate.instant('cluster.create_failed_warning'),
+          this.translate.instant('common.warning')
+        );
         this.navigateToDashboardWithRefresh();
       },
     });
@@ -264,7 +270,10 @@ export class ClusterFormComponent implements OnInit {
   private handleHealthCheckResult(health: any): void {
     if (health.status === 'healthy') {
       const details = health.checks.map((c: any) => c.name + ': ' + c.message).join('\n');
-      this.toastrService.success('健康检查通过\n' + details, '连接成功');
+      this.toastrService.success(
+        this.translate.instant('cluster.health_check_passed') + '\n' + details,
+        this.translate.instant('cluster.connection_success')
+      );
     } else if (health.status === 'warning') {
       const details = health.checks.map((c: any) => c.name + ': ' + c.message).join('\n');
       this.toastrService.warning('健康检查发现问题\n' + details, '警告');

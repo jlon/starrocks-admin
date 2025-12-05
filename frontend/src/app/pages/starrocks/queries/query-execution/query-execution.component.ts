@@ -1250,11 +1250,17 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           // Only regular tables can trigger compaction manually
           const tableType = targetNode.data?.tableType;
           if (tableType === 'VIEW') {
-            this.toastrService.warning('视图不支持手动触发Compaction', '提示');
+            this.toastrService.warning(
+              this.translate.instant('queries.view_no_compaction'),
+              this.translate.instant('common.warning')
+            );
             return;
           }
           if (tableType === 'MATERIALIZED_VIEW') {
-            this.toastrService.warning('物化视图的Compaction由系统自动管理，不建议手动触发', '提示');
+            this.toastrService.warning(
+              this.translate.instant('queries.mv_compaction_auto'),
+              this.translate.instant('common.warning')
+            );
             return;
           }
           this.openCompactionTriggerDialog(targetNode);
@@ -1279,7 +1285,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
           const tableType = targetNode.data?.tableType;
           // Only regular tables and materialized views support bucket analysis
           if (tableType === 'VIEW') {
-            this.toastrService.warning('视图是逻辑表，没有分桶信息', '提示');
+            this.toastrService.warning(
+              this.translate.instant('queries.view_no_buckets'),
+              this.translate.instant('common.warning')
+            );
             return;
           }
           // CLOUD_NATIVE tables are supported, but some analysis may show limited data
@@ -1362,7 +1371,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     if (!result || !Array.isArray(result.results) || result.results.length === 0) {
       this.currentTableSchema = '';
-      this.toastrService.warning('未返回表结构信息', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.no_table_schema'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -1380,7 +1392,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     if (!rows || rows.length === 0) {
       this.currentTableSchema = '';
-      this.toastrService.warning('未获取到建表语句', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.no_create_statement'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -1396,7 +1411,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     if (!matchedRow) {
       this.currentTableSchema = '';
-      this.toastrService.warning('未获取到建表语句', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.no_create_statement'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -1466,7 +1484,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     customErrorMessage?: { database?: string; table?: string }
   ): boolean {
     if (!info) {
-      this.toastrService.warning('节点信息无效', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.invalid_node_info'),
+        this.translate.instant('common.warning')
+      );
       return false;
     }
 
@@ -2028,7 +2049,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     // Views don't have partitions
     if (node.data?.tableType === 'VIEW') {
-      this.toastrService.warning('视图是逻辑表，没有物理分区信息', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.view_no_partitions'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -2106,7 +2130,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     // Views don't have compaction score
     if (node.data?.tableType === 'VIEW') {
-      this.toastrService.warning('视图是逻辑表，没有Compaction Score信息', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.view_no_compaction_score'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -2167,7 +2194,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     // Views don't have physical partitions
     if (node.data?.tableType === 'VIEW') {
-      this.toastrService.warning('视图是逻辑表，没有物理分区信息', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.view_no_partitions'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -3748,12 +3778,18 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   previewBucketAdjustment(): void {
     if (!this.bucketAdjustmentNewBuckets || this.bucketAdjustmentNewBuckets <= 0) {
-      this.toastrService.warning('请输入有效的分桶数', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.invalid_bucket_count'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
     if (this.bucketAdjustmentNewBuckets === this.bucketAnalysisCurrentBuckets) {
-      this.toastrService.info('新分桶数与当前分桶数相同，无需调整', '提示');
+      this.toastrService.info(
+        this.translate.instant('queries.same_bucket_count'),
+        this.translate.instant('common.info')
+      );
       return;
     }
 
@@ -3790,12 +3826,18 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   executeBucketAdjustment(): void {
     if (!this.bucketAdjustmentNewBuckets || this.bucketAdjustmentNewBuckets <= 0) {
-      this.toastrService.warning('请输入有效的分桶数', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.invalid_bucket_count'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
     if (this.bucketAdjustmentNewBuckets === this.bucketAnalysisCurrentBuckets) {
-      this.toastrService.info('新分桶数与当前分桶数相同，无需调整', '提示');
+      this.toastrService.info(
+        this.translate.instant('queries.same_bucket_count'),
+        this.translate.instant('common.info')
+      );
       return;
     }
 
@@ -3836,7 +3878,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     // Views don't have transactions (they are logical, not physical)
     if (node.data?.tableType === 'VIEW') {
-      this.toastrService.warning('视图是逻辑表，不涉及物理事务', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.view_no_transactions'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -4047,7 +4092,11 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => {
-        this.toastrService.success('已复制到剪贴板', '成功', { duration: 2000 });
+        this.toastrService.success(
+          this.translate.instant('queries.copied_to_clipboard'),
+          this.translate.instant('common.success'),
+          { duration: 2000 }
+        );
       }).catch((err) => {
         console.error('Failed to copy text:', err);
         this.fallbackCopyText(text);
@@ -4087,10 +4136,17 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     
     try {
       document.execCommand('copy');
-      this.toastrService.success('已复制到剪贴板', '成功', { duration: 2000 });
+      this.toastrService.success(
+        this.translate.instant('queries.copied_to_clipboard'),
+        this.translate.instant('common.success'),
+        { duration: 2000 }
+      );
     } catch (err) {
       console.error('Fallback copy failed:', err);
-      this.toastrService.danger('复制失败', '错误');
+      this.toastrService.danger(
+        this.translate.instant('queries.copy_failed'),
+        this.translate.instant('common.error')
+      );
     }
     
     document.body.removeChild(textArea);
@@ -4145,11 +4201,17 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     // Only regular tables can trigger compaction manually
     const tableType = node.data?.tableType;
     if (tableType === 'VIEW') {
-      this.toastrService.warning('视图不支持手动触发Compaction', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.view_no_compaction'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     if (tableType === 'MATERIALIZED_VIEW') {
-      this.toastrService.warning('物化视图的Compaction由系统自动管理，不建议手动触发', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.mv_compaction_auto'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     
@@ -4229,7 +4291,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     }
 
     if (this.compactionTriggerMode === 'partition' && this.compactionSelectedPartitions.length === 0) {
-      this.toastrService.warning('请至少选择一个分区', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.select_partition'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -4283,7 +4348,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             next: (result) => {
               this.compactionTriggering = false;
               if (result.results && result.results.length > 0 && result.results[0].success) {
-                this.toastrService.success('Compaction任务已触发', '成功');
+                this.toastrService.success(
+                  this.translate.instant('queries.compaction_trigger_success'),
+                  this.translate.instant('common.success')
+                );
                 this.closeCompactionTriggerDialog();
               } else {
                 const error = result.results?.[0]?.error || '触发失败';
@@ -4406,7 +4474,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         this.loadingDatabases = false;
         console.error('Failed to load databases:', error);
         node.children = [];
-        this.toastrService.danger('加载数据库列表失败', '错误');
+        this.toastrService.danger(
+          this.translate.instant('queries.load_databases_failed'),
+          this.translate.instant('common.error')
+        );
         this.refreshSqlSchema();
       },
     });
@@ -4933,7 +5004,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         takeUntil(this.destroy$)
       ).subscribe({
         next: () => {
-          this.toastrService.success(`查询 ${query.QueryId} 已成功查杀`, '成功');
+          this.toastrService.success(
+            this.translate.instant('queries.query_kill_success', { id: query.QueryId }),
+            this.translate.instant('common.success')
+          );
           this.loadRunningQueries();
           event.confirm.resolve();
         },
@@ -4953,7 +5027,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   // Batch kill queries
   batchKillQueries(queryIds: string[]): void {
     if (queryIds.length === 0) {
-      this.toastrService.warning('请选择要查杀的查询', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.select_queries_to_kill'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -5001,9 +5078,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
             if (completed === queryIds.length) {
               this.loading = false;
               if (successCount > 0) {
-                this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+                this.toastrService.warning(
+                  this.translate.instant('queries.batch_kill_queries_partial', { success: successCount, fail: failCount }),
+                  this.translate.instant('sessions.partial_success')
+                );
               } else {
-                this.toastrService.danger('批量查杀失败', '错误');
+                this.toastrService.danger(
+                  this.translate.instant('queries.batch_kill_queries_failed'),
+                  this.translate.instant('common.error')
+                );
               }
               this.cdr.markForCheck();
               this.loadRunningQueries();
@@ -5032,7 +5115,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       const queryIds = allQueries.map((q: Query) => q.QueryId);
       
       if (queryIds.length === 0) {
-        this.toastrService.warning('当前没有可查杀的查询', '提示');
+        this.toastrService.warning(
+          this.translate.instant('queries.no_queries_to_kill'),
+          this.translate.instant('common.warning')
+        );
         return;
       }
 
@@ -5131,24 +5217,36 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   // Real-time query methods
   executeSQL(): void {
     if (!this.sqlInput || this.sqlInput.trim() === '') {
-      this.toastrService.warning('请输入SQL语句', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.enter_sql'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
     // Check if catalog is selected
     if (!this.selectedCatalog) {
-      this.toastrService.warning('请先选择 Catalog', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.select_catalog'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
     // Check if databases are still loading
     if (this.loadingDatabases) {
-      this.toastrService.warning('数据库列表加载中，请稍候...', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.databases_loading'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
     if (!this.selectedDatabase) {
-        this.toastrService.warning('请选择数据库', '提示');
+        this.toastrService.warning(
+          this.translate.instant('queries.select_database'),
+          this.translate.instant('common.warning')
+        );
         return;
     }
 
@@ -5353,7 +5451,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         this.editorView.dispatch(transaction);
       }
     } catch (error) {
-      this.toastrService.warning('格式化失败，使用原始SQL', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.format_failed'),
+        this.translate.instant('common.warning')
+      );
     }
   }
 
@@ -5368,12 +5469,18 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       // Export single result
       resultToExport = this.queryResults[0];
     } else {
-      this.toastrService.warning('请选择要导出的结果', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.select_result_to_export'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
     
     if (!resultToExport || !resultToExport.success || !resultToExport.rows || resultToExport.rows.length === 0) {
-      this.toastrService.warning('没有数据可导出', '提示');
+      this.toastrService.warning(
+        this.translate.instant('queries.no_data_to_export'),
+        this.translate.instant('common.warning')
+      );
       return;
     }
 
@@ -5407,7 +5514,10 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       link.click();
       document.body.removeChild(link);
 
-      this.toastrService.success('导出成功', '成功');
+      this.toastrService.success(
+        this.translate.instant('queries.export_success'),
+        this.translate.instant('common.success')
+      );
     } catch (error) {
       console.error('Export error:', error);
       this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '导出失败');

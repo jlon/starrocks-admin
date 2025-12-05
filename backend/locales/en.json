@@ -1,0 +1,85 @@
+{
+  "validation": {
+    "failed": "Request validation failed: %{details}",
+    "invalid_query_id": "Invalid query_id format",
+    "invalid_scope": "Invalid scope. Must be GLOBAL or SESSION"
+  },
+  "auth": {
+    "missing_header": "Missing authorization header",
+    "invalid_header": "Invalid authorization header format",
+    "jwt_failed": "JWT verification failed",
+    "token_expired": "Token expired",
+    "invalid_credentials": "Invalid credentials",
+    "permission_denied": "Permission denied: no access to %{resource} %{action}"
+  },
+  "cluster": {
+    "not_found": "Cluster %{id} not found",
+    "connection_failed": "Failed to connect to cluster: %{message}",
+    "timeout": "Cluster operation timeout",
+    "auth_failed": "Cluster authentication failed"
+  },
+  "resource": {
+    "not_found": "Resource not found: %{name}",
+    "query_not_found": "Query %{id} not found",
+    "query_kill_failed": "Failed to kill query: %{reason}",
+    "profile_not_found": "Profile not found for query: %{id}"
+  },
+  "profile": {
+    "parse_failed": "Failed to parse Profile: %{error}",
+    "analysis_failed": "Analysis failed: %{error}"
+  },
+  "session": {
+    "fetch_failed": "Failed to fetch sessions: %{error}",
+    "kill_failed": "Failed to kill session: %{error}"
+  },
+  "system_function": {
+    "not_found": "System function not found: %{name}",
+    "duplicate": "System function duplicate",
+    "category_full": "Category full: %{name}",
+    "invalid_sql": "Invalid SQL: %{reason}",
+    "sql_safety_violation": "SQL safety violation: %{reason}",
+    "category_cannot_delete": "Category cannot be deleted"
+  },
+  "database": {
+    "error": "Database error: %{error}"
+  },
+  "internal": {
+    "error": "Internal error: %{message}"
+  },
+  "permission": {
+    "only_super_admin_create_org": "Only super administrators can create organizations",
+    "only_super_admin_delete_org": "Only super administrators can delete organizations",
+    "only_activate_own_cluster": "You can only activate clusters in your organization",
+    "only_view_own_cluster": "You can only view clusters within your organization",
+    "only_update_own_cluster": "You can only update clusters within your organization",
+    "only_delete_own_cluster": "You can only delete clusters within your organization",
+    "only_super_admin_reassign_cluster": "Only super administrators can reassign cluster organization",
+    "org_admin_cannot_override_org": "Organization administrators cannot override organization assignment",
+    "org_admin_cannot_reassign_user": "Organization administrators cannot reassign user organization",
+    "org_admin_cannot_reassign_role": "Organization administrators cannot reassign role organization"
+  },
+  "diagnostic": {
+    "rules": {
+      "runtime_filter_ineffective": "Runtime Filter failed to filter data effectively. May be due to filter build failure, timeout, or poor filter selectivity.",
+      "high_memory_usage": "Operator memory usage is too high, may cause query failure or trigger Spill. Check for data expansion or oversized intermediate results.",
+      "fragment_memory_high": "Fragment memory usage is too high, may cause query failure.",
+      "join_explosion": "Join output is significantly larger than input, usually due to missing Join condition causing Cross Join, or incorrect Join condition causing 1:N matching.",
+      "wrong_build_side": "In Hash Join, Build side data is larger than Probe side, causing oversized HashTable. Optimizer may have chosen wrong Build side due to inaccurate statistics.",
+      "broadcast_too_large": "When joining small and large tables, Broadcast Join broadcasts the small table to all nodes. But when Build side data is too large, it increases network and compute costs. May be due to inaccurate statistics causing optimizer to misjudge table sizes.",
+      "local_exchange_memory_high": "Please refer to StarRocks official documentation for more information."
+    },
+    "suggestions": {
+      "check_runtime_filter": "Check if Runtime Filter is generated",
+      "check_data_expansion": "Check for data expansion",
+      "check_data_skew": "Check for data skew",
+      "check_join_condition": "Check if JOIN condition is missing or incomplete",
+      "run_analyze_table": "Run ANALYZE TABLE to update statistics",
+      "check_global_runtime_filter": "Check if enable_global_runtime_filter is enabled"
+    },
+    "rule_names": {
+      "memory_usage_high": "Memory usage too high",
+      "local_exchange_memory_high": "LocalExchange memory usage too high",
+      "instance_memory_imbalance": "Instance memory allocation imbalance"
+    }
+  }
+}

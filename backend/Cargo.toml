@@ -82,5 +82,8 @@ rust-embed = "8.0"
 # Command line argument parsing
 clap = { version = "4.5", features = ["derive"] }
 
+# Internationalization
+rust-i18n = "3"
+
 [dev-dependencies]
 

@@ -1,0 +1,85 @@
+{
+  "validation": {
+    "failed": "请求参数验证失败：%{details}",
+    "invalid_query_id": "无效的 query_id 格式",
+    "invalid_scope": "无效的作用域。必须是 GLOBAL 或 SESSION"
+  },
+  "auth": {
+    "missing_header": "缺少授权头",
+    "invalid_header": "无效的授权头格式",
+    "jwt_failed": "JWT 验证失败",
+    "token_expired": "令牌已过期",
+    "invalid_credentials": "无效的凭证",
+    "permission_denied": "权限被拒绝：无法访问 %{resource} %{action}"
+  },
+  "cluster": {
+    "not_found": "集群 %{id} 未找到",
+    "connection_failed": "连接集群失败：%{message}",
+    "timeout": "集群操作超时",
+    "auth_failed": "集群认证失败"
+  },
+  "resource": {
+    "not_found": "资源未找到：%{name}",
+    "query_not_found": "查询 %{id} 未找到",
+    "query_kill_failed": "终止查询失败：%{reason}",
+    "profile_not_found": "未找到查询 %{id} 的 Profile"
+  },
+  "profile": {
+    "parse_failed": "解析 Profile 失败：%{error}",
+    "analysis_failed": "分析失败：%{error}"
+  },
+  "session": {
+    "fetch_failed": "获取会话失败：%{error}",
+    "kill_failed": "终止会话失败：%{error}"
+  },
+  "system_function": {
+    "not_found": "系统功能未找到：%{name}",
+    "duplicate": "系统功能重复",
+    "category_full": "分类已满：%{name}",
+    "invalid_sql": "无效的 SQL：%{reason}",
+    "sql_safety_violation": "SQL 安全违规：%{reason}",
+    "category_cannot_delete": "分类无法删除"
+  },
+  "database": {
+    "error": "数据库错误：%{error}"
+  },
+  "internal": {
+    "error": "内部错误：%{message}"
+  },
+  "permission": {
+    "only_super_admin_create_org": "只有超级管理员可以创建组织",
+    "only_super_admin_delete_org": "只有超级管理员可以删除组织",
+    "only_activate_own_cluster": "您只能激活本组织的集群",
+    "only_view_own_cluster": "您只能查看本组织的集群",
+    "only_update_own_cluster": "您只能更新本组织的集群",
+    "only_delete_own_cluster": "您只能删除本组织的集群",
+    "only_super_admin_reassign_cluster": "只有超级管理员可以重新分配集群组织",
+    "org_admin_cannot_override_org": "组织管理员无法覆盖组织分配",
+    "org_admin_cannot_reassign_user": "组织管理员无法重新分配用户组织",
+    "org_admin_cannot_reassign_role": "组织管理员无法重新分配角色组织"
+  },
+  "diagnostic": {
+    "rules": {
+      "runtime_filter_ineffective": "Runtime Filter 未能有效过滤数据。可能是 Filter 构建失败、超时或 Filter 选择性差。",
+      "high_memory_usage": "算子内存使用过高，可能导致查询失败或触发 Spill。检查是否存在数据膨胀或中间结果过大。",
+      "fragment_memory_high": "Fragment 内存使用过高，可能导致查询失败。",
+      "join_explosion": "Join 输出结果显著大于输入，通常是缺少 Join 条件导致 Cross Join，或 Join 条件错误导致 1:N 匹配。",
+      "wrong_build_side": "在 Hash Join 中，Build 端数据量大于 Probe 端，导致 HashTable 过大。优化器可能因统计信息不准确选择了错误的 Build 端。",
+      "broadcast_too_large": "当小表与大表 Join 时，Broadcast Join 会将小表广播到所有节点。但当 Build 端数据量过大时，会增加网络和计算成本。可能是统计信息不准确导致优化器错误估计了表大小。",
+      "local_exchange_memory_high": "请参考 StarRocks 官方文档了解更多信息。"
+    },
+    "suggestions": {
+      "check_runtime_filter": "检查 Runtime Filter 是否被生成",
+      "check_data_expansion": "检查是否存在数据膨胀",
+      "check_data_skew": "检查数据倾斜",
+      "check_join_condition": "检查 JOIN 条件是否缺失或不完整",
+      "run_analyze_table": "执行 ANALYZE TABLE 更新统计信息",
+      "check_global_runtime_filter": "检查 enable_global_runtime_filter 是否启用"
+    },
+    "rule_names": {
+      "memory_usage_high": "内存使用过高",
+      "local_exchange_memory_high": "LocalExchange 内存使用过高",
+      "instance_memory_imbalance": "实例内存分配不均"
+    }
+  }
+}

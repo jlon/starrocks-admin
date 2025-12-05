@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { NbDialogService, NbToastrService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Observable, Subject, forkJoin, of } from 'rxjs';
 import { finalize, map, switchMap, takeUntil, tap } from 'rxjs/operators';
@@ -53,6 +54,7 @@ export class RolesComponent implements OnInit, OnDestroy {
     private toastrService: NbToastrService,
     private organizationService: OrganizationService,
     private authService: AuthService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -75,13 +77,19 @@ export class RolesComponent implements OnInit, OnDestroy {
 
     if (this.isSuperAdmin && !this.organizations.length) {
       this.loadOrganizations();
-      this.toastrService.info('正在加载组织列表，请稍后重试', '提示');
+      this.toastrService.info(
+        this.translate.instant('roles.loading_organizations'),
+        this.translate.instant('common.info')
+      );
       return;
     }
 
     if (!this.isSuperAdmin && !this.currentOrganization) {
       this.loadCurrentOrganization();
-      this.toastrService.info('正在获取所属组织，请稍后重试', '提示');
+      this.toastrService.info(
+        this.translate.instant('roles.loading_current_org'),
+        this.translate.instant('common.info')
+      );
       return;
     }
 
@@ -161,7 +169,10 @@ export class RolesComponent implements OnInit, OnDestroy {
 
       this.roleService.deleteRole(role.id).subscribe({
         next: () => {
-          this.toastrService.success('角色已删除', '成功');
+          this.toastrService.success(
+            this.translate.instant('roles.role_delete_success'),
+            this.translate.instant('common.success')
+          );
           this.rolePermissionCache.delete(role.id);
           this.loadRoles();
         },
@@ -189,7 +200,10 @@ export class RolesComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (role) => {
-          this.toastrService.success('角色创建成功', '成功');
+          this.toastrService.success(
+            this.translate.instant('roles.role_create_success'),
+            this.translate.instant('common.success')
+          );
           if (role) {
             this.rolePermissionCache.set(role.id, [...result.permissionIds]);
           }
@@ -211,7 +225,10 @@ export class RolesComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: () => {
-          this.toastrService.success('角色更新成功', '成功');
+          this.toastrService.success(
+            this.translate.instant('roles.role_update_success'),
+            this.translate.instant('common.success')
+          );
           this.rolePermissionCache.set(role.id, [...result.permissionIds]);
           this.loadRoles();
         },

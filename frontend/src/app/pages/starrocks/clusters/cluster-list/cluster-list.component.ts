@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { NbDialogService, NbToastrService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { LocalDataSource } from 'ng2-smart-table';
 import { ClusterService, Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
@@ -86,6 +87,7 @@ export class ClusterListComponent implements OnInit {
     private dialogService: NbDialogService,
     private toastrService: NbToastrService,
     private confirmDialogService: ConfirmDialogService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {

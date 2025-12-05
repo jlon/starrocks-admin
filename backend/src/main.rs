@@ -637,6 +637,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(static_routes); // Must be last to serve as fallback for SPA routes
 
     let app = app
+        .layer(axum_middleware::from_fn(middleware::locale_middleware))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::cors::CorsLayer::permissive());
 

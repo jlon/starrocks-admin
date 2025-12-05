@@ -3,8 +3,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use rust_i18n::t;
 use serde::Serialize;
 use thiserror::Error;
+
+use super::i18n::get_locale;
 
 /// API Error with rich context and automatic error trait implementations
 ///
@@ -198,10 +201,82 @@ pub struct ApiErrorResponse {
     pub details: Option<serde_json::Value>,
 }
 
+impl ApiError {
+    /// Get localized error message based on current locale
+    pub fn localized_message(&self) -> String {
+        let locale = get_locale();
+        match self {
+            Self::Unauthorized(msg) => {
+                if msg.contains("Missing authorization header") {
+                    t!("auth.missing_header", locale = &locale).to_string()
+                } else if msg.contains("Invalid authorization header") {
+                    t!("auth.invalid_header", locale = &locale).to_string()
+                } else if msg.contains("JWT verification failed") {
+                    t!("auth.jwt_failed", locale = &locale).to_string()
+                } else if msg.contains("Permission denied") {
+                    msg.clone() // Keep original for permission details
+                } else {
+                    msg.clone()
+                }
+            }
+            Self::TokenExpired => t!("auth.token_expired", locale = &locale).to_string(),
+            Self::InvalidCredentials => t!("auth.invalid_credentials", locale = &locale).to_string(),
+            Self::ClusterNotFound { cluster_id } => {
+                t!("cluster.not_found", locale = &locale, id = cluster_id).to_string()
+            }
+            Self::ClusterConnectionFailed { message } => {
+                t!("cluster.connection_failed", locale = &locale, message = message).to_string()
+            }
+            Self::ClusterTimeout => t!("cluster.timeout", locale = &locale).to_string(),
+            Self::ClusterAuthFailed => t!("cluster.auth_failed", locale = &locale).to_string(),
+            Self::ResourceNotFound(name) => {
+                t!("resource.not_found", locale = &locale, name = name).to_string()
+            }
+            Self::QueryNotFound { query_id } => {
+                t!("resource.query_not_found", locale = &locale, id = query_id).to_string()
+            }
+            Self::QueryKillFailed(reason) => {
+                t!("resource.query_kill_failed", locale = &locale, reason = reason).to_string()
+            }
+            Self::ValidationError(details) => {
+                t!("validation.failed", locale = &locale, details = details).to_string()
+            }
+            Self::InvalidInput(msg) => msg.clone(),
+            Self::InternalError(msg) => {
+                t!("internal.error", locale = &locale, message = msg).to_string()
+            }
+            Self::SystemFunctionNotFound(name) => {
+                t!("system_function.not_found", locale = &locale, name = name).to_string()
+            }
+            Self::SystemFunctionDuplicate => {
+                t!("system_function.duplicate", locale = &locale).to_string()
+            }
+            Self::CategoryFull(name) => {
+                t!("system_function.category_full", locale = &locale, name = name).to_string()
+            }
+            Self::InvalidSQL(reason) => {
+                t!("system_function.invalid_sql", locale = &locale, reason = reason).to_string()
+            }
+            Self::SQLSafetyViolation(reason) => {
+                t!("system_function.sql_safety_violation", locale = &locale, reason = reason).to_string()
+            }
+            Self::CategoryCannotDelete => {
+                t!("system_function.category_cannot_delete", locale = &locale).to_string()
+            }
+            Self::Database(err) => {
+                t!("database.error", locale = &locale, error = err.to_string()).to_string()
+            }
+            Self::Other(err) => {
+                t!("internal.error", locale = &locale, message = err.to_string()).to_string()
+            }
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let code = self.error_code();
-        let message = self.to_string();
+        let message = self.localized_message();
 
         let status = match code {
             1001..=1999 => StatusCode::UNAUTHORIZED,

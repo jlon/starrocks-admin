@@ -5,6 +5,9 @@
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
+// Initialize rust-i18n with locales from the locales directory
+rust_i18n::i18n!("locales", fallback = "zh");
+
 pub mod config;
 pub mod db;
 pub mod embedded;

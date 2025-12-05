@@ -70,7 +70,6 @@
               </nb-card-header>
 
               <nb-card-body>
-                <!-- 核心指标区 - 黄金位置 -->
                 <div class="metrics-row d-flex justify-content-between align-items-center mb-4">
                   <div class="metric-item text-center" [class.text-danger]="getHealthScore(clusterCard) !== '100'">
                      <div class="h4 mb-0 font-weight-bold">{{ getHealthScore(clusterCard) }}%</div>
@@ -83,17 +82,11 @@
                   </div>
                   <div class="divider-vertical"></div>
                   <div class="metric-item text-center cursor-pointer" (click)="navigateToBackends(clusterCard.cluster.id)">
-<<<<<<< HEAD
                      <div class="h4 mb-0 font-weight-bold text-info">{{ getComputeNodeCount(clusterCard) }}</div>
                      <div class="caption-2 text-hint text-uppercase">{{ getComputeNodeLabel(clusterCard) }}</div>
-=======
-                     <div class="h4 mb-0 font-weight-bold text-info">{{ getBeCount(clusterCard) }}</div>
-                     <div class="caption-2 text-hint text-uppercase">{{ 'cluster.be_nodes' | translate }}</div>
->>>>>>> feat(i18n): complete internationalization for all pages
                   </div>
                 </div>
 
-                <!-- 信息区 -->
                 <div class="info-section">
                   <div class="info-row">
                     <nb-icon icon="link-2-outline" class="text-hint"></nb-icon>
@@ -112,7 +105,6 @@
                   </div>
                 </div>
 
-                <!-- 健康检查详情折叠区 -->
                 <div class="health-details-section" *ngIf="clusterCard.health">
                   <div class="d-flex justify-content-between align-items-center py-2 cursor-pointer" (click)="toggleHealthDetails(clusterCard)">
                     <div class="d-flex align-items-center">

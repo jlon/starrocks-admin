@@ -23,6 +23,7 @@ import {
   NbWindowModule,
 } from '@nebular/theme';
 import { JwtInterceptor } from './@core/interceptors/jwt.interceptor';
+import { LanguageInterceptor } from './@core/interceptors/language.interceptor';
 import { AuthModule } from './auth/auth.module';
 import { TabRouteReuseStrategy } from './@core/routing/tab-route-reuse.strategy';
 
@@ -57,6 +58,7 @@ export function HttpLoaderFactory(http: HttpClient) {
     }),
   ],
   providers: [
+    { provide: HTTP_INTERCEPTORS, useClass: LanguageInterceptor, multi: true },
     { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },
     { provide: RouteReuseStrategy, useClass: TabRouteReuseStrategy },
   ],

@@ -243,14 +243,17 @@ export class SessionsComponent implements OnInit, OnDestroy {
       this.loading = true;
       this.nodeService.killSession(session.id).subscribe({
         next: () => {
-          this.toastrService.success(`会话 ${session.id} 已成功终止`, '成功');
+          this.toastrService.success(
+            this.translate.instant('sessions.kill_success', { id: session.id }),
+            this.translate.instant('common.success')
+          );
           event.confirm.resolve();
           this.loadSessions();
         },
         error: (error) => {
           this.toastrService.danger(
-            error.error?.message || '终止会话失败',
-            '错误'
+            error.error?.message || this.translate.instant('common.operation_failed'),
+            this.translate.instant('common.error')
           );
           event.confirm.reject();
           this.loading = false;
@@ -401,9 +404,15 @@ export class SessionsComponent implements OnInit, OnDestroy {
                 if (completed === sleepingSessions.length) {
                   this.loading = false;
                   if (failCount === 0) {
-                    this.toastrService.success(`成功清除 ${successCount} 个睡眠连接`, '成功');
+                    this.toastrService.success(
+                      this.translate.instant('sessions.clear_sleeping_success', { count: successCount }),
+                      this.translate.instant('common.success')
+                    );
                   } else {
-                    this.toastrService.warning(`成功清除 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+                    this.toastrService.warning(
+                      this.translate.instant('sessions.clear_sleeping_partial', { success: successCount, fail: failCount }),
+                      this.translate.instant('sessions.partial_success')
+                    );
                   }
                   this.loadSessions();
                 }
@@ -465,9 +474,15 @@ export class SessionsComponent implements OnInit, OnDestroy {
             if (completed === this.sessions.length) {
               this.loading = false;
               if (failCount === 0) {
-                this.toastrService.success(`成功查杀 ${successCount} 个会话`, '成功');
+                this.toastrService.success(
+                  this.translate.instant('sessions.batch_kill_success', { count: successCount }),
+                  this.translate.instant('common.success')
+                );
               } else {
-                this.toastrService.warning(`成功查杀 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+                this.toastrService.warning(
+                  this.translate.instant('sessions.batch_kill_partial', { success: successCount, fail: failCount }),
+                  this.translate.instant('sessions.partial_success')
+                );
               }
               this.loadSessions();
             }

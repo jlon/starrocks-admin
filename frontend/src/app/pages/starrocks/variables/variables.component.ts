@@ -134,13 +134,16 @@ export class VariablesComponent implements OnInit, OnDestroy {
         scope: this.variableType.toUpperCase(),
       }).subscribe({
         next: () => {
-          this.toastrService.success(`变量 "${variable.name}" 更新成功`, '成功');
+          this.toastrService.success(
+            this.translate.instant('variables.update_success', { name: variable.name }),
+            this.translate.instant('common.success')
+          );
           this.loadVariables();
         },
         error: (error) => {
           this.toastrService.danger(
-            error.error?.message || '更新变量失败',
-            '错误'
+            error.error?.message || this.translate.instant('variables.update_failed'),
+            this.translate.instant('common.error')
           );
           this.loading = false;
         },

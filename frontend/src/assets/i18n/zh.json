@@ -332,7 +332,13 @@
     "filter_slow_only": "仅显示慢会话（≥1分钟）",
     "clear_filter": "清除筛选",
     "clear_sleeping": "清除睡眠连接",
-    "batch_kill": "批量查杀当前显示"
+    "batch_kill": "批量查杀当前显示",
+    "kill_success": "会话 {{id}} 已成功终止",
+    "clear_sleeping_success": "成功清除 {{count}} 个睡眠连接",
+    "clear_sleeping_partial": "成功清除 {{success}} 个，失败 {{fail}} 个",
+    "batch_kill_success": "成功查杀 {{count}} 个会话",
+    "batch_kill_partial": "成功查杀 {{success}} 个，失败 {{fail}} 个",
+    "partial_success": "部分成功"
   },
   "variables": {
     "title": "变量管理",
@@ -345,7 +351,9 @@
     "no_variables": "未找到变量,请调整搜索条件",
     "loading": "加载变量中...",
     "warning_title": "警告：",
-    "warning_message": "修改系统变量可能会影响集群行为。请在修改前查阅 StarRocks 文档。"
+    "warning_message": "修改系统变量可能会影响集群行为。请在修改前查阅 StarRocks 文档。",
+    "update_success": "变量 \"{{name}}\" 更新成功",
+    "update_failed": "更新变量失败"
   },
   "roles": {
     "title": "角色管理",
@@ -410,6 +418,23 @@
     "title": "组织管理",
     "subtitle": "管理系统组织，创建和管理多租户组织",
     "create_organization": "创建组织",
+    "edit_organization": "编辑组织",
+    "create_subtitle": "创建新组织",
+    "edit_subtitle": "修改组织与管理员配置",
+    "code": "组织代码",
+    "code_placeholder": "请输入组织代码（小写字母、数字、下划线）",
+    "code_required": "组织代码不能为空",
+    "code_pattern": "组织代码只能包含小写字母、数字和下划线",
+    "name": "组织名称",
+    "name_placeholder": "请输入组织名称",
+    "name_required": "组织名称不能为空",
+    "description": "描述",
+    "description_placeholder": "请输入组织描述（可选）",
+    "admin_user": "组织管理员（可选）",
+    "admin_user_placeholder": "请选择组织内的用户作为管理员",
+    "no_users_in_org": "暂无该组织的用户",
+    "admin_user_hint": "仅可选择已属于该组织的用户。留空则保持当前管理员不变。",
+    "save_changes": "保存修改",
     "no_permission_hint": "您暂无查看组织的权限，请联系管理员获取授权。"
   },
   "materialized_views": {

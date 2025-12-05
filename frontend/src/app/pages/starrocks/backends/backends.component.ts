@@ -20,6 +20,10 @@ export class BackendsComponent implements OnInit, OnDestroy {
   clusterId: number;
   activeCluster: Cluster | null = null;
   clusterName: string = '';
+  deploymentMode: string = '';
+  pageTitle: string = 'Backend 节点';
+  deploymentModeText: string = '';
+  deploymentModeBadgeClass: string = '';
   loading = true;
   private destroy$ = new Subject<void>();
   private readonly diskThresholds: MetricThresholds = { warn: 70, danger: 85 };
@@ -29,7 +33,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
   settings = {
     mode: 'external',
     hideSubHeader: false, // Enable search
-    noDataMessage: '暂无Backend节点数据',
+    noDataMessage: '暂无计算节点数据',
     actions: {
       columnTitle: '操作',
       add: false,
@@ -47,7 +51,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
     },
     columns: {
       BackendId: {
-        title: 'BE ID',
+        title: '节点 ID',
         type: 'string',
         width: '8%',
       },
@@ -61,7 +65,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
         width: '10%',
       },
       BePort: {
-        title: 'BE 端口',
+        title: '服务端口',
         type: 'string',
         width: '10%',
       },
@@ -117,7 +121,8 @@ export class BackendsComponent implements OnInit, OnDestroy {
   onDeleteConfirm(event: any): void {
     const backend = event.data;
     const itemName = `${backend.IP}:${backend.HeartbeatPort}`;
-    const additionalWarning = `⚠️ 警告: 删除节点是危险操作，请确保：\n1. 节点数据已迁移完成\n2. 集群有足够的副本数\n3. 该节点已停止服务`;
+    const nodeType = this.deploymentMode === 'shared_data' ? 'CN (Compute Node)' : 'BE (Backend)';
+    const additionalWarning = `⚠️ 警告: 删除${nodeType}节点是危险操作，请确保：\n1. 节点数据已迁移完成\n2. 集群有足够的副本数\n3. 该节点已停止服务`;
     
     this.confirmDialogService.confirmDelete(itemName, additionalWarning)
       .subscribe(confirmed => {
@@ -130,7 +135,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
           .subscribe({
             next: () => {
               this.toastrService.success(
-                `Backend 节点 ${itemName} 已删除`,
+                `${nodeType} 节点 ${itemName} 已删除`,
                 '成功'
               );
               event.confirm.resolve();
@@ -195,6 +200,18 @@ export class BackendsComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (cluster) => {
           this.clusterName = cluster.name;
+          this.deploymentMode = cluster.deployment_mode || 'shared_nothing';
+          
+          // Update page title and badge based on deployment mode
+          if (this.deploymentMode === 'shared_data') {
+            this.pageTitle = 'Compute Nodes (CN)';
+            this.deploymentModeText = '存算分离';
+            this.deploymentModeBadgeClass = 'badge-info';
+          } else {
+            this.pageTitle = 'Backend Nodes (BE)';
+            this.deploymentModeText = '存算一体';
+            this.deploymentModeBadgeClass = 'badge-success';
+          }
         },
       });
   }

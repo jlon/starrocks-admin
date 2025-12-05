@@ -212,6 +212,13 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 - [Nebular](https://John.github.io/nebular/) - Beautiful UI component library
 - [Axum](https://github.com/tokio-rs/axum) - Powerful Rust web framework
 - [StarRocks](https://www.starrocks.io/) - High-performance analytical database
+
+## Contact & Support
+
+If you have any questions or issues, please feel free to contact me:
+
+📧 Email: **itjlon@gmail.com**
+
 ---
 [↑ Back to Top](#starrocks-admin)
 ---
@@ -432,6 +439,12 @@ APP_METRICS_ENABLED=true \
 - [Nebular](https://John.github.io/nebular/) - 漂亮的 UI 组件库
 - [Axum](https://github.com/tokio-rs/axum) - 强大的 Rust Web 框架
 - [StarRocks](https://www.starrocks.io/) - 高性能分析数据库
+
+## 联系方式与支持
+
+如有任何问题或疑问，欢迎通过邮件联系我：
+
+📧 邮箱：**itjlon@gmail.com**
 
 ## 捐赠支持
 

@@ -55,7 +55,7 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
   
   // 系统默认功能（硬编码）
   systemFunctions: SystemFunctionOld[] = [
-    { name: 'backends', description: 'Backend节点信息', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
+    { name: 'backends', description: '计算节点信息(BE/CN)', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
     { name: 'frontends', description: 'Frontend节点信息', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
     { name: 'brokers', description: 'Broker节点信息', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
     { name: 'statistic', description: '统计信息', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
@@ -736,7 +736,7 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
   // 获取功能描述
   getFunctionDescription(functionName: string): string {
     const descriptionMap: { [key: string]: string } = {
-      'backends': 'Backend节点信息',
+      'backends': '计算节点信息(BE/CN)',
       'frontends': 'Frontend节点信息',
       'brokers': 'Broker节点信息',
       'statistic': '统计信息',

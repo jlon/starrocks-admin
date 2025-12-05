@@ -33,7 +33,14 @@ where
     s.parse().map_err(serde::de::Error::custom)
 }
 
-// Backend node information
+// Helper function for default empty string
+fn default_empty_string() -> String {
+    "0".to_string()
+}
+
+// Backend node information (also used for Compute Nodes in shared-data architecture)
+// Note: In shared-data mode, some storage-related fields (TabletNum, DataUsedCapacity, etc.) 
+//       may be "0" or empty as CNs don't store data locally
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct Backend {
     #[serde(rename = "BackendId")]
@@ -56,7 +63,9 @@ pub struct Backend {
     pub alive: String,
     #[serde(rename = "SystemDecommissioned")]
     pub system_decommissioned: String,
-    #[serde(rename = "TabletNum")]
+    #[serde(rename = "ClusterDecommissioned", default)]
+    pub cluster_decommissioned: Option<String>,
+    #[serde(rename = "TabletNum", default = "default_empty_string")]
     pub tablet_num: String,
     #[serde(rename = "DataUsedCapacity")]
     pub data_used_capacity: String,

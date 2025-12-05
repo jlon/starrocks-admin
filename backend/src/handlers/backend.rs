@@ -9,12 +9,12 @@ use crate::models::Backend;
 use crate::services::StarRocksClient;
 use crate::utils::ApiResult;
 
-// Get all backends for a cluster
+// Get all backends for a cluster (BE nodes in shared-nothing, CN nodes in shared-data)
 #[utoipa::path(
     get,
     path = "/api/clusters/backends",
     responses(
-        (status = 200, description = "List of backend nodes", body = Vec<Backend>),
+        (status = 200, description = "List of compute nodes (BE in shared-nothing, CN in shared-data)", body = Vec<Backend>),
         (status = 404, description = "No active cluster found")
     ),
     security(
@@ -40,18 +40,18 @@ pub async fn list_backends(
     Ok(Json(backends))
 }
 
-// Delete a backend node
+// Delete a backend/compute node (BE in shared-nothing, CN in shared-data)
 #[utoipa::path(
     delete,
     path = "/api/clusters/backends/{host}/{port}",
     params(
-        ("host" = String, Path, description = "Backend host"),
-        ("port" = String, Path, description = "Backend heartbeat port")
+        ("host" = String, Path, description = "Node host"),
+        ("port" = String, Path, description = "Node heartbeat port")
     ),
     responses(
-        (status = 200, description = "Backend deleted successfully"),
+        (status = 200, description = "Node deleted successfully"),
         (status = 404, description = "No active cluster found"),
-        (status = 500, description = "Failed to delete backend")
+        (status = 500, description = "Failed to delete node")
     ),
     security(
         ("bearer_auth" = [])

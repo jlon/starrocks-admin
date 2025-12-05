@@ -51,6 +51,8 @@ pub struct MetricsSnapshot {
     pub query_timeout: i64,
 
     // Cluster health
+    // Note: In shared-data mode, backend_* refers to Compute Nodes (CN)
+    //       In shared-nothing mode, backend_* refers to Backend Nodes (BE)
     pub backend_total: i32,
     pub backend_alive: i32,
     pub frontend_total: i32,
@@ -192,7 +194,8 @@ impl MetricsCollectorService {
         // Parse Prometheus metrics
         let metrics_map = client.parse_prometheus_metrics(&metrics_text)?;
 
-        // Aggregate backend metrics
+        // Aggregate backend metrics (BE in shared-nothing, CN in shared-data)
+        // Note: In shared-data mode, backends list contains Compute Nodes (CN), not Backend Nodes (BE)
         let backend_total = backends.len() as i32;
         let backend_alive = backends.iter().filter(|b| b.alive == "true").count() as i32;
 
@@ -231,7 +234,7 @@ impl MetricsCollectorService {
         };
 
         tracing::debug!(
-            "CPU parsing: parsed {}/{} backends, total={}, avg={}",
+            "CPU parsing: parsed {}/{} compute nodes (BE/CN), total={}, avg={}",
             cpu_values.len(),
             backend_total,
             total_cpu_usage,
@@ -253,14 +256,14 @@ impl MetricsCollectorService {
         let avg_memory_usage =
             if backend_total > 0 { total_memory_usage / backend_total as f64 } else { 0.0 };
 
-        // Calculate disk total capacity (sum of all BE nodes)
+        // Calculate disk total capacity (sum of all compute nodes: BE in shared-nothing, CN in shared-data)
         let disk_total_bytes: i64 = backends
             .iter()
             .filter_map(|b| parse_storage_size(&b.total_capacity))
             .sum();
 
-        // For local cache usage: find the BE node with MAX disk usage percentage
-        // and calculate its actual used bytes (this represents cache pressure)
+        // For local cache usage: find the compute node with MAX disk usage percentage
+        // and calculate its actual used bytes (represents cache pressure in shared-data or disk usage in shared-nothing)
         let (max_disk_usage_pct, _max_node_total, max_node_used) = backends
             .iter()
             .filter_map(|b| {
@@ -278,10 +281,11 @@ impl MetricsCollectorService {
         let disk_usage_pct = max_disk_usage_pct;
 
         tracing::debug!(
-            "Local cache usage (MAX node): {}% ({} bytes), total BE capacity: {} bytes",
+            "Disk usage (MAX node): {}% ({} bytes), total capacity: {} bytes (cluster mode: {})",
             disk_usage_pct,
             disk_used_bytes,
-            disk_total_bytes
+            disk_total_bytes,
+            cluster.deployment_mode
         );
 
         // JVM metrics

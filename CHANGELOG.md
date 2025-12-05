@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2024-12-05
+
 ### Added
 - Complete internationalization (i18n) support for Chinese and English
 - Profile visualization with DAG analysis

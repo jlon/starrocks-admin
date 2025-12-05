@@ -175,7 +175,10 @@ export class ClusterFormComponent implements OnInit {
         if (!this.isEditMode && cluster.id) {
           this.testConnectionAfterCreate(cluster.id);
         } else {
-          this.toastrService.success('集群更新成功', '成功');
+          this.toastrService.success(
+            this.translate.instant('cluster.update_success'),
+            this.translate.instant('common.success')
+          );
           this.navigateToDashboardWithRefresh();
         }
       },
@@ -193,9 +196,15 @@ export class ClusterFormComponent implements OnInit {
     this.clusterService.getHealth(clusterId).subscribe({
       next: (health) => {
         if (health.status === 'healthy') {
-          this.toastrService.success('集群创建成功，健康检查通过', '成功');
+          this.toastrService.success(
+            this.translate.instant('cluster.create_success'),
+            this.translate.instant('common.success')
+          );
         } else if (health.status === 'warning') {
-          this.toastrService.warning('集群已创建，但健康检查发现问题。请检查配置', '警告');
+          this.toastrService.warning(
+            this.translate.instant('cluster.create_warning'),
+            this.translate.instant('common.warning')
+          );
         } else {
           this.toastrService.warning('集群已创建，但健康检查失败。请检查配置', '警告');
         }

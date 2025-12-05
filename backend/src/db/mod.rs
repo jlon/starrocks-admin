@@ -5,14 +5,14 @@ use std::time::Duration;
 pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
     tracing::info!("Initializing database connection: {}", database_url);
 
-    if let Some(dir) = std::path::Path::new(database_url.trim_start_matches("sqlite://")).parent() {
-        if !dir.exists() {
-            tracing::debug!("Creating database directory: {:?}", dir);
-            std::fs::create_dir_all(dir).map_err(|e| {
-                tracing::error!("Failed to create database directory {:?}: {}", dir, e);
-                sqlx::Error::Io(e)
-            })?;
-        }
+    if let Some(dir) = std::path::Path::new(database_url.trim_start_matches("sqlite://")).parent()
+        && !dir.exists()
+    {
+        tracing::debug!("Creating database directory: {:?}", dir);
+        std::fs::create_dir_all(dir).map_err(|e| {
+            tracing::error!("Failed to create database directory {:?}: {}", dir, e);
+            sqlx::Error::Io(e)
+        })?;
     }
 
     // Ensure database file exists

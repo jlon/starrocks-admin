@@ -56,10 +56,10 @@ impl<'a> QueryRuleContext<'a> {
     /// Priority: cluster_variables > non_default_variables > default
     pub fn get_variable_value(&self, name: &str) -> Option<String> {
         // First check live cluster variables (most accurate)
-        if let Some(vars) = self.cluster_variables {
-            if let Some(value) = vars.get(name) {
-                return Some(value.clone());
-            }
+        if let Some(vars) = self.cluster_variables
+            && let Some(value) = vars.get(name)
+        {
+            return Some(value.clone());
         }
         // Then check profile's non-default variables
         if let Some(info) = self.profile.summary.non_default_variables.get(name) {
@@ -103,9 +103,7 @@ impl<'a> QueryRuleContext<'a> {
                 let current = current_i64.unwrap_or(0);
                 let total_bytes = cluster_info.total_scan_bytes;
                 let recommended = if total_bytes > 0 {
-                    (total_bytes * 2)
-                        .max(4 * 1024 * 1024 * 1024)
-                        .min(32 * 1024 * 1024 * 1024) as i64
+                    (total_bytes * 2).clamp(4 * 1024 * 1024 * 1024, 32 * 1024 * 1024 * 1024) as i64
                 } else {
                     8 * 1024 * 1024 * 1024
                 };

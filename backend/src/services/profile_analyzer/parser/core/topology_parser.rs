@@ -137,12 +137,11 @@ impl TopologyParser {
         for fragment in fragments {
             for pipeline in &fragment.pipelines {
                 for operator in &pipeline.operators {
-                    if operator.name == sink_name {
-                        if let Some(plan_id) = &operator.plan_node_id {
-                            if let Ok(plan_id_int) = plan_id.parse::<i32>() {
-                                return Some(plan_id_int);
-                            }
-                        }
+                    if operator.name == sink_name
+                        && let Some(plan_id) = &operator.plan_node_id
+                        && let Ok(plan_id_int) = plan_id.parse::<i32>()
+                    {
+                        return Some(plan_id_int);
                     }
                 }
             }

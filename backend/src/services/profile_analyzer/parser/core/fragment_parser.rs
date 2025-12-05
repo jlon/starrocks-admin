@@ -43,9 +43,9 @@ impl FragmentParser {
 
                 // Find end of fragment (next fragment at same indent level)
                 let mut end_idx = lines.len();
-                for j in (i + 1)..lines.len() {
-                    let next_indent = Self::get_indent(lines[j]);
-                    if next_indent <= base_indent && FRAGMENT_REGEX.is_match(lines[j].trim()) {
+                for (j, line) in lines.iter().enumerate().skip(i + 1) {
+                    let next_indent = Self::get_indent(line);
+                    if next_indent <= base_indent && FRAGMENT_REGEX.is_match(line.trim()) {
                         end_idx = j;
                         break;
                     }
@@ -82,11 +82,11 @@ impl FragmentParser {
 
                 // Find end of pipeline
                 let mut end_idx = lines.len();
-                for j in (i + 1)..lines.len() {
-                    let next_indent = Self::get_indent(lines[j]);
+                for (j, line) in lines.iter().enumerate().skip(i + 1) {
+                    let next_indent = Self::get_indent(line);
                     if next_indent <= base_indent
-                        && (PIPELINE_REGEX.is_match(lines[j].trim())
-                            || FRAGMENT_REGEX.is_match(lines[j].trim()))
+                        && (PIPELINE_REGEX.is_match(line.trim())
+                            || FRAGMENT_REGEX.is_match(line.trim()))
                     {
                         end_idx = j;
                         break;

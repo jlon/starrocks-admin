@@ -214,11 +214,11 @@ pub fn analyze_profile_with_context(
     // Update execution tree nodes with diagnostic info
     if let Some(ref mut tree) = execution_tree {
         for node in &mut tree.nodes {
-            if let Some(plan_node_id) = node.plan_node_id {
-                if let Some(node_diags) = node_diagnostics.get(&plan_node_id) {
-                    node.has_diagnostic = true;
-                    node.diagnostic_ids = node_diags.iter().map(|d| d.rule_id.clone()).collect();
-                }
+            if let Some(plan_node_id) = node.plan_node_id
+                && let Some(node_diags) = node_diagnostics.get(&plan_node_id)
+            {
+                node.has_diagnostic = true;
+                node.diagnostic_ids = node_diags.iter().map(|d| d.rule_id.clone()).collect();
             }
         }
     }
@@ -490,15 +490,15 @@ fn calculate_datacache_totals(nodes: &[ExecutionTreeNode]) -> (u64, u64) {
         }
 
         // Try OLAP_SCAN metrics first (disaggregated storage-compute)
-        if let Some(local_str) = node.unique_metrics.get("CompressedBytesReadLocalDisk") {
-            if let Ok(bytes) = parser::core::ValueParser::parse_bytes(local_str) {
-                total_local += bytes;
-            }
+        if let Some(local_str) = node.unique_metrics.get("CompressedBytesReadLocalDisk")
+            && let Ok(bytes) = parser::core::ValueParser::parse_bytes(local_str)
+        {
+            total_local += bytes;
         }
-        if let Some(remote_str) = node.unique_metrics.get("CompressedBytesReadRemote") {
-            if let Ok(bytes) = parser::core::ValueParser::parse_bytes(remote_str) {
-                total_remote += bytes;
-            }
+        if let Some(remote_str) = node.unique_metrics.get("CompressedBytesReadRemote")
+            && let Ok(bytes) = parser::core::ValueParser::parse_bytes(remote_str)
+        {
+            total_remote += bytes;
         }
 
         // Try HDFS_SCAN / Hive Connector metrics (external tables with DataCache)
@@ -506,15 +506,15 @@ fn calculate_datacache_totals(nodes: &[ExecutionTreeNode]) -> (u64, u64) {
         // DataCacheReadMemBytes = bytes read from memory cache
         // Total cache hit = DataCacheReadDiskBytes + DataCacheReadMemBytes
         let mut hdfs_cache_hit: u64 = 0;
-        if let Some(disk_str) = node.unique_metrics.get("DataCacheReadDiskBytes") {
-            if let Ok(bytes) = parser::core::ValueParser::parse_bytes(disk_str) {
-                hdfs_cache_hit += bytes;
-            }
+        if let Some(disk_str) = node.unique_metrics.get("DataCacheReadDiskBytes")
+            && let Ok(bytes) = parser::core::ValueParser::parse_bytes(disk_str)
+        {
+            hdfs_cache_hit += bytes;
         }
-        if let Some(mem_str) = node.unique_metrics.get("DataCacheReadMemBytes") {
-            if let Ok(bytes) = parser::core::ValueParser::parse_bytes(mem_str) {
-                hdfs_cache_hit += bytes;
-            }
+        if let Some(mem_str) = node.unique_metrics.get("DataCacheReadMemBytes")
+            && let Ok(bytes) = parser::core::ValueParser::parse_bytes(mem_str)
+        {
+            hdfs_cache_hit += bytes;
         }
 
         // For HDFS_SCAN, we need to calculate remote bytes from total - cache
@@ -524,17 +524,16 @@ fn calculate_datacache_totals(nodes: &[ExecutionTreeNode]) -> (u64, u64) {
 
             // Try to get total bytes read to calculate remote
             let mut total_read: u64 = 0;
-            if let Some(total_str) = node.unique_metrics.get("BytesRead") {
-                if let Ok(bytes) = parser::core::ValueParser::parse_bytes(total_str) {
-                    total_read = bytes;
-                }
+            if let Some(total_str) = node.unique_metrics.get("BytesRead")
+                && let Ok(bytes) = parser::core::ValueParser::parse_bytes(total_str)
+            {
+                total_read = bytes;
             }
-            if total_read == 0 {
-                if let Some(total_str) = node.unique_metrics.get("RawBytesRead") {
-                    if let Ok(bytes) = parser::core::ValueParser::parse_bytes(total_str) {
-                        total_read = bytes;
-                    }
-                }
+            if total_read == 0
+                && let Some(total_str) = node.unique_metrics.get("RawBytesRead")
+                && let Ok(bytes) = parser::core::ValueParser::parse_bytes(total_str)
+            {
+                total_read = bytes;
             }
 
             // Remote = Total - CacheHit (if total > cache hit)
@@ -621,60 +620,60 @@ fn aggregate_io_statistics(nodes: &[ExecutionTreeNode]) -> IoStatistics {
             has_any_scan = true;
 
             // RawRowsRead
-            if let Some(val) = node.unique_metrics.get("RawRowsRead") {
-                if let Ok(rows) = val.parse::<u64>() {
-                    total_raw_rows += rows;
-                }
+            if let Some(val) = node.unique_metrics.get("RawRowsRead")
+                && let Ok(rows) = val.parse::<u64>()
+            {
+                total_raw_rows += rows;
             }
 
             // BytesRead
-            if let Some(val) = node.unique_metrics.get("BytesRead") {
-                if let Ok(bytes) = parser::core::ValueParser::parse_bytes(val) {
-                    total_bytes += bytes;
-                }
+            if let Some(val) = node.unique_metrics.get("BytesRead")
+                && let Ok(bytes) = parser::core::ValueParser::parse_bytes(val)
+            {
+                total_bytes += bytes;
             }
 
             // PagesCountMemory
-            if let Some(val) = node.unique_metrics.get("PagesCountMemory") {
-                if let Ok(pages) = val.parse::<u64>() {
-                    total_pages_memory += pages;
-                }
+            if let Some(val) = node.unique_metrics.get("PagesCountMemory")
+                && let Ok(pages) = val.parse::<u64>()
+            {
+                total_pages_memory += pages;
             }
 
             // PagesCountLocalDisk
-            if let Some(val) = node.unique_metrics.get("PagesCountLocalDisk") {
-                if let Ok(pages) = val.parse::<u64>() {
-                    total_pages_local += pages;
-                }
+            if let Some(val) = node.unique_metrics.get("PagesCountLocalDisk")
+                && let Ok(pages) = val.parse::<u64>()
+            {
+                total_pages_local += pages;
             }
 
             // PagesCountRemote
-            if let Some(val) = node.unique_metrics.get("PagesCountRemote") {
-                if let Ok(pages) = val.parse::<u64>() {
-                    total_pages_remote += pages;
-                }
+            if let Some(val) = node.unique_metrics.get("PagesCountRemote")
+                && let Ok(pages) = val.parse::<u64>()
+            {
+                total_pages_remote += pages;
             }
 
             // IO time metrics (for disaggregated storage)
             // IoSeekTime
-            if let Some(val) = node.unique_metrics.get("IoSeekTime") {
-                if let Ok(ms) = parser::core::ValueParser::parse_time_to_ms(val) {
-                    total_io_seek_ms += ms;
-                }
+            if let Some(val) = node.unique_metrics.get("IoSeekTime")
+                && let Ok(ms) = parser::core::ValueParser::parse_time_to_ms(val)
+            {
+                total_io_seek_ms += ms;
             }
 
             // IOTimeLocalDisk
-            if let Some(val) = node.unique_metrics.get("IOTimeLocalDisk") {
-                if let Ok(ms) = parser::core::ValueParser::parse_time_to_ms(val) {
-                    total_local_io_ms += ms;
-                }
+            if let Some(val) = node.unique_metrics.get("IOTimeLocalDisk")
+                && let Ok(ms) = parser::core::ValueParser::parse_time_to_ms(val)
+            {
+                total_local_io_ms += ms;
             }
 
             // IOTimeRemote
-            if let Some(val) = node.unique_metrics.get("IOTimeRemote") {
-                if let Ok(ms) = parser::core::ValueParser::parse_time_to_ms(val) {
-                    total_remote_io_ms += ms;
-                }
+            if let Some(val) = node.unique_metrics.get("IOTimeRemote")
+                && let Ok(ms) = parser::core::ValueParser::parse_time_to_ms(val)
+            {
+                total_remote_io_ms += ms;
             }
         }
 
@@ -687,17 +686,16 @@ fn aggregate_io_statistics(nodes: &[ExecutionTreeNode]) -> IoStatistics {
                 .unique_metrics
                 .get("RowsReturned")
                 .or_else(|| node.unique_metrics.get("NumSentRows"))
+                && let Ok(rows) = val.parse::<u64>()
             {
-                if let Ok(rows) = val.parse::<u64>() {
-                    total_result_rows += rows;
-                }
+                total_result_rows += rows;
             }
 
             // ResultBytes
-            if let Some(val) = node.unique_metrics.get("BytesSent") {
-                if let Ok(bytes) = parser::core::ValueParser::parse_bytes(val) {
-                    total_result_bytes += bytes;
-                }
+            if let Some(val) = node.unique_metrics.get("BytesSent")
+                && let Ok(bytes) = parser::core::ValueParser::parse_bytes(val)
+            {
+                total_result_bytes += bytes;
             }
         }
     }

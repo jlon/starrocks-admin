@@ -189,12 +189,12 @@ impl TreeBuilder {
             let children_ids: Vec<String> = nodes[node_idx].children.clone();
 
             for child_id in children_ids {
-                if let Some(&child_idx) = id_to_idx.get(&child_id) {
-                    if !visited.contains(&child_idx) {
-                        nodes[child_idx].depth = depth + 1;
-                        visited.insert(child_idx);
-                        queue.push_back((child_idx, depth + 1));
-                    }
+                if let Some(&child_idx) = id_to_idx.get(&child_id)
+                    && !visited.contains(&child_idx)
+                {
+                    nodes[child_idx].depth = depth + 1;
+                    visited.insert(child_idx);
+                    queue.push_back((child_idx, depth + 1));
                 }
             }
         }
@@ -335,11 +335,11 @@ impl TreeBuilder {
                         .get(&max_metric_name)
                         .or_else(|| operator.unique_metrics.get(metric_name));
 
-                    if let Some(time_str) = time_str {
-                        if let Ok(duration) = ValueParser::parse_duration(time_str) {
-                            let time_ns = duration.as_nanos() as u64;
-                            *aggregated.entry(plan_id).or_insert(0) += time_ns;
-                        }
+                    if let Some(time_str) = time_str
+                        && let Ok(duration) = ValueParser::parse_duration(time_str)
+                    {
+                        let time_ns = duration.as_nanos() as u64;
+                        *aggregated.entry(plan_id).or_insert(0) += time_ns;
                     }
                 }
             }
@@ -377,11 +377,11 @@ impl TreeBuilder {
                         .get("__MAX_OF_OperatorTotalTime")
                         .or_else(|| operator.common_metrics.get("OperatorTotalTime"));
 
-                    if let Some(time_str) = time_str {
-                        if let Ok(duration) = ValueParser::parse_duration(time_str) {
-                            let time_ns = duration.as_nanos() as u64;
-                            *aggregated.entry(plan_id).or_insert(0) += time_ns;
-                        }
+                    if let Some(time_str) = time_str
+                        && let Ok(duration) = ValueParser::parse_duration(time_str)
+                    {
+                        let time_ns = duration.as_nanos() as u64;
+                        *aggregated.entry(plan_id).or_insert(0) += time_ns;
                     }
                 }
             }
@@ -398,17 +398,17 @@ impl TreeBuilder {
         fragments: &[Fragment],
     ) -> u64 {
         // Try QueryCumulativeOperatorTime first
-        if let Some(time_ms) = summary.query_cumulative_operator_time_ms {
-            if time_ms > 0.0 {
-                return (time_ms * 1_000_000.0) as u64;
-            }
+        if let Some(time_ms) = summary.query_cumulative_operator_time_ms
+            && time_ms > 0.0
+        {
+            return (time_ms * 1_000_000.0) as u64;
         }
 
         // Try QueryExecutionWallTime
-        if let Some(time_ms) = summary.query_execution_wall_time_ms {
-            if time_ms > 0.0 {
-                return (time_ms * 1_000_000.0) as u64;
-            }
+        if let Some(time_ms) = summary.query_execution_wall_time_ms
+            && time_ms > 0.0
+        {
+            return (time_ms * 1_000_000.0) as u64;
         }
 
         // Fallback: sum all operator times from nodes

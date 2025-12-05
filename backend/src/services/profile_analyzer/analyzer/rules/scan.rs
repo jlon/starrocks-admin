@@ -320,12 +320,13 @@ impl DiagnosticRule for S009LowCacheHit {
         let cached_pages = context.get_metric("CachedPagesNum");
         let read_pages = context.get_metric("ReadPagesNum");
 
-        if let (Some(cached), Some(total)) = (cached_pages, read_pages) {
-            if total > 1000.0 {
-                let hit_rate = cached / total;
+        if let (Some(cached), Some(total)) = (cached_pages, read_pages)
+            && total > 1000.0
+        {
+            let hit_rate = cached / total;
 
-                if hit_rate < 0.3 {
-                    return Some(Diagnostic {
+            if hit_rate < 0.3 {
+                return Some(Diagnostic {
                         rule_id: self.id().to_string(),
                         rule_name: self.name().to_string(),
                         severity: RuleSeverity::Info,
@@ -342,9 +343,8 @@ impl DiagnosticRule for S009LowCacheHit {
                             "增大 PageCache 容量 (storage_page_cache_limit)".to_string(),
                             "检查是否有其他查询竞争缓存".to_string(),
                         ],
-                        parameter_suggestions: vec![],
-                    });
-                }
+                    parameter_suggestions: vec![],
+                });
             }
         }
 

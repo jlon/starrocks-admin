@@ -13,7 +13,7 @@ use crate::utils::{ApiResult, error::ApiError};
 
 /// Validate and sanitize query_id to prevent SQL injection
 /// StarRocks query_id format: UUID like "12345678-1234-1234-1234-123456789abc"
-/// 
+///
 /// Returns the sanitized (trimmed) query_id as a String.
 /// The sanitized version is what should be used for:
 /// - SQL queries (security)
@@ -134,16 +134,12 @@ pub async fn get_profile(
     // Note: This trims whitespace and validates format. The sanitized version
     // is used consistently for SQL queries, responses, and error messages.
     let safe_query_id = sanitize_query_id(&query_id)?;
-    
+
     // Log original vs sanitized if they differ (for debugging)
     if query_id.trim() != query_id {
-        tracing::debug!(
-            "Query ID sanitized: '{}' -> '{}'",
-            query_id,
-            safe_query_id
-        );
+        tracing::debug!("Query ID sanitized: '{}' -> '{}'", query_id, safe_query_id);
     }
-    
+
     tracing::info!("Fetching profile detail for query {} in cluster {}", safe_query_id, cluster.id);
 
     // Get connection pool and execute SELECT get_query_profile()
@@ -161,20 +157,14 @@ pub async fn get_profile(
         .unwrap_or_default();
 
     if profile_content.trim().is_empty() {
-        return Err(ApiError::not_found(format!(
-            "Profile not found for query: {}",
-            safe_query_id
-        )));
+        return Err(ApiError::not_found(format!("Profile not found for query: {}", safe_query_id)));
     }
 
     tracing::info!("Profile content length: {} bytes", profile_content.len());
 
     // Return sanitized query_id in response for consistency
     // This ensures the API contract is clear: responses use the sanitized (trimmed) version
-    Ok(Json(ProfileDetail {
-        query_id: safe_query_id,
-        profile_content,
-    }))
+    Ok(Json(ProfileDetail { query_id: safe_query_id, profile_content }))
 }
 
 /// Analyze a query profile and return structured visualization data
@@ -213,16 +203,12 @@ pub async fn analyze_profile_handler(
     // Note: This trims whitespace and validates format. The sanitized version
     // is used consistently for SQL queries, responses, and error messages.
     let safe_query_id = sanitize_query_id(&query_id)?;
-    
+
     // Log original vs sanitized if they differ (for debugging)
     if query_id.trim() != query_id {
-        tracing::debug!(
-            "Query ID sanitized: '{}' -> '{}'",
-            query_id,
-            safe_query_id
-        );
+        tracing::debug!("Query ID sanitized: '{}' -> '{}'", query_id, safe_query_id);
     }
-    
+
     tracing::info!("Analyzing profile for query {} in cluster {}", safe_query_id, cluster.id);
 
     // Fetch profile content from StarRocks database (NOT from test files)
@@ -240,10 +226,7 @@ pub async fn analyze_profile_handler(
         .unwrap_or_default();
 
     if profile_content.trim().is_empty() {
-        return Err(ApiError::not_found(format!(
-            "Profile not found for query: {}",
-            safe_query_id
-        )));
+        return Err(ApiError::not_found(format!("Profile not found for query: {}", safe_query_id)));
     }
 
     tracing::info!(
@@ -283,7 +266,7 @@ const CLUSTER_VARIABLE_NAMES: &[&str] = &[
 ];
 
 /// Fetch relevant session variables from the cluster
-/// 
+///
 /// Returns `None` if query fails (graceful degradation).
 /// This allows analysis to continue even if variable fetching fails,
 /// though parameter recommendations may be less accurate.
@@ -315,13 +298,13 @@ async fn fetch_cluster_variables(mysql_client: &MySQLClient) -> Option<ClusterVa
                 variables.len()
             );
             Some(variables)
-        }
+        },
         Err(e) => {
             tracing::warn!(
                 "Failed to fetch cluster variables: {}, analysis will continue without them",
                 e
             );
             None
-        }
+        },
     }
 }

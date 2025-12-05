@@ -62,7 +62,7 @@ fn parse_bytes_value(value: &str) -> Option<u64> {
 
     // Parse with unit suffix (e.g., "1.5 GB", "100 MB")
     let parts: Vec<&str> = value.split_whitespace().collect();
-    if parts.len() >= 1 {
+    if !parts.is_empty() {
         let num_str = parts[0].replace(",", "");
         let num: f64 = num_str.parse().ok()?;
 
@@ -419,7 +419,7 @@ pub struct ExecutionTreeNode {
 }
 
 /// Node type classification for visualization styling
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum NodeType {
     OlapScan,
     ConnectorScan,
@@ -434,13 +434,8 @@ pub enum NodeType {
     Project,
     TableFunction,
     OlapTableSink,
+    #[default]
     Unknown,
-}
-
-impl Default for NodeType {
-    fn default() -> Self {
-        NodeType::Unknown
-    }
 }
 
 // ============================================================================
@@ -549,20 +544,15 @@ pub struct ResultSinkMetrics {
 // ============================================================================
 
 /// Hotspot severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum HotSeverity {
+    #[default]
     Normal,
     Mild,
     Moderate,
     High,
     Severe,
     Critical,
-}
-
-impl Default for HotSeverity {
-    fn default() -> Self {
-        HotSeverity::Normal
-    }
 }
 
 /// A detected performance hotspot

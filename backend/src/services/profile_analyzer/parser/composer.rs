@@ -39,19 +39,18 @@ impl ProfileComposer {
         let execution_info = SectionParser::parse_execution(text)?;
 
         // Extract additional metrics from execution info
-        if summary.query_cumulative_operator_time_ms.is_none() {
-            if let Some(qcot) = execution_info.metrics.get("QueryCumulativeOperatorTime") {
-                summary.query_cumulative_operator_time_ms =
-                    ValueParser::parse_time_to_ms(qcot).ok();
-                summary.query_cumulative_operator_time = Some(qcot.clone());
-            }
+        if summary.query_cumulative_operator_time_ms.is_none()
+            && let Some(qcot) = execution_info.metrics.get("QueryCumulativeOperatorTime")
+        {
+            summary.query_cumulative_operator_time_ms = ValueParser::parse_time_to_ms(qcot).ok();
+            summary.query_cumulative_operator_time = Some(qcot.clone());
         }
 
-        if summary.query_execution_wall_time_ms.is_none() {
-            if let Some(qewt) = execution_info.metrics.get("QueryExecutionWallTime") {
-                summary.query_execution_wall_time_ms = ValueParser::parse_time_to_ms(qewt).ok();
-                summary.query_execution_wall_time = Some(qewt.clone());
-            }
+        if summary.query_execution_wall_time_ms.is_none()
+            && let Some(qewt) = execution_info.metrics.get("QueryExecutionWallTime")
+        {
+            summary.query_execution_wall_time_ms = ValueParser::parse_time_to_ms(qewt).ok();
+            summary.query_execution_wall_time = Some(qewt.clone());
         }
 
         // Extract all execution metrics
@@ -126,14 +125,14 @@ impl ProfileComposer {
         for fragment in fragments {
             for pipeline in &fragment.pipelines {
                 for operator in &pipeline.operators {
-                    if let Some(plan_id) = &operator.plan_node_id {
-                        if let Ok(plan_id_int) = plan_id.parse::<i32>() {
-                            operators_by_plan_id.entry(plan_id_int).or_default().push((
-                                operator,
-                                fragment.id.clone(),
-                                pipeline.id.clone(),
-                            ));
-                        }
+                    if let Some(plan_id) = &operator.plan_node_id
+                        && let Ok(plan_id_int) = plan_id.parse::<i32>()
+                    {
+                        operators_by_plan_id.entry(plan_id_int).or_default().push((
+                            operator,
+                            fragment.id.clone(),
+                            pipeline.id.clone(),
+                        ));
                     }
                 }
             }
@@ -422,10 +421,10 @@ impl ProfileComposer {
         // Aggregate time metrics
         let mut total_time_ns: u64 = 0;
         for &op in &matching_operators {
-            if let Some(time_str) = op.common_metrics.get("OperatorTotalTime") {
-                if let Some(time_ms) = Self::parse_time_to_ms(time_str) {
-                    total_time_ns += (time_ms * 1_000_000.0) as u64;
-                }
+            if let Some(time_str) = op.common_metrics.get("OperatorTotalTime")
+                && let Some(time_ms) = Self::parse_time_to_ms(time_str)
+            {
+                total_time_ns += (time_ms * 1_000_000.0) as u64;
             }
         }
 
@@ -441,10 +440,10 @@ impl ProfileComposer {
         for metric_name in &count_metrics {
             let mut total_count: u64 = 0;
             for &op in &matching_operators {
-                if let Some(count_str) = op.common_metrics.get(*metric_name) {
-                    if let Ok(count) = count_str.parse::<u64>() {
-                        total_count += count;
-                    }
+                if let Some(count_str) = op.common_metrics.get(*metric_name)
+                    && let Ok(count) = count_str.parse::<u64>()
+                {
+                    total_count += count;
                 }
             }
             if total_count > 0 {

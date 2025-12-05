@@ -268,9 +268,11 @@ impl DiagnosticRule for A006LowLocalAggregation {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         // Get input and output row counts
-        let input_rows = context.get_metric("InputRowCount")
+        let input_rows = context
+            .get_metric("InputRowCount")
             .or_else(|| context.node.metrics.pull_row_num.map(|v| v as f64))?;
-        let output_rows = context.get_metric("OutputRowCount")
+        let output_rows = context
+            .get_metric("OutputRowCount")
             .or_else(|| context.node.metrics.push_row_num.map(|v| v as f64))?;
 
         if output_rows == 0.0 || input_rows == 0.0 {
@@ -297,9 +299,10 @@ impl DiagnosticRule for A006LowLocalAggregation {
                     "本地聚合效果差，聚合比 {:.2}:1 (输入 {:.0} 行 → 输出 {:.0} 行)",
                     agg_ratio, input_rows, output_rows
                 ),
-                reason: "在执行聚合操作时，各计算节点通常会先在本地聚合获取较小结果后再分发到其它节点。\
+                reason:
+                    "在执行聚合操作时，各计算节点通常会先在本地聚合获取较小结果后再分发到其它节点。\
                     但本地聚合未能有效缩减数据量时，不仅不能减少网络传输，反而会消耗大量计算资源。"
-                    .to_string(),
+                        .to_string(),
                 suggestions: vec![
                     "如果聚合整体执行时间较长，考虑关闭二阶段聚合".to_string(),
                     "检查 GROUP BY 键的基数是否过高".to_string(),

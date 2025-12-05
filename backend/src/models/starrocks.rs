@@ -39,7 +39,7 @@ fn default_empty_string() -> String {
 }
 
 // Backend node information (also used for Compute Nodes in shared-data architecture)
-// Note: In shared-data mode, some storage-related fields (TabletNum, DataUsedCapacity, etc.) 
+// Note: In shared-data mode, some storage-related fields (TabletNum, DataUsedCapacity, etc.)
 //       may be "0" or empty as CNs don't store data locally
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct Backend {

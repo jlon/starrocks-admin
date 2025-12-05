@@ -126,7 +126,10 @@ impl ValueParser {
                 "G" | "GB" => 1024.0 * 1024.0 * 1024.0,
                 "T" | "TB" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
                 _ => {
-                    return Err(ParseError::ParseBytesError(format!("Unknown byte unit: {}", unit)));
+                    return Err(ParseError::ParseBytesError(format!(
+                        "Unknown byte unit: {}",
+                        unit
+                    )));
                 },
             };
 

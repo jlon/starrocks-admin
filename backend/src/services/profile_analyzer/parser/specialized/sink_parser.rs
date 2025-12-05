@@ -10,8 +10,8 @@ pub struct SinkMetricsParser;
 impl SinkMetricsParser {
     /// Parse RESULT_SINK operator metrics
     pub fn parse_result_sink(&self, text: &str) -> OperatorSpecializedMetrics {
-        let mut metrics = ResultSinkMetrics::default();
-        metrics.sink_type = "RESULT".to_string();
+        let mut metrics =
+            ResultSinkMetrics { sink_type: "RESULT".to_string(), ..Default::default() };
 
         for line in text.lines() {
             let trimmed = line.trim();
@@ -48,8 +48,8 @@ impl SinkMetricsParser {
 
     /// Parse OLAP_TABLE_SINK operator metrics
     pub fn parse_olap_table_sink(&self, text: &str) -> OperatorSpecializedMetrics {
-        let mut metrics = ResultSinkMetrics::default();
-        metrics.sink_type = "OLAP_TABLE".to_string();
+        let mut metrics =
+            ResultSinkMetrics { sink_type: "OLAP_TABLE".to_string(), ..Default::default() };
 
         for line in text.lines() {
             let trimmed = line.trim();
@@ -62,13 +62,10 @@ impl SinkMetricsParser {
                 let key = &rest[..colon_pos];
                 let value = &rest[colon_pos + 2..];
 
-                match key {
-                    "AppendChunkTime" => {
-                        if let Ok(duration) = ValueParser::parse_duration(value) {
-                            metrics.append_chunk_time_ns = Some(duration.as_nanos() as u64);
-                        }
-                    },
-                    _ => {},
+                if key == "AppendChunkTime"
+                    && let Ok(duration) = ValueParser::parse_duration(value)
+                {
+                    metrics.append_chunk_time_ns = Some(duration.as_nanos() as u64);
                 }
             }
         }

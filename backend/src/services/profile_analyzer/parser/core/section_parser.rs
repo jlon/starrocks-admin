@@ -187,8 +187,8 @@ impl SectionParser {
                     // New section at same or lower indent level
                     if curr_indent <= marker_indent && line.trim().ends_with(':') {
                         let mut char_count = 0;
-                        for j in 0..i {
-                            char_count += lines[j].len() + 1;
+                        for l in lines.iter().take(i) {
+                            char_count += l.len() + 1;
                         }
                         end_pos = char_count;
                         break;

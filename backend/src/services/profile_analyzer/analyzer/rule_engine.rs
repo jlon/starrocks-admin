@@ -69,24 +69,24 @@ impl RuleEngine {
             cluster_variables,
         );
         for rule in get_query_rules() {
-            if let Some(diag) = rule.evaluate(&query_ctx) {
-                if diag.severity >= self.config.min_severity {
-                    diagnostics.push(Diagnostic {
-                        rule_id: diag.rule_id,
-                        rule_name: diag.rule_name,
-                        severity: diag.severity,
-                        node_path: "Query".to_string(),
-                        plan_node_id: None,
-                        message: diag.message,
-                        reason: diag.reason,
-                        suggestions: diag.suggestions,
-                        parameter_suggestions: if self.config.include_parameters {
-                            diag.parameter_suggestions
-                        } else {
-                            vec![]
-                        },
-                    });
-                }
+            if let Some(diag) = rule.evaluate(&query_ctx)
+                && diag.severity >= self.config.min_severity
+            {
+                diagnostics.push(Diagnostic {
+                    rule_id: diag.rule_id,
+                    rule_name: diag.rule_name,
+                    severity: diag.severity,
+                    node_path: "Query".to_string(),
+                    plan_node_id: None,
+                    message: diag.message,
+                    reason: diag.reason,
+                    suggestions: diag.suggestions,
+                    parameter_suggestions: if self.config.include_parameters {
+                        diag.parameter_suggestions
+                    } else {
+                        vec![]
+                    },
+                });
             }
         }
 
@@ -109,15 +109,14 @@ impl RuleEngine {
                 };
 
                 for rule in &self.rules {
-                    if rule.applicable_to(node) {
-                        if let Some(mut diag) = rule.evaluate(&context) {
-                            if diag.severity >= self.config.min_severity {
-                                if !self.config.include_parameters {
-                                    diag.parameter_suggestions.clear();
-                                }
-                                diagnostics.push(diag);
-                            }
+                    if rule.applicable_to(node)
+                        && let Some(mut diag) = rule.evaluate(&context)
+                        && diag.severity >= self.config.min_severity
+                    {
+                        if !self.config.include_parameters {
+                            diag.parameter_suggestions.clear();
                         }
+                        diagnostics.push(diag);
                     }
                 }
             }

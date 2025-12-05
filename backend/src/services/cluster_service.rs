@@ -481,7 +481,10 @@ impl ClusterService {
                     checks.push(HealthCheck {
                         name: "Compute Nodes".to_string(),
                         status: "warning".to_string(),
-                        message: format!("{}/{} {} nodes are online", alive_count, total_count, node_type),
+                        message: format!(
+                            "{}/{} {} nodes are online",
+                            alive_count, total_count, node_type
+                        ),
                     });
                     if overall_status == HealthStatus::Healthy {
                         overall_status = HealthStatus::Warning;
@@ -578,7 +581,10 @@ impl ClusterService {
                                     checks.push(HealthCheck {
                                         name: "Compute Nodes".to_string(),
                                         status: "ok".to_string(),
-                                        message: format!("All {} {} nodes are online", total_count, node_type),
+                                        message: format!(
+                                            "All {} {} nodes are online",
+                                            total_count, node_type
+                                        ),
                                     });
                                 } else if alive_count > 0 {
                                     checks.push(HealthCheck {

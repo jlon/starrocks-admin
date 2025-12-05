@@ -312,10 +312,10 @@ impl<'a> RuleContext<'a> {
     /// Priority: cluster_variables > session_variables (non-default) > None
     pub fn get_variable_value(&self, name: &str) -> Option<String> {
         // First check live cluster variables (most accurate)
-        if let Some(cluster_vars) = self.cluster_variables {
-            if let Some(value) = cluster_vars.get(name) {
-                return Some(value.clone());
-            }
+        if let Some(cluster_vars) = self.cluster_variables
+            && let Some(value) = cluster_vars.get(name)
+        {
+            return Some(value.clone());
         }
         // Fallback to profile's non-default variables
         self.session_variables
@@ -340,12 +340,11 @@ impl<'a> RuleContext<'a> {
         }
 
         // If parameter is not in non_default_variables, check if default value matches recommendation
-        if !self.session_variables.contains_key(name) {
-            if let Some(default) = get_parameter_default(name) {
-                if default.eq_ignore_ascii_case(recommended) {
-                    return None; // Using default value which matches recommendation
-                }
-            }
+        if !self.session_variables.contains_key(name)
+            && let Some(default) = get_parameter_default(name)
+            && default.eq_ignore_ascii_case(recommended)
+        {
+            return None; // Using default value which matches recommendation
         }
 
         // Get current value if set
@@ -444,10 +443,7 @@ impl<'a> RuleContext<'a> {
 
                 // Recommend based on scan size: 2x scan size, min 4GB, max 32GB
                 let recommended = if total_bytes > 0 {
-                    let suggested = (total_bytes * 2)
-                        .max(4 * 1024 * 1024 * 1024)
-                        .min(32 * 1024 * 1024 * 1024);
-                    suggested as i64
+                    (total_bytes * 2).clamp(4 * 1024 * 1024 * 1024, 32 * 1024 * 1024 * 1024) as i64
                 } else {
                     8 * 1024 * 1024 * 1024 // Default 8GB
                 };

@@ -4,7 +4,7 @@
 //! Each profile has a corresponding PNG showing the expected visualization result.
 
 #[cfg(test)]
-mod tests {
+mod profile_tests {
     use crate::services::profile_analyzer::models::*;
     use crate::services::profile_analyzer::parser::core::*;
     use crate::services::profile_analyzer::{ProfileComposer, analyze_profile};
@@ -187,7 +187,7 @@ mod tests {
             let fragments = FragmentParser::extract_all_fragments(&profile_text);
 
             // Profile1 has Fragment 0, 1, 2
-            assert!(fragments.len() >= 1, "Expected at least 1 fragment, got {}", fragments.len());
+            assert!(!fragments.is_empty(), "Expected at least 1 fragment, got {}", fragments.len());
 
             // Check first fragment
             let frag0 = &fragments[0];
@@ -457,14 +457,14 @@ mod tests {
 
             // Verify fragments are returned
             assert!(!analysis.fragments.is_empty(), "Fragments should not be empty");
-            
+
             // Verify fragment structure
             let fragment = &analysis.fragments[0];
             assert!(!fragment.id.is_empty(), "Fragment ID should not be empty");
-            
+
             // Verify pipelines exist
             assert!(!fragment.pipelines.is_empty(), "Pipelines should not be empty");
-            
+
             // Verify pipeline has operators
             let pipeline = &fragment.pipelines[0];
             assert!(!pipeline.id.is_empty(), "Pipeline ID should not be empty");
@@ -1187,7 +1187,7 @@ Query:
         fn test_rule_engine_creation() {
             let _engine = RuleEngine::new();
             // Should create without panic
-            assert!(true, "Rule engine created successfully");
+            // Rule engine created successfully
         }
 
         #[test]

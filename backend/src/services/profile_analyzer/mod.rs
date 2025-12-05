@@ -96,8 +96,23 @@ pub fn analyze_profile(profile_text: &str) -> Result<ProfileAnalysisResponse, St
     let profile = composer.parse(profile_text)
         .map_err(|e| format!("解析Profile失败: {:?}", e))?;
     
-    let mut execution_tree = profile.execution_tree.clone();
-    let summary = Some(profile.summary.clone());
+    let execution_tree = profile.execution_tree.clone();
+    let mut summary = profile.summary.clone();
+    
+    // Calculate DataCache hit rate directly from profile text
+    // This handles nested metrics like DataCache: -> DataCacheReadDiskBytes
+    let (total_local, total_remote) = extract_datacache_from_text(profile_text);
+    if total_local > 0 || total_remote > 0 {
+        let total = total_local + total_remote;
+        summary.datacache_hit_rate = Some(total_local as f64 / total as f64);
+        summary.datacache_bytes_local = Some(total_local);
+        summary.datacache_bytes_remote = Some(total_remote);
+        summary.datacache_bytes_local_display = Some(format_bytes_display(total_local));
+        summary.datacache_bytes_remote_display = Some(format_bytes_display(total_remote));
+    }
+    
+    let summary = Some(summary);
+    let mut execution_tree = execution_tree;
     
     // Run RuleEngine for diagnostics
     let rule_engine = RuleEngine::new();
@@ -263,3 +278,232 @@ fn severity_order(severity: &str) -> u8 {
     }
 }
 
+/// Extract DataCache metrics directly from profile text
+/// 
+/// Supports three storage architectures:
+/// 1. **存算一体 (Shared-Nothing)**: OLAP_SCAN - no cache metrics, data is local
+/// 2. **存算分离 (Shared-Data/Lake)**: CONNECTOR_SCAN with LakeConnector
+///    - CompressedBytesReadLocalDisk: local cache hit
+///    - CompressedBytesReadRemote: remote read (cache miss)
+/// 3. **外部表 (External Tables)**: HDFS_SCAN / CONNECTOR_SCAN with HiveConnector
+///    - DataCacheReadDiskBytes: local disk cache hit
+///    - DataCacheReadMemBytes: memory cache hit  
+///    - FSIOBytesRead: cache miss, read from remote HDFS (key metric!)
+///    - DataCacheSkipReadBytes: actively bypassed cache
+///
+/// **Important**: For external tables, FSIOBytesRead represents actual cache misses,
+/// while DataCacheSkipReadBytes only counts actively skipped reads.
+///
+/// Returns (total_cache_hit_bytes, total_remote_read_bytes)
+fn extract_datacache_from_text(profile_text: &str) -> (u64, u64) {
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+    
+    // ========== 存算分离 (Lake/Shared-Data) metrics ==========
+    // These are under IOStatistics: section in CONNECTOR_SCAN
+    static COMPRESSED_LOCAL_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"- CompressedBytesReadLocalDisk:\s*([0-9.]+)\s*(B|KB|MB|GB|TB)").unwrap()
+    });
+    static COMPRESSED_REMOTE_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"- CompressedBytesReadRemote:\s*([0-9.]+)\s*(B|KB|MB|GB|TB)").unwrap()
+    });
+    
+    // ========== 外部表 (Hive/Iceberg) DataCache metrics ==========
+    // These are under DataCache: section in CONNECTOR_SCAN/HDFS_SCAN
+    static DATACACHE_DISK_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"- DataCacheReadDiskBytes:\s*([0-9.]+)\s*(B|KB|MB|GB|TB)").unwrap()
+    });
+    static DATACACHE_MEM_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"- DataCacheReadMemBytes:\s*([0-9.]+)\s*(B|KB|MB|GB|TB)").unwrap()
+    });
+    static DATACACHE_SKIP_READ_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"- DataCacheSkipReadBytes:\s*([0-9.]+)\s*(B|KB|MB|GB|TB)").unwrap()
+    });
+    
+    // ========== 外部表 InputStream metrics (cache miss indicator) ==========
+    // FSIOBytesRead = actual bytes read from remote HDFS when cache misses
+    static FSIO_BYTES_READ_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"- FSIOBytesRead:\s*([0-9.]+)\s*(B|KB|MB|GB|TB)").unwrap()
+    });
+    
+    let mut total_local: u64 = 0;
+    let mut total_remote: u64 = 0;
+    let mut fsio_bytes: u64 = 0;
+    let mut datacache_skip_bytes: u64 = 0;
+    let mut has_datacache_metrics = false;
+    
+    // Helper function to parse bytes value with unit
+    let parse_bytes = |value: &str, unit: &str| -> u64 {
+        let v: f64 = value.parse().unwrap_or(0.0);
+        let multiplier: u64 = match unit {
+            "TB" => 1024 * 1024 * 1024 * 1024,
+            "GB" => 1024 * 1024 * 1024,
+            "MB" => 1024 * 1024,
+            "KB" => 1024,
+            _ => 1,
+        };
+        (v * multiplier as f64) as u64
+    };
+    
+    // Parse each line, skip __MAX_OF_ and __MIN_OF_ (only count aggregated values)
+    for line in profile_text.lines() {
+        let trimmed = line.trim();
+        
+        // Skip min/max variants, only count the main aggregated value
+        if trimmed.contains("__MAX_OF_") || trimmed.contains("__MIN_OF_") {
+            continue;
+        }
+        
+        // ===== 存算分离 (Lake) =====
+        // CompressedBytesReadLocalDisk - data read from local cache
+        if let Some(caps) = COMPRESSED_LOCAL_REGEX.captures(trimmed) {
+            let value = caps.get(1).map(|m| m.as_str()).unwrap_or("0");
+            let unit = caps.get(2).map(|m| m.as_str()).unwrap_or("B");
+            total_local += parse_bytes(value, unit);
+        }
+        
+        // CompressedBytesReadRemote - data read from remote storage
+        if let Some(caps) = COMPRESSED_REMOTE_REGEX.captures(trimmed) {
+            let value = caps.get(1).map(|m| m.as_str()).unwrap_or("0");
+            let unit = caps.get(2).map(|m| m.as_str()).unwrap_or("B");
+            total_remote += parse_bytes(value, unit);
+        }
+        
+        // ===== 外部表 (Hive/Iceberg) =====
+        // DataCacheReadDiskBytes - data read from local disk cache
+        if let Some(caps) = DATACACHE_DISK_REGEX.captures(trimmed) {
+            let value = caps.get(1).map(|m| m.as_str()).unwrap_or("0");
+            let unit = caps.get(2).map(|m| m.as_str()).unwrap_or("B");
+            total_local += parse_bytes(value, unit);
+            has_datacache_metrics = true;
+        }
+        
+        // DataCacheReadMemBytes - data read from memory cache
+        if let Some(caps) = DATACACHE_MEM_REGEX.captures(trimmed) {
+            let value = caps.get(1).map(|m| m.as_str()).unwrap_or("0");
+            let unit = caps.get(2).map(|m| m.as_str()).unwrap_or("B");
+            total_local += parse_bytes(value, unit);
+            has_datacache_metrics = true;
+        }
+        
+        // DataCacheSkipReadBytes - data that actively bypassed cache
+        if let Some(caps) = DATACACHE_SKIP_READ_REGEX.captures(trimmed) {
+            let value = caps.get(1).map(|m| m.as_str()).unwrap_or("0");
+            let unit = caps.get(2).map(|m| m.as_str()).unwrap_or("B");
+            datacache_skip_bytes += parse_bytes(value, unit);
+        }
+        
+        // FSIOBytesRead - actual bytes read from remote HDFS (cache miss)
+        if let Some(caps) = FSIO_BYTES_READ_REGEX.captures(trimmed) {
+            let value = caps.get(1).map(|m| m.as_str()).unwrap_or("0");
+            let unit = caps.get(2).map(|m| m.as_str()).unwrap_or("B");
+            fsio_bytes += parse_bytes(value, unit);
+        }
+    }
+    
+    // For external tables with DataCache, use FSIOBytesRead as the primary cache miss indicator
+    // FSIOBytesRead represents actual remote reads when cache misses
+    // DataCacheSkipReadBytes only counts actively skipped reads (policy-based)
+    if has_datacache_metrics {
+        // Use the larger of FSIOBytesRead and DataCacheSkipReadBytes
+        // FSIOBytesRead is more accurate for cache miss measurement
+        total_remote += fsio_bytes.max(datacache_skip_bytes);
+    } else {
+        // For Lake storage, DataCacheSkipReadBytes is the correct metric
+        total_remote += datacache_skip_bytes;
+    }
+    
+    (total_local, total_remote)
+}
+
+/// Calculate total DataCache bytes from execution tree nodes (legacy, kept for reference)
+/// Returns (total_local_bytes, total_remote_bytes)
+/// Supports both OLAP_SCAN (disaggregated storage) and HDFS_SCAN (external tables)
+#[allow(dead_code)]
+fn calculate_datacache_totals(nodes: &[ExecutionTreeNode]) -> (u64, u64) {
+    let mut total_local: u64 = 0;
+    let mut total_remote: u64 = 0;
+    
+    for node in nodes {
+        // Only check SCAN nodes
+        if !node.operator_name.to_uppercase().contains("SCAN") {
+            continue;
+        }
+        
+        // Try OLAP_SCAN metrics first (disaggregated storage-compute)
+        if let Some(local_str) = node.unique_metrics.get("CompressedBytesReadLocalDisk") {
+            if let Ok(bytes) = parser::core::ValueParser::parse_bytes(local_str) {
+                total_local += bytes;
+            }
+        }
+        if let Some(remote_str) = node.unique_metrics.get("CompressedBytesReadRemote") {
+            if let Ok(bytes) = parser::core::ValueParser::parse_bytes(remote_str) {
+                total_remote += bytes;
+            }
+        }
+        
+        // Try HDFS_SCAN / Hive Connector metrics (external tables with DataCache)
+        // DataCacheReadDiskBytes = bytes read from local disk cache
+        // DataCacheReadMemBytes = bytes read from memory cache
+        // Total cache hit = DataCacheReadDiskBytes + DataCacheReadMemBytes
+        let mut hdfs_cache_hit: u64 = 0;
+        if let Some(disk_str) = node.unique_metrics.get("DataCacheReadDiskBytes") {
+            if let Ok(bytes) = parser::core::ValueParser::parse_bytes(disk_str) {
+                hdfs_cache_hit += bytes;
+            }
+        }
+        if let Some(mem_str) = node.unique_metrics.get("DataCacheReadMemBytes") {
+            if let Ok(bytes) = parser::core::ValueParser::parse_bytes(mem_str) {
+                hdfs_cache_hit += bytes;
+            }
+        }
+        
+        // For HDFS_SCAN, we need to calculate remote bytes from total - cache
+        // BytesRead or RawBytesRead = total bytes read
+        if hdfs_cache_hit > 0 {
+            total_local += hdfs_cache_hit;
+            
+            // Try to get total bytes read to calculate remote
+            let mut total_read: u64 = 0;
+            if let Some(total_str) = node.unique_metrics.get("BytesRead") {
+                if let Ok(bytes) = parser::core::ValueParser::parse_bytes(total_str) {
+                    total_read = bytes;
+                }
+            }
+            if total_read == 0 {
+                if let Some(total_str) = node.unique_metrics.get("RawBytesRead") {
+                    if let Ok(bytes) = parser::core::ValueParser::parse_bytes(total_str) {
+                        total_read = bytes;
+                    }
+                }
+            }
+            
+            // Remote = Total - CacheHit (if total > cache hit)
+            if total_read > hdfs_cache_hit {
+                total_remote += total_read - hdfs_cache_hit;
+            }
+        }
+    }
+    
+    (total_local, total_remote)
+}
+
+/// Format bytes to human-readable display string
+fn format_bytes_display(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    const TB: u64 = GB * 1024;
+    
+    if bytes >= TB {
+        format!("{:.2} TB", bytes as f64 / TB as f64)
+    } else if bytes >= GB {
+        format!("{:.2} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.2} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.2} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
+    }
+}

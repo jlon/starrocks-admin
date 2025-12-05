@@ -1,6 +1,22 @@
-//! Scan operator diagnostic rules (S001-S011)
+//! Scan operator diagnostic rules (S001-S014)
 //!
 //! Rules for OLAP_SCAN and CONNECTOR_SCAN operators.
+//!
+//! ## Rule List:
+//! - S001: Data skew detection
+//! - S002: IO skew detection
+//! - S003: Poor filter effectiveness
+//! - S004: Predicate not pushed down
+//! - S005: IO thread pool saturation
+//! - S006: Rowset fragmentation
+//! - S007: Cold storage access (IO bound)
+//! - S008: ZoneMap index not effective
+//! - S009: Low cache hit rate (PageCache + DataCache for disaggregated storage)
+//! - S010: Runtime Filter not effective
+//! - S011: Accumulated soft deletes
+//! - S012: Bitmap index not effective
+//! - S013: Bloom filter index not effective
+//! - S014: Colocate Join opportunity missed
 
 use super::*;
 
@@ -176,8 +192,10 @@ impl DiagnosticRule for S007ColdStorage {
     }
 }
 
-/// S009: Low cache hit rate
-/// Condition: CachedPagesNum/ReadPagesNum < 0.3
+/// S009: Low cache hit rate (PageCache or DataCache)
+/// Condition: 
+/// - PageCache: CachedPagesNum/ReadPagesNum < 0.3
+/// - DataCache (disaggregated): CompressedBytesReadLocalDisk/(Local+Remote) < 0.7
 pub struct S009LowCacheHit;
 
 impl DiagnosticRule for S009LowCacheHit {
@@ -189,47 +207,137 @@ impl DiagnosticRule for S009LowCacheHit {
     }
     
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
-        let cached_pages = context.get_metric("CachedPagesNum")?;
-        let read_pages = context.get_metric("ReadPagesNum")?;
+        // First, check DataCache metrics (for disaggregated storage-compute clusters)
+        let bytes_local = context.get_metric("CompressedBytesReadLocalDisk").unwrap_or(0.0);
+        let bytes_remote = context.get_metric("CompressedBytesReadRemote").unwrap_or(0.0);
+        let total_bytes = bytes_local + bytes_remote;
         
-        if read_pages == 0.0 {
-            return None;
+        const MIN_BYTES: f64 = 10.0 * 1024.0 * 1024.0; // 10MB
+        
+        // DataCache scenario: remote bytes > 0 indicates disaggregated storage
+        if bytes_remote > 0.0 && total_bytes > MIN_BYTES {
+            let hit_rate = bytes_local / total_bytes;
+            
+            // Trigger if hit rate < 70%
+            if hit_rate < 0.7 {
+                let miss_rate = (1.0 - hit_rate) * 100.0;
+                return Some(Diagnostic {
+                    rule_id: self.id().to_string(),
+                    rule_name: self.name().to_string(),
+                    severity: if hit_rate < 0.3 { RuleSeverity::Error } else { RuleSeverity::Warning },
+                    node_path: format!("{} (plan_node_id={})", 
+                        context.node.operator_name,
+                        context.node.plan_node_id.unwrap_or(-1)),
+                    plan_node_id: context.node.plan_node_id,
+                    message: format!(
+                        "DataCache 命中率 {:.1}%，{:.1}% 数据从远程存储读取 (本地: {}, 远程: {})",
+                        hit_rate * 100.0,
+                        miss_rate,
+                        format_bytes(bytes_local as u64),
+                        format_bytes(bytes_remote as u64)
+                    ),
+                    reason: "存算分离架构下，DataCache 是提升查询性能的关键。当大量数据需要从远程存储（如 S3/OSS）读取时，网络延迟会显著影响查询性能。".to_string(),
+                    suggestions: vec![
+                        "增大 DataCache 容量 (datacache_disk_size)".to_string(),
+                        "检查 DataCache 磁盘空间是否充足".to_string(),
+                        "对热点数据执行缓存预热 (CACHE SELECT)".to_string(),
+                        "检查是否有其他查询竞争缓存资源".to_string(),
+                    ],
+                    parameter_suggestions: vec![
+                        ParameterSuggestion {
+                            name: "enable_scan_datacache".to_string(),
+                            param_type: ParameterType::Session,
+                            current: None,
+                            recommended: "true".to_string(),
+                            command: "SET enable_scan_datacache = true;".to_string(),
+                        },
+                        ParameterSuggestion {
+                            name: "enable_populate_datacache".to_string(),
+                            param_type: ParameterType::Session,
+                            current: None,
+                            recommended: "true".to_string(),
+                            command: "SET enable_populate_datacache = true;".to_string(),
+                        },
+                    ],
+                });
+            }
         }
         
-        let hit_rate = cached_pages / read_pages;
+        // Also check IO count metrics as alternative for DataCache
+        let io_local = context.get_metric("IOCountLocalDisk").unwrap_or(0.0);
+        let io_remote = context.get_metric("IOCountRemote").unwrap_or(0.0);
+        let total_io = io_local + io_remote;
         
-        if hit_rate < 0.3 && read_pages > 1000.0 {
-            Some(Diagnostic {
-                rule_id: self.id().to_string(),
-                rule_name: self.name().to_string(),
-                severity: RuleSeverity::Info,
-                node_path: format!("{} (plan_node_id={})", 
-                    context.node.operator_name,
-                    context.node.plan_node_id.unwrap_or(-1)),
-                plan_node_id: context.node.plan_node_id,
-                message: format!(
-                    "缓存命中率仅 {:.1}% ({:.0}/{:.0} pages)",
-                    hit_rate * 100.0, cached_pages, read_pages
-                ),
-                reason: "数据缓存命中率低，大量数据需要从磁盘或远程存储读取。可能是缓存容量不足或数据访问模式不适合缓存。".to_string(),
-                suggestions: vec![
-                    "增大 PageCache 容量".to_string(),
-                    "检查是否有其他查询竞争缓存".to_string(),
-                    "考虑启用数据缓存".to_string(),
-                ],
-                parameter_suggestions: vec![
-                    ParameterSuggestion {
-                        name: "enable_scan_datacache".to_string(),
-                        param_type: ParameterType::Session,
-                        current: None,
-                        recommended: "true".to_string(),
-                        command: "SET enable_scan_datacache = true;".to_string(),
-                    },
-                ],
-            })
-        } else {
-            None
+        if io_remote > 0.0 && total_io > 100.0 {
+            let hit_rate = io_local / total_io;
+            
+            if hit_rate < 0.7 {
+                return Some(Diagnostic {
+                    rule_id: self.id().to_string(),
+                    rule_name: self.name().to_string(),
+                    severity: if hit_rate < 0.3 { RuleSeverity::Error } else { RuleSeverity::Warning },
+                    node_path: format!("{} (plan_node_id={})", 
+                        context.node.operator_name,
+                        context.node.plan_node_id.unwrap_or(-1)),
+                    plan_node_id: context.node.plan_node_id,
+                    message: format!(
+                        "DataCache IO 命中率 {:.1}%，{:.1}% IO 访问远程存储 (本地: {:.0}, 远程: {:.0})",
+                        hit_rate * 100.0,
+                        (1.0 - hit_rate) * 100.0,
+                        io_local,
+                        io_remote
+                    ),
+                    reason: "存算分离架构下，DataCache 是提升查询性能的关键。当大量 IO 请求需要访问远程存储时，网络延迟会显著影响查询性能。".to_string(),
+                    suggestions: vec![
+                        "增大 DataCache 容量 (datacache_disk_size)".to_string(),
+                        "对热点数据执行缓存预热 (CACHE SELECT)".to_string(),
+                    ],
+                    parameter_suggestions: vec![
+                        ParameterSuggestion {
+                            name: "enable_scan_datacache".to_string(),
+                            param_type: ParameterType::Session,
+                            current: None,
+                            recommended: "true".to_string(),
+                            command: "SET enable_scan_datacache = true;".to_string(),
+                        },
+                    ],
+                });
+            }
         }
+        
+        // Fallback: check PageCache metrics (for shared-nothing clusters)
+        let cached_pages = context.get_metric("CachedPagesNum");
+        let read_pages = context.get_metric("ReadPagesNum");
+        
+        if let (Some(cached), Some(total)) = (cached_pages, read_pages) {
+            if total > 1000.0 {
+                let hit_rate = cached / total;
+                
+                if hit_rate < 0.3 {
+                    return Some(Diagnostic {
+                        rule_id: self.id().to_string(),
+                        rule_name: self.name().to_string(),
+                        severity: RuleSeverity::Info,
+                        node_path: format!("{} (plan_node_id={})", 
+                            context.node.operator_name,
+                            context.node.plan_node_id.unwrap_or(-1)),
+                        plan_node_id: context.node.plan_node_id,
+                        message: format!(
+                            "PageCache 命中率仅 {:.1}% ({:.0}/{:.0} pages)",
+                            hit_rate * 100.0, cached, total
+                        ),
+                        reason: "PageCache 命中率低，大量数据需要从磁盘读取。可能是缓存容量不足或数据访问模式不适合缓存。".to_string(),
+                        suggestions: vec![
+                            "增大 PageCache 容量 (storage_page_cache_limit)".to_string(),
+                            "检查是否有其他查询竞争缓存".to_string(),
+                        ],
+                        parameter_suggestions: vec![],
+                    });
+                }
+            }
+        }
+        
+        None
     }
 }
 

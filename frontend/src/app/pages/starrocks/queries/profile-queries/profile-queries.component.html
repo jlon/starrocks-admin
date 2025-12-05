@@ -16,12 +16,6 @@
               刷新
             </button>
             
-            <!-- DEBUG: Test button -->
-            <button nbButton status="warning" size="small" (click)="testSpecificQuery()">
-              <nb-icon icon="code-outline"></nb-icon>
-              测试DAG
-            </button>
-            
             <nb-select 
               [(selected)]="selectedRefreshInterval" 
               size="small" 
@@ -378,6 +372,20 @@
                         </span>
                         <span>{{ analysisData?.summary?.query_spill_bytes }}</span>
                       </div>
+                      <!-- DataCache Hit Rate (for disaggregated storage-compute clusters) -->
+                      <div class="metric-row-simple" *ngIf="analysisData?.summary?.datacache_hit_rate != null">
+                        <span class="metric-label">
+                          DataCache命中率
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
+                                   [nbTooltip]="getDataCacheTooltip()"
+                                   nbTooltipPlacement="left"></nb-icon>
+                        </span>
+                        <span [class.text-success]="analysisData?.summary?.datacache_hit_rate >= 0.7"
+                              [class.text-warning]="analysisData?.summary?.datacache_hit_rate >= 0.3 && analysisData?.summary?.datacache_hit_rate < 0.7"
+                              [class.text-danger]="analysisData?.summary?.datacache_hit_rate < 0.3">
+                          {{ (analysisData?.summary?.datacache_hit_rate * 100).toFixed(1) }}%
+                        </span>
+                      </div>
                       <!-- Fallback when no metrics available -->
                       <div *ngIf="!hasAnyMetric()" class="text-hint text-center py-2">
                         暂无指标数据
@@ -523,38 +531,6 @@
                             Pipeline 信息暂不可用
                           </div>
                         </div>
-                      </nb-tab>
-
-                      <!-- Diagnostics Tab - Node specific diagnostics -->
-                      <nb-tab [tabTitle]="'诊断' + (getNodeDiagnostics(selectedNode)?.length ? ' (' + getNodeDiagnostics(selectedNode)?.length + ')' : '')">
-                        <div class="node-diagnostics-list" *ngIf="getNodeDiagnostics(selectedNode)?.length; else noDiagnostics">
-                          <div *ngFor="let diag of getNodeDiagnostics(selectedNode)" class="node-diag-item">
-                            <div class="node-diag-header">
-                              <span class="diag-badge" [ngClass]="{
-                                'badge-danger': diag.severity === 'Error',
-                                'badge-warning': diag.severity === 'Warning',
-                                'badge-info': diag.severity === 'Info'
-                              }">{{ diag.rule_id }}</span>
-                              <span class="diag-name">{{ diag.rule_name }}</span>
-                            </div>
-                            <div class="node-diag-message">{{ diag.message }}</div>
-                            <div class="node-diag-reason" *ngIf="diag.reason">
-                              <nb-icon icon="info-outline" class="text-info"></nb-icon>
-                              <span>{{ diag.reason }}</span>
-                            </div>
-                            <div class="node-diag-suggestions" *ngIf="diag.suggestions?.length">
-                              <div *ngFor="let suggestion of diag.suggestions" class="suggestion-item">
-                                <span class="icon">💡</span>
-                                <span>{{ suggestion }}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <ng-template #noDiagnostics>
-                          <div class="text-hint text-center py-3">
-                            该节点暂无诊断建议
-                          </div>
-                        </ng-template>
                       </nb-tab>
                     </nb-tabset>
                   </div>

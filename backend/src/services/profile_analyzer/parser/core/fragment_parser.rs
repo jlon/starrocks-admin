@@ -220,6 +220,7 @@ impl FragmentParser {
     }
     
     /// Parse metrics text to HashMap
+    /// This function recursively parses nested metrics blocks like DataCache:
     fn parse_metrics_to_hashmap(text: &str) -> HashMap<String, String> {
         let mut metrics = HashMap::new();
         
@@ -231,9 +232,15 @@ impl FragmentParser {
                 if let Some(colon_pos) = rest.find(": ") {
                     let key = rest[..colon_pos].trim().to_string();
                     let value = rest[colon_pos + 2..].trim().to_string();
-                    metrics.insert(key, value);
+                    
+                    // Skip __MAX_OF_ and __MIN_OF_ prefixed metrics for cleaner output
+                    // but still include the main metric
+                    if !key.starts_with("__MAX_OF_") && !key.starts_with("__MIN_OF_") {
+                        metrics.insert(key, value);
+                    }
                 } else if !rest.is_empty() {
-                    metrics.insert(rest.to_string(), "true".to_string());
+                    // This is a section header like "DataCache:" - skip it
+                    // The nested metrics will be parsed in subsequent lines
                 }
             }
         }

@@ -248,10 +248,48 @@ pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::profile_analyzer::models::{ExecutionTreeNode, NodeType, OperatorMetrics, HotSeverity};
+    use std::collections::HashMap;
     
     #[test]
     fn test_g001_threshold() {
         let rule = G001MostConsuming;
         assert_eq!(rule.id(), "G001");
+    }
+
+    #[test]
+    fn test_g001_triggers_on_high_percentage() {
+        let rule = G001MostConsuming;
+        
+        // Create a node with 99.84% time percentage
+        let node = ExecutionTreeNode {
+            id: "test_node".to_string(),
+            operator_name: "OLAP_SCAN".to_string(),
+            node_type: NodeType::OlapScan,
+            plan_node_id: Some(0),
+            parent_plan_node_id: None,
+            metrics: OperatorMetrics::default(),
+            children: vec![],
+            depth: 0,
+            is_hotspot: false,
+            hotspot_severity: HotSeverity::Normal,
+            fragment_id: None,
+            pipeline_id: None,
+            time_percentage: Some(99.84),
+            rows: None,
+            is_most_consuming: true,
+            is_second_most_consuming: false,
+            unique_metrics: HashMap::new(),
+            has_diagnostic: false,
+            diagnostic_ids: vec![],
+        };
+        
+        let context = RuleContext { node: &node };
+        let result = rule.evaluate(&context);
+        
+        assert!(result.is_some(), "G001 should trigger for 99.84% time percentage");
+        let diag = result.unwrap();
+        assert_eq!(diag.rule_id, "G001");
+        assert_eq!(diag.plan_node_id, Some(0));
     }
 }

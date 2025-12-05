@@ -32,6 +32,17 @@ impl MetricsParser {
         metrics
     }
     
+    /// Merge memory-related metrics from unique_metrics into OperatorMetrics
+    /// This handles metrics like HashTableMemoryUsage, LocalExchangePeakMemoryUsage, etc.
+    pub fn merge_memory_metrics(metrics: &mut OperatorMetrics, unique_metrics: &HashMap<String, String>) {
+        for (key, value) in unique_metrics {
+            // Only process memory-related metrics
+            if key.contains("Memory") || key.contains("memory") {
+                Self::set_metric_value(metrics, key, value);
+            }
+        }
+    }
+    
     /// Parse metrics from raw text
     pub fn parse_metrics_from_text(text: &str) -> OperatorMetrics {
         let mut metrics = OperatorMetrics::default();
@@ -195,6 +206,22 @@ impl MetricsParser {
             }
             "MemoryUsage" => {
                 metrics.memory_usage = ValueParser::parse_bytes(value).ok();
+            }
+            // Handle various memory-related metrics and accumulate to memory_usage
+            // These are operator-level peak memory metrics
+            "LocalExchangePeakMemoryUsage" | 
+            "HashTableMemoryUsage" |
+            "PeakChunkBufferMemoryUsage" |
+            "PassThroughBufferPeakMemoryUsage" |
+            "PeakBufferMemoryBytes" |
+            "OperatorPeakMemoryUsage" |
+            "AggregatorMemoryUsage" |
+            "SortMemoryUsage" => {
+                if let Ok(bytes) = ValueParser::parse_bytes(value) {
+                    // Accumulate memory usage from various sources
+                    let current = metrics.memory_usage.unwrap_or(0);
+                    metrics.memory_usage = Some(current + bytes);
+                }
             }
             "OutputChunkBytes" => {
                 metrics.output_chunk_bytes = ValueParser::parse_bytes(value).ok();

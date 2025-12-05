@@ -149,6 +149,9 @@ impl ProfileComposer {
                 
                 let mut metrics = MetricsParser::from_hashmap(&aggregated_op.common_metrics);
                 
+                // Also parse memory-related metrics from unique_metrics
+                MetricsParser::merge_memory_metrics(&mut metrics, &aggregated_op.unique_metrics);
+                
                 // Parse specialized metrics
                 if !aggregated_op.unique_metrics.is_empty() {
                     let pure_name = Self::extract_operator_name(&aggregated_op.name);

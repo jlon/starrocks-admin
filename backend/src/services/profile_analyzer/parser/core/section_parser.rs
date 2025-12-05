@@ -70,6 +70,13 @@ impl SectionParser {
             // Spill metrics
             query_spill_bytes: None,
             
+            // DataCache metrics
+            datacache_hit_rate: None,
+            datacache_bytes_local: None,
+            datacache_bytes_remote: None,
+            datacache_bytes_local_display: None,
+            datacache_bytes_remote_display: None,
+            
             top_time_consuming_nodes: None,
         })
     }

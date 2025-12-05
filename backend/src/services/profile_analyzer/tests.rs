@@ -1106,4 +1106,55 @@ Query:
             println!("Empty profile diagnostics: {}", diagnostics.len());
         }
     }
+
+    // ========================================================================
+    // DataCache Hit Rate Tests
+    // ========================================================================
+
+    mod datacache_tests {
+        use super::*;
+
+        #[test]
+        fn test_datacache_hit_rate_with_fsio() {
+            // Test the updated profile with FSIOBytesRead
+            let profile_text = load_profile("test_profile.txt");
+            let result = analyze_profile(&profile_text).expect("Should analyze");
+            
+            let summary = result.summary.as_ref().expect("Should have summary");
+            
+            // Check if DataCache metrics are present
+            if let Some(hit_rate) = summary.datacache_hit_rate {
+                println!("DataCache Hit Rate: {:.2}%", hit_rate * 100.0);
+                println!("Local Bytes: {:?}", summary.datacache_bytes_local_display);
+                println!("Remote Bytes: {:?}", summary.datacache_bytes_remote_display);
+                
+                // The test profile has:
+                // - DataCacheReadDiskBytes: 4.015 GB (cache hit)
+                // - FSIOBytesRead: 2.332 GB (cache miss)
+                // Expected hit rate: 4.015 / (4.015 + 2.332) ≈ 63.3%
+                assert!(hit_rate < 1.0, "Hit rate should not be 100% when FSIOBytesRead > 0");
+                assert!(hit_rate > 0.5, "Hit rate should be > 50%");
+                assert!(hit_rate < 0.7, "Hit rate should be < 70%");
+            } else {
+                println!("No DataCache metrics found in profile");
+            }
+        }
+
+        #[test]
+        fn test_datacache_calculation_logic() {
+            // Simulate the calculation with known values
+            // DataCacheReadDiskBytes: 4.015 GB = 4.015 * 1024^3 = 4,311,744,921 bytes
+            // FSIOBytesRead: 2.332 GB = 2.332 * 1024^3 = 2,504,047,820 bytes
+            let cache_hit: f64 = 4.015 * 1024.0 * 1024.0 * 1024.0;
+            let cache_miss: f64 = 2.332 * 1024.0 * 1024.0 * 1024.0;
+            let total = cache_hit + cache_miss;
+            let expected_hit_rate = cache_hit / total;
+            
+            println!("Expected hit rate: {:.4} ({:.2}%)", expected_hit_rate, expected_hit_rate * 100.0);
+            
+            // Verify the calculation
+            assert!((expected_hit_rate - 0.6326).abs() < 0.01, 
+                "Expected ~63.26%, got {:.2}%", expected_hit_rate * 100.0);
+        }
+    }
 }

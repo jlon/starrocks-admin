@@ -24,7 +24,7 @@ pub struct RuleEngineConfig {
 impl Default for RuleEngineConfig {
     fn default() -> Self {
         Self {
-            max_suggestions: 5,
+            max_suggestions: 100, // Increased from 5 to avoid truncating important diagnostics
             include_parameters: true,
             min_severity: RuleSeverity::Info,
         }

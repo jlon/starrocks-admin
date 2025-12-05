@@ -86,6 +86,18 @@ pub struct ProfileSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_spill_bytes: Option<String>,
     
+    // DataCache metrics (for disaggregated storage-compute clusters)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacache_hit_rate: Option<f64>,  // 0.0 - 1.0
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacache_bytes_local: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacache_bytes_remote: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacache_bytes_local_display: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacache_bytes_remote_display: Option<String>,
+    
     // Top time-consuming nodes for quick overview
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_time_consuming_nodes: Option<Vec<TopNode>>,

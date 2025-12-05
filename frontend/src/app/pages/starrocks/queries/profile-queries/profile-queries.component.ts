@@ -729,56 +729,6 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       this.loadAnalysis(this.currentQueryId);
     }
   }
-  
-  // DEBUG: Test method with MOCK DATA to guarantee display
-  testSpecificQuery(): void {
-    console.log('Testing with MOCK DATA');
-    
-    // Construct mock tree structure matching backend format
-    const mockTree = {
-      root: { 
-        id: 'node_-1', 
-        operator_name: 'RESULT_SINK', 
-        plan_node_id: -1, 
-        children: ['node_0'], 
-        metrics: { operator_total_time: 100000 }, 
-        time_percentage: 0.5,
-        rows: 1
-      },
-      nodes: [
-        { id: 'node_0', operator_name: 'HASH_JOIN', plan_node_id: 0, children: ['node_1', 'node_2'], metrics: { operator_total_time: 5000000 }, time_percentage: 15.5, rows: 1 },
-        { id: 'node_1', operator_name: 'OLAP_SCAN', plan_node_id: 1, children: [], metrics: { operator_total_time: 12000000 }, time_percentage: 35.2, rows: 1000 },
-        { id: 'node_2', operator_name: 'EXCHANGE', plan_node_id: 2, children: ['node_3'], metrics: { operator_total_time: 2000000 }, time_percentage: 5.1, rows: 1 },
-        { id: 'node_3', operator_name: 'AGGREGATION', plan_node_id: 3, children: ['node_4', 'node_5'], metrics: { operator_total_time: 8000000 }, time_percentage: 22.3, rows: 500 },
-        { id: 'node_4', operator_name: 'OLAP_SCAN', plan_node_id: 4, children: [], metrics: { operator_total_time: 4000000 }, time_percentage: 12.1, rows: 2000 },
-        { id: 'node_5', operator_name: 'PROJECT', plan_node_id: 5, children: ['node_6'], metrics: { operator_total_time: 500000 }, time_percentage: 1.2, rows: 100 },
-        { id: 'node_6', operator_name: 'OLAP_SCAN', plan_node_id: 6, children: [], metrics: { operator_total_time: 3000000 }, time_percentage: 8.1, rows: 3000 }
-      ]
-    };
-    
-    // Set analysis data directly
-    this.analysisData = {
-      execution_tree: mockTree,
-      summary: { query_id: 'MOCK-TEST', top_time_consuming_nodes: [] },
-      hotspots: [],
-      conclusion: 'Mock Analysis - Testing DAG Display',
-      suggestions: [],
-      performance_score: 85
-    };
-    
-    // Open dialog first
-    this.dialogService.open(this.profileDetailDialogTemplate, {
-      context: { QueryId: 'MOCK-TEST' },
-      dialogClass: 'profile-detail-dialog',
-      closeOnBackdropClick: false,
-    });
-    
-    // Build graph after dialog opens
-    setTimeout(() => {
-      this.buildGraph(mockTree);
-      this.cdr.markForCheck();
-    }, 100);
-  }
 
   private getIntersectionPoint(
     from: { x: number, y: number },
@@ -1165,7 +1115,24 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     return !!(s.query_execution_wall_time || s.query_cumulative_operator_time ||
               s.query_cumulative_cpu_time || s.query_cumulative_scan_time ||
               s.query_cumulative_network_time || s.query_peak_schedule_time ||
-              s.result_deliver_time || s.query_sum_memory_usage || s.query_spill_bytes);
+              s.result_deliver_time || s.query_sum_memory_usage || s.query_spill_bytes ||
+              s.datacache_hit_rate != null);
+  }
+  
+  // Get DataCache tooltip with detailed metrics
+  getDataCacheTooltip(): string {
+    const s = this.analysisData?.summary;
+    if (!s) return '';
+    
+    const local = s.datacache_bytes_local_display || '0 B';
+    const remote = s.datacache_bytes_remote_display || '0 B';
+    const hitRate = s.datacache_hit_rate != null ? (s.datacache_hit_rate * 100).toFixed(1) : '0';
+    
+    return `存算分离架构 DataCache 命中率\n` +
+           `本地缓存读取: ${local}\n` +
+           `远程存储读取: ${remote}\n` +
+           `命中率: ${hitRate}%\n` +
+           `(命中率 >= 70% 为健康)`;
   }
   
   // Get metric keys from metrics object (filter out null/undefined and specialized)
@@ -1209,7 +1176,8 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
   // Get diagnostics for a specific node by plan_node_id
   getNodeDiagnostics(node: any): any[] {
-    if (!node?.plan_node_id || !this.analysisData?.node_diagnostics) {
+    // Note: plan_node_id can be 0, so use explicit null/undefined check
+    if (node?.plan_node_id == null || !this.analysisData?.node_diagnostics) {
       return [];
     }
     return this.analysisData.node_diagnostics[node.plan_node_id] || [];

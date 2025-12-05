@@ -34,9 +34,11 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Testing
-**/*test*
-**/*spec*
+# Testing (exclude test files but keep necessary source files)
+# Note: Don't use broad patterns like **/*test* as it excludes valid source files
+backend/tests/**/*test*.rs
+frontend/**/*spec*.ts
+frontend/e2e/
 
 # Scripts (except those needed for build)
 scripts/

@@ -1,15 +1,10 @@
-name: Docker Image CI/CD
+name: Docker Build and Publish
 
-# Trigger conditions: push tags or manually trigger
+# Trigger conditions: only on version tags or manual trigger
 on:
   push:
     tags:
       - 'v*'  # Trigger on version tags like v1.0.0
-    branches:
-      - main  # Trigger on main branch push
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:  # Allow manual trigger
 
 env:
@@ -48,19 +43,14 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # For version tags (v1.0.0)
+            # For version tags (v1.0.0) - only full version
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            # For main branch
-            type=ref,event=branch
-            # Always include latest tag
-            type=raw,value=latest,enable={{is_default_branch}}
-            # Include commit SHA
-            type=sha,prefix={{branch}}-
+            # Always include latest tag for version tags
+            type=raw,value=latest
 
       # Step 5: Build and push Docker image
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -71,24 +61,44 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # Multi-platform build: support AMD64 and ARM64 (Apple M1/M2, AWS Graviton)
-          # Temporarily disabled ARM64 to debug build issues, will re-enable after fixing
-          # platforms: linux/amd64
           platforms: linux/amd64,linux/arm64
 
-      # Step 6: Generate build summary
+      # Step 6: Verify Docker image
+      - name: Verify Docker image
+        run: |
+          echo "Verifying Docker image..."
+          
+          # Extract first tag for testing
+          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -1)
+          echo "Testing image: $FIRST_TAG"
+          
+          # Pull and inspect the image
+          docker pull "$FIRST_TAG"
+          docker inspect "$FIRST_TAG" > /dev/null
+          
+          echo "✅ Docker image verified successfully"
+
+      # Step 7: Generate build summary
       - name: Generate build summary
         run: |
-          echo "## Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✅ Build Successful" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Available Tags" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Pull Command:**" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Pull Command" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Image Digest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

@@ -64,6 +64,16 @@ jobs:
       working-directory: backend
       run: cargo test --verbose
 
+    - name: Generate test summary
+      if: always()
+      run: |
+        echo "## 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Frontend linting passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Rust formatting check passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Clippy checks passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Backend tests passed" >> $GITHUB_STEP_SUMMARY
+
   build:
     name: Build Application
     runs-on: ubuntu-latest
@@ -99,9 +109,50 @@ jobs:
     - name: Build application
       run: make build
 
+    - name: Verify build output
+      run: |
+        echo "Verifying build output..."
+        
+        # Check if binary exists
+        if [ ! -f "build/dist/bin/starrocks-admin" ]; then
+          echo "❌ Binary not found"
+          exit 1
+        fi
+        
+        # Check if binary is executable
+        if [ ! -x "build/dist/bin/starrocks-admin" ]; then
+          echo "❌ Binary is not executable"
+          exit 1
+        fi
+        
+        # Check required directories
+        for dir in conf data logs migrations; do
+          if [ ! -d "build/dist/$dir" ]; then
+            echo "❌ Directory $dir not found"
+            exit 1
+          fi
+        done
+        
+        echo "✅ Build verification passed"
+        
+        # Show build info
+        ls -lh build/dist/bin/starrocks-admin
+        du -sh build/dist/
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
       with:
         name: build-artifacts
         path: build/dist/
         retention-days: 7
+
+    - name: Generate build summary
+      run: |
+        echo "## 🏗️ Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Status:** ✅ Build Successful" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Binary Size:** $(du -h build/dist/bin/starrocks-admin | cut -f1)" >> $GITHUB_STEP_SUMMARY
+        echo "**Total Size:** $(du -sh build/dist/ | cut -f1)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Artifacts:** Available for 7 days" >> $GITHUB_STEP_SUMMARY

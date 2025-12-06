@@ -192,6 +192,10 @@ retention_days = "7d"
 enabled = true          
 ```
 
+## Release Notes
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
+
 ## Contributing
 
 We welcome all forms of contributions! Please follow these steps:
@@ -418,6 +422,10 @@ APP_METRICS_INTERVAL_SECS=1m \
 APP_METRICS_RETENTION_DAYS=14d \
 APP_METRICS_ENABLED=true \
 ```
+
+## 版本发布说明
+
+查看 [CHANGELOG.md](CHANGELOG.md) 了解详细的版本发布说明和历史记录。
 
 ## 贡献
 

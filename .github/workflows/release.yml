@@ -10,19 +10,89 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  verify-version:
+    name: Verify Version Consistency
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Get version from tag
+      id: get_version
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Verify version consistency
+      run: |
+        TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+        echo "Tag version: $TAG_VERSION"
+        
+        # Check Cargo.toml
+        CARGO_VERSION=$(grep '^version' backend/Cargo.toml | head -1 | cut -d'"' -f2)
+        echo "Cargo.toml version: $CARGO_VERSION"
+        
+        # Check package.json
+        NPM_VERSION=$(grep '"version"' frontend/package.json | head -1 | cut -d'"' -f4)
+        echo "package.json version: $NPM_VERSION"
+        
+        # Check Chart.yaml
+        CHART_VERSION=$(grep '^version:' deploy/chart/Chart.yaml | head -1 | awk '{print $2}')
+        echo "Chart.yaml version: $CHART_VERSION"
+        
+        # Verify all versions match
+        if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+          echo "❌ Version mismatch: Tag ($TAG_VERSION) != Cargo.toml ($CARGO_VERSION)"
+          exit 1
+        fi
+        
+        if [ "$TAG_VERSION" != "$NPM_VERSION" ]; then
+          echo "❌ Version mismatch: Tag ($TAG_VERSION) != package.json ($NPM_VERSION)"
+          exit 1
+        fi
+        
+        if [ "$TAG_VERSION" != "$CHART_VERSION" ]; then
+          echo "❌ Version mismatch: Tag ($TAG_VERSION) != Chart.yaml ($CHART_VERSION)"
+          exit 1
+        fi
+        
+        echo "✅ All versions are consistent: $TAG_VERSION"
+
   create-release:
     name: Create Release
+    needs: verify-version
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
+      version: ${{ needs.verify-version.outputs.version }}
     
     steps:
-    - name: Get version from tag
-      id: get_version
-      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Extract CHANGELOG for this version
+      id: changelog
+      run: |
+        VERSION="${GITHUB_REF#refs/tags/v}"
+        echo "Extracting CHANGELOG for version $VERSION"
+        
+        # Extract content between this version and the next version header
+        CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | sed '$d' | tail -n +2)
+        
+        # If extraction failed, use a default message
+        if [ -z "$CHANGELOG" ]; then
+          CHANGELOG="Please see the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+        fi
+        
+        # Save to output using heredoc to handle multiline
+        {
+          echo 'content<<EOF'
+          echo "$CHANGELOG"
+          echo 'EOF'
+        } >> $GITHUB_OUTPUT
 
     - name: Create Release
       id: create_release
@@ -36,15 +106,15 @@ jobs:
           
           ### 🚀 What's New
           
-          Please see the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          ${{ steps.changelog.outputs.content }}
           
           ### 📦 Installation
           
           #### Quick Start (Recommended)
           ```bash
           # Download and extract
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/starrocks-admin-linux-amd64.tar.gz
-          tar -xzf starrocks-admin-linux-amd64.tar.gz
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/starrocks-admin-${{ needs.verify-version.outputs.version }}-linux-amd64.tar.gz
+          tar -xzf starrocks-admin-${{ needs.verify-version.outputs.version }}-linux-amd64.tar.gz
           cd starrocks-admin
           
           # Start the service
@@ -57,92 +127,36 @@ jobs:
           #### Docker (Multi-platform: amd64/arm64)
           ```bash
           # Pull the image (automatically built by docker-publish workflow)
-          docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          docker pull ghcr.io/${{ github.repository }}:${{ needs.verify-version.outputs.version }}
           
-          # Or use semantic version tags
+          # Or use latest tag
           docker pull ghcr.io/${{ github.repository }}:latest
           
           # Run the container
-          docker run -d -p 8080:8080 ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          docker run -d -p 8080:8080 \
+            -v $(pwd)/data:/app/data \
+            -v $(pwd)/logs:/app/logs \
+            ghcr.io/${{ github.repository }}:${{ needs.verify-version.outputs.version }}
           ```
           
           > **Note:** Docker images are built automatically by the `docker-publish` workflow and support both amd64 and arm64 architectures.
           
           ### 📋 System Requirements
-          - Linux x86_64 or macOS (ARM64/x86_64)
+          - Linux x86_64 (macOS users please use Docker)
           - 2GB RAM minimum
           - 1GB disk space
           
           ### 🔗 Links
           - [Documentation](https://github.com/${{ github.repository }}/blob/main/README.md)
-          - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/docs/INSTALLATION.md)
-          - [Configuration Guide](https://github.com/${{ github.repository }}/blob/main/docs/CONFIGURATION.md)
-        body: |
-          ## StarRocks Admin ${{ github.ref_name }}
-          
-          ### 🚀 What's New
-          
-          Please see the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-          
-          ### 📦 Installation
-          
-          #### Quick Start (Recommended)
-          ```bash
-          # Download and extract
-          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/starrocks-admin-linux-amd64.tar.gz
-          tar -xzf starrocks-admin-linux-amd64.tar.gz
-          cd starrocks-admin
-          
-          # Start the service
-          ./bin/starrocks-admin.sh start
-          
-          # Access the application
-          open http://localhost:8080
-          ```
-          
-          #### Docker (Multi-platform: amd64/arm64)
-          ```bash
-          # Pull the image (automatically built by docker-publish workflow)
-          docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-          
-          # Or use semantic version tags
-          docker pull ghcr.io/${{ github.repository }}:latest
-          
-          # Run the container
-          docker run -d -p 8080:8080 ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-          ```
-          
-          > **Note:** Docker images are built automatically by the `docker-publish` workflow and support both amd64 and arm64 architectures.
-          
-          ### 📋 System Requirements
-          - Linux x86_64 or macOS (ARM64/x86_64)
-          - 2GB RAM minimum
-          - 1GB disk space
-          
-          ### 🔗 Links
-          - [Documentation](https://github.com/${{ github.repository }}/blob/main/README.md)
-          - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/docs/INSTALLATION.md)
-          - [Configuration Guide](https://github.com/${{ github.repository }}/blob/main/docs/CONFIGURATION.md)
+          - [Quick Start Guide](https://github.com/${{ github.repository }}/blob/main/docs/QUICK_START_RELEASE.md)
+          - [Full CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
 
   build-and-upload:
     name: Build and Upload Assets
     needs: create-release
     permissions:
       contents: write
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact_name: starrocks-admin-linux-amd64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: starrocks-admin-macos-amd64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: starrocks-admin-macos-arm64
-    
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
@@ -150,8 +164,6 @@ jobs:
 
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: ${{ matrix.target }}
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -169,29 +181,62 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           backend/target/
-        key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-${{ matrix.target }}-cargo-
+          ${{ runner.os }}-cargo-
 
     - name: Build application
       run: make build
-      env:
-        CARGO_BUILD_TARGET: ${{ matrix.target }}
+
+    - name: Verify build artifacts
+      run: |
+        echo "Verifying build artifacts..."
+        
+        # Check if binary exists and is executable
+        if [ ! -f "build/dist/bin/starrocks-admin" ]; then
+          echo "❌ Binary not found"
+          exit 1
+        fi
+        
+        # Check if binary is executable
+        if [ ! -x "build/dist/bin/starrocks-admin" ]; then
+          echo "❌ Binary is not executable"
+          exit 1
+        fi
+        
+        # Check if required directories exist
+        for dir in conf data logs migrations; do
+          if [ ! -d "build/dist/$dir" ]; then
+            echo "❌ Directory $dir not found"
+            exit 1
+          fi
+        done
+        
+        echo "✅ Build artifacts verified"
 
     - name: Create release package
       run: |
+        VERSION="${{ needs.create-release.outputs.version }}"
+        ARTIFACT_NAME="starrocks-admin-${VERSION}-linux-amd64"
+        
         cd build/dist
-        tar -czf ${{ matrix.artifact_name }}.tar.gz \
+        tar -czf ${ARTIFACT_NAME}.tar.gz \
           --transform 's,^,starrocks-admin/,' \
           bin conf lib data logs migrations
+        
+        # Verify tar package
+        echo "Verifying tar package..."
+        echo "Package name: ${ARTIFACT_NAME}.tar.gz"
+        tar -tzf ${ARTIFACT_NAME}.tar.gz | head -20
+        
+        # Check package size
+        SIZE=$(du -h ${ARTIFACT_NAME}.tar.gz | cut -f1)
+        echo "Package size: $SIZE"
 
     - name: Upload Release Asset
       uses: softprops/action-gh-release@v1
       with:
-        files: build/dist/${{ matrix.artifact_name }}.tar.gz
-
-  # Note: Docker image building is handled by docker-publish.yml workflow
-  # which is automatically triggered when a tag is pushed
+        files: build/dist/starrocks-admin-${{ needs.create-release.outputs.version }}-linux-amd64.tar.gz
 
   publish-helm-chart:
     name: Publish Helm Chart
@@ -218,3 +263,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: deploy/chart/starrocks-admin-${{ needs.create-release.outputs.version }}.tgz
+
+  # Note: Docker image building is handled by docker-publish.yml workflow
+  # which is automatically triggered when a tag is pushed.
+  # The docker-publish workflow runs in parallel with this release workflow.

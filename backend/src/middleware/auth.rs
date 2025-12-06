@@ -94,7 +94,7 @@ pub async fn auth_middleware(
 
     // Fallback: fetch from user_organizations if organization_id is still None
     let organization_id = if organization_id.is_none() {
-        async_std_block_on_fetch_org(&state.db, user_id)
+        fetch_org_from_user_organizations(&state.db, user_id).await
     } else {
         organization_id
     };
@@ -153,21 +153,13 @@ pub async fn auth_middleware(
 }
 
 // Helper to fetch organization from user_organizations when users.organization_id is NULL
-fn async_std_block_on_fetch_org(db: &SqlitePool, user_id: i64) -> Option<i64> {
-    // Use a simple current-thread runtime to block on async safely in middleware context
-    // Note: this is only a fallback path and executes a single short query.
-    let rt = tokio::runtime::Handle::try_current();
-    if let Ok(handle) = rt {
-        return handle.block_on(async move {
-            sqlx::query_scalar::<_, i64>(
-                r#"SELECT organization_id FROM user_organizations WHERE user_id = ?"#,
-            )
-            .bind(user_id)
-            .fetch_optional(db)
-            .await
-            .ok()
-            .flatten()
-        });
-    }
-    None
+async fn fetch_org_from_user_organizations(db: &SqlitePool, user_id: i64) -> Option<i64> {
+    sqlx::query_scalar::<_, i64>(
+        r#"SELECT organization_id FROM user_organizations WHERE user_id = ?"#,
+    )
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
 }

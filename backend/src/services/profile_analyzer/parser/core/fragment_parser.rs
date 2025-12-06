@@ -224,9 +224,9 @@ impl FragmentParser {
                     let key = rest[..colon_pos].trim().to_string();
                     let value = rest[colon_pos + 2..].trim().to_string();
 
-                    // Skip __MAX_OF_ and __MIN_OF_ prefixed metrics for cleaner output
-                    // but still include the main metric
-                    if !key.starts_with("__MAX_OF_") && !key.starts_with("__MIN_OF_") {
+                    // Include __MAX_OF_ metrics as they are needed for time percentage calculation
+                    // Skip __MIN_OF_ metrics for cleaner output
+                    if !key.starts_with("__MIN_OF_") {
                         metrics.insert(key, value);
                     }
                 } else if !rest.is_empty() {

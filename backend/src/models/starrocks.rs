@@ -39,52 +39,163 @@ fn default_empty_string() -> String {
 }
 
 // Backend node information (also used for Compute Nodes in shared-data architecture)
-// Note: In shared-data mode, some storage-related fields (TabletNum, DataUsedCapacity, etc.)
-//       may be "0" or empty as CNs don't store data locally
+//
+// Field definitions from StarRocks source code:
+//
+// /backends (BackendsProcDir.java) TITLE_NAMES:
+//   BackendId, IP, HeartbeatPort, BePort, HttpPort, BrpcPort, LastStartTime, LastHeartbeat,
+//   Alive, SystemDecommissioned, ClusterDecommissioned, TabletNum,
+//   DataUsedCapacity, AvailCapacity, TotalCapacity, UsedPct,
+//   MaxDiskUsedPct, ErrMsg, Version, Status, DataTotalCapacity,
+//   DataUsedPct, CpuCores, MemLimit, NumRunningQueries, MemUsedPct, CpuUsedPct,
+//   DataCacheMetrics, Location, StatusCode
+//   + Shared-Data: StarletPort, WorkerId, WarehouseName
+//
+// /compute_nodes (ComputeNodeProcDir.java) TITLE_NAMES:
+//   ComputeNodeId, IP, HeartbeatPort, BePort, HttpPort, BrpcPort, LastStartTime, LastHeartbeat,
+//   Alive, SystemDecommissioned, ClusterDecommissioned, ErrMsg, Version,
+//   CpuCores, MemLimit, NumRunningQueries, MemUsedPct, CpuUsedPct,
+//   DataCacheMetrics, HasStoragePath, StatusCode
+//   + Shared-Data: StarletPort, WorkerId, WarehouseName, TabletNum
+//
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct Backend {
-    #[serde(rename = "BackendId")]
+    // Node ID: BackendId for BE, ComputeNodeId for CN
+    // Use rename for serialization (output as BackendId), alias for deserialization (accept ComputeNodeId)
+    #[serde(rename = "BackendId", alias = "ComputeNodeId", default = "default_empty_string")]
     pub backend_id: String,
-    #[serde(rename = "IP", alias = "Host")] // Support both IP and Host
+
+    // IP address
+    #[serde(rename = "IP", default = "default_empty_string")]
     pub host: String,
-    #[serde(rename = "HeartbeatPort")]
+
+    // Heartbeat port
+    #[serde(rename = "HeartbeatPort", default = "default_empty_string")]
     pub heartbeat_port: String,
-    #[serde(rename = "BePort")]
+
+    // BE port
+    #[serde(rename = "BePort", default = "default_empty_string")]
     pub be_port: String,
-    #[serde(rename = "HttpPort")]
+
+    // HTTP port
+    #[serde(rename = "HttpPort", default = "default_empty_string")]
     pub http_port: String,
-    #[serde(rename = "BrpcPort")]
+
+    // BRPC port
+    #[serde(rename = "BrpcPort", default = "default_empty_string")]
     pub brpc_port: String,
-    #[serde(rename = "LastStartTime")]
+
+    // Last start time
+    #[serde(rename = "LastStartTime", default = "default_empty_string")]
     pub last_start_time: String,
-    #[serde(rename = "LastHeartbeat")]
+
+    // Last heartbeat time
+    #[serde(rename = "LastHeartbeat", default = "default_empty_string")]
     pub last_heartbeat: String,
-    #[serde(rename = "Alive")]
+
+    // Alive status
+    #[serde(rename = "Alive", default = "default_empty_string")]
     pub alive: String,
-    #[serde(rename = "SystemDecommissioned")]
+
+    // System decommissioned status
+    #[serde(rename = "SystemDecommissioned", default = "default_empty_string")]
     pub system_decommissioned: String,
-    #[serde(rename = "ClusterDecommissioned", default)]
-    pub cluster_decommissioned: Option<String>,
+
+    // Cluster decommissioned status
+    #[serde(rename = "ClusterDecommissioned", default = "default_empty_string")]
+    pub cluster_decommissioned: String,
+
+    // Tablet count (BE: local tablets, CN in shared-data: remote tablets)
     #[serde(rename = "TabletNum", default = "default_empty_string")]
     pub tablet_num: String,
-    #[serde(rename = "DataUsedCapacity")]
+
+    // Data used capacity (BE only)
+    #[serde(rename = "DataUsedCapacity", default = "default_empty_string")]
     pub data_used_capacity: String,
-    #[serde(rename = "TotalCapacity")]
+
+    // Available capacity (BE only)
+    #[serde(rename = "AvailCapacity", default = "default_empty_string")]
+    pub avail_capacity: String,
+
+    // Total capacity (BE only)
+    #[serde(rename = "TotalCapacity", default = "default_empty_string")]
     pub total_capacity: String,
-    #[serde(rename = "UsedPct")]
+
+    // Used percentage (BE only)
+    #[serde(rename = "UsedPct", default = "default_empty_string")]
     pub used_pct: String,
-    #[serde(rename = "MaxDiskUsedPct")]
+
+    // Max disk used percentage (BE only)
+    #[serde(rename = "MaxDiskUsedPct", default = "default_empty_string")]
     pub max_disk_used_pct: String,
-    #[serde(rename = "CpuUsedPct")]
-    pub cpu_used_pct: String,
-    #[serde(rename = "MemUsedPct")]
-    pub mem_used_pct: String,
-    #[serde(rename = "NumRunningQueries")]
+
+    // Error message
+    #[serde(rename = "ErrMsg", default = "default_empty_string")]
+    pub err_msg: String,
+
+    // Version
+    #[serde(rename = "Version", default = "default_empty_string")]
+    pub version: String,
+
+    // Status (BE only, JSON format)
+    #[serde(rename = "Status", default = "default_empty_string")]
+    pub status: String,
+
+    // Data total capacity (BE only)
+    #[serde(rename = "DataTotalCapacity", default = "default_empty_string")]
+    pub data_total_capacity: String,
+
+    // Data used percentage (BE only)
+    #[serde(rename = "DataUsedPct", default = "default_empty_string")]
+    pub data_used_pct: String,
+
+    // CPU cores
+    #[serde(rename = "CpuCores", default = "default_empty_string")]
+    pub cpu_cores: String,
+
+    // Memory limit
+    #[serde(rename = "MemLimit", default = "default_empty_string")]
+    pub mem_limit: String,
+
+    // Number of running queries
+    #[serde(rename = "NumRunningQueries", default = "default_empty_string")]
     pub num_running_queries: String,
-    // New fields in StarRocks 3.5.2
-    #[serde(default)]
-    #[serde(rename = "WarehouseName")]
-    pub warehouse_name: Option<String>,
+
+    // Memory used percentage
+    #[serde(rename = "MemUsedPct", default = "default_empty_string")]
+    pub mem_used_pct: String,
+
+    // CPU used percentage
+    #[serde(rename = "CpuUsedPct", default = "default_empty_string")]
+    pub cpu_used_pct: String,
+
+    // Data cache metrics
+    #[serde(rename = "DataCacheMetrics", default = "default_empty_string")]
+    pub data_cache_metrics: String,
+
+    // Location (BE only)
+    #[serde(rename = "Location", default = "default_empty_string")]
+    pub location: String,
+
+    // Status code
+    #[serde(rename = "StatusCode", default = "default_empty_string")]
+    pub status_code: String,
+
+    // Has storage path (CN only)
+    #[serde(rename = "HasStoragePath", default = "default_empty_string")]
+    pub has_storage_path: String,
+
+    // Starlet port (Shared-Data mode)
+    #[serde(rename = "StarletPort", default = "default_empty_string")]
+    pub starlet_port: String,
+
+    // Worker ID (Shared-Data mode)
+    #[serde(rename = "WorkerId", default = "default_empty_string")]
+    pub worker_id: String,
+
+    // Warehouse name (Shared-Data mode)
+    #[serde(rename = "WarehouseName", default = "default_empty_string")]
+    pub warehouse_name: String,
 }
 
 // Frontend node information

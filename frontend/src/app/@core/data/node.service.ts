@@ -3,24 +3,49 @@ import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 
 export interface Backend {
-  BackendId: string;
-  IP: string;  // Changed from Host to IP to match StarRocks API
-  HeartbeatPort: string;
-  BePort: string;
-  HttpPort: string;
-  BrpcPort: string;
-  LastStartTime: string;
-  LastHeartbeat: string;
-  Alive: string;
-  SystemDecommissioned: string;
-  TabletNum: string;
-  DataUsedCapacity: string;
-  TotalCapacity: string;
-  UsedPct: string;
-  MaxDiskUsedPct: string;
-  CpuUsedPct: string;
-  MemUsedPct: string;
-  NumRunningQueries: string;
+  // Common fields for both BE and CN
+  BackendId: string;           // Node ID (BackendId for BE, ComputeNodeId for CN)
+  IP: string;                  // IP address
+  HeartbeatPort: string;       // Heartbeat port
+  BePort: string;              // BE service port
+  HttpPort: string;            // HTTP port
+  BrpcPort: string;            // BRPC port
+  LastStartTime: string;       // Last start time
+  LastHeartbeat: string;       // Last heartbeat time
+  Alive: string;               // Alive status
+  SystemDecommissioned: string; // System decommissioned status
+  ClusterDecommissioned: string; // Cluster decommissioned status
+  
+  // Storage fields (BE only, CN may have empty values)
+  TabletNum: string;           // Tablet count
+  DataUsedCapacity: string;    // Data used capacity
+  AvailCapacity: string;       // Available capacity
+  TotalCapacity: string;       // Total capacity
+  UsedPct: string;             // Used percentage
+  MaxDiskUsedPct: string;      // Max disk used percentage
+  DataTotalCapacity: string;   // Data total capacity
+  DataUsedPct: string;         // Data used percentage
+  
+  // Resource fields
+  CpuCores: string;            // CPU cores
+  MemLimit: string;            // Memory limit
+  NumRunningQueries: string;   // Number of running queries
+  MemUsedPct: string;          // Memory used percentage
+  CpuUsedPct: string;          // CPU used percentage
+  
+  // Status fields
+  ErrMsg: string;              // Error message
+  Version: string;             // Version
+  Status: string;              // Status (JSON format)
+  DataCacheMetrics: string;    // Data cache metrics
+  Location: string;            // Location (BE only)
+  StatusCode: string;          // Status code
+  HasStoragePath: string;      // Has storage path (CN only)
+  
+  // Shared-Data mode fields
+  StarletPort: string;         // Starlet port
+  WorkerId: string;            // Worker ID
+  WarehouseName: string;       // Warehouse name
 }
 
 export interface Frontend {

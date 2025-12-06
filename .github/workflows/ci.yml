@@ -32,7 +32,7 @@ jobs:
         cache-dependency-path: frontend/package-lock.json
 
     - name: Cache Rust dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/bin/
@@ -94,7 +94,7 @@ jobs:
         cache-dependency-path: frontend/package-lock.json
 
     - name: Cache Rust dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/bin/
@@ -139,13 +139,6 @@ jobs:
         ls -lh build/dist/bin/starrocks-admin
         du -sh build/dist/
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-artifacts
-        path: build/dist/
-        retention-days: 7
-
     - name: Generate build summary
       run: |
         echo "## 🏗️ Build Summary" >> $GITHUB_STEP_SUMMARY
@@ -154,5 +147,3 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Binary Size:** $(du -h build/dist/bin/starrocks-admin | cut -f1)" >> $GITHUB_STEP_SUMMARY
         echo "**Total Size:** $(du -sh build/dist/ | cut -f1)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Artifacts:** Available for 7 days" >> $GITHUB_STEP_SUMMARY

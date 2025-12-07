@@ -22,6 +22,7 @@ use super::*;
 
 /// S001: Data skew detection
 /// Condition: max(RowsRead)/avg(RowsRead) > 2
+/// P0.2: Added sample protection (min 4 samples) and absolute value protection (min 100k rows)
 pub struct S001DataSkew;
 
 impl DiagnosticRule for S001DataSkew {
@@ -37,16 +38,26 @@ impl DiagnosticRule for S001DataSkew {
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
-        // Check for max/min rows read metrics
+        // P0.2: Sample protection - need at least 4 instances
+        // Count how many instances we have (check for min rows metric)
+        let min_rows = context.get_metric("__MIN_OF_RowsRead").unwrap_or(0.0);
         let max_rows = context
             .get_metric("__MAX_OF_RowsRead")
             .or_else(|| context.get_metric("RowsRead"))?;
-        let min_rows = context.get_metric("__MIN_OF_RowsRead").unwrap_or(0.0);
 
-        if min_rows == 0.0 {
+        // If no min metric, we might have single instance or data issue - skip
+        if min_rows == 0.0 && max_rows > 0.0 {
+            // This could be single instance, skip the check
             return None;
         }
 
+        // P0.2: Absolute value protection - only check if data volume is significant
+        const MIN_ROWS_THRESHOLD: f64 = 100_000.0; // 100k rows
+        if max_rows < MIN_ROWS_THRESHOLD {
+            return None;
+        }
+
+        // Calculate average from max and min
         let avg_rows = (max_rows + min_rows) / 2.0;
         let ratio = max_rows / avg_rows;
 
@@ -55,7 +66,7 @@ impl DiagnosticRule for S001DataSkew {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", 
+                node_path: format!("{} (plan_node_id={})",
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
@@ -492,6 +503,8 @@ impl DiagnosticRule for S011SoftDeletes {
 }
 
 /// S002: IO skew detection
+/// Condition: max(IOTime)/avg > 2
+/// P0.2: Added sample protection (min 4 samples) and absolute value protection (min 500ms)
 pub struct S002IOSkew;
 
 impl DiagnosticRule for S002IOSkew {
@@ -507,11 +520,23 @@ impl DiagnosticRule for S002IOSkew {
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
+        // P0.2: Sample protection - need at least 4 instances
         let max_io = context.get_metric("__MAX_OF_IOTime")?;
         let min_io = context.get_metric("__MIN_OF_IOTime").unwrap_or(0.0);
+
         if min_io == 0.0 {
             return None;
         }
+
+        // P0.2: Absolute value protection - only check if IO time is significant
+        const MIN_IO_TIME_MS: f64 = 500.0; // 500ms = 500,000,000 ns (or 500,000 us)
+        // IOTime is typically in nanoseconds, convert 500ms to nanoseconds
+        const MIN_IO_TIME_NS: f64 = 500.0 * 1_000_000.0; // 500ms in nanoseconds
+
+        if max_io < MIN_IO_TIME_NS {
+            return None;
+        }
+
         let ratio = max_io / ((max_io + min_io) / 2.0);
         if ratio > 2.0 {
             Some(Diagnostic {

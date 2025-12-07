@@ -144,6 +144,7 @@ impl DiagnosticRule for G002HighMemory {
 
 /// G003: Execution time skew across instances
 /// Threshold: max/avg > 2
+/// P0.2: Added absolute value protection (min 500ms execution time)
 pub struct G003ExecutionSkew;
 
 impl DiagnosticRule for G003ExecutionSkew {
@@ -165,6 +166,12 @@ impl DiagnosticRule for G003ExecutionSkew {
         let avg_time = context.node.metrics.operator_total_time?;
 
         if avg_time == 0 {
+            return None;
+        }
+
+        // P0.2: Absolute value protection - only check if execution time is significant
+        const MIN_EXEC_TIME_NS: u64 = 500 * 1_000_000; // 500ms in nanoseconds
+        if avg_time < MIN_EXEC_TIME_NS {
             return None;
         }
 

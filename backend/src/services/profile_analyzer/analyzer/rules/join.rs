@@ -6,6 +6,7 @@ use super::*;
 
 /// J001: Join result explosion
 /// Condition: PullRowNum > ProbeRows * 10
+/// P0.2: Added absolute value protection (min 10k rows)
 pub struct J001ResultExplosion;
 
 impl DiagnosticRule for J001ResultExplosion {
@@ -28,6 +29,12 @@ impl DiagnosticRule for J001ResultExplosion {
             return None;
         }
 
+        // P0.2: Absolute value protection - only check if probe rows are significant
+        const MIN_PROBE_ROWS: f64 = 10_000.0;
+        if probe_rows < MIN_PROBE_ROWS {
+            return None;
+        }
+
         let ratio = output_rows / probe_rows;
 
         if ratio > 10.0 {
@@ -35,7 +42,7 @@ impl DiagnosticRule for J001ResultExplosion {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Error,
-                node_path: format!("{} (plan_node_id={})", 
+                node_path: format!("{} (plan_node_id={})",
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,

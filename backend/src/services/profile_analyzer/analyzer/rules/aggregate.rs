@@ -6,6 +6,7 @@ use super::*;
 
 /// A001: Aggregation skew
 /// Condition: max(AggComputeTime)/avg > 2
+/// P0.2: Added absolute value protection (min 100k rows aggregated)
 pub struct A001AggregationSkew;
 
 impl DiagnosticRule for A001AggregationSkew {
@@ -28,6 +29,15 @@ impl DiagnosticRule for A001AggregationSkew {
             return None;
         }
 
+        // P0.2: Absolute value protection - only check if aggregation is significant
+        // Require at least 100k rows processed
+        const MIN_AGG_ROWS: f64 = 100_000.0;
+        let input_rows = context.get_metric("PushRowNum").unwrap_or(0.0);
+
+        if input_rows < MIN_AGG_ROWS {
+            return None;
+        }
+
         let ratio = max_time as f64 / avg_time as f64;
 
         if ratio > 2.0 {
@@ -35,7 +45,7 @@ impl DiagnosticRule for A001AggregationSkew {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", 
+                node_path: format!("{} (plan_node_id={})",
                     context.node.operator_name,
                     context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,

@@ -4,6 +4,14 @@
 
 set -e
 
+# Initialize Rust environment for non-interactive shell
+# This is needed because the script runs in a non-interactive bash context
+# and doesn't load ~/.bashrc or ~/.zshrc
+export PATH="$HOME/.cargo/bin:$PATH"
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
+
 # 配置
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"

@@ -15,6 +15,7 @@ pub mod sink;
 pub mod sort;
 
 use crate::services::profile_analyzer::models::*;
+use super::thresholds::DynamicThresholds;
 
 // ============================================================================
 // Rule Trait and Types
@@ -270,6 +271,8 @@ pub struct RuleContext<'a> {
     pub cluster_variables: Option<&'a std::collections::HashMap<String, String>>,
     /// Default database from profile summary
     pub default_db: Option<&'a str>,
+    /// Dynamic thresholds based on cluster info and query type
+    pub thresholds: DynamicThresholds,
 }
 
 impl<'a> RuleContext<'a> {

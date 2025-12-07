@@ -21,8 +21,9 @@
 use super::*;
 
 /// S001: Data skew detection
-/// Condition: max(RowsRead)/avg(RowsRead) > 2
+/// Condition: max(RowsRead)/avg(RowsRead) > threshold (dynamic based on cluster size)
 /// P0.2: Added sample protection (min 4 samples) and absolute value protection (min 100k rows)
+/// v2.0: Uses dynamic skew threshold based on cluster parallelism
 pub struct S001DataSkew;
 
 impl DiagnosticRule for S001DataSkew {
@@ -52,8 +53,9 @@ impl DiagnosticRule for S001DataSkew {
         }
 
         // P0.2: Absolute value protection - only check if data volume is significant
-        const MIN_ROWS_THRESHOLD: f64 = 100_000.0; // 100k rows
-        if max_rows < MIN_ROWS_THRESHOLD {
+        // v2.0: Use dynamic threshold from thresholds module
+        let min_rows_threshold = context.thresholds.get_min_rows_for_skew();
+        if max_rows < min_rows_threshold {
             return None;
         }
 
@@ -61,7 +63,11 @@ impl DiagnosticRule for S001DataSkew {
         let avg_rows = (max_rows + min_rows) / 2.0;
         let ratio = max_rows / avg_rows;
 
-        if ratio > 2.0 {
+        // v2.0: Use dynamic skew threshold based on cluster size
+        // Larger clusters can tolerate more skew
+        let skew_threshold = context.thresholds.get_skew_threshold();
+
+        if ratio > skew_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -71,8 +77,8 @@ impl DiagnosticRule for S001DataSkew {
                     context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
-                    "Scan 存在数据倾斜，max/avg 比率为 {:.2}",
-                    ratio
+                    "Scan 存在数据倾斜，max/avg 比率为 {:.2} (阈值: {:.1})",
+                    ratio, skew_threshold
                 ),
                 reason: "StarRocks 数据在各个存储节点分布不均，使得某些节点在读取数据时需要扫描更多的数据，导致查询延迟。通常是分桶键选择不当导致数据分布不均匀。".to_string(),
                 suggestions: vec![
@@ -114,8 +120,11 @@ impl DiagnosticRule for S003PoorFilter {
 
         let ratio = rows_read / raw_rows_read;
 
+        // v2.0: Use dynamic threshold for minimum rows
+        let min_rows_threshold = context.thresholds.get_min_rows_for_filter();
+
         // Only trigger if we're reading a significant amount of data
-        if ratio > 0.8 && raw_rows_read > 100_000.0 {
+        if ratio > 0.8 && raw_rows_read > min_rows_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -214,8 +223,9 @@ impl DiagnosticRule for S007ColdStorage {
 
 /// S009: Low cache hit rate (PageCache or DataCache)
 /// Condition:
-/// - PageCache: CachedPagesNum/ReadPagesNum < 0.3
-/// - DataCache (disaggregated): CompressedBytesReadLocalDisk/(Local+Remote) < 0.7
+/// - PageCache: CachedPagesNum/ReadPagesNum < threshold
+/// - DataCache (disaggregated): CompressedBytesReadLocalDisk/(Local+Remote) < threshold
+/// v2.0: Uses dynamic cache hit threshold based on storage type
 pub struct S009LowCacheHit;
 
 impl DiagnosticRule for S009LowCacheHit {
@@ -231,6 +241,10 @@ impl DiagnosticRule for S009LowCacheHit {
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
+        // v2.0: Get dynamic cache hit threshold
+        let cache_threshold = context.thresholds.get_cache_hit_threshold();
+        let error_threshold = cache_threshold * 0.6; // Error if below 60% of warning threshold
+
         // First, check DataCache metrics (for disaggregated storage-compute clusters)
         let bytes_local = context
             .get_metric("CompressedBytesReadLocalDisk")
@@ -246,13 +260,13 @@ impl DiagnosticRule for S009LowCacheHit {
         if bytes_remote > 0.0 && total_bytes > MIN_BYTES {
             let hit_rate = bytes_local / total_bytes;
 
-            // Trigger if hit rate < 70%
-            if hit_rate < 0.7 {
+            // v2.0: Use dynamic threshold
+            if hit_rate < cache_threshold {
                 let miss_rate = (1.0 - hit_rate) * 100.0;
                 return Some(Diagnostic {
                     rule_id: self.id().to_string(),
                     rule_name: self.name().to_string(),
-                    severity: if hit_rate < 0.3 { RuleSeverity::Error } else { RuleSeverity::Warning },
+                    severity: if hit_rate < error_threshold { RuleSeverity::Error } else { RuleSeverity::Warning },
                     node_path: format!("{} (plan_node_id={})", 
                         context.node.operator_name,
                         context.node.plan_node_id.unwrap_or(-1)),
@@ -296,11 +310,12 @@ impl DiagnosticRule for S009LowCacheHit {
         if io_remote > 0.0 && total_io > 100.0 {
             let hit_rate = io_local / total_io;
 
-            if hit_rate < 0.7 {
+            // v2.0: Use dynamic threshold
+            if hit_rate < cache_threshold {
                 return Some(Diagnostic {
                     rule_id: self.id().to_string(),
                     rule_name: self.name().to_string(),
-                    severity: if hit_rate < 0.3 { RuleSeverity::Error } else { RuleSeverity::Warning },
+                    severity: if hit_rate < error_threshold { RuleSeverity::Error } else { RuleSeverity::Warning },
                     node_path: format!("{} (plan_node_id={})", 
                         context.node.operator_name,
                         context.node.plan_node_id.unwrap_or(-1)),
@@ -503,8 +518,9 @@ impl DiagnosticRule for S011SoftDeletes {
 }
 
 /// S002: IO skew detection
-/// Condition: max(IOTime)/avg > 2
+/// Condition: max(IOTime)/avg > threshold (dynamic based on cluster size)
 /// P0.2: Added sample protection (min 4 samples) and absolute value protection (min 500ms)
+/// v2.0: Uses dynamic skew threshold based on cluster parallelism
 pub struct S002IOSkew;
 
 impl DiagnosticRule for S002IOSkew {
@@ -529,23 +545,26 @@ impl DiagnosticRule for S002IOSkew {
         }
 
         // P0.2: Absolute value protection - only check if IO time is significant
-        const MIN_IO_TIME_MS: f64 = 500.0; // 500ms = 500,000,000 ns (or 500,000 us)
-        // IOTime is typically in nanoseconds, convert 500ms to nanoseconds
-        const MIN_IO_TIME_NS: f64 = 500.0 * 1_000_000.0; // 500ms in nanoseconds
+        // v2.0: Use constant from thresholds module
+        use crate::services::profile_analyzer::analyzer::thresholds::defaults::MIN_IO_TIME_NS;
 
         if max_io < MIN_IO_TIME_NS {
             return None;
         }
 
         let ratio = max_io / ((max_io + min_io) / 2.0);
-        if ratio > 2.0 {
+        
+        // v2.0: Use dynamic skew threshold based on cluster size
+        let skew_threshold = context.thresholds.get_skew_threshold();
+        
+        if ratio > skew_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
-                message: format!("Scan IO 耗时存在倾斜，max/avg 比率为 {:.2}", ratio),
+                message: format!("Scan IO 耗时存在倾斜，max/avg 比率为 {:.2} (阈值: {:.1})", ratio, skew_threshold),
                 reason: "Scan 算子多个实例在读取数据时，部分实例花费的时间显著大于其它实例。可能是节点 IO 使用率不均或数据在节点上分布不均。".to_string(),
                 suggestions: vec!["检查节点 IO 使用率是否不均".to_string(), "检查存储设备是否存在性能问题".to_string()],
                 parameter_suggestions: vec![],
@@ -873,6 +892,110 @@ impl DiagnosticRule for S014ColocateJoinOpportunity {
     }
 }
 
+/// S016: Small file detection for external tables (v2.0 updated)
+/// Condition: FileCount > threshold AND AvgFileSize < threshold
+/// v2.0: Uses ExternalScanType enum for type detection and type-specific suggestions
+pub struct S016SmallFiles;
+
+impl DiagnosticRule for S016SmallFiles {
+    fn id(&self) -> &str {
+        "S016"
+    }
+    fn name(&self) -> &str {
+        "外表小文件过多"
+    }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        // v2.0: Use ExternalScanType for type detection
+        use crate::services::profile_analyzer::analyzer::thresholds::ExternalScanType;
+        ExternalScanType::from_operator_name(&node.operator_name)
+            .map(|t| t.supports_small_file_detection())
+            .unwrap_or(false)
+    }
+
+    fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
+        use crate::services::profile_analyzer::analyzer::thresholds::{
+            generate_small_file_suggestions, ExternalScanType,
+        };
+
+        // v2.0: Detect scan type using ExternalScanType enum
+        let scan_type = ExternalScanType::from_operator_name(&context.node.operator_name)?;
+
+        // Skip if this type doesn't support small file detection
+        if !scan_type.supports_small_file_detection() {
+            return None;
+        }
+
+        // Get file count using type-specific metric
+        let metric_name = scan_type.file_count_metric();
+        let file_count = context
+            .get_metric(metric_name)
+            .or_else(|| context.get_metric("ScanFileCount"))
+            .or_else(|| context.get_metric("FileCount"))
+            .or_else(|| context.get_metric("TotalFilesNum"))
+            .or_else(|| context.get_metric("MorselsCount"))?;
+
+        let total_bytes = context
+            .get_metric("BytesRead")
+            .or_else(|| context.get_metric("CompressedBytesRead"))?;
+
+        if file_count == 0.0 || total_bytes == 0.0 {
+            return None;
+        }
+
+        // v2.0: Get storage type from ExternalScanType
+        let storage_type = scan_type.storage_type();
+
+        // Get dynamic thresholds based on storage type
+        let min_file_count = context.thresholds.get_min_file_count(storage_type) as f64;
+        let small_file_threshold = context.thresholds.get_small_file_threshold(storage_type) as f64;
+
+        // Calculate average file size
+        let avg_file_size = total_bytes / file_count;
+
+        // Trigger if file count exceeds threshold AND average file size is below threshold
+        if file_count > min_file_count && avg_file_size < small_file_threshold {
+            // Get table name for suggestions
+            let table_name = context
+                .node
+                .unique_metrics
+                .get("Table")
+                .map(|s| s.as_str())
+                .unwrap_or("external_table");
+
+            // v2.0: Generate type-specific suggestions
+            let suggestions = generate_small_file_suggestions(&scan_type, table_name);
+
+            Some(Diagnostic {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: RuleSeverity::Warning,
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
+                plan_node_id: context.node.plan_node_id,
+                message: format!(
+                    "扫描了 {:.0} 个文件，平均大小仅 {}（建议 > {}）",
+                    file_count,
+                    format_bytes(avg_file_size as u64),
+                    format_bytes(small_file_threshold as u64)
+                ),
+                reason: format!(
+                    "{} 外表 {} 存在大量小文件，导致元数据开销大、IO 效率低。",
+                    scan_type.display_name(),
+                    table_name
+                ),
+                suggestions,
+                parameter_suggestions: vec![],
+            })
+        } else {
+            None
+        }
+    }
+}
+
 /// Get all scan rules
 pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
     vec![
@@ -890,5 +1013,6 @@ pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
         Box::new(S012BitmapIndexNotEffective),
         Box::new(S013BloomFilterNotEffective),
         Box::new(S014ColocateJoinOpportunity),
+        Box::new(S016SmallFiles),
     ]
 }

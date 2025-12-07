@@ -5,8 +5,9 @@
 use super::*;
 
 /// A001: Aggregation skew
-/// Condition: max(AggComputeTime)/avg > 2
+/// Condition: max(AggComputeTime)/avg > threshold (dynamic based on cluster size)
 /// P0.2: Added absolute value protection (min 100k rows aggregated)
+/// v2.0: Uses dynamic skew threshold based on cluster parallelism
 pub struct A001AggregationSkew;
 
 impl DiagnosticRule for A001AggregationSkew {
@@ -30,17 +31,20 @@ impl DiagnosticRule for A001AggregationSkew {
         }
 
         // P0.2: Absolute value protection - only check if aggregation is significant
-        // Require at least 100k rows processed
-        const MIN_AGG_ROWS: f64 = 100_000.0;
+        // v2.0: Use dynamic threshold from thresholds module
+        let min_rows_threshold = context.thresholds.get_min_rows_for_skew();
         let input_rows = context.get_metric("PushRowNum").unwrap_or(0.0);
 
-        if input_rows < MIN_AGG_ROWS {
+        if input_rows < min_rows_threshold {
             return None;
         }
 
         let ratio = max_time as f64 / avg_time as f64;
 
-        if ratio > 2.0 {
+        // v2.0: Use dynamic skew threshold based on cluster size
+        let skew_threshold = context.thresholds.get_skew_threshold();
+
+        if ratio > skew_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -50,8 +54,8 @@ impl DiagnosticRule for A001AggregationSkew {
                     context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
-                    "聚合存在数据倾斜，max/avg 比率为 {:.2}",
-                    ratio
+                    "聚合存在数据倾斜，max/avg 比率为 {:.2} (阈值: {:.1})",
+                    ratio, skew_threshold
                 ),
                 reason: "聚合算子多个实例处理的数据量存在明显差异，部分实例成为瓶颈。通常是 GROUP BY 键的数据分布不均匀导致。".to_string(),
                 suggestions: vec![
@@ -68,7 +72,8 @@ impl DiagnosticRule for A001AggregationSkew {
 }
 
 /// A002: HashTable memory too large
-/// Condition: HashTableMemoryUsage > 1GB
+/// Condition: HashTableMemoryUsage > threshold (dynamic based on BE memory)
+/// v2.0: Uses dynamic hash table memory threshold (5% of BE memory, clamped to 512MB-5GB)
 pub struct A002HashTableTooLarge;
 
 impl DiagnosticRule for A002HashTableTooLarge {
@@ -85,9 +90,11 @@ impl DiagnosticRule for A002HashTableTooLarge {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let memory = context.get_memory_usage()?;
-        const ONE_GB: u64 = 1024 * 1024 * 1024;
+        
+        // v2.0: Use dynamic hash table memory threshold
+        let memory_threshold = context.thresholds.get_hash_table_memory_threshold();
 
-        if memory > ONE_GB {
+        if memory > memory_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -97,8 +104,9 @@ impl DiagnosticRule for A002HashTableTooLarge {
                     context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
-                    "聚合 HashTable 内存使用 {}",
-                    format_bytes(memory)
+                    "聚合 HashTable 内存使用 {} (阈值: {})",
+                    format_bytes(memory),
+                    format_bytes(memory_threshold)
                 ),
                 reason: "HashTable 占用内存过大，可能导致内存压力或触发 Spill。通常是 GROUP BY 键基数过高或聚合函数状态过大。".to_string(),
                 suggestions: vec![

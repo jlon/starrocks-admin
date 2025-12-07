@@ -6,6 +6,7 @@
 use super::rules::{
     Diagnostic, DiagnosticRule, RuleContext, RuleSeverity, get_all_rules, get_query_rules,
 };
+use super::thresholds::{DynamicThresholds, QueryType};
 use crate::services::profile_analyzer::models::*;
 use std::collections::HashSet;
 
@@ -61,12 +62,20 @@ impl RuleEngine {
         profile: &Profile,
         cluster_variables: Option<&std::collections::HashMap<String, String>>,
     ) -> Vec<Diagnostic> {
-        // P0.1: Skip diagnosis for fast queries (< 1 second)
-        // This avoids false positives on millisecond-level queries
-        const MIN_DIAGNOSIS_TIME_SECONDS: f64 = 1.0;
+        // Detect query type from SQL for dynamic thresholds
+        let query_type = QueryType::from_sql(&profile.summary.sql_statement);
+        
+        // Get cluster info for smart recommendations
+        let cluster_info = profile.get_cluster_info();
+        
+        // Create dynamic thresholds based on cluster info and query type
+        let thresholds = DynamicThresholds::new(cluster_info.clone(), query_type);
 
+        // P0.1: Skip diagnosis for fast queries
+        // v2.0: Use dynamic threshold based on query type (ETL allows faster queries to be diagnosed)
+        let min_diagnosis_time = thresholds.get_min_diagnosis_time_seconds();
         if let Ok(total_time_seconds) = Self::parse_total_time(&profile.summary.total_time) {
-            if total_time_seconds < MIN_DIAGNOSIS_TIME_SECONDS {
+            if total_time_seconds < min_diagnosis_time {
                 // Fast query - return empty diagnostics
                 return vec![];
             }
@@ -105,8 +114,6 @@ impl RuleEngine {
         if let Some(execution_tree) = &profile.execution_tree {
             // Get session variables for context
             let session_variables = &profile.summary.non_default_variables;
-            // Get cluster info for smart recommendations
-            let cluster_info = Some(profile.get_cluster_info());
             // Get default database for table name resolution
             let default_db = profile.summary.default_db.as_deref();
 
@@ -114,12 +121,18 @@ impl RuleEngine {
                 let context = RuleContext {
                     node,
                     session_variables,
-                    cluster_info: cluster_info.clone(),
+                    cluster_info: Some(cluster_info.clone()),
                     cluster_variables,
                     default_db,
+                    thresholds: thresholds.clone(),
                 };
 
                 for rule in &self.rules {
+                    // Skip rules based on query type
+                    if query_type.should_skip_rule(rule.id()) {
+                        continue;
+                    }
+                    
                     if rule.applicable_to(node)
                         && let Some(mut diag) = rule.evaluate(&context)
                         && diag.severity >= self.config.min_severity

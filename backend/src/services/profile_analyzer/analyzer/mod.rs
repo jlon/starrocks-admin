@@ -4,5 +4,6 @@
 
 pub mod rule_engine;
 pub mod rules;
+pub mod thresholds;
 
 pub use rule_engine::RuleEngine;

@@ -141,6 +141,7 @@ impl Profile {
             backend_num: backends.len() as u32,
             instance_num: total_instances,
             total_scan_bytes,
+            be_memory_limit: None, // Not available from profile, use default
         }
     }
 }
@@ -155,6 +156,9 @@ pub struct ClusterInfo {
     pub instance_num: u32,
     /// Total bytes scanned across all scan operators
     pub total_scan_bytes: u64,
+    /// BE memory limit in bytes (optional, for dynamic threshold calculation)
+    /// If not available, defaults to 64GB
+    pub be_memory_limit: Option<u64>,
 }
 
 /// Query summary information extracted from profile header

@@ -30,8 +30,9 @@ impl DiagnosticRule for J001ResultExplosion {
         }
 
         // P0.2: Absolute value protection - only check if probe rows are significant
-        const MIN_PROBE_ROWS: f64 = 10_000.0;
-        if probe_rows < MIN_PROBE_ROWS {
+        // v2.0: Use dynamic threshold from thresholds module
+        let min_probe_rows = context.thresholds.get_min_rows_for_join();
+        if probe_rows < min_probe_rows {
             return None;
         }
 
@@ -113,7 +114,8 @@ impl DiagnosticRule for J002BuildLargerThanProbe {
 }
 
 /// J003: HashTable memory too large
-/// Condition: HashTableMemoryUsage > 1GB
+/// Condition: HashTableMemoryUsage > threshold (dynamic based on BE memory)
+/// v2.0: Uses dynamic hash table memory threshold (5% of BE memory, clamped to 512MB-5GB)
 pub struct J003HashTableTooLarge;
 
 impl DiagnosticRule for J003HashTableTooLarge {
@@ -134,9 +136,10 @@ impl DiagnosticRule for J003HashTableTooLarge {
             .get_metric("HashTableMemoryUsage")
             .or_else(|| context.get_memory_usage().map(|v| v as f64))?;
 
-        const ONE_GB: f64 = 1024.0 * 1024.0 * 1024.0;
+        // v2.0: Use dynamic hash table memory threshold
+        let memory_threshold = context.thresholds.get_hash_table_memory_threshold() as f64;
 
-        if hash_memory > ONE_GB {
+        if hash_memory > memory_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -148,8 +151,9 @@ impl DiagnosticRule for J003HashTableTooLarge {
                 ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
-                    "HashTable 内存使用 {}，可能导致内存压力",
-                    format_bytes(hash_memory as u64)
+                    "HashTable 内存使用 {}，可能导致内存压力 (阈值: {})",
+                    format_bytes(hash_memory as u64),
+                    format_bytes(memory_threshold as u64)
                 ),
                 reason: "Join 的 HashTable 占用内存过大，可能导致内存压力或触发 Spill。"
                     .to_string(),
@@ -367,6 +371,7 @@ impl DiagnosticRule for J005HashCollision {
 }
 
 /// J006: Join shuffle skew
+/// v2.0: Uses dynamic skew threshold based on cluster parallelism
 pub struct J006ShuffleSkew;
 
 impl DiagnosticRule for J006ShuffleSkew {
@@ -388,14 +393,19 @@ impl DiagnosticRule for J006ShuffleSkew {
             return None;
         }
         let ratio = max_probe / ((max_probe + min_probe) / 2.0);
-        if ratio > 3.0 {
+        
+        // v2.0: Use dynamic skew threshold based on cluster size
+        // For shuffle skew, use a slightly higher threshold (skew_threshold + 1.0)
+        let skew_threshold = context.thresholds.get_skew_threshold() + 1.0;
+        
+        if ratio > skew_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
-                message: format!("Join 数据分布倾斜，max/avg 比率为 {:.2}", ratio),
+                message: format!("Join 数据分布倾斜，max/avg 比率为 {:.2} (阈值: {:.1})", ratio, skew_threshold),
                 reason: "Shuffle Join 的数据分布不均匀，部分节点处理更多数据。通常是 Join 键存在热点值。".to_string(),
                 suggestions: vec!["切换到更高基数的连接键".to_string(), "对键添加盐值".to_string()],
                 parameter_suggestions: vec![],

@@ -3,9 +3,13 @@
 //! These rules apply to all operator types.
 
 use super::*;
+use crate::services::profile_analyzer::analyzer::thresholds::defaults::{
+    MIN_OPERATOR_TIME_MS, MOST_CONSUMING_PERCENTAGE, SECOND_CONSUMING_PERCENTAGE,
+};
 
 /// G001: Time percentage too high (most consuming node)
-/// Threshold: > 30% (aligned with StarRocks ExplainAnalyzer.java)
+/// Threshold: > 30% AND > 500ms (aligned with StarRocks ExplainAnalyzer.java)
+/// P0.2: Added absolute time threshold to avoid false positives on fast operators
 pub struct G001MostConsuming;
 
 impl DiagnosticRule for G001MostConsuming {
@@ -22,8 +26,11 @@ impl DiagnosticRule for G001MostConsuming {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let percentage = context.get_time_percentage()?;
+        let operator_time_ms = context.get_operator_time_ms()?;
 
-        if percentage > 30.0 {
+        // P0.2: Check both percentage AND absolute time threshold
+        // Avoid false positives on operators that are fast in absolute terms
+        if percentage > MOST_CONSUMING_PERCENTAGE && operator_time_ms > MIN_OPERATOR_TIME_MS {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -47,7 +54,8 @@ impl DiagnosticRule for G001MostConsuming {
 }
 
 /// G001b: Time percentage high (second most consuming node)
-/// Threshold: > 15% (aligned with StarRocks ExplainAnalyzer.java)
+/// Threshold: > 15% AND > 500ms (aligned with StarRocks ExplainAnalyzer.java)
+/// P0.2: Added absolute time threshold to avoid false positives on fast operators
 pub struct G001bSecondConsuming;
 
 impl DiagnosticRule for G001bSecondConsuming {
@@ -64,9 +72,14 @@ impl DiagnosticRule for G001bSecondConsuming {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let percentage = context.get_time_percentage()?;
+        let operator_time_ms = context.get_operator_time_ms()?;
 
+        // P0.2: Check both percentage AND absolute time threshold
         // Only trigger if between 15% and 30% (G001 handles > 30%)
-        if percentage > 15.0 && percentage <= 30.0 {
+        if percentage > SECOND_CONSUMING_PERCENTAGE
+            && percentage <= MOST_CONSUMING_PERCENTAGE
+            && operator_time_ms > MIN_OPERATOR_TIME_MS
+        {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -90,7 +103,8 @@ impl DiagnosticRule for G001bSecondConsuming {
 }
 
 /// G002: Memory usage too high
-/// Threshold: > 1GB
+/// Threshold: dynamic based on BE memory (10% of BE memory, clamped to 1GB-10GB)
+/// v2.0: Uses dynamic memory threshold based on cluster configuration
 pub struct G002HighMemory;
 
 impl DiagnosticRule for G002HighMemory {
@@ -107,9 +121,11 @@ impl DiagnosticRule for G002HighMemory {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let memory = context.get_memory_usage()?;
-        const ONE_GB: u64 = 1024 * 1024 * 1024;
+        
+        // v2.0: Use dynamic memory threshold based on BE memory
+        let memory_threshold = context.thresholds.get_operator_memory_threshold();
 
-        if memory > ONE_GB {
+        if memory > memory_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -119,8 +135,8 @@ impl DiagnosticRule for G002HighMemory {
                     context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
-                    "算子 {} 内存使用过高: {}",
-                    context.node.operator_name, format_bytes(memory)
+                    "算子 {} 内存使用过高: {} (阈值: {})",
+                    context.node.operator_name, format_bytes(memory), format_bytes(memory_threshold)
                 ),
                 reason: "算子内存使用过高，可能导致查询失败或触发 Spill。检查是否存在数据膨胀或中间结果过大。".to_string(),
                 suggestions: vec![
@@ -143,8 +159,9 @@ impl DiagnosticRule for G002HighMemory {
 }
 
 /// G003: Execution time skew across instances
-/// Threshold: max/avg > 2
+/// Threshold: max/avg > threshold (dynamic based on cluster size)
 /// P0.2: Added absolute value protection (min 500ms execution time)
+/// v2.0: Uses dynamic skew threshold based on cluster parallelism
 pub struct G003ExecutionSkew;
 
 impl DiagnosticRule for G003ExecutionSkew {
@@ -170,14 +187,18 @@ impl DiagnosticRule for G003ExecutionSkew {
         }
 
         // P0.2: Absolute value protection - only check if execution time is significant
-        const MIN_EXEC_TIME_NS: u64 = 500 * 1_000_000; // 500ms in nanoseconds
+        // v2.0: Use constant from thresholds module
+        use crate::services::profile_analyzer::analyzer::thresholds::defaults::MIN_EXEC_TIME_NS;
         if avg_time < MIN_EXEC_TIME_NS {
             return None;
         }
 
         let ratio = max_time as f64 / avg_time as f64;
 
-        if ratio > 2.0 {
+        // v2.0: Use dynamic skew threshold based on cluster size
+        let skew_threshold = context.thresholds.get_skew_threshold();
+
+        if ratio > skew_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -189,8 +210,8 @@ impl DiagnosticRule for G003ExecutionSkew {
                 ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
-                    "算子 {} 存在执行时间倾斜，max/avg 比率为 {:.2}",
-                    context.node.operator_name, ratio
+                    "算子 {} 存在执行时间倾斜，max/avg 比率为 {:.2} (阈值: {:.1})",
+                    context.node.operator_name, ratio, skew_threshold
                 ),
                 reason:
                     "算子在多个实例间执行时间差异大，部分实例成为瓶颈。通常是数据分布不均匀导致。"
@@ -268,6 +289,7 @@ pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::profile_analyzer::analyzer::thresholds::{DynamicThresholds, QueryType};
     use crate::services::profile_analyzer::models::{
         ExecutionTreeNode, HotSeverity, NodeType, OperatorMetrics,
     };
@@ -283,14 +305,18 @@ mod tests {
     fn test_g001_triggers_on_high_percentage() {
         let rule = G001MostConsuming;
 
-        // Create a node with 99.84% time percentage
+        // Create a node with 99.84% time percentage and sufficient absolute time (1 second)
+        // P0.2: G001 now requires both percentage > 30% AND operator_time > 500ms
+        let mut metrics = OperatorMetrics::default();
+        metrics.operator_total_time = Some(1_000_000_000); // 1 second in nanoseconds
+
         let node = ExecutionTreeNode {
             id: "test_node".to_string(),
             operator_name: "OLAP_SCAN".to_string(),
             node_type: NodeType::OlapScan,
             plan_node_id: Some(0),
             parent_plan_node_id: None,
-            metrics: OperatorMetrics::default(),
+            metrics,
             children: vec![],
             depth: 0,
             is_hotspot: false,
@@ -313,12 +339,58 @@ mod tests {
             cluster_info: None,
             cluster_variables: None,
             default_db: None,
+            thresholds: DynamicThresholds::with_defaults(QueryType::Select),
         };
         let result = rule.evaluate(&context);
 
-        assert!(result.is_some(), "G001 should trigger for 99.84% time percentage");
+        assert!(result.is_some(), "G001 should trigger for 99.84% time percentage with 1s operator time");
         let diag = result.unwrap();
         assert_eq!(diag.rule_id, "G001");
         assert_eq!(diag.plan_node_id, Some(0));
+    }
+
+    #[test]
+    fn test_g001_skips_fast_operator() {
+        let rule = G001MostConsuming;
+
+        // Create a node with high percentage but low absolute time (100ms < 500ms threshold)
+        // P0.2: G001 should NOT trigger because operator_time < 500ms
+        let mut metrics = OperatorMetrics::default();
+        metrics.operator_total_time = Some(100_000_000); // 100ms in nanoseconds
+
+        let node = ExecutionTreeNode {
+            id: "test_node".to_string(),
+            operator_name: "OLAP_SCAN".to_string(),
+            node_type: NodeType::OlapScan,
+            plan_node_id: Some(0),
+            parent_plan_node_id: None,
+            metrics,
+            children: vec![],
+            depth: 0,
+            is_hotspot: false,
+            hotspot_severity: HotSeverity::Normal,
+            fragment_id: None,
+            pipeline_id: None,
+            time_percentage: Some(50.0), // High percentage
+            rows: None,
+            is_most_consuming: true,
+            is_second_most_consuming: false,
+            unique_metrics: HashMap::new(),
+            has_diagnostic: false,
+            diagnostic_ids: vec![],
+        };
+
+        let session_variables = std::collections::HashMap::new();
+        let context = RuleContext {
+            node: &node,
+            session_variables: &session_variables,
+            cluster_info: None,
+            cluster_variables: None,
+            default_db: None,
+            thresholds: DynamicThresholds::with_defaults(QueryType::Select),
+        };
+        let result = rule.evaluate(&context);
+
+        assert!(result.is_none(), "G001 should NOT trigger for fast operator (100ms < 500ms threshold)");
     }
 }

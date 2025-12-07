@@ -182,7 +182,13 @@ pub struct QueryDiagnostic {
 }
 
 /// Q001: Query execution time too long
-/// Condition: TotalTime > 60s
+/// Condition: TotalTime > threshold (dynamic based on query type)
+/// v2.0: Uses query-type-specific time thresholds:
+///   - OLAP SELECT: 10s
+///   - INSERT/CTAS: 5min
+///   - EXPORT/ANALYZE: 10min
+///   - LOAD: 30min
+///   - Unknown: 1min
 pub struct Q001LongRunning;
 
 impl QueryRule for Q001LongRunning {
@@ -194,22 +200,52 @@ impl QueryRule for Q001LongRunning {
     }
 
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
+        use crate::services::profile_analyzer::analyzer::thresholds::QueryType;
+        
         let total_time_ms = ctx
             .profile
             .summary
             .total_time_ms
             .or_else(|| parse_duration_ms(&ctx.profile.summary.total_time))?;
 
-        if total_time_ms > 60_000.0 {
+        // v2.0: Detect query type and use appropriate threshold
+        let query_type = QueryType::from_sql(&ctx.profile.summary.sql_statement);
+        let time_threshold_ms = query_type.get_time_threshold_ms();
+        
+        // Format threshold for display
+        let threshold_display = if time_threshold_ms >= 60_000.0 {
+            format!("{:.0}分钟", time_threshold_ms / 60_000.0)
+        } else {
+            format!("{:.0}秒", time_threshold_ms / 1000.0)
+        };
+        
+        // Get query type name for display
+        let query_type_name = match query_type {
+            QueryType::Select => "OLAP 查询",
+            QueryType::Insert => "INSERT 导入",
+            QueryType::Export => "EXPORT 导出",
+            QueryType::Analyze => "ANALYZE 分析",
+            QueryType::Ctas => "CTAS 建表",
+            QueryType::Load => "LOAD 导入",
+            QueryType::Unknown => "查询",
+        };
+
+        if total_time_ms > time_threshold_ms {
             Some(QueryDiagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 message: format!(
-                    "查询执行时间 {}，超过 60 秒阈值",
-                    format_duration_ms(total_time_ms)
+                    "{}执行时间 {}，超过{}阈值 ({})",
+                    query_type_name,
+                    format_duration_ms(total_time_ms),
+                    query_type_name,
+                    threshold_display
                 ),
-                reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
+                reason: format!(
+                    "根据查询类型 ({}) 设置了不同的时间阈值。OLAP 查询期望快速响应 (10s)，而 ETL 任务允许更长时间 (5-30min)。",
+                    query_type_name
+                ),
                 suggestions: vec![
                     "检查是否存在性能瓶颈算子".to_string(),
                     "考虑优化查询计划".to_string(),

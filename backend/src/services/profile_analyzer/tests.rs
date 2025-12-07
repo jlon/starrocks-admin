@@ -1562,6 +1562,7 @@ Query:
                 cluster_info: None,
                 cluster_variables: None,
                 default_db: None,
+                thresholds: crate::services::profile_analyzer::analyzer::thresholds::DynamicThresholds::default(),
             };
 
             // enable_scan_datacache default is "true", so suggesting "true" should return None

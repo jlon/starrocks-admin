@@ -54,15 +54,29 @@ stringData:
   # database-password: "your-db-password"
   # api-key: "your-api-key"
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: starrocks-admin-data
+  namespace: starrocks-admin
+  labels:
+    app: starrocks-admin
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: ""  # 使用默认存储类，如需指定请取消注释并填写
+---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: starrocks-admin
   namespace: starrocks-admin
   labels:
     app: starrocks-admin
 spec:
-  serviceName: starrocks-admin
   replicas: 1  # SQLite only supports single writer, use 1 replica
   selector:
     matchLabels:
@@ -111,24 +125,31 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
       volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: starrocks-admin-data
       - name: config
         configMap:
           name: starrocks-admin-config
       - name: logs
         emptyDir: {}
-  
-  volumeClaimTemplates:
-  - metadata:
-      name: data
-      labels:
-        app: starrocks-admin
-    spec:
-      accessModes: 
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: 10Gi
 ---
 apiVersion: v1
 kind: Service

@@ -2,7 +2,8 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+# Replica count - MUST be 1 because SQLite only supports single writer
+# For high availability, use an external database (PostgreSQL/MySQL)
 replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
@@ -146,11 +147,12 @@ livenessProbe:
   failureThreshold: 3
   successThreshold: 1
 
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+# Autoscaling - DISABLED because SQLite only supports single writer
+# Do not enable autoscaling unless using an external database
 autoscaling:
-  enabled: false
+  enabled: false  # Must remain false for SQLite
   minReplicas: 1
-  maxReplicas: 100
+  maxReplicas: 1  # Fixed to 1 for SQLite
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 

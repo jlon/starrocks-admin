@@ -69,6 +69,11 @@ make docker-up     # Start Docker container
 open http://localhost:8080
 ```
 
+### More Deployment Options
+
+For detailed deployment guides including Kubernetes YAML and Helm Chart deployment, see:
+📖 **[Deployment Guide](docs/deploy/DEPLOYMENT_GUIDE.md)**
+
 ## Interface Preview
 
 StarRocks Admin provides an intuitive and beautiful web management interface covering all aspects of cluster management.
@@ -291,6 +296,11 @@ make docker-up     # 启动 Docker 容器
 # 访问应用
 open http://localhost:8080
 ```
+
+### 更多部署方式
+
+完整的部署指南（包括 Kubernetes YAML 部署和 Helm Chart 部署），请参阅：
+📖 **[详细部署指南](docs/deploy/DEPLOYMENT_GUIDE.md)**
 
 ## 界面预览
 

@@ -61,6 +61,17 @@ impl RuleEngine {
         profile: &Profile,
         cluster_variables: Option<&std::collections::HashMap<String, String>>,
     ) -> Vec<Diagnostic> {
+        // P0.1: Skip diagnosis for fast queries (< 1 second)
+        // This avoids false positives on millisecond-level queries
+        const MIN_DIAGNOSIS_TIME_SECONDS: f64 = 1.0;
+
+        if let Ok(total_time_seconds) = Self::parse_total_time(&profile.summary.total_time) {
+            if total_time_seconds < MIN_DIAGNOSIS_TIME_SECONDS {
+                // Fast query - return empty diagnostics
+                return vec![];
+            }
+        }
+
         let mut diagnostics = Vec::new();
 
         // Evaluate query-level rules first

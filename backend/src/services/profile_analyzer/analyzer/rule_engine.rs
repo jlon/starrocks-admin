@@ -109,7 +109,7 @@ impl RuleEngine {
                 });
             }
         }
-        
+
         // Evaluate planner-level rules (HMS metadata, optimizer, etc.)
         let query_time_ms = Self::parse_total_time(&profile.summary.total_time)
             .map(|s| s * 1000.0)

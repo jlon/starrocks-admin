@@ -178,7 +178,7 @@ impl SectionParser {
                 details.insert(key.to_string(), value.to_string());
             }
         }
-        
+
         // Calculate total HMS time
         hms_metrics.total_hms_time_ms = hms_metrics.get_database_ms 
             + hms_metrics.get_table_ms 

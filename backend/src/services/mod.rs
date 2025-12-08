@@ -1,4 +1,5 @@
 pub mod auth_service;
+pub mod baseline_service;
 pub mod casbin_service;
 pub mod cluster_service;
 pub mod data_statistics_service;
@@ -18,6 +19,7 @@ pub mod user_role_service;
 pub mod user_service;
 
 pub use auth_service::AuthService;
+pub use baseline_service::BaselineService;
 pub use casbin_service::CasbinService;
 pub use cluster_service::ClusterService;
 pub use llm::{LLMService, LLMServiceImpl, LLMError, LLMProviderInfo, LLMScenario};

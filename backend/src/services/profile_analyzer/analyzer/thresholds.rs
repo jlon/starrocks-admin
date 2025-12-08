@@ -4,10 +4,14 @@
 //! - Cluster configuration (BE count, memory)
 //! - Query type (SELECT, INSERT, EXPORT, etc.)
 //! - Storage type (S3, HDFS, local)
+//! - Historical baseline from audit logs
+//! - Query complexity (simple/medium/complex/very complex)
 //!
 //! Reference: profile-diagnostic-system-review.md Section 4
 
 use crate::services::profile_analyzer::models::ClusterInfo;
+use super::baseline::{PerformanceBaseline, QueryComplexity, AdaptiveThresholdCalculator};
+use std::collections::HashMap;
 
 // ============================================================================
 // Query Type Detection
@@ -100,17 +104,50 @@ impl QueryType {
 pub struct DynamicThresholds {
     pub cluster_info: ClusterInfo,
     pub query_type: QueryType,
+    pub query_complexity: QueryComplexity,
+    /// Historical baseline data (optional)
+    pub baseline: Option<PerformanceBaseline>,
 }
 
 impl DynamicThresholds {
     /// Create a new threshold calculator
-    pub fn new(cluster_info: ClusterInfo, query_type: QueryType) -> Self {
-        Self { cluster_info, query_type }
+    pub fn new(cluster_info: ClusterInfo, query_type: QueryType, query_complexity: QueryComplexity) -> Self {
+        Self { 
+            cluster_info, 
+            query_type,
+            query_complexity,
+            baseline: None,
+        }
     }
 
     /// Create with default cluster info
     pub fn with_defaults(query_type: QueryType) -> Self {
-        Self { cluster_info: ClusterInfo::default(), query_type }
+        Self { 
+            cluster_info: ClusterInfo::default(), 
+            query_type,
+            query_complexity: QueryComplexity::Medium,
+            baseline: None,
+        }
+    }
+    
+    /// Create with historical baseline
+    pub fn with_baseline(
+        cluster_info: ClusterInfo, 
+        query_type: QueryType,
+        query_complexity: QueryComplexity,
+        baseline: PerformanceBaseline,
+    ) -> Self {
+        Self {
+            cluster_info,
+            query_type,
+            query_complexity,
+            baseline: Some(baseline),
+        }
+    }
+    
+    /// Detect query complexity from SQL
+    pub fn detect_complexity(sql: &str) -> QueryComplexity {
+        QueryComplexity::from_sql(sql)
     }
 
     // ========================================================================
@@ -160,9 +197,46 @@ impl DynamicThresholds {
 
     /// Get execution time threshold for Q001 (query too long)
     /// Returns threshold in milliseconds
+    ///
+    /// Strategy:
+    /// 1. If historical baseline available: use P95 + 2*std_dev
+    /// 2. Otherwise: use query type baseline * complexity factor
     #[allow(dead_code)] // Used by QueryType directly in Q001
     pub fn get_query_time_threshold_ms(&self) -> f64 {
-        self.query_type.get_time_threshold_ms()
+        // Priority 1: Use historical baseline if available
+        if let Some(baseline) = &self.baseline {
+            let adaptive_threshold = baseline.stats.p95_ms + 2.0 * baseline.stats.std_dev_ms;
+            
+            // Ensure reasonable minimum
+            let min_threshold = self.get_min_threshold_by_complexity();
+            return adaptive_threshold.max(min_threshold);
+        }
+        
+        // Priority 2: Use query type + complexity factor
+        let base = self.query_type.get_time_threshold_ms();
+        let complexity_factor = self.get_complexity_factor();
+        
+        base * complexity_factor
+    }
+    
+    /// Get complexity factor for threshold adjustment
+    fn get_complexity_factor(&self) -> f64 {
+        match self.query_complexity {
+            QueryComplexity::Simple => 0.5,      // Simple: 50% of base
+            QueryComplexity::Medium => 1.0,      // Medium: 100% of base
+            QueryComplexity::Complex => 2.0,     // Complex: 200% of base
+            QueryComplexity::VeryComplex => 3.0, // Very complex: 300% of base
+        }
+    }
+    
+    /// Get minimum threshold by complexity (to avoid too strict)
+    fn get_min_threshold_by_complexity(&self) -> f64 {
+        match self.query_complexity {
+            QueryComplexity::Simple => 5_000.0,       // 5s
+            QueryComplexity::Medium => 10_000.0,      // 10s
+            QueryComplexity::Complex => 30_000.0,     // 30s
+            QueryComplexity::VeryComplex => 60_000.0, // 1min
+        }
     }
 
     /// Get minimum diagnosis time threshold
@@ -184,15 +258,34 @@ impl DynamicThresholds {
     /// Get data skew threshold (S001, J006, A001, G003)
     /// Returns max/avg ratio threshold
     ///
-    /// Logic: Larger clusters can tolerate more skew
+    /// Strategy:
+    /// 1. If historical baseline available: learn from P99/P50 ratio
+    /// 2. Otherwise: use cluster size-based threshold
     pub fn get_skew_threshold(&self) -> f64 {
         let parallelism = self.cluster_info.backend_num;
-
-        match parallelism {
+        
+        // Base threshold from cluster size
+        let base = match parallelism {
             p if p > 32 => 3.5, // Large cluster: allow more skew
             p if p > 16 => 3.0,
             p if p > 8 => 2.5,
             _ => 2.0, // Small cluster: stricter
+        };
+        
+        // If baseline available, adjust based on historical variance
+        if let Some(baseline) = &self.baseline {
+            let historical_ratio = if baseline.stats.p50_ms > 0.0 {
+                baseline.stats.p99_ms / baseline.stats.p50_ms
+            } else {
+                2.0
+            };
+            
+            // If historical data shows high variance, allow slightly more skew
+            // Increase base by 20% of (historical_ratio - 2.0), capped at 1.0
+            let adjustment = ((historical_ratio - 2.0) * 0.2).min(1.0).max(0.0);
+            base + adjustment
+        } else {
+            base
         }
     }
 
@@ -255,7 +348,12 @@ impl DynamicThresholds {
 
 impl Default for DynamicThresholds {
     fn default() -> Self {
-        Self::with_defaults(QueryType::Unknown)
+        Self {
+            cluster_info: ClusterInfo::default(),
+            query_type: QueryType::Unknown,
+            query_complexity: QueryComplexity::Medium,
+            baseline: None,
+        }
     }
 }
 

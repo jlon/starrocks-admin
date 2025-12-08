@@ -405,11 +405,11 @@ impl ProfileComposer {
         if matching_operators.is_empty() {
             let scan_types = ["OLAP_SCAN", "HDFS_SCAN", "HUDI_SCAN", "ICEBERG_SCAN", "DELTA_SCAN", "PAIMON_SCAN", "FILE_SCAN"];
             if scan_types.contains(&topology_name.as_ref()) {
-                for &op in operators {
-                    let op_name = Self::extract_operator_name(&op.name);
-                    let op_canonical = OperatorParser::canonical_topology_name(&op_name);
+            for &op in operators {
+                let op_name = Self::extract_operator_name(&op.name);
+                let op_canonical = OperatorParser::canonical_topology_name(&op_name);
                     if op_canonical == "CONNECTOR_SCAN" || op_canonical == topology_name {
-                        matching_operators.push(op);
+                    matching_operators.push(op);
                     }
                 }
             }

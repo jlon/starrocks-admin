@@ -2,6 +2,7 @@
 //!
 //! Production-ready baseline management:
 //! - In-memory cache with TTL (default: 1 hour)
+//! - Per-cluster baseline isolation
 //! - Background async refresh
 //! - Graceful fallback to defaults when audit log unavailable
 //! - Zero-allocation on cache hit
@@ -18,6 +19,8 @@ use std::time::{Duration, Instant};
 /// Cached baseline data with metadata
 #[derive(Debug, Clone)]
 pub struct CachedBaseline {
+    /// Cluster ID this baseline belongs to
+    pub cluster_id: i64,
     /// Baseline data by complexity
     pub baselines: HashMap<QueryComplexity, PerformanceBaseline>,
     /// Cache creation time
@@ -52,19 +55,20 @@ impl CachedBaseline {
 }
 
 // ============================================================================
-// Baseline Cache Manager
+// Multi-Cluster Baseline Cache Manager
 // ============================================================================
 
-/// Thread-safe baseline cache manager
+/// Thread-safe baseline cache manager supporting multiple clusters
 /// 
 /// # Design Principles
-/// 1. **Zero-copy on read**: Uses RwLock for concurrent reads
-/// 2. **Automatic fallback**: Returns defaults if cache miss
-/// 3. **Background refresh**: Non-blocking cache updates
-/// 4. **Graceful degradation**: Works without audit log
+/// 1. **Per-cluster isolation**: Each cluster has independent baselines
+/// 2. **Zero-copy on read**: Uses RwLock for concurrent reads
+/// 3. **Automatic fallback**: Returns defaults if cache miss
+/// 4. **Background refresh**: Non-blocking cache updates
+/// 5. **Graceful degradation**: Works without audit log
 pub struct BaselineCacheManager {
-    /// Cached baseline data
-    cache: Arc<RwLock<Option<CachedBaseline>>>,
+    /// Cached baseline data per cluster (cluster_id -> CachedBaseline)
+    cache: Arc<RwLock<HashMap<i64, CachedBaseline>>>,
     /// Default TTL (1 hour)
     default_ttl: Duration,
 }
@@ -73,7 +77,7 @@ impl BaselineCacheManager {
     /// Create new cache manager
     pub fn new() -> Self {
         Self {
-            cache: Arc::new(RwLock::new(None)),
+            cache: Arc::new(RwLock::new(HashMap::new())),
             default_ttl: Duration::from_secs(3600), // 1 hour
         }
     }
@@ -81,22 +85,22 @@ impl BaselineCacheManager {
     /// Create with custom TTL
     pub fn with_ttl(ttl_seconds: u64) -> Self {
         Self {
-            cache: Arc::new(RwLock::new(None)),
+            cache: Arc::new(RwLock::new(HashMap::new())),
             default_ttl: Duration::from_secs(ttl_seconds),
         }
     }
     
-    /// Get baseline for specific complexity (fast path)
+    /// Get baseline for specific cluster and complexity (fast path)
     /// 
     /// Returns:
-    /// - Cached baseline if valid
+    /// - Cached baseline if valid for this cluster
     /// - Default baseline if cache invalid or missing
     /// 
     /// This method NEVER blocks on I/O - it always returns immediately
-    pub fn get_baseline(&self, complexity: QueryComplexity) -> PerformanceBaseline {
+    pub fn get_baseline(&self, cluster_id: i64, complexity: QueryComplexity) -> PerformanceBaseline {
         // Fast path: read from cache
         if let Ok(cache_guard) = self.cache.read() {
-            if let Some(cached) = cache_guard.as_ref() {
+            if let Some(cached) = cache_guard.get(&cluster_id) {
                 if cached.is_valid() {
                     if let Some(baseline) = cached.get(complexity) {
                         return baseline.clone();
@@ -109,30 +113,36 @@ impl BaselineCacheManager {
         Self::default_baseline(complexity)
     }
     
-    /// Check if cache has valid data
-    pub fn has_valid_cache(&self) -> bool {
+    /// Get baseline without cluster (backward compatibility, uses cluster 0)
+    pub fn get_baseline_default(&self, complexity: QueryComplexity) -> PerformanceBaseline {
+        self.get_baseline(0, complexity)
+    }
+    
+    /// Check if cache has valid data for cluster
+    pub fn has_valid_cache(&self, cluster_id: i64) -> bool {
         if let Ok(cache_guard) = self.cache.read() {
-            cache_guard.as_ref().map(|c| c.is_valid()).unwrap_or(false)
+            cache_guard.get(&cluster_id).map(|c| c.is_valid()).unwrap_or(false)
         } else {
             false
         }
     }
     
-    /// Get cache source (for diagnostics)
-    pub fn get_source(&self) -> BaselineSource {
+    /// Get cache source for cluster (for diagnostics)
+    pub fn get_source(&self, cluster_id: i64) -> BaselineSource {
         if let Ok(cache_guard) = self.cache.read() {
-            cache_guard.as_ref().map(|c| c.source).unwrap_or(BaselineSource::Default)
+            cache_guard.get(&cluster_id).map(|c| c.source).unwrap_or(BaselineSource::Default)
         } else {
             BaselineSource::Default
         }
     }
     
-    /// Update cache with new baseline data
+    /// Update cache with new baseline data for a specific cluster
     /// 
     /// Called by background refresh task
-    pub fn update(&self, baselines: HashMap<QueryComplexity, PerformanceBaseline>, source: BaselineSource) {
+    pub fn update(&self, cluster_id: i64, baselines: HashMap<QueryComplexity, PerformanceBaseline>, source: BaselineSource) {
         if let Ok(mut cache_guard) = self.cache.write() {
-            *cache_guard = Some(CachedBaseline {
+            cache_guard.insert(cluster_id, CachedBaseline {
+                cluster_id,
                 baselines,
                 created_at: Instant::now(),
                 ttl: self.default_ttl,
@@ -141,10 +151,31 @@ impl BaselineCacheManager {
         }
     }
     
-    /// Clear cache (for testing or manual refresh)
-    pub fn clear(&self) {
+    /// Update cache for default cluster (backward compatibility)
+    pub fn update_default(&self, baselines: HashMap<QueryComplexity, PerformanceBaseline>, source: BaselineSource) {
+        self.update(0, baselines, source);
+    }
+    
+    /// Clear cache for a specific cluster
+    pub fn clear(&self, cluster_id: i64) {
         if let Ok(mut cache_guard) = self.cache.write() {
-            *cache_guard = None;
+            cache_guard.remove(&cluster_id);
+        }
+    }
+    
+    /// Clear all caches
+    pub fn clear_all(&self) {
+        if let Ok(mut cache_guard) = self.cache.write() {
+            cache_guard.clear();
+        }
+    }
+    
+    /// Get list of cached cluster IDs
+    pub fn cached_clusters(&self) -> Vec<i64> {
+        if let Ok(cache_guard) = self.cache.read() {
+            cache_guard.keys().cloned().collect()
+        } else {
+            vec![]
         }
     }
     
@@ -207,23 +238,32 @@ impl Default for BaselineCacheManager {
 /// 
 /// Usage:
 /// ```rust
-/// let baseline = BaselineProvider::get(QueryComplexity::Medium);
+/// // Get baseline for specific cluster
+/// let baseline = BaselineProvider::get(cluster_id, QueryComplexity::Medium);
+/// 
+/// // Get baseline without cluster (uses default)
+/// let baseline = BaselineProvider::get_default(QueryComplexity::Medium);
 /// ```
 pub struct BaselineProvider;
 
 impl BaselineProvider {
-    /// Get baseline for complexity (uses global cache or defaults)
+    /// Get baseline for specific cluster and complexity
     /// 
     /// This is the main entry point for getting baselines.
     /// It NEVER fails - always returns a valid baseline.
-    pub fn get(complexity: QueryComplexity) -> PerformanceBaseline {
+    pub fn get(cluster_id: i64, complexity: QueryComplexity) -> PerformanceBaseline {
         // Try global cache first
         if let Some(manager) = GLOBAL_CACHE.get() {
-            manager.get_baseline(complexity)
+            manager.get_baseline(cluster_id, complexity)
         } else {
             // No global cache initialized, use defaults
             BaselineCacheManager::default_baseline(complexity)
         }
+    }
+    
+    /// Get baseline without cluster (backward compatibility)
+    pub fn get_default(complexity: QueryComplexity) -> PerformanceBaseline {
+        Self::get(0, complexity)
     }
     
     /// Initialize global cache (call once at startup)
@@ -236,18 +276,30 @@ impl BaselineProvider {
         let _ = GLOBAL_CACHE.set(BaselineCacheManager::with_ttl(ttl_seconds));
     }
     
-    /// Update global cache (called by background task)
-    pub fn update(baselines: HashMap<QueryComplexity, PerformanceBaseline>, source: BaselineSource) {
+    /// Update cache for specific cluster (called by background task)
+    pub fn update(cluster_id: i64, baselines: HashMap<QueryComplexity, PerformanceBaseline>, source: BaselineSource) {
         if let Some(manager) = GLOBAL_CACHE.get() {
-            manager.update(baselines, source);
+            manager.update(cluster_id, baselines, source);
         }
     }
     
-    /// Check if audit log data is available
-    pub fn has_audit_data() -> bool {
+    /// Update cache for default cluster (backward compatibility)
+    pub fn update_default(baselines: HashMap<QueryComplexity, PerformanceBaseline>, source: BaselineSource) {
+        Self::update(0, baselines, source);
+    }
+    
+    /// Check if audit log data is available for cluster
+    pub fn has_audit_data(cluster_id: i64) -> bool {
         GLOBAL_CACHE.get()
-            .map(|m| m.get_source() == BaselineSource::AuditLog)
+            .map(|m| m.get_source(cluster_id) == BaselineSource::AuditLog)
             .unwrap_or(false)
+    }
+    
+    /// Get list of cached cluster IDs
+    pub fn cached_clusters() -> Vec<i64> {
+        GLOBAL_CACHE.get()
+            .map(|m| m.cached_clusters())
+            .unwrap_or_default()
     }
 }
 
@@ -309,9 +361,10 @@ mod tests {
     #[test]
     fn test_cache_manager_fallback() {
         let manager = BaselineCacheManager::new();
+        let cluster_id = 1;
         
         // Without cache data, should return defaults
-        let baseline = manager.get_baseline(QueryComplexity::Medium);
+        let baseline = manager.get_baseline(cluster_id, QueryComplexity::Medium);
         assert_eq!(baseline.sample_size, 0); // Default indicator
         assert!(baseline.stats.avg_ms > 0.0);
     }
@@ -319,6 +372,7 @@ mod tests {
     #[test]
     fn test_cache_update_and_read() {
         let manager = BaselineCacheManager::new();
+        let cluster_id = 1;
         
         // Create custom baseline
         let mut baselines = HashMap::new();
@@ -336,47 +390,101 @@ mod tests {
             time_range_hours: 168,
         });
         
-        // Update cache
-        manager.update(baselines, BaselineSource::AuditLog);
+        // Update cache for cluster
+        manager.update(cluster_id, baselines, BaselineSource::AuditLog);
         
         // Read should return custom data
-        let baseline = manager.get_baseline(QueryComplexity::Medium);
+        let baseline = manager.get_baseline(cluster_id, QueryComplexity::Medium);
         assert_eq!(baseline.sample_size, 100);
         assert!((baseline.stats.avg_ms - 12345.0).abs() < 0.01);
+        
+        // Other cluster should return defaults
+        let other_baseline = manager.get_baseline(999, QueryComplexity::Medium);
+        assert_eq!(other_baseline.sample_size, 0);
     }
     
     #[test]
     fn test_cache_validity() {
         let manager = BaselineCacheManager::with_ttl(1); // 1 second TTL
+        let cluster_id = 1;
         
         // Initially no cache
-        assert!(!manager.has_valid_cache());
+        assert!(!manager.has_valid_cache(cluster_id));
         
         // Update cache
-        manager.update(HashMap::new(), BaselineSource::Default);
-        assert!(manager.has_valid_cache());
+        manager.update(cluster_id, HashMap::new(), BaselineSource::Default);
+        assert!(manager.has_valid_cache(cluster_id));
         
         // Wait for TTL to expire
         std::thread::sleep(Duration::from_secs(2));
-        assert!(!manager.has_valid_cache());
+        assert!(!manager.has_valid_cache(cluster_id));
     }
     
     #[test]
     fn test_cache_source() {
         let manager = BaselineCacheManager::new();
+        let cluster_id = 1;
         
-        // Default source
-        assert_eq!(manager.get_source(), BaselineSource::Default);
+        // Default source (no cache)
+        assert_eq!(manager.get_source(cluster_id), BaselineSource::Default);
         
         // Update with audit log data
-        manager.update(HashMap::new(), BaselineSource::AuditLog);
-        assert_eq!(manager.get_source(), BaselineSource::AuditLog);
+        manager.update(cluster_id, HashMap::new(), BaselineSource::AuditLog);
+        assert_eq!(manager.get_source(cluster_id), BaselineSource::AuditLog);
     }
     
     #[test]
     fn test_provider_fallback() {
         // Without initialization, should still work with defaults
-        let baseline = BaselineProvider::get(QueryComplexity::Simple);
+        let baseline = BaselineProvider::get_default(QueryComplexity::Simple);
         assert!(baseline.stats.avg_ms > 0.0);
+    }
+    
+    #[test]
+    fn test_multi_cluster_isolation() {
+        let manager = BaselineCacheManager::new();
+        
+        // Update cluster 1
+        let mut baselines1 = HashMap::new();
+        baselines1.insert(QueryComplexity::Simple, PerformanceBaseline {
+            complexity: QueryComplexity::Simple,
+            stats: BaselineStats {
+                avg_ms: 1000.0,
+                p50_ms: 800.0,
+                p95_ms: 2000.0,
+                p99_ms: 3000.0,
+                max_ms: 5000.0,
+                std_dev_ms: 500.0,
+            },
+            sample_size: 50,
+            time_range_hours: 168,
+        });
+        manager.update(1, baselines1, BaselineSource::AuditLog);
+        
+        // Update cluster 2
+        let mut baselines2 = HashMap::new();
+        baselines2.insert(QueryComplexity::Simple, PerformanceBaseline {
+            complexity: QueryComplexity::Simple,
+            stats: BaselineStats {
+                avg_ms: 5000.0,  // Different avg
+                p50_ms: 4000.0,
+                p95_ms: 10000.0,
+                p99_ms: 15000.0,
+                max_ms: 20000.0,
+                std_dev_ms: 2000.0,
+            },
+            sample_size: 80,
+            time_range_hours: 168,
+        });
+        manager.update(2, baselines2, BaselineSource::AuditLog);
+        
+        // Verify isolation
+        let b1 = manager.get_baseline(1, QueryComplexity::Simple);
+        let b2 = manager.get_baseline(2, QueryComplexity::Simple);
+        
+        assert!((b1.stats.avg_ms - 1000.0).abs() < 0.01);
+        assert!((b2.stats.avg_ms - 5000.0).abs() < 0.01);
+        assert_eq!(b1.sample_size, 50);
+        assert_eq!(b2.sample_size, 80);
     }
 }

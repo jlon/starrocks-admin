@@ -97,6 +97,11 @@ export const MENU_ITEMS: NbMenuItem[] = [
         link: '/pages/system/organizations',
         data: { permission: 'menu:system:organizations' },
       } as NbMenuItem & { data?: { permission: string } },
+      {
+        title: 'LLM 管理',
+        link: '/pages/system/llm-providers',
+        data: { permission: 'menu:system:llm' },
+      } as NbMenuItem & { data?: { permission: string } },
     ],
   } as NbMenuItem & { data?: { permission: string } },
 ];

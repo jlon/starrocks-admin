@@ -50,7 +50,7 @@ impl BaselineService {
     // Main API: Get Baseline (Fast Path)
     // ========================================================================
     
-    /// Get baseline for complexity - FAST, NEVER BLOCKS
+    /// Get baseline for specific cluster and complexity - FAST, NEVER BLOCKS
     /// 
     /// This is the main entry point. It:
     /// 1. Checks cache first (O(1) lookup)
@@ -59,15 +59,20 @@ impl BaselineService {
     /// 
     /// # Example
     /// ```rust
-    /// let baseline = service.get_baseline(QueryComplexity::Medium);
+    /// let baseline = service.get_baseline(cluster_id, QueryComplexity::Medium);
     /// let threshold = baseline.stats.p95_ms + 2.0 * baseline.stats.std_dev_ms;
     /// ```
-    pub fn get_baseline(&self, complexity: QueryComplexity) -> PerformanceBaseline {
-        BaselineProvider::get(complexity)
+    pub fn get_baseline(&self, cluster_id: i64, complexity: QueryComplexity) -> PerformanceBaseline {
+        BaselineProvider::get(cluster_id, complexity)
     }
     
-    /// Get all baselines - FAST, NEVER BLOCKS
-    pub fn get_all_baselines(&self) -> HashMap<QueryComplexity, PerformanceBaseline> {
+    /// Get baseline without cluster (backward compatibility)
+    pub fn get_baseline_default(&self, complexity: QueryComplexity) -> PerformanceBaseline {
+        BaselineProvider::get_default(complexity)
+    }
+    
+    /// Get all baselines for cluster - FAST, NEVER BLOCKS
+    pub fn get_all_baselines(&self, cluster_id: i64) -> HashMap<QueryComplexity, PerformanceBaseline> {
         let mut result = HashMap::new();
         for complexity in [
             QueryComplexity::Simple,
@@ -75,36 +80,41 @@ impl BaselineService {
             QueryComplexity::Complex,
             QueryComplexity::VeryComplex,
         ] {
-            result.insert(complexity, self.get_baseline(complexity));
+            result.insert(complexity, self.get_baseline(cluster_id, complexity));
         }
         result
     }
     
-    /// Check if we have real audit data (not defaults)
-    pub fn has_audit_data(&self) -> bool {
-        BaselineProvider::has_audit_data()
+    /// Check if we have real audit data for cluster (not defaults)
+    pub fn has_audit_data(&self, cluster_id: i64) -> bool {
+        BaselineProvider::has_audit_data(cluster_id)
     }
     
     // ========================================================================
     // Background Refresh API
     // ========================================================================
     
-    /// Refresh baselines from audit log (call from background task)
+    /// Refresh baselines from audit log for a specific cluster
     /// 
     /// This method:
     /// 1. Queries audit log table
     /// 2. Calculates baselines
-    /// 3. Updates global cache
+    /// 3. Updates cluster-specific cache
     /// 
     /// # Errors
     /// Returns Err if audit log query fails, but cache remains valid
-    pub async fn refresh_from_audit_log(&self, mysql: &MySQLClient) -> Result<RefreshResult, String> {
-        info!("Starting baseline refresh from audit log");
+    pub async fn refresh_from_audit_log_for_cluster(
+        &self, 
+        mysql: &MySQLClient,
+        cluster_id: i64,
+    ) -> Result<RefreshResult, String> {
+        info!("Starting baseline refresh for cluster {} from audit log", cluster_id);
         
         // Step 1: Check if audit log table exists
         if !self.audit_table_exists(mysql).await {
-            warn!("Audit log table not found, using default baselines");
+            warn!("Audit log table not found for cluster {}, using defaults", cluster_id);
             BaselineProvider::update(
+                cluster_id,
                 BaselineCacheManager::default_baselines(),
                 BaselineSource::Default,
             );
@@ -119,8 +129,9 @@ impl BaselineService {
         let records = match self.fetch_audit_logs(mysql).await {
             Ok(records) => records,
             Err(e) => {
-                error!("Failed to fetch audit logs: {}, using defaults", e);
+                error!("Failed to fetch audit logs for cluster {}: {}", cluster_id, e);
                 BaselineProvider::update(
+                    cluster_id,
                     BaselineCacheManager::default_baselines(),
                     BaselineSource::Default,
                 );
@@ -129,8 +140,9 @@ impl BaselineService {
         };
         
         if records.is_empty() {
-            warn!("No audit records found, using default baselines");
+            warn!("No audit records found for cluster {}, using defaults", cluster_id);
             BaselineProvider::update(
+                cluster_id,
                 BaselineCacheManager::default_baselines(),
                 BaselineSource::Default,
             );
@@ -153,13 +165,13 @@ impl BaselineService {
             final_baselines.insert(complexity, baseline);
         }
         
-        // Step 5: Update global cache
+        // Step 5: Update cluster-specific cache
         let sample_count = records.len();
-        BaselineProvider::update(final_baselines, BaselineSource::AuditLog);
+        BaselineProvider::update(cluster_id, final_baselines, BaselineSource::AuditLog);
         
         info!(
-            "Baseline refresh complete: {} records, {:?} complexities",
-            sample_count, complexity_counts
+            "Baseline refresh complete for cluster {}: {} records, {:?}",
+            cluster_id, sample_count, complexity_counts
         );
         
         Ok(RefreshResult {
@@ -167,6 +179,11 @@ impl BaselineService {
             sample_count,
             complexity_counts,
         })
+    }
+    
+    /// Refresh baselines from audit log (backward compatibility, uses cluster_id=0)
+    pub async fn refresh_from_audit_log(&self, mysql: &MySQLClient) -> Result<RefreshResult, String> {
+        self.refresh_from_audit_log_for_cluster(mysql, 0).await
     }
     
     /// Calculate baseline for a specific table (on-demand, not cached)
@@ -343,16 +360,18 @@ mod tests {
     #[test]
     fn test_service_creation() {
         let service = BaselineService::new();
+        let cluster_id = 1;
         
         // Should always return valid baseline
-        let baseline = service.get_baseline(QueryComplexity::Medium);
+        let baseline = service.get_baseline(cluster_id, QueryComplexity::Medium);
         assert!(baseline.stats.avg_ms > 0.0);
     }
     
     #[test]
     fn test_get_all_baselines() {
         let service = BaselineService::new();
-        let baselines = service.get_all_baselines();
+        let cluster_id = 1;
+        let baselines = service.get_all_baselines(cluster_id);
         
         assert_eq!(baselines.len(), 4);
         assert!(baselines.contains_key(&QueryComplexity::Simple));
@@ -365,10 +384,11 @@ mod tests {
     fn test_default_fallback() {
         // Without audit data, should use defaults
         let service = BaselineService::new();
-        assert!(!service.has_audit_data());
+        let cluster_id = 1;
+        assert!(!service.has_audit_data(cluster_id));
         
         // But should still return valid baselines
-        let baseline = service.get_baseline(QueryComplexity::Complex);
+        let baseline = service.get_baseline(cluster_id, QueryComplexity::Complex);
         assert!(baseline.stats.p95_ms > 0.0);
     }
 }

@@ -1,6 +1,7 @@
 //! Baseline Refresh Task
 //!
 //! Scheduled task for refreshing baseline data from audit logs.
+//! Supports multi-cluster baselines with per-cluster isolation.
 //! Uses the ScheduledExecutor framework for periodic execution.
 
 use crate::services::baseline_service::BaselineService;
@@ -12,24 +13,24 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
 // ============================================================================
-// Baseline Refresh Task
+// Multi-Cluster Baseline Refresh Task
 // ============================================================================
 
-/// Scheduled task for refreshing baseline data
+/// Scheduled task for refreshing baseline data for ALL clusters
 /// 
 /// This task:
 /// 1. Runs periodically (default: every hour)
-/// 2. Fetches audit log data from active cluster
-/// 3. Calculates baselines by query complexity
-/// 4. Updates global cache
-/// 5. Falls back to defaults on error
+/// 2. Fetches ALL enabled clusters
+/// 3. For each cluster, fetches audit log data and calculates baselines
+/// 4. Updates per-cluster cache
+/// 5. Falls back to defaults on error for each cluster
 pub struct BaselineRefreshTask {
     /// MySQL pool manager for database connections
     pool_manager: Arc<MySQLPoolManager>,
-    /// Cluster service for getting active cluster
+    /// Cluster service for getting clusters
     cluster_service: Arc<ClusterService>,
     /// Baseline service for calculations
     baseline_service: BaselineService,
@@ -59,53 +60,78 @@ impl BaselineRefreshTask {
         self.shutdown.clone()
     }
     
-    /// Execute the refresh task
+    /// Execute the refresh task for all clusters
     async fn execute(&self) -> Result<(), anyhow::Error> {
-        info!("Starting baseline refresh...");
+        info!("Starting multi-cluster baseline refresh...");
         
-        // Get active cluster
-        let cluster = match self.cluster_service.get_active_cluster().await {
+        // Get all enabled clusters
+        let clusters = match self.cluster_service.list_clusters().await {
             Ok(c) => c,
             Err(e) => {
-                warn!("No active cluster found, using default baselines: {:?}", e);
-                BaselineProvider::update(
-                    BaselineCacheManager::default_baselines(),
-                    BaselineSource::Default,
-                );
+                warn!("Failed to list clusters: {:?}", e);
                 return Ok(());
             }
         };
         
-        // Get MySQL pool for the cluster
-        let pool = match self.pool_manager.get_pool(&cluster).await {
-            Ok(p) => p,
-            Err(e) => {
-                error!("Failed to get MySQL pool: {:?}", e);
-                BaselineProvider::update(
-                    BaselineCacheManager::default_baselines(),
-                    BaselineSource::Default,
-                );
-                return Err(anyhow::anyhow!("Failed to get MySQL pool: {:?}", e));
+        if clusters.is_empty() {
+            info!("No clusters found, skipping baseline refresh");
+            return Ok(());
+        }
+        
+        let mut success_count = 0;
+        let mut error_count = 0;
+        
+        for cluster in clusters {
+            match self.refresh_cluster_baseline(&cluster).await {
+                Ok(_) => {
+                    success_count += 1;
+                    info!("Baseline refresh completed for cluster: {} (id={})", cluster.name, cluster.id);
+                }
+                Err(e) => {
+                    error_count += 1;
+                    warn!("Baseline refresh failed for cluster {}: {}", cluster.name, e);
+                    // Set default baselines for this cluster
+                    BaselineProvider::update(
+                        cluster.id,
+                        BaselineCacheManager::default_baselines(),
+                        BaselineSource::Default,
+                    );
+                }
             }
-        };
+        }
+        
+        info!(
+            "Multi-cluster baseline refresh completed: {} success, {} failed",
+            success_count, error_count
+        );
+        
+        Ok(())
+    }
+    
+    /// Refresh baseline for a single cluster
+    async fn refresh_cluster_baseline(
+        &self,
+        cluster: &crate::models::cluster::Cluster,
+    ) -> Result<(), anyhow::Error> {
+        // Get MySQL pool for the cluster
+        let pool = self.pool_manager.get_pool(cluster).await
+            .map_err(|e| anyhow::anyhow!("Failed to get MySQL pool: {:?}", e))?;
         
         // Create MySQL client and refresh baselines
         let mysql = crate::services::mysql_client::MySQLClient::from_pool(pool);
         
-        match self.baseline_service.refresh_from_audit_log(&mysql).await {
-            Ok(result) => {
-                info!(
-                    "Baseline refresh completed: source={:?}, samples={}",
-                    result.source, result.sample_count
-                );
-                Ok(())
-            }
-            Err(e) => {
-                error!("Baseline refresh failed: {}", e);
-                // Note: refresh_from_audit_log already sets default baselines on error
-                Err(anyhow::anyhow!("Baseline refresh failed: {}", e))
-            }
-        }
+        let result = self.baseline_service.refresh_from_audit_log_for_cluster(
+            &mysql, 
+            cluster.id
+        ).await
+            .map_err(|e| anyhow::anyhow!("Baseline refresh failed: {}", e))?;
+        
+        info!(
+            "Cluster {} baseline: source={:?}, samples={}",
+            cluster.name, result.source, result.sample_count
+        );
+        
+        Ok(())
     }
 }
 
@@ -181,9 +207,29 @@ mod tests {
     #[test]
     fn test_default_baselines_initialized() {
         // Provider should work even without initialization
-        let baseline = BaselineProvider::get(
+        let baseline = BaselineProvider::get_default(
             crate::services::profile_analyzer::analyzer::QueryComplexity::Medium
         );
         assert!(baseline.stats.avg_ms > 0.0);
+    }
+    
+    #[test]
+    fn test_multi_cluster_baselines() {
+        use crate::services::profile_analyzer::analyzer::QueryComplexity;
+        
+        // Initialize provider
+        BaselineProvider::init();
+        
+        // Get baseline for cluster 1
+        let baseline1 = BaselineProvider::get(1, QueryComplexity::Simple);
+        assert!(baseline1.stats.avg_ms > 0.0);
+        
+        // Get baseline for cluster 2 (should also work, returns defaults)
+        let baseline2 = BaselineProvider::get(2, QueryComplexity::Complex);
+        assert!(baseline2.stats.avg_ms > 0.0);
+        
+        // Clusters should be independent
+        assert_eq!(baseline1.complexity, QueryComplexity::Simple);
+        assert_eq!(baseline2.complexity, QueryComplexity::Complex);
     }
 }

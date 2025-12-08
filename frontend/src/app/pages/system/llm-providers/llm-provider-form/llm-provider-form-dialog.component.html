@@ -1,0 +1,220 @@
+<nb-card class="llm-provider-dialog">
+  <nb-card-header>
+    <div class="dialog-header">
+      <div>
+        <h5>{{ mode === 'create' ? '添加 LLM 提供商' : '编辑 LLM 提供商' }}</h5>
+        <p class="dialog-subtitle">
+          {{ mode === 'create' ? '配置新的大语言模型 API 服务' : '修改 LLM 提供商配置' }}
+        </p>
+      </div>
+      <button nbButton ghost status="basic" (click)="cancel()">
+        <nb-icon icon="close-outline"></nb-icon>
+      </button>
+    </div>
+  </nb-card-header>
+
+  <nb-card-body>
+    <form [formGroup]="form" class="llm-form" novalidate>
+      <!-- Quick Presets -->
+      <div class="form-group" *ngIf="mode === 'create'">
+        <label class="label">快速选择</label>
+        <div class="preset-buttons">
+          <button
+            *ngFor="let preset of presets"
+            nbButton
+            size="small"
+            [status]="form.get('name')?.value === preset.name ? 'primary' : 'basic'"
+            (click)="applyPreset(preset)"
+            type="button"
+          >
+            {{ preset.display }}
+          </button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <!-- Name -->
+        <div class="form-group form-group--half">
+          <label class="label" for="input-name">标识名称</label>
+          <input
+            nbInput
+            fullWidth
+            id="input-name"
+            placeholder="如: openai, deepseek"
+            formControlName="name"
+            [status]="form.get('name')?.invalid && form.get('name')?.touched ? 'danger' : 'basic'"
+            maxlength="50"
+          />
+          <ng-container *ngIf="form.get('name')?.invalid && form.get('name')?.touched">
+            <p class="caption status-danger" *ngIf="form.get('name')?.errors?.['required']">
+              标识名称不能为空
+            </p>
+            <p class="caption status-danger" *ngIf="form.get('name')?.errors?.['pattern']">
+              只能包含小写字母、数字、下划线和连字符
+            </p>
+          </ng-container>
+        </div>
+
+        <!-- Display Name -->
+        <div class="form-group form-group--half">
+          <label class="label" for="input-display-name">显示名称</label>
+          <input
+            nbInput
+            fullWidth
+            id="input-display-name"
+            placeholder="如: OpenAI GPT-4"
+            formControlName="display_name"
+            [status]="form.get('display_name')?.invalid && form.get('display_name')?.touched ? 'danger' : 'basic'"
+            maxlength="100"
+          />
+          <ng-container *ngIf="form.get('display_name')?.invalid && form.get('display_name')?.touched">
+            <p class="caption status-danger" *ngIf="form.get('display_name')?.errors?.['required']">
+              显示名称不能为空
+            </p>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- API Base URL -->
+      <div class="form-group">
+        <label class="label" for="input-api-base">API 地址</label>
+        <input
+          nbInput
+          fullWidth
+          id="input-api-base"
+          placeholder="https://api.openai.com/v1"
+          formControlName="api_base"
+          [status]="form.get('api_base')?.invalid && form.get('api_base')?.touched ? 'danger' : 'basic'"
+        />
+        <ng-container *ngIf="form.get('api_base')?.invalid && form.get('api_base')?.touched">
+          <p class="caption status-danger" *ngIf="form.get('api_base')?.errors?.['required']">
+            API 地址不能为空
+          </p>
+          <p class="caption status-danger" *ngIf="form.get('api_base')?.errors?.['pattern']">
+            请输入有效的 HTTP/HTTPS 地址
+          </p>
+        </ng-container>
+      </div>
+
+      <div class="form-row">
+        <!-- Model Name -->
+        <div class="form-group form-group--half">
+          <label class="label" for="input-model">模型名称</label>
+          <input
+            nbInput
+            fullWidth
+            id="input-model"
+            placeholder="如: gpt-4o, deepseek-chat"
+            formControlName="model_name"
+            [status]="form.get('model_name')?.invalid && form.get('model_name')?.touched ? 'danger' : 'basic'"
+            maxlength="100"
+          />
+          <ng-container *ngIf="form.get('model_name')?.invalid && form.get('model_name')?.touched">
+            <p class="caption status-danger" *ngIf="form.get('model_name')?.errors?.['required']">
+              模型名称不能为空
+            </p>
+          </ng-container>
+        </div>
+
+        <!-- API Key -->
+        <div class="form-group form-group--half">
+          <label class="label" for="input-api-key">
+            API Key
+            <span class="text-hint" *ngIf="mode === 'edit'">（留空保持不变）</span>
+          </label>
+          <nb-form-field>
+            <input
+              nbInput
+              fullWidth
+              id="input-api-key"
+              [type]="showApiKey ? 'text' : 'password'"
+              placeholder="sk-..."
+              formControlName="api_key"
+              [status]="form.get('api_key')?.invalid && form.get('api_key')?.touched ? 'danger' : 'basic'"
+            />
+            <button nbSuffix nbButton ghost (click)="toggleApiKeyVisibility()" type="button">
+              <nb-icon [icon]="showApiKey ? 'eye-off-outline' : 'eye-outline'"></nb-icon>
+            </button>
+          </nb-form-field>
+          <ng-container *ngIf="form.get('api_key')?.invalid && form.get('api_key')?.touched">
+            <p class="caption status-danger" *ngIf="form.get('api_key')?.errors?.['required']">
+              API Key 不能为空
+            </p>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- Advanced Settings -->
+      <nb-accordion>
+        <nb-accordion-item>
+          <nb-accordion-item-header>高级设置</nb-accordion-item-header>
+          <nb-accordion-item-body>
+            <div class="form-row">
+              <div class="form-group form-group--quarter">
+                <label class="label" for="input-max-tokens">最大 Token</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="number"
+                  id="input-max-tokens"
+                  formControlName="max_tokens"
+                  min="1"
+                  max="128000"
+                />
+              </div>
+              <div class="form-group form-group--quarter">
+                <label class="label" for="input-temperature">温度</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="number"
+                  id="input-temperature"
+                  formControlName="temperature"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                />
+              </div>
+              <div class="form-group form-group--quarter">
+                <label class="label" for="input-timeout">超时（秒）</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="number"
+                  id="input-timeout"
+                  formControlName="timeout_seconds"
+                  min="5"
+                  max="600"
+                />
+              </div>
+              <div class="form-group form-group--quarter">
+                <label class="label" for="input-priority">优先级</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="number"
+                  id="input-priority"
+                  formControlName="priority"
+                  min="0"
+                  max="100"
+                />
+              </div>
+            </div>
+            <p class="caption status-hint">
+              优先级：数字越大优先级越高，用于 fallback 时选择备用提供商
+            </p>
+          </nb-accordion-item-body>
+        </nb-accordion-item>
+      </nb-accordion>
+    </form>
+  </nb-card-body>
+
+  <nb-card-footer>
+    <div class="footer-actions">
+      <button nbButton ghost status="basic" (click)="cancel()">取消</button>
+      <button nbButton status="primary" (click)="submit()" [disabled]="form.invalid">
+        {{ mode === 'create' ? '添加提供商' : '保存修改' }}
+      </button>
+    </div>
+  </nb-card-footer>
+</nb-card>

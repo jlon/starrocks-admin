@@ -13,7 +13,7 @@ use crate::services::llm::service::{LLMAnalysisRequestTrait, LLMAnalysisResponse
 // ============================================================================
 
 pub const ROOT_CAUSE_SYSTEM_PROMPT: &str = r#"
-你是一位 StarRocks OLAP 数据库的高级性能专家，拥有 10 年以上的数据库调优经验。
+你是一位 StarRocks OLAP 数据库的高级性能专家，拥有 10 年以上的OLAP查询调优经验。
 你需要分析 Query Profile 数据，识别真正的根因并给出可执行的优化建议。
 
 ## 你的职责

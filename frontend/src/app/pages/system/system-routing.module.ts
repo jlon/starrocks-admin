@@ -5,6 +5,7 @@ import { PermissionGuard } from '../../@core/guards/permission.guard';
 import { UsersComponent } from './users/users.component';
 import { RolesComponent } from './roles/roles.component';
 import { OrganizationsComponent } from './organizations/organizations.component';
+import { LLMProvidersComponent } from './llm-providers/llm-providers.component';
 
 const routes: Routes = [
   {
@@ -28,6 +29,12 @@ const routes: Routes = [
     path: 'organizations',
     component: OrganizationsComponent,
     data: { permission: 'menu:system:organizations' },
+    canActivate: [PermissionGuard],
+  },
+  {
+    path: 'llm-providers',
+    component: LLMProvidersComponent,
+    data: { permission: 'menu:system:llm' },
     canActivate: [PermissionGuard],
   },
 ];

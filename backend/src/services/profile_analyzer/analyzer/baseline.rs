@@ -44,27 +44,96 @@ pub enum QueryComplexity {
 
 impl QueryComplexity {
     /// Detect query complexity from SQL statement
+    /// Uses token-based analysis to avoid false positives from strings/comments
+    /// 
+    /// Scoring rules (v2.0 - production ready):
+    /// - JOIN: +2 per join (min 1 join = Medium)
+    /// - Subquery: +2 per subquery
+    /// - Window function (OVER): +4
+    /// - CTE (WITH...AS): +3
+    /// - UNION/INTERSECT/EXCEPT: +2
+    /// - COUNT(DISTINCT)/SUM(DISTINCT): +3 (expensive!)
+    /// - ORDER BY without LIMIT: +2 (full sort)
+    /// - LATERAL VIEW/EXPLODE/UNNEST: +3
+    /// - REGEXP/RLIKE: +1
+    /// - EXISTS/NOT EXISTS: +2
+    /// - GROUP BY + HAVING: +1
+    /// - Multiple aggregates: +1~2
     pub fn from_sql(sql: &str) -> Self {
-        let sql_upper = sql.to_uppercase();
+        let cleaned = Self::remove_strings_and_comments(sql);
+        let tokens = Self::tokenize(&cleaned);
+        let sql_upper = cleaned.to_uppercase();
         
-        // Count JOIN operations
-        let join_count = sql_upper.matches("JOIN").count();
+        // === Basic counts ===
+        let join_count = tokens.iter().filter(|t| *t == "JOIN").count();
+        let select_count = tokens.iter().filter(|t| *t == "SELECT").count();
+        let subquery_count = select_count.saturating_sub(1);
         
-        // Check for complexity indicators
-        let has_window = sql_upper.contains("OVER(") || sql_upper.contains("OVER (");
-        let has_cte = sql_upper.contains("WITH") && sql_upper.contains("AS (");
-        let has_subquery = sql_upper.matches("SELECT").count() > 1;
-        let has_union = sql_upper.contains("UNION");
-        let has_udf = sql_upper.contains("UDF") || sql_upper.matches("(").count() > 5;
+        // === Window functions ===
+        let has_window = tokens.windows(2).any(|w| w[0] == "OVER");
         
-        // Complexity score calculation
+        // === CTE detection ===
+        let has_cte = tokens.iter().position(|t| t == "WITH")
+            .map(|i| tokens[i..].iter().take(15).any(|t| t == "AS"))
+            .unwrap_or(false) && select_count > 1;
+        
+        // === Set operations ===
+        let has_set_op = tokens.iter().any(|t| t == "UNION" || t == "INTERSECT" || t == "EXCEPT");
+        
+        // === DISTINCT aggregation (expensive!) ===
+        // Matches: COUNT(DISTINCT, SUM(DISTINCT, AVG(DISTINCT
+        let has_distinct_agg = sql_upper.contains("COUNT(DISTINCT") 
+            || sql_upper.contains("COUNT (DISTINCT")
+            || sql_upper.contains("SUM(DISTINCT") 
+            || sql_upper.contains("AVG(DISTINCT");
+        
+        // === ORDER BY without proper LIMIT (full sort) ===
+        let has_order = tokens.iter().any(|t| t == "ORDER");
+        let has_limit = tokens.iter().any(|t| t == "LIMIT");
+        let has_expensive_sort = has_order && !has_limit;
+        
+        // === Array/lateral operations ===
+        let has_lateral = tokens.iter().any(|t| 
+            t == "LATERAL" || t == "EXPLODE" || t == "UNNEST" || t == "POSEXPLODE"
+        );
+        
+        // === Correlated subquery indicators ===
+        let has_exists = tokens.iter().any(|t| t == "EXISTS");
+        
+        // === Regex operations ===
+        let has_regex = tokens.iter().any(|t| t == "REGEXP" || t == "RLIKE");
+        
+        // === GROUP BY + HAVING ===
+        let has_group_having = tokens.iter().any(|t| t == "GROUP") 
+            && tokens.iter().any(|t| t == "HAVING");
+        
+        // === Aggregate function count ===
+        let agg_funcs = ["COUNT", "SUM", "AVG", "MAX", "MIN", "GROUP_CONCAT", 
+                        "APPROX_COUNT_DISTINCT", "HLL_UNION_AGG", "BITMAP_UNION"];
+        let agg_count = tokens.iter().filter(|t| agg_funcs.contains(&t.as_str())).count();
+        
+        // === Complexity score calculation ===
         let mut score = 0;
-        score += join_count * 2;
-        if has_window { score += 3; }
-        if has_cte { score += 2; }
-        if has_subquery { score += 1; }
-        if has_union { score += 2; }
-        if has_udf { score += 3; }
+        
+        // JOIN complexity (at least 1 JOIN should not be "Simple")
+        score += match join_count {
+            0 => 0,
+            1 => 3,      // Single JOIN → at least Medium
+            2..=3 => join_count * 2 + 1,
+            _ => join_count * 2 + 2,
+        };
+        
+        score += subquery_count * 2;
+        if has_window { score += 4; }
+        if has_cte { score += 3; }
+        if has_set_op { score += 2; }
+        if has_distinct_agg { score += 3; }  // Very expensive!
+        if has_expensive_sort { score += 2; }
+        if has_lateral { score += 3; }
+        if has_exists { score += 2; }
+        if has_regex { score += 1; }
+        if has_group_having { score += 1; }
+        score += (agg_count / 2).min(2);
         
         match score {
             0..=2 => Self::Simple,
@@ -72,6 +141,62 @@ impl QueryComplexity {
             8..=15 => Self::Complex,
             _ => Self::VeryComplex,
         }
+    }
+    
+    /// Remove string literals and comments from SQL to avoid false keyword matches
+    fn remove_strings_and_comments(sql: &str) -> String {
+        let mut result = String::with_capacity(sql.len());
+        let mut chars = sql.chars().peekable();
+        
+        while let Some(c) = chars.next() {
+            match c {
+                // Single-quoted string
+                '\'' => {
+                    while let Some(c2) = chars.next() {
+                        if c2 == '\'' {
+                            if chars.peek() == Some(&'\'') { chars.next(); } // Escaped quote
+                            else { break; }
+                        }
+                    }
+                    result.push(' '); // Replace with space
+                }
+                // Double-quoted identifier
+                '"' => {
+                    while let Some(c2) = chars.next() {
+                        if c2 == '"' { break; }
+                    }
+                    result.push(' ');
+                }
+                // Line comment --
+                '-' if chars.peek() == Some(&'-') => {
+                    chars.next();
+                    while let Some(c2) = chars.next() {
+                        if c2 == '\n' { break; }
+                    }
+                }
+                // Block comment /* */
+                '/' if chars.peek() == Some(&'*') => {
+                    chars.next();
+                    while let Some(c2) = chars.next() {
+                        if c2 == '*' && chars.peek() == Some(&'/') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => result.push(c),
+            }
+        }
+        result
+    }
+    
+    /// Tokenize SQL into uppercase keywords/identifiers
+    fn tokenize(sql: &str) -> Vec<String> {
+        sql.to_uppercase()
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect()
     }
 }
 
@@ -352,6 +477,168 @@ mod tests {
         let sql = "SELECT id, ROW_NUMBER() OVER (ORDER BY id) FROM t";
         let complexity = QueryComplexity::from_sql(sql);
         assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+    }
+    
+    #[test]
+    fn test_query_complexity_ignores_strings() {
+        // JOIN in string literal should NOT count as a real JOIN
+        let sql = "SELECT * FROM t WHERE name = 'JOIN this event'";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+        
+        // UNION in string should NOT count
+        let sql = "SELECT * FROM t WHERE desc LIKE '%UNION%'";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+        
+        // WITH in string should NOT count as CTE
+        let sql = "SELECT * FROM t WHERE note = 'with regards'";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+        
+        // Multiple keywords in string should NOT increase complexity
+        let sql = r#"SELECT * FROM t WHERE msg = 'SELECT JOIN UNION WITH OVER'"#;
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+    }
+    
+    #[test]
+    fn test_query_complexity_ignores_comments() {
+        // JOIN in line comment should NOT count
+        let sql = "SELECT * FROM t -- JOIN this later";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+        
+        // UNION in block comment should NOT count
+        let sql = "SELECT * FROM t /* UNION ALL */ WHERE id > 0";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+        
+        // Complex keywords in comments should NOT increase complexity
+        let sql = r#"
+            -- This query uses JOIN, UNION, WITH CTE
+            /* 
+             * Very complex query design
+             * Uses OVER window functions
+             */
+            SELECT * FROM simple_table WHERE x > 0
+        "#;
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+    }
+    
+    #[test]
+    fn test_query_complexity_real_vs_string() {
+        // Real JOIN + fake JOIN in string = should count as Medium (1 JOIN)
+        let sql = "SELECT * FROM a JOIN b ON a.id = b.id WHERE name = 'JOIN event'";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Medium);
+        
+        // Real UNION + fake in string
+        let sql = "SELECT * FROM t1 WHERE x = 'UNION' UNION SELECT * FROM t2";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+    }
+    
+    #[test]
+    fn test_query_complexity_distinct_aggregation() {
+        // COUNT(DISTINCT) is expensive - should be at least Medium
+        let sql = "SELECT COUNT(DISTINCT user_id) FROM orders";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+        
+        // Multiple DISTINCT aggregates
+        let sql = "SELECT COUNT(DISTINCT user_id), SUM(DISTINCT amount) FROM orders GROUP BY date";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Complex || complexity == QueryComplexity::VeryComplex);
+    }
+    
+    #[test]
+    fn test_query_complexity_order_by() {
+        // ORDER BY with LIMIT is reasonable
+        let sql = "SELECT * FROM orders ORDER BY created_at LIMIT 100";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+        
+        // ORDER BY without LIMIT (full sort) is expensive
+        let sql = "SELECT * FROM orders ORDER BY created_at";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Simple);
+    }
+    
+    #[test]
+    fn test_query_complexity_lateral_explode() {
+        // LATERAL VIEW EXPLODE is complex
+        let sql = "SELECT id, tag FROM t LATERAL VIEW EXPLODE(tags) tmp AS tag";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+        
+        // UNNEST
+        let sql = "SELECT * FROM t, UNNEST(arr) AS x";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+    }
+    
+    #[test]
+    fn test_query_complexity_exists() {
+        // EXISTS subquery
+        let sql = "SELECT * FROM orders o WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = o.user_id)";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+        
+        // NOT EXISTS
+        let sql = "SELECT * FROM orders WHERE NOT EXISTS (SELECT 1 FROM refunds WHERE refunds.order_id = orders.id)";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+    }
+    
+    #[test]
+    fn test_query_complexity_single_join_not_simple() {
+        // Single JOIN should NOT be classified as Simple
+        let sql = "SELECT * FROM orders o JOIN users u ON o.user_id = u.id";
+        assert_ne!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Medium);
+    }
+    
+    #[test]
+    fn test_query_complexity_production_examples() {
+        // Real production query 1: Simple aggregation
+        let sql = "SELECT date, SUM(amount) FROM orders WHERE date >= '2025-01-01' GROUP BY date";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Simple);
+        
+        // Real production query 2: Multi-table join with aggregation
+        let sql = r#"
+            SELECT u.name, COUNT(*) as order_count, SUM(o.amount) as total
+            FROM users u
+            JOIN orders o ON u.id = o.user_id
+            JOIN products p ON o.product_id = p.id
+            WHERE o.date >= '2025-01-01'
+            GROUP BY u.name
+        "#;
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+        
+        // Real production query 3: Analytics with window functions
+        let sql = r#"
+            WITH daily_sales AS (
+                SELECT date, SUM(amount) as total
+                FROM orders
+                GROUP BY date
+            )
+            SELECT date, total, 
+                   AVG(total) OVER (ORDER BY date ROWS 7 PRECEDING) as ma7
+            FROM daily_sales
+        "#;
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Complex || complexity == QueryComplexity::VeryComplex);
+        
+        // Real production query 4: Heavy OLAP query
+        let sql = r#"
+            SELECT 
+                region,
+                product_category,
+                COUNT(DISTINCT user_id) as unique_users,
+                SUM(amount) as total_sales,
+                RANK() OVER (PARTITION BY region ORDER BY SUM(amount) DESC) as rank
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            JOIN products p ON o.product_id = p.id
+            WHERE o.date BETWEEN '2025-01-01' AND '2025-12-31'
+            GROUP BY region, product_category
+            HAVING COUNT(*) > 100
+        "#;
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::VeryComplex);
     }
     
     #[test]

@@ -618,8 +618,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // LLM Service APIs
         .route("/api/llm/status", get(handlers::llm::get_status))
         .route("/api/llm/providers", get(handlers::llm::list_providers).post(handlers::llm::create_provider))
-        .route("/api/llm/providers/:id", get(handlers::llm::get_provider))
+        .route("/api/llm/providers/active", get(handlers::llm::get_active_provider))
+        .route("/api/llm/providers/:id", get(handlers::llm::get_provider).put(handlers::llm::update_provider).delete(handlers::llm::delete_provider))
         .route("/api/llm/providers/:id/activate", post(handlers::llm::activate_provider))
+        .route("/api/llm/providers/:id/deactivate", post(handlers::llm::deactivate_provider))
+        .route("/api/llm/providers/:id/test", post(handlers::llm::test_provider_connection))
         .route("/api/llm/analyze/root-cause", post(handlers::llm::analyze_root_cause))
         .with_state(Arc::clone(&app_state_arc))
         .layer(axum_middleware::from_fn_with_state(auth_state, middleware::auth_middleware));

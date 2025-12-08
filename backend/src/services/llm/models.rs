@@ -68,43 +68,95 @@ pub struct LLMProviderInfo {
     pub id: i64,
     pub name: String,
     pub display_name: String,
+    pub api_base: String,
     pub model_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_masked: Option<String>,
     pub is_active: bool,
     pub enabled: bool,
+    pub max_tokens: i32,
+    pub temperature: f64,
+    pub timeout_seconds: i32,
+    pub priority: i32,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
 }
 
 impl From<&LLMProvider> for LLMProviderInfo {
     fn from(p: &LLMProvider) -> Self {
+        // Mask API key for display
+        let api_key_masked = p.api_key_encrypted.as_ref().map(|key| {
+            if key.len() > 8 {
+                format!("{}...{}", &key[..4], &key[key.len()-4..])
+            } else {
+                "****".to_string()
+            }
+        });
+        
         Self {
             id: p.id,
             name: p.name.clone(),
             display_name: p.display_name.clone(),
+            api_base: p.api_base.clone(),
             model_name: p.model_name.clone(),
+            api_key_masked,
             is_active: p.is_active,
             enabled: p.enabled,
+            max_tokens: p.max_tokens,
+            temperature: p.temperature,
+            timeout_seconds: p.timeout_seconds,
+            priority: p.priority,
+            created_at: p.created_at.to_rfc3339(),
+            updated_at: Some(p.updated_at.to_rfc3339()),
         }
     }
 }
 
-/// Request to create/update a provider
+/// Request to create a provider
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateProviderRequest {
     pub name: String,
     pub display_name: String,
     pub api_base: String,
     pub model_name: String,
-    pub api_key: Option<String>,
+    pub api_key: String,
     #[serde(default = "default_max_tokens")]
     pub max_tokens: i32,
     #[serde(default = "default_temperature")]
     pub temperature: f64,
     #[serde(default = "default_timeout")]
     pub timeout_seconds: i32,
+    #[serde(default = "default_priority")]
+    pub priority: i32,
+}
+
+/// Request to update a provider
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateProviderRequest {
+    pub display_name: Option<String>,
+    pub api_base: Option<String>,
+    pub model_name: Option<String>,
+    pub api_key: Option<String>,
+    pub max_tokens: Option<i32>,
+    pub temperature: Option<f64>,
+    pub timeout_seconds: Option<i32>,
+    pub priority: Option<i32>,
+    pub enabled: Option<bool>,
+}
+
+/// Response for test connection
+#[derive(Debug, Clone, Serialize)]
+pub struct TestConnectionResponse {
+    pub success: bool,
+    pub message: String,
+    pub latency_ms: Option<i64>,
 }
 
 fn default_max_tokens() -> i32 { 4096 }
 fn default_temperature() -> f64 { 0.3 }
 fn default_timeout() -> i32 { 60 }
+fn default_priority() -> i32 { 100 }
 
 // ============================================================================
 // LLM Analysis Session

@@ -69,11 +69,29 @@ pub trait LLMService: Send + Sync {
     /// Get all providers
     async fn list_providers(&self) -> Result<Vec<LLMProviderInfo>, LLMError>;
     
-    /// Activate a provider
-    async fn activate_provider(&self, provider_id: i64) -> Result<(), LLMError>;
+    /// Get provider by ID
+    async fn get_provider(&self, id: i64) -> Result<Option<LLMProviderInfo>, LLMError>;
+    
+    /// Get active provider
+    async fn get_active_provider(&self) -> Result<Option<LLMProviderInfo>, LLMError>;
     
     /// Create a new provider
     async fn create_provider(&self, req: CreateProviderRequest) -> Result<LLMProvider, LLMError>;
+    
+    /// Update a provider
+    async fn update_provider(&self, id: i64, req: UpdateProviderRequest) -> Result<LLMProvider, LLMError>;
+    
+    /// Delete a provider
+    async fn delete_provider(&self, id: i64) -> Result<(), LLMError>;
+    
+    /// Activate a provider
+    async fn activate_provider(&self, provider_id: i64) -> Result<(), LLMError>;
+    
+    /// Deactivate a provider
+    async fn deactivate_provider(&self, provider_id: i64) -> Result<(), LLMError>;
+    
+    /// Test connection to a provider
+    async fn test_connection(&self, provider_id: i64) -> Result<TestConnectionResponse, LLMError>;
 }
 
 // ============================================================================
@@ -215,12 +233,58 @@ impl LLMService for LLMServiceImpl {
         Ok(providers.iter().map(LLMProviderInfo::from).collect())
     }
     
-    async fn activate_provider(&self, provider_id: i64) -> Result<(), LLMError> {
-        self.repository.activate_provider(provider_id).await
+    async fn get_provider(&self, id: i64) -> Result<Option<LLMProviderInfo>, LLMError> {
+        let provider = self.repository.get_provider(id).await?;
+        Ok(provider.map(|p| LLMProviderInfo::from(&p)))
+    }
+    
+    async fn get_active_provider(&self) -> Result<Option<LLMProviderInfo>, LLMError> {
+        let provider = self.repository.get_active_provider().await?;
+        Ok(provider.map(|p| LLMProviderInfo::from(&p)))
     }
     
     async fn create_provider(&self, req: CreateProviderRequest) -> Result<LLMProvider, LLMError> {
         self.repository.create_provider(req).await
+    }
+    
+    async fn update_provider(&self, id: i64, req: UpdateProviderRequest) -> Result<LLMProvider, LLMError> {
+        self.repository.update_provider(id, req).await
+    }
+    
+    async fn delete_provider(&self, id: i64) -> Result<(), LLMError> {
+        self.repository.delete_provider(id).await
+    }
+    
+    async fn activate_provider(&self, provider_id: i64) -> Result<(), LLMError> {
+        self.repository.activate_provider(provider_id).await
+    }
+    
+    async fn deactivate_provider(&self, provider_id: i64) -> Result<(), LLMError> {
+        self.repository.deactivate_provider(provider_id).await
+    }
+    
+    async fn test_connection(&self, provider_id: i64) -> Result<TestConnectionResponse, LLMError> {
+        let provider = self.repository.get_provider(provider_id).await?
+            .ok_or_else(|| LLMError::ProviderNotFound(provider_id.to_string()))?;
+        
+        let start = std::time::Instant::now();
+        
+        // Simple test: send a minimal request to check connectivity
+        let test_result = self.client.test_connection(&provider).await;
+        let latency_ms = start.elapsed().as_millis() as i64;
+        
+        match test_result {
+            Ok(_) => Ok(TestConnectionResponse {
+                success: true,
+                message: "Connection successful".to_string(),
+                latency_ms: Some(latency_ms),
+            }),
+            Err(e) => Ok(TestConnectionResponse {
+                success: false,
+                message: format!("Connection failed: {}", e),
+                latency_ms: Some(latency_ms),
+            }),
+        }
     }
 }
 

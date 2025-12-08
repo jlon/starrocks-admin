@@ -133,6 +133,84 @@ impl LLMClient {
         
         Ok((result, input_tokens, output_tokens))
     }
+    
+    /// Test connection to provider (simple models list request)
+    pub async fn test_connection(&self, provider: &LLMProvider) -> Result<(), LLMError> {
+        let api_key = provider.api_key_encrypted.as_ref()
+            .ok_or_else(|| LLMError::ApiError("API key not configured".to_string()))?;
+        
+        // Use models endpoint for a lightweight test
+        let url = format!("{}/models", provider.api_base.trim_end_matches('/'));
+        
+        let response = self.http_client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    LLMError::Timeout(10)
+                } else if e.is_connect() {
+                    LLMError::ApiError(format!("Connection failed: {}", e))
+                } else {
+                    LLMError::ApiError(e.to_string())
+                }
+            })?;
+        
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(LLMError::ApiError("Invalid API key".to_string()));
+        }
+        
+        if !status.is_success() {
+            // Some providers don't have /models endpoint, try a minimal chat request
+            return self.test_with_chat(provider).await;
+        }
+        
+        Ok(())
+    }
+    
+    /// Fallback test using minimal chat completion
+    async fn test_with_chat(&self, provider: &LLMProvider) -> Result<(), LLMError> {
+        let api_key = provider.api_key_encrypted.as_ref()
+            .ok_or_else(|| LLMError::ApiError("API key not configured".to_string()))?;
+        
+        let url = format!("{}/chat/completions", provider.api_base.trim_end_matches('/'));
+        
+        let test_request = ChatCompletionRequest {
+            model: provider.model_name.clone(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: "Hi".to_string(),
+            }],
+            max_tokens: Some(1),
+            temperature: Some(0.0),
+            response_format: None,
+        };
+        
+        let response = self.http_client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .timeout(Duration::from_secs(15))
+            .json(&test_request)
+            .send()
+            .await
+            .map_err(|e| LLMError::ApiError(e.to_string()))?;
+        
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(LLMError::ApiError("Invalid API key".to_string()));
+        }
+        
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(LLMError::ApiError(format!("API error {}: {}", status, error_text)));
+        }
+        
+        Ok(())
+    }
 }
 
 // ============================================================================

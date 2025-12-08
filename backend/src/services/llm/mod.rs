@@ -35,3 +35,6 @@ pub use repository::LLMRepository;
 pub use scenarios::merger::*;
 pub use scenarios::root_cause::*;
 pub use service::{LLMAnalysisRequestTrait, LLMAnalysisResponseTrait, LLMService, LLMServiceImpl};
+
+#[cfg(test)]
+mod tests;

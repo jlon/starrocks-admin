@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use super::models::*;
+use super::UpdateProviderRequest;
 
 /// Repository for LLM database operations
 pub struct LLMRepository {
@@ -66,16 +67,25 @@ impl LLMRepository {
         Ok(())
     }
     
+    /// Get provider by ID
+    pub async fn get_provider(&self, id: i64) -> Result<Option<LLMProvider>, LLMError> {
+        sqlx::query_as::<_, LLMProvider>("SELECT * FROM llm_providers WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(LLMError::from)
+    }
+    
     /// Create a new provider
     pub async fn create_provider(&self, req: CreateProviderRequest) -> Result<LLMProvider, LLMError> {
         // TODO: Encrypt API key before storing
-        let api_key_encrypted = req.api_key;
+        let api_key_encrypted = Some(req.api_key);
         
         let result = sqlx::query(
             r#"INSERT INTO llm_providers 
                (name, display_name, api_base, model_name, api_key_encrypted, 
                 max_tokens, temperature, timeout_seconds, enabled, is_active, priority)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, FALSE, 100)"#
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, FALSE, ?)"#
         )
         .bind(&req.name)
         .bind(&req.display_name)
@@ -85,6 +95,7 @@ impl LLMRepository {
         .bind(req.max_tokens)
         .bind(req.temperature)
         .bind(req.timeout_seconds)
+        .bind(req.priority)
         .execute(&self.pool)
         .await?;
         
@@ -98,28 +109,40 @@ impl LLMRepository {
     }
     
     /// Update provider
-    pub async fn update_provider(&self, id: i64, req: CreateProviderRequest) -> Result<LLMProvider, LLMError> {
-        let api_key_encrypted = req.api_key;
+    pub async fn update_provider(&self, id: i64, req: UpdateProviderRequest) -> Result<LLMProvider, LLMError> {
+        // Build dynamic update query
+        let mut updates = vec!["updated_at = CURRENT_TIMESTAMP".to_string()];
         
-        sqlx::query(
-            r#"UPDATE llm_providers SET
-               name = ?, display_name = ?, api_base = ?, model_name = ?,
-               api_key_encrypted = COALESCE(?, api_key_encrypted),
-               max_tokens = ?, temperature = ?, timeout_seconds = ?,
-               updated_at = CURRENT_TIMESTAMP
-               WHERE id = ?"#
-        )
-        .bind(&req.name)
-        .bind(&req.display_name)
-        .bind(&req.api_base)
-        .bind(&req.model_name)
-        .bind(&api_key_encrypted)
-        .bind(req.max_tokens)
-        .bind(req.temperature)
-        .bind(req.timeout_seconds)
-        .bind(id)
-        .execute(&self.pool)
-        .await?;
+        if req.display_name.is_some() { updates.push("display_name = ?".to_string()); }
+        if req.api_base.is_some() { updates.push("api_base = ?".to_string()); }
+        if req.model_name.is_some() { updates.push("model_name = ?".to_string()); }
+        if req.api_key.is_some() { updates.push("api_key_encrypted = ?".to_string()); }
+        if req.max_tokens.is_some() { updates.push("max_tokens = ?".to_string()); }
+        if req.temperature.is_some() { updates.push("temperature = ?".to_string()); }
+        if req.timeout_seconds.is_some() { updates.push("timeout_seconds = ?".to_string()); }
+        if req.priority.is_some() { updates.push("priority = ?".to_string()); }
+        if req.enabled.is_some() { updates.push("enabled = ?".to_string()); }
+        
+        let query = format!("UPDATE llm_providers SET {} WHERE id = ?", updates.join(", "));
+        let mut q = sqlx::query(&query);
+        
+        // Bind values in order
+        if let Some(v) = &req.display_name { q = q.bind(v); }
+        if let Some(v) = &req.api_base { q = q.bind(v); }
+        if let Some(v) = &req.model_name { q = q.bind(v); }
+        if let Some(v) = &req.api_key { q = q.bind(v); }
+        if let Some(v) = &req.max_tokens { q = q.bind(v); }
+        if let Some(v) = &req.temperature { q = q.bind(v); }
+        if let Some(v) = &req.timeout_seconds { q = q.bind(v); }
+        if let Some(v) = &req.priority { q = q.bind(v); }
+        if let Some(v) = &req.enabled { q = q.bind(v); }
+        q = q.bind(id);
+        
+        let result = q.execute(&self.pool).await?;
+        
+        if result.rows_affected() == 0 {
+            return Err(LLMError::ProviderNotFound(id.to_string()));
+        }
         
         sqlx::query_as::<_, LLMProvider>("SELECT * FROM llm_providers WHERE id = ?")
             .bind(id)
@@ -130,11 +153,61 @@ impl LLMRepository {
     
     /// Delete provider
     pub async fn delete_provider(&self, id: i64) -> Result<(), LLMError> {
+        // Check if provider is active
+        let provider = self.get_provider(id).await?;
+        if let Some(p) = provider {
+            if p.is_active {
+                return Err(LLMError::ApiError("Cannot delete active provider. Deactivate it first.".to_string()));
+            }
+        }
+        
         sqlx::query("DELETE FROM llm_providers WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+    
+    /// Deactivate a provider
+    pub async fn deactivate_provider(&self, id: i64) -> Result<(), LLMError> {
+        let result = sqlx::query("UPDATE llm_providers SET is_active = FALSE WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        
+        if result.rows_affected() == 0 {
+            return Err(LLMError::ProviderNotFound(id.to_string()));
+        }
+        Ok(())
+    }
+    
+    /// Set provider enabled status
+    pub async fn set_provider_enabled(&self, id: i64, enabled: bool) -> Result<LLMProvider, LLMError> {
+        let result = sqlx::query(
+            "UPDATE llm_providers SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .bind(enabled)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        
+        if result.rows_affected() == 0 {
+            return Err(LLMError::ProviderNotFound(id.to_string()));
+        }
+        
+        // If disabling, also deactivate
+        if !enabled {
+            sqlx::query("UPDATE llm_providers SET is_active = FALSE WHERE id = ?")
+                .bind(id)
+                .execute(&self.pool)
+                .await?;
+        }
+        
+        sqlx::query_as::<_, LLMProvider>("SELECT * FROM llm_providers WHERE id = ?")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(LLMError::from)
     }
     
     // ========================================================================

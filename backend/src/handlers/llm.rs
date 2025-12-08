@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use crate::services::llm::{
     CreateProviderRequest, LLMError, LLMProviderInfo, LLMService,
+    UpdateProviderRequest,
 };
 use crate::AppState;
 
@@ -35,10 +36,17 @@ pub async fn get_provider(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, LLMApiError> {
-    let providers = state.llm_service.list_providers().await?;
-    let provider = providers.into_iter()
-        .find(|p| p.id == id)
+    let provider = state.llm_service.get_provider(id).await?
         .ok_or(LLMError::ProviderNotFound(id.to_string()))?;
+    Ok(Json(provider))
+}
+
+/// Get active provider
+/// GET /api/llm/providers/active
+pub async fn get_active_provider(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, LLMApiError> {
+    let provider = state.llm_service.get_active_provider().await?;
     Ok(Json(provider))
 }
 
@@ -52,6 +60,27 @@ pub async fn create_provider(
     Ok((StatusCode::CREATED, Json(LLMProviderInfo::from(&provider))))
 }
 
+/// Update a provider
+/// PUT /api/llm/providers/:id
+pub async fn update_provider(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(req): Json<UpdateProviderRequest>,
+) -> Result<impl IntoResponse, LLMApiError> {
+    let provider = state.llm_service.update_provider(id, req).await?;
+    Ok(Json(LLMProviderInfo::from(&provider)))
+}
+
+/// Delete a provider
+/// DELETE /api/llm/providers/:id
+pub async fn delete_provider(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<impl IntoResponse, LLMApiError> {
+    state.llm_service.delete_provider(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Activate a provider
 /// POST /api/llm/providers/:id/activate
 pub async fn activate_provider(
@@ -59,13 +88,31 @@ pub async fn activate_provider(
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, LLMApiError> {
     state.llm_service.activate_provider(id).await?;
-    Ok(Json(ActivateResponse { success: true, message: "Provider activated".to_string() }))
+    let provider = state.llm_service.get_provider(id).await?
+        .ok_or(LLMError::ProviderNotFound(id.to_string()))?;
+    Ok(Json(provider))
 }
 
-#[derive(Serialize)]
-struct ActivateResponse {
-    success: bool,
-    message: String,
+/// Deactivate a provider
+/// POST /api/llm/providers/:id/deactivate
+pub async fn deactivate_provider(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<impl IntoResponse, LLMApiError> {
+    state.llm_service.deactivate_provider(id).await?;
+    let provider = state.llm_service.get_provider(id).await?
+        .ok_or(LLMError::ProviderNotFound(id.to_string()))?;
+    Ok(Json(provider))
+}
+
+/// Test connection to a provider
+/// POST /api/llm/providers/:id/test
+pub async fn test_provider_connection(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<impl IntoResponse, LLMApiError> {
+    let result = state.llm_service.test_connection(id).await?;
+    Ok(Json(result))
 }
 
 // ============================================================================
@@ -169,7 +216,7 @@ fn truncate_sql(sql: &str, max_len: usize) -> String {
     if sql.len() <= max_len { sql.to_string() } else { format!("{}... (truncated)", &sql[..max_len]) }
 }
 
-use crate::services::llm::{KeyMetricsForLLM, DiagnosticForLLM};
+use crate::services::llm::KeyMetricsForLLM;
 
 // ============================================================================
 // Error Handling

@@ -2,6 +2,11 @@
 //!
 //! Combines the deterministic results from rule engine with LLM's
 //! open-domain reasoning to provide comprehensive root cause analysis.
+//! 
+//! Note: Some structs/methods are defined here for modularity but may be
+//! duplicated in models.rs for serialization. Allow dead_code for reserved APIs.
+
+#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

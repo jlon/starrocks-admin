@@ -213,6 +213,7 @@ pub struct RootCauseAnalysisApiRequest {
 
 fn default_be_count() -> u32 { 3 }
 
+#[allow(dead_code)]
 fn truncate_sql(sql: &str, max_len: usize) -> String {
     if sql.len() <= max_len { sql.to_string() } else { format!("{}... (truncated)", &sql[..max_len]) }
 }

@@ -33,13 +33,24 @@ pub const ROOT_CAUSE_SYSTEM_PROMPT: &str = r#"
 3. **资源竞争**: 多个算子竞争同一资源会相互影响
 4. **隐式因素**: 统计信息、配置、Join 顺序是常见隐式根因
 
+## ⚠️ 重要：区分内表和外表
+请务必查看 `scan_details` 中的 `table_type` 字段：
+- **internal**: StarRocks 原生内表，数据存储在本地 BE 节点
+- **external**: 外部表（Hive/Iceberg/HDFS），数据在远程存储（HDFS/S3/OSS）
+- **lake**: 存算分离架构表，数据在共享存储
+
+**不同表类型的优化方向完全不同！**
+- 内表：关注分桶、分区、物化视图、统计信息
+- 外表：关注小文件合并、DataCache、分区裁剪、谓词下推
+- 外表不支持 ALTER TABLE 修改分桶！外表优化需要在 Hive/Spark 端操作！
+
 ## 常见根因模式（从原始指标中识别）
 | 根因 | Profile 指标特征 | 解决方案 |
 |-----|-----------------|---------|
-| 统计信息过期 | EstimatedRows vs ActualRows 差异大 | ANALYZE TABLE xxx |
-| 分桶键不合理 | 节点间 RowsRead/ProcessTime 差异大 | ALTER TABLE xxx DISTRIBUTED BY |
-| 小文件过多 | ScanRanges 数量大、IOTaskWaitTime 长 | 合并小文件或调整参数 |
-| 缓存未命中 | DataCacheHitRate 低、RemoteIOBytes 大 | 检查缓存配置 |
+| 统计信息过期 | EstimatedRows vs ActualRows 差异大 | ANALYZE TABLE xxx（仅内表）|
+| 分桶键不合理 | 节点间 RowsRead/ProcessTime 差异大 | ALTER TABLE（仅内表）|
+| **外表小文件过多** | ScanRanges 数量大、IOTaskWaitTime 长 | **在 Hive/Spark 端合并文件** |
+| **外表缓存未命中** | FSIOBytesRead 远大于 DataCacheReadBytes | SET enable_scan_datacache=true |
 | 并行度不足 | 单节点 CPU 高、其他节点空闲 | SET parallel_fragment_exec_instance_num |
 | Spill 发生 | SpillBytes > 0、SpillTime > 0 | 增加内存或优化查询 |
 | 分区裁剪失效 | PartitionPruned = false、ScanBytes 大 | 检查 WHERE 条件中的分区列 |
@@ -270,8 +281,11 @@ pub struct InstanceTimeForLLM {
 pub struct ScanDetailForLLM {
     pub plan_node_id: i32,
     pub table_name: String,
-    /// OlapScan / HdfsScan / etc.
+    /// OlapScan / HdfsScan / ConnectorScan etc.
     pub scan_type: String,
+    /// Table storage type: "internal" (StarRocks native), "external" (Hive/Iceberg/HDFS), "lake" (shared-data)
+    /// This is CRITICAL for LLM to give correct suggestions!
+    pub table_type: String,
     /// Total rows read
     pub rows_read: u64,
     /// Rows after filtering
@@ -287,7 +301,7 @@ pub struct ScanDetailForLLM {
     /// IO wait time
     #[serde(skip_serializing_if = "Option::is_none")]
     pub io_time_ms: Option<f64>,
-    /// Cache hit rate
+    /// Cache hit rate (DataCache for external, PageCache for internal)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_hit_rate: Option<f64>,
     /// Predicates applied
@@ -296,6 +310,9 @@ pub struct ScanDetailForLLM {
     /// Partition pruning info
     #[serde(skip_serializing_if = "Option::is_none")]
     pub partitions_scanned: Option<String>,
+    /// For external tables: catalog.database.table format
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_table_path: Option<String>,
 }
 
 /// Join operator details

@@ -124,9 +124,16 @@ pub fn analyze_profile_with_context(
     // Calculate DataCache hit rate directly from profile text
     // This handles nested metrics like DataCache: -> DataCacheReadDiskBytes
     let (total_local, total_remote) = extract_datacache_from_text(profile_text);
+    tracing::info!(
+        "DataCache metrics - Local: {} bytes ({:.2} GB), Remote: {} bytes ({:.2} GB)",
+        total_local, total_local as f64 / 1024.0 / 1024.0 / 1024.0,
+        total_remote, total_remote as f64 / 1024.0 / 1024.0 / 1024.0
+    );
     if total_local > 0 || total_remote > 0 {
         let total = total_local + total_remote;
-        summary.datacache_hit_rate = Some(total_local as f64 / total as f64);
+        let hit_rate = total_local as f64 / total as f64;
+        tracing::info!("DataCache hit rate: {:.2}%", hit_rate * 100.0);
+        summary.datacache_hit_rate = Some(hit_rate);
         summary.datacache_bytes_local = Some(total_local);
         summary.datacache_bytes_remote = Some(total_remote);
         summary.datacache_bytes_local_display = Some(format_bytes_display(total_local));
@@ -521,15 +528,27 @@ fn extract_datacache_from_text(profile_text: &str) -> (u64, u64) {
         }
     }
 
-    // For external tables with DataCache, use FSIOBytesRead as the primary cache miss indicator
-    // FSIOBytesRead represents actual remote reads when cache misses
-    // DataCacheSkipReadBytes only counts actively skipped reads (policy-based)
+    // For external tables with DataCache:
+    // - DataCacheReadDiskBytes/DataCacheReadMemBytes = cache hit (local)
+    // - FSIOBytesRead = actual bytes read from remote HDFS/S3 (cache miss!)
+    // - DataCacheSkipReadBytes = policy-based skipped reads (rare)
+    //
+    // The correct formula for cache hit rate:
+    //   hit_rate = DataCacheReadBytes / (DataCacheReadBytes + FSIOBytesRead)
+    //
+    // FSIOBytesRead is the TRUE cache miss indicator, NOT DataCacheSkipReadBytes!
     if has_datacache_metrics {
-        // Use the larger of FSIOBytesRead and DataCacheSkipReadBytes
-        // FSIOBytesRead is more accurate for cache miss measurement
-        total_remote += fsio_bytes.max(datacache_skip_bytes);
+        // FSIOBytesRead represents actual remote reads when cache misses
+        // This is the primary indicator of cache miss
+        total_remote += fsio_bytes;
+        
+        // DataCacheSkipReadBytes only adds if explicitly skipped (policy-based)
+        // Don't add it again if already counted in FSIOBytesRead
+        if datacache_skip_bytes > 0 && fsio_bytes == 0 {
+            total_remote += datacache_skip_bytes;
+        }
     } else {
-        // For Lake storage, DataCacheSkipReadBytes is the correct metric
+        // For Lake storage without DataCache metrics, use skip bytes
         total_remote += datacache_skip_bytes;
     }
 

@@ -7,10 +7,12 @@ use super::models::*;
 use super::UpdateProviderRequest;
 
 /// Repository for LLM database operations
+/// Some methods are reserved for future use (admin UI, cache management, usage stats)
 pub struct LLMRepository {
     pool: SqlitePool,
 }
 
+#[allow(dead_code)]
 impl LLMRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }

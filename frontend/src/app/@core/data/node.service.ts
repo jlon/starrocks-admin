@@ -263,6 +263,17 @@ export interface AggregatedDiagnostic {
   parameter_suggestions?: ParameterSuggestion[];
 }
 
+// LLM enhanced analysis result
+export interface LLMEnhancedAnalysis {
+  available: boolean;
+  status: string;  // 'pending' | 'completed' | 'failed'
+  root_causes?: any[];
+  causal_chains?: any[];
+  recommendations?: any[];
+  hidden_issues?: any[];
+  summary?: string;
+}
+
 export interface ProfileAnalysisResult {
   hotspots: any[];
   conclusion: string;
@@ -285,6 +296,10 @@ export interface ProfileAnalysisResult {
   node_diagnostics?: { [planNodeId: number]: DiagnosticResult[] };
   // Raw profile content for PROFILE tab display
   profile_content?: string;
+  // LLM enhanced analysis (loaded async after DAG)
+  llm_analysis?: LLMEnhancedAnalysis;
+  // Rule-based root cause analysis
+  root_cause_analysis?: any;
 }
 
 @Injectable({
@@ -416,5 +431,15 @@ export class NodeService {
 
   analyzeProfile(queryId: string): Observable<ProfileAnalysisResult> {
     return this.api.get<ProfileAnalysisResult>(`/clusters/profiles/${queryId}/analyze`);
+  }
+
+  /**
+   * Enhance profile analysis with LLM (called async after DAG is rendered)
+   * @param clusterId Cluster ID
+   * @param queryId Query ID
+   * @param analysisData Pre-analyzed profile data to avoid redundant parsing
+   */
+  enhanceProfileWithLLM(clusterId: number, queryId: string, analysisData: any): Observable<any> {
+    return this.api.post<any>(`/clusters/${clusterId}/profiles/${queryId}/enhance`, { analysis_data: analysisData });
   }
 }

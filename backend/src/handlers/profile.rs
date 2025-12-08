@@ -251,28 +251,55 @@ pub async fn analyze_profile_handler(
     let mut response = analyze_profile_with_context(&profile_content, &context)
         .map_err(|e| ApiError::internal_error(format!("Analysis failed: {}", e)))?;
     
-    // Step 2: LLM enhancement (血肉 - flesh, sync, may take 1-10s but cached)
-    // Only call LLM if: 1) LLM is available 2) has diagnostics to enhance
-    if state.llm_service.is_available(){
-        tracing::info!("LLM available, enhancing analysis for query {}", safe_query_id);
-        match enhance_with_llm(&state.llm_service, &response, &safe_query_id, Some(cluster.id)).await {
-            Ok(llm_analysis) => {
-                tracing::info!("LLM enhancement completed for query {}", safe_query_id);
-                response.llm_analysis = Some(llm_analysis);
-            }
-            Err(e) => {
-                // LLM failed, but rule engine result is still valid (graceful degradation)
-                tracing::warn!("LLM enhancement failed for query {}: {}", safe_query_id, e);
-                response.llm_analysis = Some(LLMEnhancedAnalysis {
-                    available: false,
-                    status: format!("failed: {}", e),
-                    ..Default::default()
-                });
-            }
-        }
+    // Step 2: Mark LLM as available but pending (frontend will call separate API)
+    // This allows fast response for DAG rendering while LLM analysis loads async
+    if state.llm_service.is_available() {
+        response.llm_analysis = Some(LLMEnhancedAnalysis {
+            available: true,
+            status: "pending".to_string(), // Frontend should call /api/llm/enhance API
+            ..Default::default()
+        });
     }
     
     Ok(Json(response))
+}
+
+/// Request body for LLM enhancement
+#[derive(Debug, serde::Deserialize)]
+pub struct EnhanceProfileRequest {
+    /// Pre-analyzed profile data from rule engine (avoids re-parsing)
+    pub analysis_data: ProfileAnalysisResponse,
+}
+
+/// POST /api/clusters/:cluster_id/profiles/:query_id/enhance
+/// 
+/// Enhance profile analysis with LLM - called async by frontend after DAG is rendered.
+/// Receives pre-analyzed data to avoid redundant profile parsing.
+pub async fn enhance_profile_handler(
+    State(state): State<Arc<crate::AppState>>,
+    Path((cluster_id, query_id)): Path<(i64, String)>,
+    Json(req): Json<EnhanceProfileRequest>,
+) -> ApiResult<Json<LLMEnhancedAnalysis>> {
+    let safe_query_id = sanitize_query_id(&query_id)?;
+    
+    // Check LLM availability
+    if !state.llm_service.is_available() {
+        return Ok(Json(LLMEnhancedAnalysis {
+            available: false,
+            status: "LLM service not available".to_string(),
+            ..Default::default()
+        }));
+    }
+    
+    // Use pre-analyzed data directly, no need to re-fetch profile
+    match enhance_with_llm(&state.llm_service, &req.analysis_data, &safe_query_id, Some(cluster_id)).await {
+        Ok(llm_analysis) => Ok(Json(llm_analysis)),
+        Err(e) => Ok(Json(LLMEnhancedAnalysis {
+            available: false,
+            status: format!("failed: {}", e),
+            ..Default::default()
+        })),
+    }
 }
 
 /// Enhance profile analysis with LLM-based root cause analysis
@@ -285,6 +312,7 @@ async fn enhance_with_llm(
     query_id: &str,
     cluster_id: Option<i64>,
 ) -> Result<LLMEnhancedAnalysis, String> {
+    #[allow(unused_imports)]
     use crate::services::profile_analyzer::{MergedRootCause, MergedRecommendation, LLMCausalChain, LLMHiddenIssue};
     use std::collections::HashMap;
     
@@ -518,7 +546,8 @@ fn normalize_action(action: &str) -> String {
     action.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect()
 }
 
-/// Truncate SQL statement for LLM request
+/// Truncate SQL statement for LLM request (kept for future use)
+#[allow(dead_code)]
 fn truncate_sql(sql: &str, max_len: usize) -> String {
     if sql.len() <= max_len { sql.to_string() } else { format!("{}...", &sql[..max_len]) }
 }

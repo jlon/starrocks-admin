@@ -66,6 +66,10 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   translateX = 0;
   translateY = 0;
   
+  // LLM Analysis state (loaded async after DAG)
+  llmAnalysisLoading = false;
+  llmAnalysisError: string = '';
+  
   // Window control state
   isFullscreen = false; // Default to normal layout, toggle for full screen
   
@@ -775,12 +779,51 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         }
         this.analysisLoading = false;
         this.profileDetailLoading = false;
+        
+        // If LLM is available but pending, load it async
+        if (data.llm_analysis?.available && data.llm_analysis?.status === 'pending') {
+          this.loadLLMAnalysis(queryId);
+        }
       },
       error: (err) => {
         console.error('Failed to analyze profile', err);
         this.analysisError = '分析失败: ' + (err.error?.message || err.message || '未知错误');
         this.analysisLoading = false;
         this.profileDetailLoading = false;
+      }
+    });
+  }
+  
+  /**
+   * Load LLM analysis async (called after DAG is rendered)
+   * Passes pre-analyzed data to avoid redundant profile parsing
+   */
+  private loadLLMAnalysis(queryId: string): void {
+    if (!this.clusterId || !this.analysisData) return;
+    
+    this.llmAnalysisLoading = true;
+    this.llmAnalysisError = '';
+    
+    // Pass pre-analyzed data to backend to avoid re-fetching profile
+    this.nodeService.enhanceProfileWithLLM(this.clusterId, queryId, this.analysisData).subscribe({
+      next: (llmData) => {
+        // Merge LLM analysis into existing data
+        if (this.analysisData) {
+          this.analysisData.llm_analysis = llmData;
+        }
+        this.llmAnalysisLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Failed to load LLM analysis', err);
+        this.llmAnalysisError = 'LLM 分析加载失败';
+        this.llmAnalysisLoading = false;
+        // Update llm_analysis status
+        if (this.analysisData?.llm_analysis) {
+          this.analysisData.llm_analysis.status = 'failed';
+          this.analysisData.llm_analysis.available = false;
+        }
+        this.cdr.detectChanges();
       }
     });
   }

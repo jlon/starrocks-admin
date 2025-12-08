@@ -481,6 +481,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/clusters/profiles/:query_id/analyze",
             get(handlers::profile::analyze_profile_handler),
         )
+        .route(
+            "/api/clusters/:cluster_id/profiles/:query_id/enhance",
+            post(handlers::profile::enhance_profile_handler),
+        )
         // Sessions
         .route("/api/clusters/sessions", get(handlers::sessions::get_sessions))
         .route("/api/clusters/sessions/:session_id", delete(handlers::sessions::kill_session))

@@ -420,7 +420,8 @@ struct InterNodeRule {
     upstream: &'static str,
     /// Downstream diagnostic pattern
     downstream: &'static str,
-    /// Propagation mode
+    /// Propagation mode (reserved for future use)
+    #[allow(dead_code)]
     mode: PropagationMode,
     /// Description
     description: &'static str,

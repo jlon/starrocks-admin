@@ -905,15 +905,34 @@ mod llm_integration_tests {
                 })
                 .collect();
             
-            // Scan details
+            // Scan details - determine table type from scan operator name
             let scan_details: Vec<ScanDetailForLLM> = tree.nodes.iter()
                 .filter(|n| n.operator_name.contains("SCAN"))
                 .map(|n| {
                     let metrics = &n.unique_metrics;
+                    let scan_type = n.operator_name.clone();
+                    
+                    // Determine table type from scan operator
+                    // - OLAP_SCAN: internal StarRocks table
+                    // - HDFS_SCAN / CONNECTOR_SCAN: external table (Hive/Iceberg/HDFS)
+                    // - LAKE_SCAN: shared-data architecture
+                    let table_type = if scan_type.contains("OLAP") {
+                        "internal".to_string()
+                    } else if scan_type.contains("HDFS") || scan_type.contains("CONNECTOR") || scan_type.contains("HIVE") {
+                        "external".to_string()
+                    } else if scan_type.contains("LAKE") {
+                        "lake".to_string()
+                    } else {
+                        "unknown".to_string()
+                    };
+                    
+                    let table_name = metrics.get("Table").cloned().unwrap_or_else(|| "unknown".to_string());
+                    
                     ScanDetailForLLM {
                         plan_node_id: n.plan_node_id.unwrap_or(-1),
-                        table_name: metrics.get("Table").cloned().unwrap_or_else(|| "unknown".to_string()),
-                        scan_type: n.operator_name.clone(),
+                        table_name: table_name.clone(),
+                        scan_type,
+                        table_type,
                         rows_read: parse_number(metrics.get("RawRowsRead").or(metrics.get("RowsRead"))),
                         rows_returned: n.rows.unwrap_or(0),
                         filter_ratio: {
@@ -927,6 +946,7 @@ mod llm_integration_tests {
                         cache_hit_rate: parse_percentage(metrics.get("DataCacheHitRate")),
                         predicates: metrics.get("Predicates").cloned(),
                         partitions_scanned: metrics.get("PartitionsScanned").or(metrics.get("TabletCount")).cloned(),
+                        full_table_path: if table_name.contains(".") { Some(table_name) } else { None },
                     }
                 })
                 .collect();

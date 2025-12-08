@@ -754,12 +754,16 @@
                   </div>
                 </div>
 
-                <!-- Root Cause Analysis Section - Prioritize LLM analysis if available -->
-                <div class="right-section root-cause-section" *ngIf="!selectedNode && getRootCauseAnalysis()?.root_causes?.length">
+                <!-- Root Cause Analysis Section - Loading state for LLM -->
+                <div class="right-section root-cause-section" *ngIf="!selectedNode && (llmAnalysisLoading || getRootCauseAnalysis()?.root_causes?.length)">
                   <div class="section-header">
                     <span class="title">🔍 根因分析</span>
-                    <span class="warning-badge">{{ getRootCauseAnalysis().root_causes.length }}</span>
-                    <span class="llm-badge" *ngIf="hasLLMAnalysis()">🤖 LLM</span>
+                    <span class="warning-badge" *ngIf="!llmAnalysisLoading">{{ getRootCauseAnalysis()?.root_causes?.length || 0 }}</span>
+                    <span class="llm-loading-badge" *ngIf="llmAnalysisLoading">
+                      <nb-icon icon="loader-outline" class="spin"></nb-icon>
+                      <span>LLM 分析中...</span>
+                    </span>
+                    <span class="llm-badge" *ngIf="!llmAnalysisLoading && hasLLMAnalysis()">🤖 LLM</span>
                     <span class="collapse-toggle" (click)="isRootCauseCollapsed = !isRootCauseCollapsed">{{ isRootCauseCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isRootCauseCollapsed && !isRightPanelCollapsed">

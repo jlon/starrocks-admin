@@ -36,10 +36,14 @@ pub use service::{LLMService, LLMServiceImpl};
 // Internal use - exported for specific scenarios
 pub use scenarios::root_cause::*;
 
-// These are used internally or for advanced scenarios
+// Allow unused for internal modules (used in tests or future features)
+#[allow(unused_imports)]
 pub(crate) use client::LLMClient;
+#[allow(unused_imports)]
 pub(crate) use repository::LLMRepository;
+#[allow(unused_imports)]
 pub(crate) use scenarios::merger::*;
+#[allow(unused_imports)]
 pub(crate) use service::{LLMAnalysisRequestTrait, LLMAnalysisResponseTrait};
 
 #[cfg(test)]

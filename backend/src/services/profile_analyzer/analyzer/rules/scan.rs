@@ -1084,7 +1084,7 @@ impl S017FileFragmentation {
     
     /// Get suggestions based on table type (internal vs external)
     /// For external tables, provide a single consolidated suggestion to avoid repetition
-    fn get_suggestions(is_external: bool, format: &str, table: &str) -> Vec<String> {
+    fn get_suggestions(is_external: bool, _format: &str, table: &str) -> Vec<String> {
         if is_external {
             // Single consolidated suggestion for external tables
             vec![format!(

@@ -254,6 +254,7 @@ pub fn analyze_profile_with_context(
         profile_content: Some(profile_text.to_string()),
         fragments: profile.fragments.clone(),
         root_cause_analysis,
+        llm_analysis: None, // Filled by handler if LLM is enabled
     })
 }
 

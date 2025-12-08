@@ -592,7 +592,7 @@ mod cache_tests {
             r#"INSERT INTO llm_cache (cache_key, scenario, request_hash, response_json, expires_at)
                VALUES ('expired', 'test', 'hash', '{}', datetime('now', '-1 hour'))"#
         )
-        .execute(&repo.pool)
+        .execute(repo.pool())
         .await
         .unwrap();
         
@@ -698,5 +698,600 @@ mod usage_stats_tests {
         assert_eq!(stat.successful_requests, 2);
         assert_eq!(stat.failed_requests, 1);
         assert_eq!(stat.cache_hits, 1);
+    }
+}
+
+// ============================================================================
+// LLM Integration Test with Real Profile
+// ============================================================================
+
+mod llm_integration_tests {
+    use super::*;
+    use crate::services::profile_analyzer::{
+        analyze_profile_with_context, AnalysisContext, ProfileAnalysisResponse,
+        AggregatedDiagnostic, LLMEnhancedAnalysis, MergedRootCause, MergedRecommendation,
+        LLMCausalChain, LLMHiddenIssue,
+    };
+    use std::collections::HashMap;
+    use std::fs;
+    
+    /// Test the complete LLM integration pipeline with profile12
+    /// 
+    /// Run with: cargo test llm_integration_tests::test_profile12_llm_integration --lib -- --nocapture --ignored
+    #[tokio::test]
+    #[ignore] // Run manually with --ignored flag
+    async fn test_profile12_llm_integration() {
+        let sep = "=".repeat(80);
+        println!("\n{}", sep);
+        println!("🧪 LLM Integration Test - prrofile12.txt");
+        println!("{}\n", sep);
+
+        // Step 1: Read profile file
+        let profile_path = "tests/fixtures/profiles/prrofile12.txt";
+        let profile_content = fs::read_to_string(profile_path)
+            .expect("Failed to read profile file");
+        
+        println!("📄 Profile loaded: {} bytes\n", profile_content.len());
+        
+        // Step 2: Run rule engine analysis (骨架)
+        println!("{}", sep);
+        println!("🦴 Step 1: Rule Engine Analysis (骨架)");
+        println!("{}\n", sep);
+        
+        let context = AnalysisContext { cluster_variables: None };
+        let response = analyze_profile_with_context(&profile_content, &context)
+            .expect("Failed to analyze profile");
+        
+        // Print summary
+        println!("📊 Summary:");
+        if let Some(summary) = &response.summary {
+            println!("   - Query ID: {}", summary.query_id);
+            println!("   - Query State: {}", summary.query_state);
+            println!("   - Total Time: {:?} ms", summary.total_time_ms);
+            let sql_preview = if summary.sql_statement.len() > 200 {
+                format!("{}...", &summary.sql_statement[..200])
+            } else {
+                summary.sql_statement.clone()
+            };
+            println!("   - SQL (truncated): {}", sql_preview);
+        }
+        
+        println!("\n📋 Aggregated Diagnostics ({} issues):", response.aggregated_diagnostics.len());
+        for (i, diag) in response.aggregated_diagnostics.iter().enumerate() {
+            println!("   {}. [{}] {} - {} ({} nodes)", 
+                i + 1, 
+                diag.rule_id, 
+                diag.severity, 
+                diag.message, 
+                diag.node_count
+            );
+            let reason_preview = truncate_str(&diag.reason, 150);
+            println!("      Reason: {}", reason_preview);
+            if !diag.suggestions.is_empty() {
+                for s in &diag.suggestions {
+                    println!("      💡 {}", s);
+                }
+            }
+        }
+        
+        println!("\n🎯 Performance Score: {:.1}", response.performance_score);
+        
+        // Step 3: Build LLM request
+        println!("\n{}", sep);
+        println!("📤 Step 2: Data Sent to LLM");
+        println!("{}\n", sep);
+        
+        let llm_request = build_llm_request_for_test(&response);
+        let request_json = serde_json::to_string_pretty(&llm_request).unwrap();
+        println!("{}", request_json);
+        
+        // Step 4: Connect to real database and call LLM
+        println!("\n{}", sep);
+        println!("🤖 Step 3: LLM Response (Real OpenRouter API)");
+        println!("{}\n", sep);
+        
+        // Try multiple possible database paths
+        let db_paths = [
+            "data/starrocks-admin.db",
+            "starrocks_admin.db",
+            "/home/oppo/Documents/starrocks-admin/backend/data/starrocks-admin.db",
+            "/home/oppo/Documents/starrocks-admin/backend/starrocks_admin.db",
+        ];
+        let db_path = db_paths.iter()
+            .find(|p| std::path::Path::new(p).exists())
+            .expect("Database not found. Run backend first to initialize.");
+        println!("📁 Using database: {}", db_path);
+        
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!("sqlite:{}", db_path))
+            .await
+            .expect("Failed to connect to database");
+        
+        let llm_service = LLMServiceImpl::new(pool, true, 24);
+        
+        if !llm_service.is_available() {
+            println!("⚠️  No active LLM provider found.");
+            println!("    Please activate a provider first via the API or UI.");
+            return;
+        }
+        
+        println!("✅ LLM service available, calling OpenRouter API...\n");
+        
+        let query_id = response.summary.as_ref()
+            .map(|s| s.query_id.clone())
+            .unwrap_or_else(|| "test-query".to_string());
+        
+        let start = std::time::Instant::now();
+        let llm_result: Result<RootCauseAnalysisResponse, _> = llm_service
+            .analyze(&llm_request, &query_id, None)
+            .await;
+        let elapsed = start.elapsed();
+        
+        match llm_result {
+            Ok(llm_response) => {
+                println!("⏱️  LLM call took: {:?}\n", elapsed);
+                println!("📥 LLM Response:");
+                println!("{}", serde_json::to_string_pretty(&llm_response).unwrap());
+                
+                // Step 5: Merge results
+                println!("\n{}", sep);
+                println!("🔄 Step 4: Merged Result (骨架 + 血肉)");
+                println!("{}\n", sep);
+                
+                let merged = merge_results_for_test(&response.aggregated_diagnostics, &llm_response);
+                println!("{}", serde_json::to_string_pretty(&merged).unwrap());
+                
+                // Print summary
+                println!("\n{}", sep);
+                println!("📊 Final Summary");
+                println!("{}\n", sep);
+                println!("🦴 Rule Engine (骨架): {} diagnostics", response.aggregated_diagnostics.len());
+                println!("🩸 LLM (血肉): {} root causes, {} recommendations", 
+                    llm_response.root_causes.len(),
+                    llm_response.recommendations.len()
+                );
+                println!("🔄 Merged: {} root causes, {} recommendations",
+                    merged.root_causes.len(),
+                    merged.merged_recommendations.len()
+                );
+            }
+            Err(e) => {
+                println!("❌ LLM call failed after {:?}: {}", elapsed, e);
+            }
+        }
+    }
+    
+    /// Build LLM request from profile analysis response - ENHANCED VERSION
+    /// Now includes full SQL and raw profile data for deep analysis
+    fn build_llm_request_for_test(response: &ProfileAnalysisResponse) -> RootCauseAnalysisRequest {
+        use crate::services::llm::scenarios::root_cause::{
+            ProfileDataForLLM, OperatorDetailForLLM, ScanDetailForLLM,
+            JoinDetailForLLM, AggDetailForLLM, ExchangeDetailForLLM, TimeDistributionForLLM,
+        };
+        
+        let summary = response.summary.as_ref();
+        
+        // CHANGE 1: Full SQL without truncation
+        let sql = summary.map(|s| s.sql_statement.clone()).unwrap_or_default();
+        
+        let query_summary = QuerySummaryForLLM {
+            sql_statement: sql,
+            query_type: summary.and_then(|s| s.query_type.clone()).unwrap_or_else(|| "SELECT".to_string()),
+            total_time_seconds: summary.map(|s| s.total_time_ms.unwrap_or(0.0) / 1000.0).unwrap_or(0.0),
+            scan_bytes: summary.and_then(|s| s.total_bytes_read).unwrap_or(0),
+            output_rows: summary.and_then(|s| s.result_rows).unwrap_or(0),
+            be_count: summary.and_then(|s| s.total_instance_count.map(|c| c as u32)).unwrap_or(3),
+            has_spill: summary.and_then(|s| s.query_spill_bytes.as_ref().map(|b| !b.is_empty() && b != "0" && b != "0.000 B")).unwrap_or(false),
+            spill_bytes: summary.and_then(|s| s.query_spill_bytes.clone()),
+            session_variables: HashMap::new(),
+        };
+        
+        // CHANGE 2: Build rich profile data from execution tree
+        let profile_data = response.execution_tree.as_ref().map(|tree| {
+            // All operators with full metrics
+            let operators: Vec<OperatorDetailForLLM> = tree.nodes.iter()
+                .map(|n| OperatorDetailForLLM {
+                    operator: n.operator_name.clone(),
+                    plan_node_id: n.plan_node_id.unwrap_or(-1),
+                    time_pct: n.time_percentage.unwrap_or(0.0),
+                    rows: n.rows.unwrap_or(0),
+                    estimated_rows: None, // TODO: extract from plan
+                    memory_bytes: parse_bytes(&n.unique_metrics.get("PeakMemoryUsage").cloned().unwrap_or_default()),
+                    metrics: n.unique_metrics.iter()
+                        .filter(|(k, _)| is_important_metric(k))
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect(),
+                })
+                .collect();
+            
+            // Scan details
+            let scan_details: Vec<ScanDetailForLLM> = tree.nodes.iter()
+                .filter(|n| n.operator_name.contains("SCAN"))
+                .map(|n| {
+                    let metrics = &n.unique_metrics;
+                    ScanDetailForLLM {
+                        plan_node_id: n.plan_node_id.unwrap_or(-1),
+                        table_name: metrics.get("Table").cloned().unwrap_or_else(|| "unknown".to_string()),
+                        scan_type: n.operator_name.clone(),
+                        rows_read: parse_number(metrics.get("RawRowsRead").or(metrics.get("RowsRead"))),
+                        rows_returned: n.rows.unwrap_or(0),
+                        filter_ratio: {
+                            let read = parse_number(metrics.get("RawRowsRead").or(metrics.get("RowsRead")));
+                            let ret = n.rows.unwrap_or(0);
+                            if read > 0 { 1.0 - (ret as f64 / read as f64) } else { 0.0 }
+                        },
+                        scan_ranges: parse_number_opt(metrics.get("ScanRanges")),
+                        bytes_read: parse_bytes(metrics.get("BytesRead").or(metrics.get("CompressedBytesRead")).cloned().as_ref().unwrap_or(&String::new())),
+                        io_time_ms: parse_time_ms(metrics.get("IOTaskWaitTime").or(metrics.get("ScanTime"))),
+                        cache_hit_rate: parse_percentage(metrics.get("DataCacheHitRate")),
+                        predicates: metrics.get("Predicates").cloned(),
+                        partitions_scanned: metrics.get("PartitionsScanned").or(metrics.get("TabletCount")).cloned(),
+                    }
+                })
+                .collect();
+            
+            // Join details
+            let join_details: Vec<JoinDetailForLLM> = tree.nodes.iter()
+                .filter(|n| n.operator_name.contains("JOIN"))
+                .map(|n| {
+                    let metrics = &n.unique_metrics;
+                    JoinDetailForLLM {
+                        plan_node_id: n.plan_node_id.unwrap_or(-1),
+                        join_type: n.operator_name.clone(),
+                        build_rows: parse_number(metrics.get("BuildRows")),
+                        probe_rows: parse_number(metrics.get("ProbeRows")),
+                        output_rows: n.rows.unwrap_or(0),
+                        hash_table_memory: parse_bytes(metrics.get("HashTableMemoryUsage").cloned().as_ref().unwrap_or(&String::new())),
+                        is_broadcast: metrics.get("JoinType").map(|t| t.contains("BROADCAST")).unwrap_or(false),
+                        runtime_filter: metrics.get("RuntimeFilterDescription").cloned(),
+                    }
+                })
+                .collect();
+            
+            // Aggregation details
+            let agg_details: Vec<AggDetailForLLM> = tree.nodes.iter()
+                .filter(|n| n.operator_name.contains("AGGREGAT"))
+                .map(|n| {
+                    let metrics = &n.unique_metrics;
+                    let input = parse_number(metrics.get("InputRows").or(metrics.get("PushRowNum")));
+                    let output = n.rows.unwrap_or(0);
+                    AggDetailForLLM {
+                        plan_node_id: n.plan_node_id.unwrap_or(-1),
+                        input_rows: input,
+                        output_rows: output,
+                        agg_ratio: if input > 0 { output as f64 / input as f64 } else { 1.0 },
+                        group_by_keys: metrics.get("GroupByKeys").or(metrics.get("GroupingKeys")).cloned(),
+                        hash_table_memory: parse_bytes(metrics.get("HashTableMemoryUsage").cloned().as_ref().unwrap_or(&String::new())),
+                        is_streaming: metrics.get("AggMode").map(|m| m.contains("STREAMING")).unwrap_or(false),
+                    }
+                })
+                .collect();
+            
+            // Exchange details
+            let exchange_details: Vec<ExchangeDetailForLLM> = tree.nodes.iter()
+                .filter(|n| n.operator_name.contains("EXCHANGE"))
+                .map(|n| {
+                    let metrics = &n.unique_metrics;
+                    ExchangeDetailForLLM {
+                        plan_node_id: n.plan_node_id.unwrap_or(-1),
+                        exchange_type: metrics.get("PartType").cloned().unwrap_or_else(|| "SHUFFLE".to_string()),
+                        bytes_sent: parse_bytes(metrics.get("BytesSent").or(metrics.get("NetworkBytes")).cloned().as_ref().unwrap_or(&String::new())).unwrap_or(0),
+                        rows_sent: parse_number(metrics.get("RowsSent")),
+                        network_time_ms: parse_time_ms(metrics.get("NetworkTime").or(metrics.get("WaitForDataTime"))),
+                    }
+                })
+                .collect();
+            
+            // Time distribution for skew detection
+            let time_distribution = {
+                let times: Vec<f64> = tree.nodes.iter()
+                    .filter_map(|n| n.time_percentage)
+                    .filter(|&t| t > 0.0)
+                    .collect();
+                if times.is_empty() {
+                    None
+                } else {
+                    let max = times.iter().cloned().fold(f64::MIN, f64::max);
+                    let min = times.iter().cloned().fold(f64::MAX, f64::min);
+                    let avg = times.iter().sum::<f64>() / times.len() as f64;
+                    Some(TimeDistributionForLLM {
+                        max_time_ms: max,
+                        min_time_ms: min,
+                        avg_time_ms: avg,
+                        skew_ratio: if avg > 0.0 { max / avg } else { 1.0 },
+                        per_instance: vec![], // Simplified for now
+                    })
+                }
+            };
+            
+            ProfileDataForLLM {
+                operators,
+                time_distribution,
+                scan_details,
+                join_details,
+                agg_details,
+                exchange_details,
+            }
+        });
+        
+        // Execution plan (simplified DAG)
+        let dag_description = response.execution_tree.as_ref()
+            .map(|tree| {
+                tree.nodes.iter()
+                    .take(15)
+                    .map(|n| format!("{}({})", n.operator_name, n.plan_node_id.unwrap_or(-1)))
+                    .collect::<Vec<_>>()
+                    .join(" -> ")
+            })
+            .unwrap_or_else(|| "Unknown DAG".to_string());
+        
+        let hotspot_nodes: Vec<HotspotNodeForLLM> = response.execution_tree.as_ref()
+            .map(|tree| {
+                tree.nodes.iter()
+                    .filter(|n| n.time_percentage.unwrap_or(0.0) > 5.0)
+                    .take(10)
+                    .map(|n| HotspotNodeForLLM {
+                        operator: n.operator_name.clone(),
+                        plan_node_id: n.plan_node_id.unwrap_or(-1),
+                        time_percentage: n.time_percentage.unwrap_or(0.0),
+                        key_metrics: n.unique_metrics.iter()
+                            .filter(|(k, _)| is_important_metric(k))
+                            .take(15)
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect(),
+                        upstream_operators: vec![],
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        
+        let execution_plan = ExecutionPlanForLLM {
+            dag_description,
+            hotspot_nodes,
+        };
+        
+        // Rule diagnostics (as reference for LLM)
+        let diagnostics: Vec<DiagnosticForLLM> = response.aggregated_diagnostics.iter()
+            .map(|d| DiagnosticForLLM {
+                rule_id: d.rule_id.clone(),
+                severity: d.severity.clone(),
+                operator: d.affected_nodes.first()
+                    .map(|s| s.split('/').last().unwrap_or("unknown"))
+                    .unwrap_or("unknown")
+                    .to_string(),
+                plan_node_id: None,
+                message: format!("{} ({}个节点)", d.message, d.node_count),
+                evidence: {
+                    let mut e = HashMap::new();
+                    e.insert("reason".to_string(), d.reason.clone());
+                    e.insert("affected_nodes".to_string(), d.affected_nodes.join(", "));
+                    e
+                },
+            })
+            .collect();
+        
+        RootCauseAnalysisRequest {
+            query_summary,
+            profile_data,
+            execution_plan,
+            rule_diagnostics: diagnostics,
+            key_metrics: KeyMetricsForLLM::default(),
+            user_question: None,
+        }
+    }
+    
+    /// Check if metric is important for LLM analysis
+    fn is_important_metric(key: &str) -> bool {
+        let important = [
+            "Table", "Predicates", "RowsRead", "RawRowsRead", "RowsReturned",
+            "BytesRead", "ScanRanges", "TabletCount", "PartitionsScanned",
+            "IOTaskWaitTime", "ScanTime", "DataCacheHitRate", "DataCacheReadBytes",
+            "BuildRows", "ProbeRows", "HashTableMemoryUsage", "JoinType",
+            "InputRows", "OutputRows", "GroupByKeys", "AggMode",
+            "BytesSent", "NetworkTime", "PartType",
+            "PeakMemoryUsage", "SpillBytes", "SpillTime",
+            "EstimatedRows", "ActualRows", "CardinalityError",
+        ];
+        important.iter().any(|&i| key.contains(i))
+    }
+    
+    /// Parse number from metric string like "1.705B (1704962761)" or "1234"
+    fn parse_number(s: Option<&String>) -> u64 {
+        s.and_then(|v| {
+            // Try to extract number in parentheses first: "1.705B (1704962761)"
+            if let Some(start) = v.find('(') {
+                if let Some(end) = v.find(')') {
+                    return v[start+1..end].parse().ok();
+                }
+            }
+            // Otherwise try direct parse
+            v.replace(",", "").parse().ok()
+        }).unwrap_or(0)
+    }
+    
+    fn parse_number_opt(s: Option<&String>) -> Option<u64> {
+        let n = parse_number(s);
+        if n > 0 { Some(n) } else { None }
+    }
+    
+    /// Parse bytes from string like "68.750 MB" or "20.597 GB"
+    fn parse_bytes(s: &str) -> Option<u64> {
+        if s.is_empty() { return None; }
+        let s = s.trim();
+        let parts: Vec<&str> = s.split_whitespace().collect();
+        if parts.is_empty() { return None; }
+        
+        let num: f64 = parts[0].replace(",", "").parse().ok()?;
+        let multiplier = if parts.len() > 1 {
+            match parts[1].to_uppercase().as_str() {
+                "B" | "BYTES" => 1,
+                "KB" => 1024_u64,
+                "MB" => 1024_u64 * 1024,
+                "GB" => 1024_u64 * 1024 * 1024,
+                "TB" => 1024_u64 * 1024 * 1024 * 1024,
+                _ => 1,
+            }
+        } else { 1 };
+        Some((num * multiplier as f64) as u64)
+    }
+    
+    /// Parse time from string like "1m34s" or "717.077us"
+    fn parse_time_ms(s: Option<&String>) -> Option<f64> {
+        s.and_then(|v| {
+            let v = v.trim();
+            if v.contains("ms") {
+                v.replace("ms", "").trim().parse().ok()
+            } else if v.contains("us") {
+                v.replace("us", "").trim().parse::<f64>().ok().map(|n| n / 1000.0)
+            } else if v.contains("ns") {
+                v.replace("ns", "").trim().parse::<f64>().ok().map(|n| n / 1_000_000.0)
+            } else if v.contains('m') && v.contains('s') {
+                // "1m34s" format
+                let parts: Vec<&str> = v.split('m').collect();
+                if parts.len() == 2 {
+                    let mins: f64 = parts[0].parse().ok()?;
+                    let secs: f64 = parts[1].replace("s", "").parse().ok()?;
+                    Some((mins * 60.0 + secs) * 1000.0)
+                } else { None }
+            } else if v.ends_with('s') {
+                v.replace("s", "").trim().parse::<f64>().ok().map(|n| n * 1000.0)
+            } else {
+                v.parse().ok()
+            }
+        })
+    }
+    
+    /// Parse percentage from string
+    fn parse_percentage(s: Option<&String>) -> Option<f64> {
+        s.and_then(|v| v.replace("%", "").trim().parse().ok())
+    }
+    
+    /// Merge rule diagnostics with LLM response
+    fn merge_results_for_test(
+        rule_diagnostics: &[AggregatedDiagnostic],
+        llm_response: &RootCauseAnalysisResponse,
+    ) -> LLMEnhancedAnalysis {
+        use std::collections::HashSet;
+        
+        let mut root_causes = Vec::new();
+        let mut seen_ids: HashSet<String> = HashSet::new();
+        
+        // Add LLM root causes first (higher priority)
+        for llm_rc in &llm_response.root_causes {
+            let id = llm_rc.root_cause_id.clone();
+            seen_ids.insert(id.clone());
+            
+            let related_rules: Vec<String> = llm_rc.symptoms.iter()
+                .filter(|s| rule_diagnostics.iter().any(|d| &d.rule_id == *s))
+                .cloned()
+                .collect();
+            
+            let source = if related_rules.is_empty() { "llm" } else { "both" };
+            
+            root_causes.push(MergedRootCause {
+                id,
+                related_rule_ids: related_rules,
+                description: llm_rc.description.clone(),
+                is_implicit: llm_rc.is_implicit,
+                confidence: llm_rc.confidence,
+                source: source.to_string(),
+                evidence: llm_rc.evidence.clone(),
+                symptoms: llm_rc.symptoms.clone(),
+            });
+        }
+        
+        // Add uncovered rule diagnostics
+        for diag in rule_diagnostics {
+            let is_covered = llm_response.root_causes.iter()
+                .any(|rc| rc.symptoms.contains(&diag.rule_id));
+            
+            if !is_covered {
+                let id = format!("rule_{}", diag.rule_id);
+                if !seen_ids.contains(&id) {
+                    seen_ids.insert(id.clone());
+                    root_causes.push(MergedRootCause {
+                        id,
+                        related_rule_ids: vec![diag.rule_id.clone()],
+                        description: diag.message.clone(),
+                        is_implicit: false,
+                        confidence: 1.0,
+                        source: "rule".to_string(),
+                        evidence: vec![diag.reason.clone()],
+                        symptoms: vec![],
+                    });
+                }
+            }
+        }
+        
+        root_causes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        
+        // Merge recommendations
+        let mut recommendations = Vec::new();
+        let mut seen_actions: HashSet<String> = HashSet::new();
+        
+        for rec in &llm_response.recommendations {
+            let action_key: String = rec.action.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+            if !seen_actions.contains(&action_key) {
+                seen_actions.insert(action_key);
+                recommendations.push(MergedRecommendation {
+                    priority: rec.priority,
+                    action: rec.action.clone(),
+                    expected_improvement: rec.expected_improvement.clone(),
+                    sql_example: rec.sql_example.clone(),
+                    source: "llm".to_string(),
+                    related_root_causes: vec![],
+                    is_root_cause_fix: true,
+                });
+            }
+        }
+        
+        let mut rule_priority = recommendations.len() as u32 + 1;
+        for diag in rule_diagnostics {
+            for suggestion in &diag.suggestions {
+                let action_key: String = suggestion.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+                if !seen_actions.contains(&action_key) {
+                    seen_actions.insert(action_key);
+                    recommendations.push(MergedRecommendation {
+                        priority: rule_priority,
+                        action: suggestion.clone(),
+                        expected_improvement: String::new(),
+                        sql_example: None,
+                        source: "rule".to_string(),
+                        related_root_causes: vec![diag.rule_id.clone()],
+                        is_root_cause_fix: false,
+                    });
+                    rule_priority += 1;
+                }
+            }
+        }
+        
+        recommendations.sort_by_key(|r| r.priority);
+        
+        LLMEnhancedAnalysis {
+            available: true,
+            status: "completed".to_string(),
+            root_causes,
+            causal_chains: llm_response.causal_chains.iter().map(|c| LLMCausalChain {
+                chain: c.chain.clone(),
+                explanation: c.explanation.clone(),
+            }).collect(),
+            merged_recommendations: recommendations,
+            summary: llm_response.summary.clone(),
+            hidden_issues: llm_response.hidden_issues.iter().map(|h| LLMHiddenIssue {
+                issue: h.issue.clone(),
+                suggestion: h.suggestion.clone(),
+            }).collect(),
+        }
+    }
+    
+    /// Safely truncate a string at char boundary
+    fn truncate_str(s: &str, max_chars: usize) -> String {
+        if s.chars().count() <= max_chars {
+            s.to_string()
+        } else {
+            let truncated: String = s.chars().take(max_chars).collect();
+            format!("{}...", truncated)
+        }
     }
 }

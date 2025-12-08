@@ -1309,6 +1309,212 @@
             font-size: 12px;
           }
         }
+        
+        .chain-explanation {
+          width: 100%;
+          margin-top: 4px;
+          padding-top: 4px;
+          font-size: 10px;
+          color: #8f96aa;
+          border-top: 1px dashed rgba(143, 150, 170, 0.15);
+        }
+      }
+    }
+    
+    // LLM Badge - Nebular info color (#0095ff)
+    .llm-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      background: #0095ff;
+      color: white;
+      border-radius: 4px;
+      font-weight: 500;
+      margin-left: 4px;
+    }
+    
+    // LLM-source root cause item
+    .root-cause-item {
+      &.llm-source {
+        border-left-color: #0095ff;
+        background: rgba(0, 149, 255, 0.04);
+      }
+      
+      &.implicit {
+        border-left-style: dashed;
+      }
+      
+      .source-badge {
+        font-size: 12px;
+      }
+      
+      .implicit-badge {
+        font-size: 9px;
+        padding: 1px 4px;
+        background: rgba(255, 170, 0, 0.15);
+        color: #ffaa00;
+        border-radius: 2px;
+        font-weight: 500;
+      }
+    }
+    
+    // Hidden Issues from LLM - Nebular info style
+    .hidden-issues {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: rgba(0, 149, 255, 0.06);
+      border-radius: 4px;
+      border-left: 3px dashed #0095ff;
+      
+      .hidden-issue-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #0095ff;
+        margin-bottom: 8px;
+        
+        nb-icon {
+          font-size: 14px;
+        }
+      }
+      
+      .hidden-issue-item {
+        padding: 6px 0;
+        border-bottom: 1px dashed rgba(143, 150, 170, 0.15);
+        
+        &:last-child {
+          border-bottom: none;
+          padding-bottom: 0;
+        }
+        
+        .issue-desc {
+          font-size: 11px;
+          color: #222b45;
+          font-weight: 500;
+          margin-bottom: 4px;
+        }
+        
+        .issue-suggestion {
+          font-size: 10px;
+          color: #8f96aa;
+        }
+      }
+    }
+    
+    // LLM Recommendations Section
+    .llm-recommendations {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(143, 150, 170, 0.1);
+      
+      .rec-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #222b45;
+        margin-bottom: 10px;
+        
+        nb-icon {
+          font-size: 14px;
+        }
+        
+        .rec-count {
+          font-weight: 400;
+          color: #8f96aa;
+          font-size: 10px;
+        }
+      }
+      
+      .rec-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      .rec-item {
+        display: flex;
+        gap: 10px;
+        padding: 10px 12px;
+        background: rgba(143, 150, 170, 0.04);
+        border-radius: 4px;
+        border-left: 3px solid #598bff;
+        
+        &.llm-rec {
+          border-left-color: #00d68f;
+          background: rgba(0, 214, 143, 0.04);
+        }
+        
+        .rec-priority {
+          flex-shrink: 0;
+          
+          .priority-num {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            background: rgba(89, 139, 255, 0.15);
+            color: #598bff;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 50%;
+          }
+        }
+        
+        &.llm-rec .rec-priority .priority-num {
+          background: rgba(0, 214, 143, 0.15);
+          color: #00d68f;
+        }
+        
+        .rec-content {
+          flex: 1;
+          min-width: 0;
+          
+          .rec-action {
+            font-size: 12px;
+            font-weight: 500;
+            color: #222b45;
+            margin-bottom: 4px;
+            line-height: 1.4;
+          }
+          
+          .rec-improvement {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            color: #00d68f;
+            margin-bottom: 6px;
+            
+            nb-icon {
+              font-size: 12px;
+            }
+          }
+          
+          .rec-sql {
+            margin-top: 6px;
+            
+            pre {
+              margin: 0;
+              padding: 8px 10px;
+              background: rgba(143, 150, 170, 0.06);
+              border-radius: 4px;
+              overflow-x: auto;
+              
+              code {
+                font-family: monospace;
+                font-size: 10px;
+                line-height: 1.5;
+                color: #222b45;
+                white-space: pre-wrap;
+                word-break: break-word;
+              }
+            }
+          }
+        }
       }
     }
   }

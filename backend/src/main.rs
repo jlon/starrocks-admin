@@ -11,73 +11,27 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-mod config;
-mod db;
-mod embedded;
-mod handlers;
-mod middleware;
-mod models;
-mod services;
-mod utils;
-
-// Include tests module only in test builds
-#[cfg(test)]
-mod tests;
-
-use config::Config;
-use embedded::WebAssets;
-use services::{
+use starrocks_admin::config::Config;
+use starrocks_admin::db;
+use starrocks_admin::embedded::WebAssets;
+use starrocks_admin::models;
+use starrocks_admin::services::{
     AuthService, CasbinService, ClusterService, DataStatisticsService, MetricsCollectorService,
     MySQLPoolManager, OrganizationService, OverviewService, PermissionService, RoleService,
     SystemFunctionService, UserRoleService, UserService, LLMServiceImpl,
 };
-use sqlx::SqlitePool;
-use utils::{JwtUtil, ScheduledExecutor};
-
-/// Application shared state
-///
-/// Design Philosophy: Keep it simple - Rust's type system IS our DI container.
-/// No need for Service Container pattern with dyn Any.
-/// All services are wrapped in Arc for cheap cloning and thread safety.
-#[derive(Clone)]
-pub struct AppState {
-    // Core dependencies
-    pub db: SqlitePool,
-
-    // Managers
-    pub mysql_pool_manager: Arc<MySQLPoolManager>,
-    pub jwt_util: Arc<JwtUtil>,
-
-    // Config
-    pub audit_config: config::AuditLogConfig,
-
-    // Services (grouped by domain)
-    pub auth_service: Arc<AuthService>,
-    pub cluster_service: Arc<ClusterService>,
-    pub organization_service: Arc<OrganizationService>,
-    pub system_function_service: Arc<SystemFunctionService>,
-    pub metrics_collector_service: Arc<MetricsCollectorService>,
-    pub data_statistics_service: Arc<DataStatisticsService>,
-    pub overview_service: Arc<OverviewService>,
-
-    // RBAC Services
-    pub casbin_service: Arc<CasbinService>,
-    pub permission_service: Arc<PermissionService>,
-    pub role_service: Arc<RoleService>,
-    pub user_role_service: Arc<UserRoleService>,
-    pub user_service: Arc<UserService>,
-    
-    // LLM Service
-    pub llm_service: Arc<LLMServiceImpl>,
-}
+use starrocks_admin::{handlers, middleware, services, AppState};
+use starrocks_admin::utils::{JwtUtil, ScheduledExecutor};
 
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        // Auth
         handlers::auth::register,
         handlers::auth::login,
         handlers::auth::get_me,
         handlers::auth::update_me,
+        // Cluster
         handlers::cluster::create_cluster,
         handlers::cluster::list_clusters,
         handlers::cluster::get_active_cluster,
@@ -85,14 +39,17 @@ pub struct AppState {
         handlers::cluster::update_cluster,
         handlers::cluster::delete_cluster,
         handlers::cluster::activate_cluster,
+        // Organization
         handlers::organization::create_organization,
         handlers::organization::list_organizations,
         handlers::organization::get_organization,
         handlers::organization::update_organization,
         handlers::organization::delete_organization,
         handlers::cluster::get_cluster_health,
+        // Backend
         handlers::backend::list_backends,
         handlers::frontend::list_frontends,
+        // Materialized View
         handlers::materialized_view::list_materialized_views,
         handlers::materialized_view::get_materialized_view,
         handlers::materialized_view::get_materialized_view_ddl,
@@ -101,6 +58,7 @@ pub struct AppState {
         handlers::materialized_view::refresh_materialized_view,
         handlers::materialized_view::cancel_refresh_materialized_view,
         handlers::materialized_view::alter_materialized_view,
+        // Query
         handlers::query::list_catalogs,
         handlers::query::list_databases,
         handlers::query::list_catalogs_with_databases,
@@ -108,16 +66,20 @@ pub struct AppState {
         handlers::query::kill_query,
         handlers::query::execute_sql,
         handlers::query_history::list_query_history,
+        // Session
         handlers::sessions::get_sessions,
         handlers::sessions::kill_session,
         handlers::variables::get_variables,
         handlers::variables::update_variable,
+        // Profile
         handlers::profile::list_profiles,
         handlers::profile::get_profile,
         handlers::profile::analyze_profile_handler,
+        // System
         handlers::system_management::get_system_functions,
         handlers::system_management::get_system_function_detail,
         handlers::system::get_runtime_info,
+        // Overview
         handlers::overview::get_cluster_overview,
         handlers::overview::get_health_cards,
         handlers::overview::get_performance_trends,
@@ -130,18 +92,21 @@ pub struct AppState {
         handlers::role::list_roles,
         handlers::role::get_role,
         handlers::role::create_role,
-        handlers::role::update_role,
+        handlers::role::update_role,        // Role
         handlers::role::delete_role,
         handlers::role::get_role_with_permissions,
         handlers::role::update_role_permissions,
+        // Permission
         handlers::permission::list_permissions,
         handlers::permission::list_menu_permissions,
         handlers::permission::list_api_permissions,
         handlers::permission::get_permission_tree,
         handlers::permission::get_current_user_permissions,
+        // User Role
         handlers::user_role::get_user_roles,
         handlers::user_role::assign_role_to_user,
         handlers::user_role::remove_role_from_user,
+        // User
         handlers::user::list_users,
         handlers::user::get_user,
         handlers::user::create_user,

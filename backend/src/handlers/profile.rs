@@ -8,6 +8,11 @@ use crate::models::{ProfileDetail, ProfileListItem};
 use crate::services::MySQLClient;
 use crate::services::profile_analyzer::{
     AnalysisContext, ClusterVariables, ProfileAnalysisResponse, analyze_profile_with_context,
+    LLMEnhancedAnalysis,
+};
+use crate::services::llm::{
+    LLMService, RootCauseAnalysisRequest, RootCauseAnalysisResponse,
+    QuerySummaryForLLM, ExecutionPlanForLLM, HotspotNodeForLLM, DiagnosticForLLM, KeyMetricsForLLM,
 };
 use crate::utils::{ApiResult, error::ApiError};
 
@@ -242,10 +247,280 @@ pub async fn analyze_profile_handler(
     // Build analysis context with cluster variables
     let context = AnalysisContext { cluster_variables };
 
-    // Parse the profile and return analysis with cluster context
-    analyze_profile_with_context(&profile_content, &context)
-        .map(Json)
-        .map_err(|e| ApiError::internal_error(format!("Analysis failed: {}", e)))
+    // Step 1: Rule engine analysis (骨架 - skeleton, sync, < 100ms)
+    let mut response = analyze_profile_with_context(&profile_content, &context)
+        .map_err(|e| ApiError::internal_error(format!("Analysis failed: {}", e)))?;
+    
+    // Step 2: LLM enhancement (血肉 - flesh, sync, may take 1-10s but cached)
+    // Only call LLM if: 1) LLM is available 2) has diagnostics to enhance
+    if state.llm_service.is_available(){
+        tracing::info!("LLM available, enhancing analysis for query {}", safe_query_id);
+        match enhance_with_llm(&state.llm_service, &response, &safe_query_id, Some(cluster.id)).await {
+            Ok(llm_analysis) => {
+                tracing::info!("LLM enhancement completed for query {}", safe_query_id);
+                response.llm_analysis = Some(llm_analysis);
+            }
+            Err(e) => {
+                // LLM failed, but rule engine result is still valid (graceful degradation)
+                tracing::warn!("LLM enhancement failed for query {}: {}", safe_query_id, e);
+                response.llm_analysis = Some(LLMEnhancedAnalysis {
+                    available: false,
+                    status: format!("failed: {}", e),
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    
+    Ok(Json(response))
+}
+
+/// Enhance profile analysis with LLM-based root cause analysis
+///
+/// Builds a request from the rule engine results and calls LLM for deeper analysis.
+/// Results are merged using ResultMerger to combine rule-based and LLM insights.
+async fn enhance_with_llm(
+    llm_service: &std::sync::Arc<crate::services::llm::LLMServiceImpl>,
+    response: &ProfileAnalysisResponse,
+    query_id: &str,
+    cluster_id: Option<i64>,
+) -> Result<LLMEnhancedAnalysis, String> {
+    use crate::services::profile_analyzer::{MergedRootCause, MergedRecommendation, LLMCausalChain, LLMHiddenIssue};
+    use std::collections::HashMap;
+    
+    // Build LLM request from profile analysis
+    let summary = response.summary.as_ref();
+    
+    let query_summary = QuerySummaryForLLM {
+        sql_statement: summary.map(|s| s.sql_statement.clone()).unwrap_or_default(), // Full SQL, not truncated
+        query_type: summary.and_then(|s| s.query_type.clone()).unwrap_or_else(|| "SELECT".to_string()),
+        total_time_seconds: summary.map(|s| s.total_time_ms.unwrap_or(0.0) / 1000.0).unwrap_or(0.0),
+        scan_bytes: summary.and_then(|s| s.total_bytes_read).unwrap_or(0),
+        output_rows: summary.and_then(|s| s.result_rows).unwrap_or(0),
+        be_count: summary.and_then(|s| s.total_instance_count.map(|c| c as u32)).unwrap_or(3),
+        has_spill: summary.and_then(|s| s.query_spill_bytes.as_ref().map(|b| !b.is_empty() && b != "0")).unwrap_or(false),
+        spill_bytes: summary.and_then(|s| s.query_spill_bytes.clone()),
+        session_variables: HashMap::new(),
+    };
+    
+    // Build execution plan description from tree
+    let dag_description = response.execution_tree.as_ref()
+        .map(|tree| {
+            tree.nodes.iter()
+                .take(10)
+                .map(|n| n.operator_name.clone())
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        })
+        .unwrap_or_else(|| "Unknown DAG".to_string());
+    
+    // Extract hotspot nodes (time_percentage > 15%)
+    let hotspot_nodes: Vec<HotspotNodeForLLM> = response.execution_tree.as_ref()
+        .map(|tree| {
+            tree.nodes.iter()
+                .filter(|n| n.time_percentage.unwrap_or(0.0) > 15.0)
+                .take(5)
+                .map(|n| HotspotNodeForLLM {
+                    operator: n.operator_name.clone(),
+                    plan_node_id: n.plan_node_id.unwrap_or(-1),
+                    time_percentage: n.time_percentage.unwrap_or(0.0),
+                    key_metrics: n.unique_metrics.iter()
+                        .take(5)
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect(),
+                    upstream_operators: vec![],
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    
+    let execution_plan = ExecutionPlanForLLM {
+        dag_description,
+        hotspot_nodes,
+    };
+    
+    // Convert diagnostics to LLM format
+    let diagnostics: Vec<DiagnosticForLLM> = response.aggregated_diagnostics.iter()
+        .map(|d| DiagnosticForLLM {
+            rule_id: d.rule_id.clone(),
+            severity: d.severity.clone(),
+            operator: d.affected_nodes.first().map(|s| s.split('/').last().unwrap_or("unknown")).unwrap_or("unknown").to_string(),
+            plan_node_id: None,
+            message: format!("{} ({}个节点)", d.message, d.node_count),
+            evidence: {
+                let mut e = HashMap::new();
+                e.insert("reason".to_string(), d.reason.clone());
+                e.insert("affected_nodes".to_string(), d.affected_nodes.join(", "));
+                e
+            },
+        })
+        .collect();
+    
+    // Build the LLM request
+    let llm_request = RootCauseAnalysisRequest::builder()
+        .query_summary(query_summary)
+        .execution_plan(execution_plan)
+        .diagnostics(diagnostics)
+        .key_metrics(KeyMetricsForLLM::default())
+        .build()
+        .map_err(|e| e.to_string())?;
+    
+    // Call LLM service
+    let llm_response: RootCauseAnalysisResponse = llm_service
+        .analyze(&llm_request, query_id, cluster_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    // Merge LLM response with rule diagnostics
+    let root_causes = merge_root_causes(&response.aggregated_diagnostics, &llm_response);
+    let recommendations = merge_recommendations(&response.aggregated_diagnostics, &llm_response);
+    
+    Ok(LLMEnhancedAnalysis {
+        available: true,
+        status: "completed".to_string(),
+        root_causes,
+        causal_chains: llm_response.causal_chains.into_iter().map(|c| LLMCausalChain {
+            chain: c.chain,
+            explanation: c.explanation,
+        }).collect(),
+        merged_recommendations: recommendations,
+        summary: llm_response.summary,
+        hidden_issues: llm_response.hidden_issues.into_iter().map(|h| LLMHiddenIssue {
+            issue: h.issue,
+            suggestion: h.suggestion,
+        }).collect(),
+    })
+}
+
+/// Merge root causes from rule engine and LLM
+fn merge_root_causes(
+    rule_diagnostics: &[crate::services::profile_analyzer::AggregatedDiagnostic],
+    llm_response: &RootCauseAnalysisResponse,
+) -> Vec<crate::services::profile_analyzer::MergedRootCause> {
+    use crate::services::profile_analyzer::MergedRootCause;
+    use std::collections::HashSet;
+    
+    let mut merged = Vec::new();
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    
+    // First, add LLM root causes (higher priority)
+    for llm_rc in &llm_response.root_causes {
+        let id = llm_rc.root_cause_id.clone();
+        seen_ids.insert(id.clone());
+        
+        // Find related rule diagnostics
+        let related_rules: Vec<String> = llm_rc.symptoms.iter()
+            .filter(|s| rule_diagnostics.iter().any(|d| &d.rule_id == *s))
+            .cloned()
+            .collect();
+        
+        let source = if related_rules.is_empty() { "llm" } else { "both" };
+        
+        merged.push(MergedRootCause {
+            id,
+            related_rule_ids: related_rules,
+            description: llm_rc.description.clone(),
+            is_implicit: llm_rc.is_implicit,
+            confidence: llm_rc.confidence,
+            source: source.to_string(),
+            evidence: llm_rc.evidence.clone(),
+            symptoms: llm_rc.symptoms.clone(),
+        });
+    }
+    
+    // Add uncovered rule diagnostics as independent issues
+    for diag in rule_diagnostics {
+        let is_covered = llm_response.root_causes.iter()
+            .any(|rc| rc.symptoms.contains(&diag.rule_id));
+        
+        if !is_covered {
+            let id = format!("rule_{}", diag.rule_id);
+            if !seen_ids.contains(&id) {
+                seen_ids.insert(id.clone());
+                merged.push(MergedRootCause {
+                    id,
+                    related_rule_ids: vec![diag.rule_id.clone()],
+                    description: diag.message.clone(),
+                    is_implicit: false,
+                    confidence: 1.0,
+                    source: "rule".to_string(),
+                    evidence: vec![diag.reason.clone()],
+                    symptoms: vec![],
+                });
+            }
+        }
+    }
+    
+    // Sort by confidence (descending)
+    merged.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    merged
+}
+
+/// Merge recommendations from rule engine and LLM
+fn merge_recommendations(
+    rule_diagnostics: &[crate::services::profile_analyzer::AggregatedDiagnostic],
+    llm_response: &RootCauseAnalysisResponse,
+) -> Vec<crate::services::profile_analyzer::MergedRecommendation> {
+    use crate::services::profile_analyzer::MergedRecommendation;
+    use std::collections::HashSet;
+    
+    let mut merged = Vec::new();
+    let mut seen_actions: HashSet<String> = HashSet::new();
+    
+    // First, add LLM recommendations (root cause fixes)
+    for rec in &llm_response.recommendations {
+        let action_key = normalize_action(&rec.action);
+        if !seen_actions.contains(&action_key) {
+            seen_actions.insert(action_key);
+            merged.push(MergedRecommendation {
+                priority: rec.priority,
+                action: rec.action.clone(),
+                expected_improvement: rec.expected_improvement.clone(),
+                sql_example: rec.sql_example.clone(),
+                source: "llm".to_string(),
+                related_root_causes: vec![],
+                is_root_cause_fix: true,
+            });
+        }
+    }
+    
+    // Add rule engine suggestions
+    let mut rule_priority = merged.len() as u32 + 1;
+    for diag in rule_diagnostics {
+        for suggestion in &diag.suggestions {
+            let action_key = normalize_action(suggestion);
+            if !seen_actions.contains(&action_key) {
+                seen_actions.insert(action_key.clone());
+                merged.push(MergedRecommendation {
+                    priority: rule_priority,
+                    action: suggestion.clone(),
+                    expected_improvement: String::new(),
+                    sql_example: None,
+                    source: "rule".to_string(),
+                    related_root_causes: vec![diag.rule_id.clone()],
+                    is_root_cause_fix: false,
+                });
+                rule_priority += 1;
+            } else if let Some(existing) = merged.iter_mut().find(|r| normalize_action(&r.action) == action_key) {
+                if existing.source == "llm" {
+                    existing.source = "both".to_string();
+                }
+            }
+        }
+    }
+    
+    merged.sort_by_key(|r| r.priority);
+    merged
+}
+
+/// Normalize action text for deduplication
+fn normalize_action(action: &str) -> String {
+    action.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect()
+}
+
+/// Truncate SQL statement for LLM request
+fn truncate_sql(sql: &str, max_len: usize) -> String {
+    if sql.len() <= max_len { sql.to_string() } else { format!("{}...", &sql[..max_len]) }
 }
 
 /// Parameters we query from cluster for smart recommendations

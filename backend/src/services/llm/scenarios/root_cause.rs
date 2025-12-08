@@ -14,43 +14,101 @@ use crate::services::llm::service::{LLMAnalysisRequestTrait, LLMAnalysisResponse
 
 pub const ROOT_CAUSE_SYSTEM_PROMPT: &str = r#"
 你是一位 StarRocks OLAP 数据库的高级性能专家，拥有 10 年以上的OLAP查询调优经验。
-你需要分析 Query Profile 数据，识别真正的根因并给出可执行的优化建议。
+你需要分析 Query Profile 数据，识别真正的根因并给出**可直接执行**的优化建议。
+
+## 你收到的数据
+1. **完整 SQL**: 原始查询语句
+2. **Profile 原始数据**: 各算子的详细指标（时间、内存、IO、行数等）
+3. **规则诊断结果**: 规则引擎已识别的问题（作为参考，不要简单重复）
 
 ## 你的职责
-1. 分析规则引擎已检测到的诊断结果
-2. 识别规则引擎未能发现的隐式根因
-3. 建立完整的因果关系链
-4. 给出优先级排序的、可执行的优化建议
+1. **深入分析原始 Profile 数据**，不要只看规则诊断结果
+2. **识别规则引擎未发现的隐式根因**，如统计信息过期、配置不当、Join 顺序问题
+3. **建立因果关系链**，说明问题的传导路径
+4. **给出可直接执行的 SQL 或命令**，不要给笼统的建议
 
 ## 因果推断原则
-1. **时间先后**: 原因必须发生在结果之前（上游算子 → 下游算子）
-2. **数据传导**: 数据量/倾斜度会沿着执行计划传导
-3. **资源竞争**: 多个算子竞争同一资源可能导致性能下降
-4. **隐式因素**: 统计信息过期、配置不当等是常见的隐式根因
+1. **时间先后**: 上游算子影响下游算子
+2. **数据传导**: 数据量/倾斜度沿执行计划传导
+3. **资源竞争**: 多个算子竞争同一资源会相互影响
+4. **隐式因素**: 统计信息、配置、Join 顺序是常见隐式根因
 
-## 常见根因模式（优先考虑）
-- **统计信息过期** → 基数估算错误 → Join 顺序不优 / Broadcast 选择错误
-- **分桶键不合理** → 数据倾斜 → 执行时间倾斜
-- **小文件过多** → IO 请求数高 → IO 瓶颈
-- **缓存命中低** → 远程读取多 → IO 延迟高
-- **并行度不足** → CPU 利用率低 → 执行时间长
-- **内存不足** → Spill 到磁盘 → 性能下降
+## 常见根因模式（从原始指标中识别）
+| 根因 | Profile 指标特征 | 解决方案 |
+|-----|-----------------|---------|
+| 统计信息过期 | EstimatedRows vs ActualRows 差异大 | ANALYZE TABLE xxx |
+| 分桶键不合理 | 节点间 RowsRead/ProcessTime 差异大 | ALTER TABLE xxx DISTRIBUTED BY |
+| 小文件过多 | ScanRanges 数量大、IOTaskWaitTime 长 | 合并小文件或调整参数 |
+| 缓存未命中 | DataCacheHitRate 低、RemoteIOBytes 大 | 检查缓存配置 |
+| 并行度不足 | 单节点 CPU 高、其他节点空闲 | SET parallel_fragment_exec_instance_num |
+| Spill 发生 | SpillBytes > 0、SpillTime > 0 | 增加内存或优化查询 |
+| 分区裁剪失效 | PartitionPruned = false、ScanBytes 大 | 检查 WHERE 条件中的分区列 |
+| Join 顺序不优 | 大表在 Build 侧、ProbeRows >> BuildRows | 调整 Join Hint 或更新统计信息 |
+| Broadcast 过大 | BroadcastBytes 大、网络时间长 | SET broadcast_row_limit |
 
-## 输出要求
-1. **置信度**: 基于证据充分性给出 0.0-1.0 的置信度
-2. **建议**: 必须是可执行的具体操作，优先提供 SQL 示例
-3. **优先级**: 按影响程度排序，优先解决根因
-4. **语言**: 使用中文
+## ⚠️ 建议必须可执行
+每个建议必须是以下类型之一：
+1. **SQL 语句**: 可直接复制执行的 SQL
+2. **SET 命令**: 调整 Session 变量
+3. **DDL 语句**: ALTER TABLE、CREATE INDEX 等
+4. **运维命令**: ANALYZE、REFRESH MATERIALIZED VIEW 等
 
-## 输出格式
-严格按照以下 JSON 格式输出：
+示例（好的建议）:
+- `ANALYZE TABLE orders PARTITION(p20231201);`
+- `SET parallel_fragment_exec_instance_num = 16;`
+- `ALTER TABLE orders SET ("dynamic_partition.enable" = "true");`
+- 在 SQL 中添加 Hint: `SELECT /*+ SET_VAR(query_timeout=300) */ ...`
+
+示例（不好的建议）:
+- ❌ "优化查询性能" - 太笼统
+- ❌ "检查统计信息" - 没给具体命令
+- ❌ "考虑使用物化视图" - 没给创建语句
+
+## ⚠️ 严格 JSON 输出格式
+
+```json
 {
-  "root_causes": [...],
-  "causal_chains": [...],
-  "recommendations": [...],
-  "summary": "...",
-  "hidden_issues": [...]
+  "root_causes": [
+    {
+      "root_cause_id": "RC001",
+      "description": "根因描述，基于原始指标分析",
+      "confidence": 0.85,
+      "evidence": ["Profile 指标证据1", "指标证据2"],
+      "symptoms": ["S001", "G003"],
+      "is_implicit": false
+    }
+  ],
+  "causal_chains": [
+    {
+      "chain": ["根因", "→", "中间原因", "→", "症状"],
+      "explanation": "基于 Profile 数据的因果分析"
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": 1,
+      "action": "建议操作的简短描述",
+      "expected_improvement": "预期改善效果（定量描述）",
+      "sql_example": "可直接执行的 SQL 或命令"
+    }
+  ],
+  "summary": "整体分析摘要，重点说明根因和优化方向",
+  "hidden_issues": [
+    {
+      "issue": "规则引擎未发现的问题",
+      "suggestion": "可执行的解决命令"
+    }
+  ]
 }
+```
+
+字段说明:
+- root_cause_id: "RC001", "RC002" 格式
+- evidence: **必须引用具体的 Profile 指标数值**
+- symptoms: 关联的规则 ID
+- is_implicit: true 表示规则引擎未检测到
+- priority: 1 为最高优先级
+- sql_example: **必填**，可直接执行的 SQL/命令
 "#;
 
 // ============================================================================
@@ -62,9 +120,12 @@ pub const ROOT_CAUSE_SYSTEM_PROMPT: &str = r#"
 pub struct RootCauseAnalysisRequest {
     /// Query summary information
     pub query_summary: QuerySummaryForLLM,
+    /// Raw profile data for deep analysis (NEW - 原始 Profile 数据)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_data: Option<ProfileDataForLLM>,
     /// Execution plan (simplified for token efficiency)
     pub execution_plan: ExecutionPlanForLLM,
-    /// Rule engine diagnostics
+    /// Rule engine diagnostics (for reference, LLM should go deeper)
     pub rule_diagnostics: Vec<DiagnosticForLLM>,
     /// Key performance metrics
     pub key_metrics: KeyMetricsForLLM,
@@ -111,7 +172,7 @@ impl LLMAnalysisRequestTrait for RootCauseAnalysisRequest {
 /// Query summary for LLM analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuerySummaryForLLM {
-    /// SQL statement (truncated if > 2000 chars)
+    /// Full SQL statement (NOT truncated - LLM needs complete SQL for analysis)
     pub sql_statement: String,
     /// Query type: SELECT/INSERT/EXPORT/ANALYZE
     pub query_type: String,
@@ -125,9 +186,175 @@ pub struct QuerySummaryForLLM {
     pub be_count: u32,
     /// Whether spill occurred
     pub has_spill: bool,
-    /// Non-default session variables
+    /// Spill details if spill occurred
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spill_bytes: Option<String>,
+    /// Non-default session variables (important for analysis)
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub session_variables: HashMap<String, String>,
+}
+
+// ============================================================================
+// Raw Profile Data - NEW: 原始 Profile 数据
+// ============================================================================
+
+/// Raw profile data for LLM deep analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileDataForLLM {
+    /// All operator nodes with their metrics
+    pub operators: Vec<OperatorDetailForLLM>,
+    /// Cross-node time distribution (for detecting skew)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_distribution: Option<TimeDistributionForLLM>,
+    /// Scan node details (tables, partitions, files)
+    #[serde(default)]
+    pub scan_details: Vec<ScanDetailForLLM>,
+    /// Join node details (join type, build/probe stats)
+    #[serde(default)]
+    pub join_details: Vec<JoinDetailForLLM>,
+    /// Aggregation node details
+    #[serde(default)]
+    pub agg_details: Vec<AggDetailForLLM>,
+    /// Exchange (shuffle) details
+    #[serde(default)]
+    pub exchange_details: Vec<ExchangeDetailForLLM>,
+}
+
+/// Detailed operator information with all metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperatorDetailForLLM {
+    /// Operator name (SCAN, JOIN, AGG, etc.)
+    pub operator: String,
+    /// Plan node ID
+    pub plan_node_id: i32,
+    /// Execution time percentage
+    pub time_pct: f64,
+    /// Actual rows processed
+    pub rows: u64,
+    /// Estimated rows (for cardinality error detection)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_rows: Option<u64>,
+    /// Memory used in bytes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_bytes: Option<u64>,
+    /// All key metrics (raw from profile)
+    pub metrics: HashMap<String, String>,
+}
+
+/// Time distribution across instances for skew detection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeDistributionForLLM {
+    /// Max time across instances
+    pub max_time_ms: f64,
+    /// Min time across instances
+    pub min_time_ms: f64,
+    /// Average time
+    pub avg_time_ms: f64,
+    /// Skew ratio (max/avg)
+    pub skew_ratio: f64,
+    /// Per-instance times for top operators
+    #[serde(default)]
+    pub per_instance: Vec<InstanceTimeForLLM>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstanceTimeForLLM {
+    pub operator: String,
+    pub instance_id: i32,
+    pub time_ms: f64,
+    pub rows: u64,
+}
+
+/// Scan operator details
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanDetailForLLM {
+    pub plan_node_id: i32,
+    pub table_name: String,
+    /// OlapScan / HdfsScan / etc.
+    pub scan_type: String,
+    /// Total rows read
+    pub rows_read: u64,
+    /// Rows after filtering
+    pub rows_returned: u64,
+    /// Filter ratio
+    pub filter_ratio: f64,
+    /// Scan ranges (file/tablet count)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scan_ranges: Option<u64>,
+    /// Bytes read
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes_read: Option<u64>,
+    /// IO wait time
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub io_time_ms: Option<f64>,
+    /// Cache hit rate
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_hit_rate: Option<f64>,
+    /// Predicates applied
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub predicates: Option<String>,
+    /// Partition pruning info
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partitions_scanned: Option<String>,
+}
+
+/// Join operator details
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JoinDetailForLLM {
+    pub plan_node_id: i32,
+    /// HASH_JOIN, CROSS_JOIN, etc.
+    pub join_type: String,
+    /// Build side rows
+    pub build_rows: u64,
+    /// Probe side rows
+    pub probe_rows: u64,
+    /// Output rows
+    pub output_rows: u64,
+    /// Hash table memory
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash_table_memory: Option<u64>,
+    /// Is broadcast join
+    #[serde(default)]
+    pub is_broadcast: bool,
+    /// Runtime filter info
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runtime_filter: Option<String>,
+}
+
+/// Aggregation operator details
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AggDetailForLLM {
+    pub plan_node_id: i32,
+    /// Input rows
+    pub input_rows: u64,
+    /// Output rows after aggregation
+    pub output_rows: u64,
+    /// Aggregation ratio (output/input)
+    pub agg_ratio: f64,
+    /// GROUP BY keys
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_by_keys: Option<String>,
+    /// Hash table memory
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash_table_memory: Option<u64>,
+    /// Is streaming agg
+    #[serde(default)]
+    pub is_streaming: bool,
+}
+
+/// Exchange (shuffle) operator details
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExchangeDetailForLLM {
+    pub plan_node_id: i32,
+    /// SHUFFLE, BROADCAST, GATHER
+    pub exchange_type: String,
+    /// Data sent bytes
+    pub bytes_sent: u64,
+    /// Rows sent
+    pub rows_sent: u64,
+    /// Network time
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network_time_ms: Option<f64>,
 }
 
 /// Simplified execution plan for LLM
@@ -330,6 +557,7 @@ impl RootCauseAnalysisRequest {
 #[derive(Default)]
 pub struct RootCauseAnalysisRequestBuilder {
     query_summary: Option<QuerySummaryForLLM>,
+    profile_data: Option<ProfileDataForLLM>,
     execution_plan: Option<ExecutionPlanForLLM>,
     rule_diagnostics: Vec<DiagnosticForLLM>,
     key_metrics: KeyMetricsForLLM,
@@ -339,6 +567,11 @@ pub struct RootCauseAnalysisRequestBuilder {
 impl RootCauseAnalysisRequestBuilder {
     pub fn query_summary(mut self, summary: QuerySummaryForLLM) -> Self {
         self.query_summary = Some(summary);
+        self
+    }
+    
+    pub fn profile_data(mut self, data: ProfileDataForLLM) -> Self {
+        self.profile_data = Some(data);
         self
     }
     
@@ -370,6 +603,7 @@ impl RootCauseAnalysisRequestBuilder {
     pub fn build(self) -> Result<RootCauseAnalysisRequest, &'static str> {
         Ok(RootCauseAnalysisRequest {
             query_summary: self.query_summary.ok_or("query_summary is required")?,
+            profile_data: self.profile_data,
             execution_plan: self.execution_plan.ok_or("execution_plan is required")?,
             rule_diagnostics: self.rule_diagnostics,
             key_metrics: self.key_metrics,

@@ -969,7 +969,7 @@ mod profile_tests {
             metrics.insert("__MIN_OF_RowsRead".to_string(), "100".to_string());
             metrics.insert("RawRowsRead".to_string(), "500".to_string());
 
-            let node = ExecutionTreeNode {
+            let _node = ExecutionTreeNode {
                 id: "scan-0".to_string(),
                 operator_name: "OLAP_SCAN".to_string(),
                 node_type: NodeType::OlapScan,

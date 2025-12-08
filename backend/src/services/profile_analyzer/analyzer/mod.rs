@@ -10,12 +10,10 @@ pub mod rules;
 pub mod thresholds;
 
 pub use baseline::{
-    BaselineCalculator, PerformanceBaseline, QueryComplexity, 
-    AdaptiveThresholdCalculator, AuditLogRecord, BaselineStats,
+    BaselineCalculator, PerformanceBaseline, QueryComplexity, AuditLogRecord,
 };
 pub use baseline_cache::{
-    BaselineCacheManager, BaselineProvider, BaselineSource,
-    CachedBaseline, BaselineRefreshConfig,
+    BaselineCacheManager, BaselineProvider, BaselineSource, BaselineRefreshConfig,
 };
-pub use root_cause::{RootCauseAnalysis, RootCauseAnalyzer, RootCause, CausalChain};
+pub use root_cause::{RootCauseAnalysis, RootCauseAnalyzer};
 pub use rule_engine::RuleEngine;

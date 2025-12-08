@@ -624,6 +624,99 @@ pub struct ProfileAnalysisResponse {
     /// Root cause analysis result (rule-based, without LLM)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_cause_analysis: Option<super::analyzer::RootCauseAnalysis>,
+    /// LLM-enhanced analysis result (async loaded, may be None initially)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm_analysis: Option<LLMEnhancedAnalysis>,
+}
+
+/// LLM-enhanced analysis result (merged with rule engine)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LLMEnhancedAnalysis {
+    /// Whether LLM analysis is available
+    pub available: bool,
+    /// LLM analysis status: "pending" | "completed" | "failed" | "disabled"
+    pub status: String,
+    /// Root causes (may include implicit ones not detected by rules)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub root_causes: Vec<MergedRootCause>,
+    /// Causal chains with explanations
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub causal_chains: Vec<LLMCausalChain>,
+    /// Merged recommendations (rule + LLM, deduplicated)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub merged_recommendations: Vec<MergedRecommendation>,
+    /// Natural language summary from LLM
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub summary: String,
+    /// Hidden issues detected by LLM only
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_issues: Vec<LLMHiddenIssue>,
+}
+
+/// Merged root cause (from rule engine and/or LLM)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergedRootCause {
+    /// Unique identifier (e.g., "RC001" from LLM or "rule_S001" from rules)
+    pub id: String,
+    /// Related rule IDs (if detected by rules)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_rule_ids: Vec<String>,
+    /// Description of the root cause
+    pub description: String,
+    /// Is this an implicit root cause (not detected by rules)?
+    #[serde(default)]
+    pub is_implicit: bool,
+    /// Confidence score (1.0 for rule-based, 0.0-1.0 for LLM)
+    pub confidence: f64,
+    /// Source: "rule" | "llm" | "both"
+    pub source: String,
+    /// Evidence supporting this conclusion
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<String>,
+    /// Symptom rule IDs caused by this root cause
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symptoms: Vec<String>,
+}
+
+/// Causal chain with explanation from LLM
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMCausalChain {
+    /// Chain representation, e.g., ["统计信息过期", "→", "Join顺序不优", "→", "内存过高"]
+    pub chain: Vec<String>,
+    /// Natural language explanation
+    pub explanation: String,
+}
+
+/// Merged recommendation from rule engine and LLM
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergedRecommendation {
+    /// Priority (1 = highest)
+    pub priority: u32,
+    /// Action description
+    pub action: String,
+    /// Expected improvement
+    #[serde(default)]
+    pub expected_improvement: String,
+    /// SQL example (if applicable)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sql_example: Option<String>,
+    /// Source: "rule" | "llm" | "both"
+    pub source: String,
+    /// Related root cause IDs
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_root_causes: Vec<String>,
+    /// Is this a root cause fix (vs symptom fix)?
+    #[serde(default)]
+    pub is_root_cause_fix: bool,
+}
+
+/// Hidden issue detected by LLM only
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMHiddenIssue {
+    /// Issue description
+    pub issue: String,
+    /// Suggested action
+    pub suggestion: String,
 }
 
 /// Aggregated diagnostic for overview display

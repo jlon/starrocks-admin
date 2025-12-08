@@ -159,13 +159,14 @@ pub async fn analyze_root_cause(
     // Build the LLM request
     let llm_request = RootCauseAnalysisRequest::builder()
         .query_summary(QuerySummaryForLLM {
-            sql_statement: truncate_sql(&req.sql_statement, 2000),
+            sql_statement: req.sql_statement.clone(), // Full SQL, not truncated
             query_type: req.query_type.clone(),
             total_time_seconds: req.total_time_seconds,
             scan_bytes: req.scan_bytes,
             output_rows: req.output_rows,
             be_count: req.be_count,
             has_spill: req.has_spill,
+            spill_bytes: None,
             session_variables: req.session_variables.clone().unwrap_or_default(),
         })
         .execution_plan(ExecutionPlanForLLM {

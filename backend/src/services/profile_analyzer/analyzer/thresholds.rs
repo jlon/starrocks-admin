@@ -10,8 +10,7 @@
 //! Reference: profile-diagnostic-system-review.md Section 4
 
 use crate::services::profile_analyzer::models::ClusterInfo;
-use super::baseline::{PerformanceBaseline, QueryComplexity, AdaptiveThresholdCalculator, BaselineStats};
-use std::collections::HashMap;
+use super::baseline::{PerformanceBaseline, QueryComplexity};
 
 // ============================================================================
 // Query Type Detection

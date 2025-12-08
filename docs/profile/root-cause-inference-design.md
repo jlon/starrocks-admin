@@ -4760,6 +4760,183 @@ priority = 2
 
 ---
 
+### G.15 Profile 分析自动调用 LLM 流程
+
+#### G.15.1 自动集成架构
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Profile 分析自动调用 LLM 流程                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  GET /api/clusters/profiles/:query_id/analyze                              │
+│       │                                                                     │
+│       ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ 1. 规则引擎分析 (同步, < 50ms)                                        │   │
+│  │    - ProfileComposer::parse()                                         │   │
+│  │    - RuleEngine::analyze()                                           │   │
+│  │    - RootCauseAnalyzer::analyze() (v5.0 rule-based)                  │   │
+│  │    - 输出: ProfileAnalysisResponse (without llm_analysis)            │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│       │                                                                     │
+│       ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ 2. 检查 LLM 条件                                                       │   │
+│  │    - llm_service.is_available() == true                              │   │
+│  │    - aggregated_diagnostics.len() > 0                                │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│       │                                                                     │
+│       ├── 条件不满足 ──▶ 直接返回 ProfileAnalysisResponse                   │
+│       │                                                                     │
+│       ▼ 条件满足                                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ 3. 构建 LLM 请求 (enhance_with_llm)                                   │   │
+│  │    - 从 ProfileSummary 提取查询信息                                    │   │
+│  │    - 从 ExecutionTree 提取热点节点                                     │   │
+│  │    - 从 AggregatedDiagnostic 转换诊断结果                             │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│       │                                                                     │
+│       ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ 4. 调用 LLM 服务 (异步, 1-10s)                                         │   │
+│  │    - 检查缓存 (cache_key)                                             │   │
+│  │    - 缓存命中: 直接返回                                                 │   │
+│  │    - 缓存未命中: 调用 LLM API                                          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│       │                                                                     │
+│       ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ 5. 结果融合 (merge_root_causes + merge_recommendations)              │   │
+│  │    - LLM 根因优先 (可能包含隐式根因)                                    │   │
+│  │    - 规则诊断补充 (未被覆盖的独立问题)                                  │   │
+│  │    - 建议去重合并 (标记来源: rule/llm/both)                           │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│       │                                                                     │
+│       ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ 6. 返回增强后的 ProfileAnalysisResponse                               │   │
+│  │    - llm_analysis.available = true                                   │   │
+│  │    - llm_analysis.status = "completed"                               │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  失败处理:                                                                   │
+│  - LLM 调用失败: llm_analysis.status = "failed: <error>"                    │
+│  - 规则引擎结果仍然返回，用户体验不中断                                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### G.15.2 发送给 LLM 的数据格式
+
+从 Profile 分析结果构建的 LLM 请求数据结构：
+
+```json
+{
+  "query_summary": {
+    "sql_statement": "SELECT ... (截断至2000字符)",
+    "query_type": "SELECT",
+    "total_time_seconds": 15.5,
+    "scan_bytes": 1073741824,
+    "output_rows": 10000,
+    "be_count": 5,
+    "has_spill": true,
+    "session_variables": {}
+  },
+  "execution_plan": {
+    "dag_description": "OLAP_SCAN -> HASH_JOIN -> AGGREGATE -> SORT -> RESULT_SINK",
+    "hotspot_nodes": [
+      {
+        "operator": "HASH_JOIN",
+        "plan_node_id": 2,
+        "time_percentage": 45.0,
+        "key_metrics": {
+          "ProbeRows": "100000000",
+          "BuildRows": "5000000",
+          "HashTableSize": "4.5GB"
+        },
+        "upstream_operators": []
+      }
+    ]
+  },
+  "rule_diagnostics": [
+    {
+      "rule_id": "S001",
+      "severity": "Warning",
+      "operator": "OLAP_SCAN",
+      "plan_node_id": 1,
+      "message": "数据倾斜: max/avg = 3.5 (3个节点)",
+      "evidence": {
+        "reason": "扫描行数不均: max=100M, min=5M, avg=20M",
+        "affected_nodes": "OLAP_SCAN/plan_node_1, OLAP_SCAN/plan_node_3, ..."
+      }
+    },
+    {
+      "rule_id": "Q003",
+      "severity": "Error",
+      "operator": "AGGREGATE",
+      "plan_node_id": 4,
+      "message": "触发 Spill (1个节点)",
+      "evidence": {
+        "reason": "Spill数据量: 2.5GB",
+        "affected_nodes": "AGGREGATE/plan_node_4"
+      }
+    }
+  ],
+  "key_metrics": {}
+}
+```
+
+#### G.15.3 LLM 返回数据格式
+
+```json
+{
+  "root_causes": [
+    {
+      "root_cause_id": "RC001",
+      "description": "分桶键不合理导致数据倾斜",
+      "confidence": 0.9,
+      "evidence": ["S001显示倾斜比3.5", "Q003显示Spill是倾斜的下游影响"],
+      "symptoms": ["S001", "Q003", "G002"],
+      "is_implicit": false
+    }
+  ],
+  "causal_chains": [
+    {
+      "chain": ["分桶键不合理", "→", "数据倾斜", "→", "内存压力", "→", "Spill"],
+      "explanation": "数据倾斜导致部分节点负载过高，最终触发Spill"
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": 1,
+      "action": "优化分桶键设计",
+      "expected_improvement": "减少倾斜50%以上",
+      "sql_example": "ALTER TABLE orders SET (\"bucketing_column\" = \"order_id\");"
+    }
+  ],
+  "summary": "根本原因是分桶键设计不合理导致的数据倾斜...",
+  "hidden_issues": [
+    {
+      "issue": "统计信息可能过期",
+      "suggestion": "执行 ANALYZE TABLE 更新统计信息"
+    }
+  ]
+}
+```
+
+#### G.15.4 缓存策略
+
+| 特性 | 说明 |
+|-----|------|
+| 缓存键 | `cache_key = hash(sql_hash + profile_hash)` |
+| 缓存 TTL | 默认 24 小时 (可配置) |
+| 缓存命中 | 相同 SQL + 相同 Profile 指标 → 直接返回缓存 |
+| 缓存更新 | 每次命中更新 `hit_count` 和 `last_accessed_at` |
+| 缓存清理 | 定时任务清理过期缓存 |
+
+---
+
 **文档更新完成**
 
 变更记录:
@@ -4778,3 +4955,9 @@ priority = 2
   - G.12: v7.0 vs 之前版本对比
   - G.13: 实施计划 (11 天)
   - G.14: 配置示例
+- v7.1 (2024-12-08): Profile 分析自动调用 LLM
+  - G.15: Profile 分析自动调用 LLM 流程
+    - G.15.1: 自动集成架构图
+    - G.15.2: 发送给 LLM 的数据格式
+    - G.15.3: LLM 返回数据格式
+    - G.15.4: 缓存策略

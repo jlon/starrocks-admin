@@ -6,7 +6,7 @@
 //! - PL003: Too many partitions to process
 
 use super::*;
-use crate::services::profile_analyzer::models::{HMSMetrics, PlannerInfo};
+use crate::services::profile_analyzer::models::PlannerInfo;
 
 /// Context for planner rule evaluation
 pub struct PlannerRuleContext<'a> {

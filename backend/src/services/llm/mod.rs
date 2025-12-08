@@ -29,12 +29,18 @@ mod repository;
 mod scenarios;
 mod service;
 
-pub use client::LLMClient;
+// Re-exports for external use
 pub use models::*;
-pub use repository::LLMRepository;
-pub use scenarios::merger::*;
+pub use service::{LLMService, LLMServiceImpl};
+
+// Internal use - exported for specific scenarios
 pub use scenarios::root_cause::*;
-pub use service::{LLMAnalysisRequestTrait, LLMAnalysisResponseTrait, LLMService, LLMServiceImpl};
+
+// These are used internally or for advanced scenarios
+pub(crate) use client::LLMClient;
+pub(crate) use repository::LLMRepository;
+pub(crate) use scenarios::merger::*;
+pub(crate) use service::{LLMAnalysisRequestTrait, LLMAnalysisResponseTrait};
 
 #[cfg(test)]
 mod tests;

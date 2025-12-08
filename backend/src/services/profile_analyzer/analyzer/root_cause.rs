@@ -849,8 +849,8 @@ impl RootCauseAnalyzer {
         // Find all rule_ids that have incoming edges (are effects)
         let effects: HashSet<&str> = edges.iter().map(|(_, effect, _)| effect.as_str()).collect();
         
-        // Find rule_ids that are causes (have outgoing edges)
-        let causes: HashSet<&str> = edges.iter().map(|(cause, _, _)| cause.as_str()).collect();
+        // Note: causes set could be used for more advanced analysis (e.g., cycle detection)
+        let _causes: HashSet<&str> = edges.iter().map(|(cause, _, _)| cause.as_str()).collect();
         
         // Root causes: present in diagnostics, not an effect of another, OR has no incoming edge
         let mut root_cause_ids: HashSet<&str> = HashSet::new();

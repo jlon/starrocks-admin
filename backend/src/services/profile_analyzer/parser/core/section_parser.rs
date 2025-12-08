@@ -23,12 +23,36 @@ impl SectionParser {
         let summary_block = Self::extract_block(text, "Summary:")?;
 
         let mut fields = HashMap::new();
-        for line in summary_block.lines() {
+        let lines: Vec<&str> = summary_block.lines().collect();
+        let mut i = 0;
+        
+        while i < lines.len() {
+            let line = lines[i];
             if let Some(cap) = SUMMARY_LINE_REGEX.captures(line) {
                 let key = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-                let value = cap.get(2).map(|m| m.as_str().trim()).unwrap_or("");
-                fields.insert(key.to_string(), value.to_string());
+                let mut value = cap.get(2).map(|m| m.as_str().trim()).unwrap_or("").to_string();
+                
+                // Handle multi-line SQL Statement
+                if key == "Sql Statement" {
+                    let mut sql_lines = vec![value.clone()];
+                    i += 1;
+                    // Collect continuation lines (indented, not starting with "- ")
+                    while i < lines.len() {
+                        let next_line = lines[i].trim();
+                        // Stop at next field or empty line or new section
+                        if next_line.starts_with("- ") || next_line.is_empty() || next_line.contains("Fragment") {
+                            break;
+                        }
+                        sql_lines.push(next_line.to_string());
+                        i += 1;
+                    }
+                    value = sql_lines.join("\n");
+                    i -= 1; // Adjust since we'll i += 1 at loop end
+                }
+                
+                fields.insert(key.to_string(), value);
             }
+            i += 1;
         }
 
         // Parse NonDefaultSessionVariables JSON if present

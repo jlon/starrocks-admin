@@ -16,6 +16,12 @@ impl LLMRepository {
         Self { pool }
     }
     
+    /// Get reference to pool (for testing)
+    #[cfg(test)]
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+    
     // ========================================================================
     // Provider Operations
     // ========================================================================

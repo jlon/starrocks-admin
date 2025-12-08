@@ -3,6 +3,14 @@ name = "starrocks-admin"
 version = "1.0.0"
 edition = "2024"
 
+[lib]
+name = "starrocks_admin"
+path = "src/lib.rs"
+
+[[bin]]
+name = "starrocks-admin"
+path = "src/main.rs"
+
 # Lint configuration (following rustfs standard)
 [lints.rust]
 unsafe_code = "warn"

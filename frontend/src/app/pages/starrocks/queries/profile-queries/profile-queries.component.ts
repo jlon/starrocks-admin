@@ -1724,6 +1724,46 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     return this.analysisData?.aggregated_diagnostics?.length || 0;
   }
   
+  /**
+   * Get merged root cause analysis data
+   * Priority: LLM analysis (if available and completed) > Rule-based analysis
+   * LLM analysis provides richer natural language descriptions
+   */
+  getRootCauseAnalysis(): any {
+    const llmAnalysis = this.analysisData?.llm_analysis;
+    const ruleAnalysis = this.analysisData?.root_cause_analysis;
+    
+    // If LLM analysis is available and completed, use it
+    if (llmAnalysis?.available && llmAnalysis?.status === 'completed') {
+      return {
+        root_causes: llmAnalysis.root_causes || [],
+        causal_chains: llmAnalysis.causal_chains || [],
+        summary: llmAnalysis.summary || '',
+        recommendations: llmAnalysis.merged_recommendations || [],
+        hidden_issues: llmAnalysis.hidden_issues || [],
+        source: 'llm'
+      };
+    }
+    
+    // Fallback to rule-based analysis
+    if (ruleAnalysis) {
+      return {
+        ...ruleAnalysis,
+        source: 'rule'
+      };
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Check if LLM analysis is available
+   */
+  hasLLMAnalysis(): boolean {
+    const llmAnalysis = this.analysisData?.llm_analysis;
+    return llmAnalysis?.available && llmAnalysis?.status === 'completed';
+  }
+  
   // Get edge path for SVG
   getEdgePath(points: {x: number, y: number}[]): string {
     if (!points || points.length === 0) return '';

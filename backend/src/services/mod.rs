@@ -20,11 +20,16 @@ pub mod user_role_service;
 pub mod user_service;
 
 pub use auth_service::AuthService;
-pub use baseline_refresh_task::{BaselineRefreshTask, start_baseline_refresh_task};
-pub use baseline_service::{BaselineService, RefreshResult, init_baseline_system, init_baseline_system_with_ttl};
+pub use baseline_refresh_task::start_baseline_refresh_task;
 pub use casbin_service::CasbinService;
 pub use cluster_service::ClusterService;
-pub use llm::{LLMService, LLMServiceImpl, LLMError, LLMProviderInfo, LLMScenario};
+pub use llm::{
+    LLMServiceImpl, LLMProvider, LLMProviderInfo, LLMError,
+    LLMUsageStats, LLMAnalysisResult,
+    // Root cause analysis request/response for OpenAPI schema
+    RootCauseAnalysisRequest as LLMAnalysisRequest,
+    RootCauseAnalysisResponse as LLMAnalysisResponse,
+};
 pub use data_statistics_service::{
     DataStatistics, DataStatisticsService, TopTableByAccess, TopTableBySize,
 };

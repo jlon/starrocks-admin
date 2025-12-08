@@ -754,47 +754,73 @@
                   </div>
                 </div>
 
-                <!-- Root Cause Analysis Section - Only show when NO node is selected and has root causes -->
-                <div class="right-section root-cause-section" *ngIf="!selectedNode && analysisData?.root_cause_analysis?.root_causes?.length">
+                <!-- Root Cause Analysis Section - Prioritize LLM analysis if available -->
+                <div class="right-section root-cause-section" *ngIf="!selectedNode && getRootCauseAnalysis()?.root_causes?.length">
                   <div class="section-header">
                     <span class="title">🔍 根因分析</span>
-                    <span class="warning-badge">{{ analysisData.root_cause_analysis.root_causes.length }}</span>
+                    <span class="warning-badge">{{ getRootCauseAnalysis().root_causes.length }}</span>
+                    <span class="llm-badge" *ngIf="hasLLMAnalysis()">🤖 LLM</span>
                     <span class="collapse-toggle" (click)="isRootCauseCollapsed = !isRootCauseCollapsed">{{ isRootCauseCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isRootCauseCollapsed && !isRightPanelCollapsed">
-                    <!-- Summary -->
-                    <div class="root-cause-summary" *ngIf="analysisData.root_cause_analysis.summary">
+                    <!-- Summary (LLM provides richer summary) -->
+                    <div class="root-cause-summary" *ngIf="getRootCauseAnalysis().summary">
                       <nb-icon icon="bulb-outline" class="text-warning"></nb-icon>
-                      <span>{{ analysisData.root_cause_analysis.summary }}</span>
+                      <span>{{ getRootCauseAnalysis().summary }}</span>
+                    </div>
+                    
+                    <!-- Hidden Issues from LLM -->
+                    <div class="hidden-issues" *ngIf="getRootCauseAnalysis().hidden_issues?.length">
+                      <div class="hidden-issue-header">
+                        <nb-icon icon="eye-off-outline" class="text-info"></nb-icon>
+                        <span>隐式问题 (规则引擎未检测到)</span>
+                      </div>
+                      <div *ngFor="let issue of getRootCauseAnalysis().hidden_issues" class="hidden-issue-item">
+                        <div class="issue-desc">⚠️ {{ issue.issue }}</div>
+                        <div class="issue-suggestion" *ngIf="issue.suggestion">💡 {{ issue.suggestion }}</div>
+                      </div>
                     </div>
                     
                     <!-- Root Causes List -->
                     <div class="root-cause-list">
-                      <div *ngFor="let rc of analysisData.root_cause_analysis.root_causes; let i = index" 
+                      <div *ngFor="let rc of getRootCauseAnalysis().root_causes; let i = index" 
                            class="root-cause-item"
-                           [ngClass]="{'high-impact': rc.impact_percentage >= 40}">
+                           [ngClass]="{
+                             'high-impact': rc.impact_percentage >= 40 || rc.confidence >= 0.8,
+                             'llm-source': rc.source === 'llm' || rc.source === 'both',
+                             'implicit': rc.is_implicit
+                           }">
                         <div class="rc-header">
-                          <span class="rc-id">{{ rc.id }}</span>
-                          <span class="rc-impact" [ngClass]="{
+                          <span class="rc-id">{{ rc.id || rc.root_cause_id }}</span>
+                          <!-- Show confidence for LLM, impact_percentage for rule -->
+                          <span class="rc-impact" *ngIf="rc.confidence" [ngClass]="{
+                            'high': rc.confidence >= 0.8,
+                            'medium': rc.confidence >= 0.5 && rc.confidence < 0.8,
+                            'low': rc.confidence < 0.5
+                          }">置信度 {{ rc.confidence * 100 | number:'1.0-0' }}%</span>
+                          <span class="rc-impact" *ngIf="!rc.confidence && rc.impact_percentage" [ngClass]="{
                             'high': rc.impact_percentage >= 40,
                             'medium': rc.impact_percentage >= 20 && rc.impact_percentage < 40,
                             'low': rc.impact_percentage < 20
                           }">影响度 {{ rc.impact_percentage | number:'1.0-0' }}%</span>
+                          <span class="source-badge" *ngIf="rc.source">
+                            {{ rc.source === 'llm' ? '🤖' : rc.source === 'both' ? '🔗' : '📋' }}
+                          </span>
+                          <span class="implicit-badge" *ngIf="rc.is_implicit">隐式</span>
                         </div>
                         <div class="rc-description">{{ rc.description }}</div>
-                        <div class="rc-rules" *ngIf="rc.diagnostic_ids?.length">
-                          <span class="rule-badge" *ngFor="let ruleId of rc.diagnostic_ids">{{ ruleId }}</span>
+                        <!-- Related rule IDs -->
+                        <div class="rc-rules" *ngIf="rc.diagnostic_ids?.length || rc.related_rule_ids?.length || rc.symptoms?.length">
+                          <span class="rule-badge" *ngFor="let ruleId of (rc.diagnostic_ids || rc.related_rule_ids || rc.symptoms)">{{ ruleId }}</span>
                         </div>
-                        <div class="rc-symptoms" *ngIf="rc.symptoms?.length">
-                          <nb-icon icon="arrow-forward-outline" class="text-hint"></nb-icon>
-                          <span class="text-hint">导致: {{ rc.symptoms.join(', ') }}</span>
-                        </div>
+                        <!-- Evidence (LLM provides detailed evidence from profile metrics) -->
                         <div class="rc-evidence" *ngIf="rc.evidence?.length">
                           <div *ngFor="let ev of rc.evidence" class="evidence-item">
                             <nb-icon icon="checkmark-circle-2-outline" class="text-success"></nb-icon>
                             <span class="text-hint">{{ ev }}</span>
                           </div>
                         </div>
+                        <!-- Suggestions (rule-based) -->
                         <div class="rc-suggestions" *ngIf="rc.suggestions?.length">
                           <div *ngFor="let sug of rc.suggestions" class="suggestion-item">
                             <span class="icon">💡</span>
@@ -805,14 +831,14 @@
                     </div>
                     
                     <!-- Causal Chains - Visual chain display -->
-                    <div class="causal-chains" *ngIf="analysisData.root_cause_analysis.causal_chains?.length">
+                    <div class="causal-chains" *ngIf="getRootCauseAnalysis().causal_chains?.length">
                       <div class="chain-header">
                         <nb-icon icon="trending-up-outline" class="text-info"></nb-icon>
                         <span>因果链</span>
-                        <span class="chain-count">({{ analysisData.root_cause_analysis.causal_chains.length }})</span>
+                        <span class="chain-count">({{ getRootCauseAnalysis().causal_chains.length }})</span>
                       </div>
                       <div class="chain-list">
-                        <div *ngFor="let chain of analysisData.root_cause_analysis.causal_chains; let i = index" class="chain-item">
+                        <div *ngFor="let chain of getRootCauseAnalysis().causal_chains; let i = index" class="chain-item">
                           <ng-container *ngFor="let node of chain.chain; let j = index; let last = last">
                             <span *ngIf="node !== '→'" class="chain-node" [ngClass]="{
                               'root-cause': j === 0,
@@ -826,6 +852,38 @@
                               <nb-icon icon="arrow-forward-outline"></nb-icon>
                             </span>
                           </ng-container>
+                          <!-- Chain explanation -->
+                          <div class="chain-explanation" *ngIf="chain.explanation">
+                            <span class="text-hint">{{ chain.explanation }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- LLM Recommendations (executable SQL) -->
+                    <div class="llm-recommendations" *ngIf="hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length">
+                      <div class="rec-header">
+                        <nb-icon icon="flash-outline" class="text-primary"></nb-icon>
+                        <span>优化建议 (可执行)</span>
+                        <span class="rec-count">({{ getRootCauseAnalysis().recommendations.length }})</span>
+                      </div>
+                      <div class="rec-list">
+                        <div *ngFor="let rec of getRootCauseAnalysis().recommendations; let i = index" 
+                             class="rec-item"
+                             [ngClass]="{'llm-rec': rec.source === 'llm' || rec.is_root_cause_fix}">
+                          <div class="rec-priority">
+                            <span class="priority-num">{{ rec.priority || (i + 1) }}</span>
+                          </div>
+                          <div class="rec-content">
+                            <div class="rec-action">{{ rec.action }}</div>
+                            <div class="rec-improvement" *ngIf="rec.expected_improvement">
+                              <nb-icon icon="trending-up-outline" class="text-success"></nb-icon>
+                              <span>{{ rec.expected_improvement }}</span>
+                            </div>
+                            <div class="rec-sql" *ngIf="rec.sql_example">
+                              <pre><code>{{ rec.sql_example }}</code></pre>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

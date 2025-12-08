@@ -22,79 +22,63 @@ use super::*;
 
 /// S001: Data skew detection
 /// Condition: max(RowsRead)/avg(RowsRead) > threshold (dynamic based on cluster size)
-/// P0.2: Added sample protection (min 4 samples) and absolute value protection (min 100k rows)
-/// v2.0: Uses dynamic skew threshold based on cluster parallelism
+/// Distinguishes between internal tables (bucket key) and external tables (partition skew)
 pub struct S001DataSkew;
 
 impl DiagnosticRule for S001DataSkew {
-    fn id(&self) -> &str {
-        "S001"
-    }
-    fn name(&self) -> &str {
-        "Scan 数据倾斜"
-    }
+    fn id(&self) -> &str { "S001" }
+    fn name(&self) -> &str { "Scan 数据倾斜" }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("SCAN")
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
-        // P0.2: Sample protection - need at least 4 instances
-        // Count how many instances we have (check for min rows metric)
         let min_rows = context.get_metric("__MIN_OF_RowsRead").unwrap_or(0.0);
-        let max_rows = context
-            .get_metric("__MAX_OF_RowsRead")
-            .or_else(|| context.get_metric("RowsRead"))?;
+        let max_rows = context.get_metric("__MAX_OF_RowsRead").or_else(|| context.get_metric("RowsRead"))?;
 
-        // If no min metric, we might have single instance or data issue - skip
-        if min_rows == 0.0 && max_rows > 0.0 {
-            // This could be single instance, skip the check
-            return None;
-        }
+        if min_rows == 0.0 && max_rows > 0.0 { return None; }
 
-        // P0.2: Absolute value protection - only check if data volume is significant
-        // v2.0: Use dynamic threshold from thresholds module
         let min_rows_threshold = context.thresholds.get_min_rows_for_skew();
-        if max_rows < min_rows_threshold {
-            return None;
-        }
+        if max_rows < min_rows_threshold { return None; }
 
-        // Calculate average from max and min
         let avg_rows = (max_rows + min_rows) / 2.0;
         let ratio = max_rows / avg_rows;
-
-        // v2.0: Use dynamic skew threshold based on cluster size
-        // Larger clusters can tolerate more skew
         let skew_threshold = context.thresholds.get_skew_threshold();
 
         if ratio > skew_threshold {
+            let table = context.get_full_table_name();
+            let is_internal = context.is_internal_table();
+            
+            let (reason, suggestions) = if is_internal {
+                (
+                    format!("内表「{}」数据在各节点分布不均（max {:.0} 行，min {:.0} 行）。通常是分桶键选择不当导致数据倾斜。", table, max_rows, min_rows),
+                    vec![
+                        format!("检查表「{}」的分桶键是否选择了高基数列", table),
+                        format!("查看数据分布: SELECT COUNT(*) FROM {} GROUP BY <bucket_key> ORDER BY 1 DESC", table),
+                        format!("必要时重建分桶: ALTER TABLE {} DISTRIBUTED BY HASH(<high_cardinality_column>) BUCKETS N", table),
+                    ]
+                )
+            } else {
+                (
+                    format!("外表「{}」数据在各节点分布不均（max {:.0} 行，min {:.0} 行）。可能是 Hive 分区大小不均或文件分布不均。", table, max_rows, min_rows),
+                    vec![
+                        format!("检查外表「{}」的分区数据量是否均衡", table),
+                        "检查是否存在热点分区或超大文件".to_string(),
+                        "考虑在 Hive 侧重新分区或合并小文件".to_string(),
+                    ]
+                )
+            };
+
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})",
-                    context.node.operator_name,
-                    context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
-                message: format!(
-                    "Scan 存在数据倾斜，max/avg 比率为 {:.2} (阈值: {:.1})",
-                    ratio, skew_threshold
-                ),
-                reason: {
-                    let table = context.get_full_table_name();
-                    format!(
-                        "表「{}」数据在各节点分布不均（max {:.0} 行，min {:.0} 行，比率 {:.2}）。通常是分桶键选择不当导致数据倾斜。",
-                        table, max_rows, min_rows, ratio
-                    )
-                },
-                suggestions: {
-                    let table = context.get_full_table_name();
-                    vec![
-                        format!("检查表「{}」的分桶键是否选择了高基数列", table),
-                        format!("查看数据分布: SELECT COUNT(*) FROM {} GROUP BY <bucket_key> ORDER BY 1 DESC LIMIT 10", table),
-                        format!("必要时重建分桶: ALTER TABLE {} DISTRIBUTED BY HASH(<high_cardinality_column>) BUCKETS N", table),
-                    ]
-                },
+                message: format!("Scan 存在数据倾斜，max/avg 比率为 {:.2} (阈值: {:.1})", ratio, skew_threshold),
+                reason,
+                suggestions,
                 parameter_suggestions: vec![],
             })
         } else {
@@ -105,15 +89,12 @@ impl DiagnosticRule for S001DataSkew {
 
 /// S003: Poor filter effectiveness
 /// Condition: RowsRead/RawRowsRead > 0.8 (less than 20% filtered)
+/// Distinguishes between internal and external tables for suggestions
 pub struct S003PoorFilter;
 
 impl DiagnosticRule for S003PoorFilter {
-    fn id(&self) -> &str {
-        "S003"
-    }
-    fn name(&self) -> &str {
-        "过滤效果差"
-    }
+    fn id(&self) -> &str { "S003" }
+    fn name(&self) -> &str { "过滤效果差" }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("SCAN")
@@ -122,46 +103,51 @@ impl DiagnosticRule for S003PoorFilter {
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let rows_read = context.get_metric("RowsRead")?;
         let raw_rows_read = context.get_metric("RawRowsRead")?;
-
-        if raw_rows_read == 0.0 {
-            return None;
-        }
+        if raw_rows_read == 0.0 { return None; }
 
         let ratio = rows_read / raw_rows_read;
-
-        // v2.0: Use dynamic threshold for minimum rows
         let min_rows_threshold = context.thresholds.get_min_rows_for_filter();
 
-        // Only trigger if we're reading a significant amount of data
         if ratio > 0.8 && raw_rows_read > min_rows_threshold {
+            let table = context.get_full_table_name();
+            let is_internal = context.is_internal_table();
+            
+            let (reason, suggestions) = if is_internal {
+                (
+                    format!(
+                        "内表「{}」扫描了 {:.0} 行但仅过滤掉 {:.1}%。可通过 ZoneMap、BloomFilter 索引或谓词下推提前过滤。",
+                        table, raw_rows_read, (1.0 - ratio) * 100.0
+                    ),
+                    vec![
+                        format!("为表「{}」的过滤列添加 ZoneMap 或 BloomFilter 索引", table),
+                        "检查 WHERE 条件是否支持下推（避免函数包裹、类型转换）".to_string(),
+                        format!("检查表「{}」的分区是否能裁剪", table),
+                        "通过 EXPLAIN 查看谓词下推情况".to_string(),
+                    ]
+                )
+            } else {
+                (
+                    format!(
+                        "外表「{}」扫描了 {:.0} 行但仅过滤掉 {:.1}%。外表过滤依赖 Hive 分区裁剪和文件格式的统计信息。",
+                        table, raw_rows_read, (1.0 - ratio) * 100.0
+                    ),
+                    vec![
+                        format!("检查外表「{}」的 Hive 分区是否能裁剪（WHERE 条件包含分区列）", table),
+                        "ORC/Parquet 文件利用 min/max 统计信息过滤，确保文件有 statistics".to_string(),
+                        "检查 WHERE 条件是否支持下推到外部存储".to_string(),
+                    ]
+                )
+            };
+
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", 
-                    context.node.operator_name,
-                    context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
-                message: format!(
-                    "过滤效果差，仅过滤了 {:.1}% 的数据 (读取 {:.0} 行 / 原始 {:.0} 行)",
-                    (1.0 - ratio) * 100.0, rows_read, raw_rows_read
-                ),
-                reason: {
-                    let table = context.get_full_table_name();
-                    format!(
-                        "表「{}」扫描了 {:.0} 行原始数据，但仅过滤掉 {:.1}%。StarRocks 提供 ZoneMap、BloomFilter、谓词下推等方式提前过滤数据。",
-                        table, raw_rows_read, (1.0 - ratio) * 100.0
-                    )
-                },
-                suggestions: {
-                    let table = context.get_full_table_name();
-                    vec![
-                        format!("为表「{}」的过滤列添加 ZoneMap 或 BloomFilter 索引", table),
-                        "检查 WHERE 条件是否支持下推（避免函数包裹、类型转换）".to_string(),
-                        format!("检查表「{}」的分区是否能裁剪（WHERE 条件包含分区列）", table),
-                        "通过 EXPLAIN 查看谓词下推情况".to_string(),
-                    ]
-                },
+                message: format!("过滤效果差，仅过滤了 {:.1}% 的数据 (读取 {:.0} 行 / 原始 {:.0} 行)", (1.0 - ratio) * 100.0, rows_read, raw_rows_read),
+                reason,
+                suggestions,
                 parameter_suggestions: vec![],
             })
         } else {
@@ -605,15 +591,12 @@ impl DiagnosticRule for S002IOSkew {
 }
 
 /// S004: Predicate not pushed down
+/// Distinguishes internal vs external table suggestions
 pub struct S004PredicateNotPushed;
 
 impl DiagnosticRule for S004PredicateNotPushed {
-    fn id(&self) -> &str {
-        "S004"
-    }
-    fn name(&self) -> &str {
-        "谓词未下推"
-    }
+    fn id(&self) -> &str { "S004" }
+    fn name(&self) -> &str { "谓词未下推" }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("SCAN")
@@ -623,7 +606,23 @@ impl DiagnosticRule for S004PredicateNotPushed {
         let pushdown = context.get_metric("PushdownPredicates").unwrap_or(0.0);
         let pred_filter = context.get_metric("PredFilterRows").unwrap_or(0.0);
         let raw_rows = context.get_metric("RawRowsRead").unwrap_or(0.0);
+        
         if pushdown == 0.0 && raw_rows > 10000.0 && pred_filter / raw_rows > 0.1 {
+            let is_internal = context.is_internal_table();
+            let suggestions = if is_internal {
+                vec![
+                    "将谓词重写为简单比较（避免函数包裹）".to_string(),
+                    "为过滤列添加 ZoneMap/Bloom 索引".to_string(),
+                    "检查列类型是否匹配（避免隐式转换）".to_string(),
+                ]
+            } else {
+                vec![
+                    "将谓词重写为简单比较（避免函数包裹）".to_string(),
+                    "确保过滤列在 Hive 分区列中".to_string(),
+                    "检查 ORC/Parquet 文件是否有统计信息".to_string(),
+                ]
+            };
+            
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -632,7 +631,7 @@ impl DiagnosticRule for S004PredicateNotPushed {
                 plan_node_id: context.node.plan_node_id,
                 message: format!("谓词未能下推到存储层，{:.0} 行 ({:.1}%) 在表达式层过滤", pred_filter, pred_filter / raw_rows * 100.0),
                 reason: "查询条件未能下推到存储层执行，导致需要在计算层过滤大量数据。可能是查询条件包含函数、类型不匹配或不支持下推的表达式。".to_string(),
-                suggestions: vec!["将谓词重写为简单比较".to_string(), "添加 zonemap/Bloom 索引".to_string()],
+                suggestions,
                 parameter_suggestions: vec![],
             })
         } else {

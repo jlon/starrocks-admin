@@ -218,7 +218,7 @@ impl DiagnosticRule for G003ExecutionSkew {
                         .to_string(),
                 suggestions: vec![
                     "检查数据分布是否均匀".to_string(),
-                    "检查分桶键选择是否合理".to_string(),
+                    "检查数据分区或分桶是否合理".to_string(),
                     "考虑增加并行度".to_string(),
                 ],
                 parameter_suggestions: {
@@ -242,7 +242,6 @@ fn get_operator_suggestions(operator_name: &str) -> Vec<String> {
     if name.contains("SCAN") {
         vec![
             "检查是否可以添加过滤条件减少扫描数据量".to_string(),
-            "考虑添加索引或物化视图".to_string(),
             "检查分区裁剪是否生效".to_string(),
             "执行 ANALYZE TABLE 更新统计信息".to_string(),
         ]

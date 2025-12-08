@@ -29,7 +29,7 @@ use embedded::WebAssets;
 use services::{
     AuthService, CasbinService, ClusterService, DataStatisticsService, MetricsCollectorService,
     MySQLPoolManager, OrganizationService, OverviewService, PermissionService, RoleService,
-    SystemFunctionService, UserRoleService, UserService,
+    SystemFunctionService, UserRoleService, UserService, LLMServiceImpl,
 };
 use sqlx::SqlitePool;
 use utils::{JwtUtil, ScheduledExecutor};
@@ -66,6 +66,9 @@ pub struct AppState {
     pub role_service: Arc<RoleService>,
     pub user_role_service: Arc<UserRoleService>,
     pub user_service: Arc<UserService>,
+    
+    // LLM Service
+    pub llm_service: Arc<LLMServiceImpl>,
 }
 
 #[derive(OpenApi)]
@@ -367,6 +370,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let user_service = Arc::new(UserService::new(pool.clone(), Arc::clone(&casbin_service)));
 
+    // Initialize LLM service (enabled by default, 24 hours cache TTL)
+    let llm_service = Arc::new(LLMServiceImpl::new(pool.clone(), true, 24));
+    tracing::info!("LLM service initialized");
+
     // Build AppState with all services
     let app_state = AppState {
         db: pool.clone(),
@@ -385,6 +392,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         role_service: Arc::clone(&role_service),
         user_role_service: Arc::clone(&user_role_service),
         user_service: Arc::clone(&user_service),
+        llm_service: Arc::clone(&llm_service),
     };
 
     // Start metrics collector using ScheduledExecutor (configurable interval)
@@ -598,6 +606,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(handlers::user_role::get_user_roles).post(handlers::user_role::assign_role_to_user),
         )
         .route("/api/users/:id/roles/:role_id", delete(handlers::user_role::remove_role_from_user))
+        // LLM Service APIs
+        .route("/api/llm/status", get(handlers::llm::get_status))
+        .route("/api/llm/providers", get(handlers::llm::list_providers).post(handlers::llm::create_provider))
+        .route("/api/llm/providers/:id", get(handlers::llm::get_provider))
+        .route("/api/llm/providers/:id/activate", post(handlers::llm::activate_provider))
+        .route("/api/llm/analyze/root-cause", post(handlers::llm::analyze_root_cause))
         .with_state(Arc::clone(&app_state_arc))
         .layer(axum_middleware::from_fn_with_state(auth_state, middleware::auth_middleware));
 

@@ -1056,6 +1056,217 @@
     }
   }
   
+  // Root Cause Analysis Section
+  .root-cause-section {
+    .section-header {
+      .title {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+    }
+    
+    .root-cause-summary {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 12px;
+      background: linear-gradient(135deg, rgba(255, 170, 0, 0.08) 0%, rgba(255, 170, 0, 0.03) 100%);
+      border-radius: 6px;
+      border-left: 3px solid #ffaa00;
+      margin-bottom: 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #222b45;
+      
+      nb-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+    }
+    
+    .root-cause-list {
+      .root-cause-item {
+        background: rgba(143, 150, 170, 0.04);
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        border-left: 3px solid #598bff;
+        transition: all 0.15s ease;
+        
+        &:last-child {
+          margin-bottom: 0;
+        }
+        
+        &.high-impact {
+          border-left-color: #ff3d71;
+          background: rgba(255, 61, 113, 0.04);
+        }
+        
+        &:hover {
+          background: rgba(143, 150, 170, 0.08);
+        }
+        
+        .rc-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+          
+          .rc-id {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            background: rgba(89, 139, 255, 0.15);
+            color: #598bff;
+            border-radius: 3px;
+          }
+          
+          .rc-impact {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            
+            &.high {
+              background: rgba(255, 61, 113, 0.15);
+              color: #ff3d71;
+            }
+            
+            &.medium {
+              background: rgba(255, 170, 0, 0.15);
+              color: #ffaa00;
+            }
+            
+            &.low {
+              background: rgba(0, 214, 143, 0.15);
+              color: #00d68f;
+            }
+          }
+        }
+        
+        .rc-description {
+          font-size: 12px;
+          font-weight: 500;
+          color: #222b45;
+          margin-bottom: 6px;
+          line-height: 1.4;
+        }
+        
+        .rc-rules {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-bottom: 6px;
+          
+          .rule-badge {
+            font-size: 9px;
+            padding: 1px 5px;
+            background: rgba(143, 150, 170, 0.15);
+            color: #666;
+            border-radius: 2px;
+            font-family: monospace;
+          }
+        }
+        
+        .rc-symptoms {
+          display: flex;
+          align-items: flex-start;
+          gap: 4px;
+          font-size: 11px;
+          margin-bottom: 6px;
+          
+          nb-icon {
+            font-size: 12px;
+            flex-shrink: 0;
+          }
+        }
+        
+        .rc-evidence {
+          margin-bottom: 6px;
+          
+          .evidence-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
+            font-size: 11px;
+            padding: 2px 0;
+            
+            nb-icon {
+              font-size: 12px;
+              flex-shrink: 0;
+              margin-top: 1px;
+            }
+          }
+        }
+        
+        .rc-suggestions {
+          margin-top: 8px;
+          padding-top: 6px;
+          border-top: 1px dashed rgba(143, 150, 170, 0.2);
+          
+          .suggestion-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            font-size: 11px;
+            color: #555;
+            padding: 2px 0;
+            
+            .icon {
+              font-size: 12px;
+            }
+          }
+        }
+      }
+    }
+    
+    .causal-chains {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(143, 150, 170, 0.1);
+      
+      .chain-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #222b45;
+        margin-bottom: 8px;
+        
+        nb-icon {
+          font-size: 14px;
+        }
+      }
+      
+      .chain-item {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        padding: 6px 8px;
+        background: rgba(143, 150, 170, 0.04);
+        border-radius: 4px;
+        margin-bottom: 6px;
+        
+        &:last-child {
+          margin-bottom: 0;
+        }
+        
+        .chain-node {
+          color: #222b45;
+          
+          &:contains('→') {
+            color: #8f96aa;
+          }
+        }
+      }
+    }
+  }
+  
   // Node Detail Section (when node is selected)
   .node-detail-section {
     .section-header {

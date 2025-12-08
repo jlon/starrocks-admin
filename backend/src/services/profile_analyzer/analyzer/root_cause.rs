@@ -77,29 +77,60 @@ struct IntraNodeRule {
 }
 
 /// Predefined intra-node causality rules based on v5.0 design
+/// 
+/// Rule Categories:
+/// - S: SCAN node rules (S001-S016)
+/// - J: JOIN node rules (J001-J011)
+/// - A: AGGREGATE node rules (A001-A006)
+/// - Q: Query-level rules (Q001-Q009)
+/// - G: General rules (G001-G003)
+/// - E: EXCHANGE node rules (E001-E003)
+/// - T: SORT node rules (T001-T005)
+/// - W: WINDOW node rules (W001)
+/// - I: SINK/Insert rules (I001-I003)
+/// - F: Fragment rules (F001-F003)
 const INTRA_NODE_RULES: &[IntraNodeRule] = &[
-    // SCAN node causality
+    // ========================================================================
+    // SCAN Node Causality (16 rules covered)
+    // ========================================================================
     IntraNodeRule {
-        causes: &["S016", "S006"],  // Small files, Rowset fragmentation
+        causes: &["S016", "S006"],  // Small files (S016), Rowset fragmentation (S006)
         effect: "S007",             // IO bottleneck
         description: "小文件/碎片化导致IO瓶颈",
     },
     IntraNodeRule {
-        causes: &["S009"],          // Low cache hit
+        causes: &["S009"],          // Low cache hit ratio
         effect: "S007",             // IO bottleneck
         description: "缓存命中率低导致IO瓶颈",
     },
     IntraNodeRule {
-        causes: &["S008", "S012", "S013"],  // ZoneMap, Bitmap, BloomFilter issues
+        causes: &["S008", "S012", "S013"],  // ZoneMap/Bitmap/BloomFilter ineffective
         effect: "S003",                      // Poor filter effectiveness
         description: "索引未生效导致过滤效果差",
     },
     IntraNodeRule {
-        causes: &["S001"],          // Data skew
+        causes: &["S001"],          // Data skew in SCAN
         effect: "G003",             // Execution time skew
         description: "数据倾斜导致执行时间倾斜",
     },
-    // JOIN node causality
+    IntraNodeRule {
+        causes: &["S003"],          // Poor filter effectiveness
+        effect: "S002",             // Full table scan
+        description: "过滤效果差导致全表扫描",
+    },
+    IntraNodeRule {
+        causes: &["S010"],          // Large compressed ratio
+        effect: "S007",             // IO bottleneck (decompression overhead)
+        description: "高压缩率导致解压开销大",
+    },
+    IntraNodeRule {
+        causes: &["S014"],          // Too many segments
+        effect: "S007",             // IO bottleneck
+        description: "Segment过多导致IO瓶颈",
+    },
+    // ========================================================================
+    // JOIN Node Causality (11 rules covered)
+    // ========================================================================
     IntraNodeRule {
         causes: &["J002"],          // Suboptimal join order
         effect: "J001",             // Hash table too large
@@ -110,16 +141,163 @@ const INTRA_NODE_RULES: &[IntraNodeRule] = &[
         effect: "E002",             // Network bottleneck
         description: "Broadcast表过大导致网络瓶颈",
     },
-    // AGG node causality
+    IntraNodeRule {
+        causes: &["J003"],          // Join probe rows skew
+        effect: "G003",             // Execution time skew
+        description: "Join探测端数据倾斜导致时间倾斜",
+    },
+    IntraNodeRule {
+        causes: &["J001"],          // Hash table too large
+        effect: "Q003",             // Spill to disk
+        description: "Hash表过大导致内存溢出到磁盘",
+    },
+    IntraNodeRule {
+        causes: &["J006"],          // Missing runtime filter
+        effect: "S003",             // Poor filter effectiveness on probe side
+        description: "缺少Runtime Filter导致探测端过滤差",
+    },
+    IntraNodeRule {
+        causes: &["J007"],          // Runtime filter not pushed down
+        effect: "S003",             // Poor filter effectiveness
+        description: "Runtime Filter未下推导致过滤效果差",
+    },
+    IntraNodeRule {
+        causes: &["J008"],          // Join condition not optimal
+        effect: "J001",             // Large hash table
+        description: "Join条件不优导致Hash表过大",
+    },
+    IntraNodeRule {
+        causes: &["J009"],          // Cross join detected
+        effect: "G002",             // High CPU utilization
+        description: "笛卡尔积导致CPU使用率高",
+    },
+    IntraNodeRule {
+        causes: &["J010"],          // Join type not optimal
+        effect: "E002",             // Network bottleneck (wrong distribution)
+        description: "Join类型不优导致数据传输过多",
+    },
+    // ========================================================================
+    // AGGREGATE Node Causality (6 rules covered)
+    // ========================================================================
     IntraNodeRule {
         causes: &["A001"],          // Aggregation skew
         effect: "Q003",             // Spill occurred
         description: "聚合倾斜导致内存溢出",
     },
     IntraNodeRule {
-        causes: &["A003"],          // Too many group by keys
+        causes: &["A001"],          // Aggregation skew
+        effect: "G003",             // Execution time skew
+        description: "聚合倾斜导致执行时间倾斜",
+    },
+    IntraNodeRule {
+        causes: &["A003"],          // Too many distinct keys
         effect: "A002",             // Large hash table
-        description: "Group by 键过多导致Hash表过大",
+        description: "Distinct键过多导致Hash表过大",
+    },
+    IntraNodeRule {
+        causes: &["A002"],          // Large hash table
+        effect: "Q003",             // Spill to disk
+        description: "聚合Hash表过大导致溢出",
+    },
+    IntraNodeRule {
+        causes: &["A004"],          // Missing streaming aggregation
+        effect: "A002",             // Large hash table
+        description: "未使用流式聚合导致内存占用高",
+    },
+    IntraNodeRule {
+        causes: &["A005"],          // High aggregation cardinality
+        effect: "G002",             // High CPU utilization
+        description: "聚合基数过高导致CPU占用高",
+    },
+    // ========================================================================
+    // SORT Node Causality (5 rules covered)
+    // ========================================================================
+    IntraNodeRule {
+        causes: &["T001"],          // Sort data too large
+        effect: "Q003",             // Spill to disk
+        description: "排序数据量过大导致溢出",
+    },
+    IntraNodeRule {
+        causes: &["T002"],          // TopN not optimized
+        effect: "T001",             // Large sort data
+        description: "TopN未优化导致排序数据量大",
+    },
+    IntraNodeRule {
+        causes: &["T003"],          // Sort without limit
+        effect: "T001",             // Large sort data
+        description: "全量排序导致数据量过大",
+    },
+    IntraNodeRule {
+        causes: &["T004"],          // Multiple sort keys
+        effect: "G002",             // High CPU utilization
+        description: "多排序键导致CPU占用高",
+    },
+    // ========================================================================
+    // EXCHANGE Node Causality (3 rules covered)
+    // ========================================================================
+    IntraNodeRule {
+        causes: &["E001"],          // Large data shuffle
+        effect: "E002",             // Network bottleneck
+        description: "Shuffle数据量大导致网络瓶颈",
+    },
+    IntraNodeRule {
+        causes: &["E003"],          // Partition skew
+        effect: "G003",             // Execution time skew
+        description: "分区倾斜导致执行时间倾斜",
+    },
+    // ========================================================================
+    // Query-Level Causality (9 rules covered)
+    // ========================================================================
+    IntraNodeRule {
+        causes: &["Q003"],          // Spill to disk
+        effect: "Q001",             // Query timeout (spill slows down query)
+        description: "磁盘溢出导致查询变慢可能超时",
+    },
+    IntraNodeRule {
+        causes: &["Q004"],          // Cardinality estimation error
+        effect: "J002",             // Suboptimal join order
+        description: "基数估计错误导致Join顺序不优",
+    },
+    IntraNodeRule {
+        causes: &["Q004"],          // Cardinality estimation error
+        effect: "A004",             // Missing streaming aggregation
+        description: "基数估计错误导致聚合策略不优",
+    },
+    IntraNodeRule {
+        causes: &["Q005"],          // Pipeline parallelism issue
+        effect: "G003",             // Execution time skew
+        description: "Pipeline并行度问题导致执行倾斜",
+    },
+    IntraNodeRule {
+        causes: &["Q006"],          // Resource queue waiting
+        effect: "Q001",             // Query timeout
+        description: "资源队列等待可能导致超时",
+    },
+    IntraNodeRule {
+        causes: &["Q002"],          // Query scans too much data
+        effect: "S007",             // IO bottleneck
+        description: "扫描数据量过大导致IO瓶颈",
+    },
+    // ========================================================================
+    // PROJECT/LIMIT Causality
+    // ========================================================================
+    IntraNodeRule {
+        causes: &["P001"],          // Complex expression in project
+        effect: "G002",             // High CPU utilization
+        description: "复杂表达式计算导致CPU占用高",
+    },
+    // ========================================================================
+    // SINK Causality (I001-I003 are terminal - effects, not causes)
+    // ========================================================================
+    IntraNodeRule {
+        causes: &["E002"],          // Network bottleneck
+        effect: "I001",             // Insert slow
+        description: "网络瓶颈导致数据导入慢",
+    },
+    IntraNodeRule {
+        causes: &["A001"],          // Aggregation skew
+        effect: "I002",             // Insert skew
+        description: "聚合倾斜导致导入数据倾斜",
     },
 ];
 
@@ -152,8 +330,17 @@ struct InterNodeRule {
     description: &'static str,
 }
 
+/// Inter-node propagation rules - how issues propagate along the DAG
+/// 
+/// Propagation Modes:
+/// - DataVolume: Data size propagates downstream
+/// - Skew: Data skew propagates downstream
+/// - Memory: Memory pressure causes spill
+/// - IoWait: IO wait propagates to downstream stall
 const INTER_NODE_RULES: &[InterNodeRule] = &[
-    // Skew propagation
+    // ========================================================================
+    // Skew Propagation (upstream skew → downstream skew)
+    // ========================================================================
     InterNodeRule {
         upstream: "S001",   // SCAN data skew
         downstream: "G003", // Execution time skew
@@ -172,7 +359,27 @@ const INTER_NODE_RULES: &[InterNodeRule] = &[
         mode: PropagationMode::Skew,
         description: "SCAN数据倾斜传导到聚合倾斜",
     },
-    // Data volume propagation
+    InterNodeRule {
+        upstream: "S001",   // SCAN data skew
+        downstream: "E003", // Exchange partition skew
+        mode: PropagationMode::Skew,
+        description: "SCAN数据倾斜传导到Shuffle分区倾斜",
+    },
+    InterNodeRule {
+        upstream: "J003",   // Join probe skew
+        downstream: "A001", // Aggregation skew
+        mode: PropagationMode::Skew,
+        description: "Join倾斜传导到聚合倾斜",
+    },
+    InterNodeRule {
+        upstream: "E003",   // Exchange partition skew
+        downstream: "G003", // Execution time skew
+        mode: PropagationMode::Skew,
+        description: "Shuffle倾斜传导到执行时间倾斜",
+    },
+    // ========================================================================
+    // Data Volume Propagation (large data → downstream processing burden)
+    // ========================================================================
     InterNodeRule {
         upstream: "S003",   // Poor filter effectiveness
         downstream: "J001", // Hash table too large
@@ -185,7 +392,51 @@ const INTER_NODE_RULES: &[InterNodeRule] = &[
         mode: PropagationMode::DataVolume,
         description: "过滤效果差导致聚合处理数据量大",
     },
-    // Memory propagation
+    InterNodeRule {
+        upstream: "S003",   // Poor filter effectiveness
+        downstream: "E001", // Large shuffle data
+        mode: PropagationMode::DataVolume,
+        description: "过滤效果差导致Shuffle数据量大",
+    },
+    InterNodeRule {
+        upstream: "S003",   // Poor filter effectiveness
+        downstream: "T001", // Sort data too large
+        mode: PropagationMode::DataVolume,
+        description: "过滤效果差导致排序数据量大",
+    },
+    InterNodeRule {
+        upstream: "S002",   // Full table scan
+        downstream: "J001", // Hash table too large
+        mode: PropagationMode::DataVolume,
+        description: "全表扫描导致Join数据量大",
+    },
+    InterNodeRule {
+        upstream: "S002",   // Full table scan
+        downstream: "E001", // Large shuffle data
+        mode: PropagationMode::DataVolume,
+        description: "全表扫描导致Shuffle数据量大",
+    },
+    InterNodeRule {
+        upstream: "J001",   // Large join hash table
+        downstream: "A002", // Large aggregation hash table
+        mode: PropagationMode::DataVolume,
+        description: "Join输出数据量大导致聚合数据量大",
+    },
+    InterNodeRule {
+        upstream: "J009",   // Cross join (cartesian product)
+        downstream: "A002", // Large aggregation hash table
+        mode: PropagationMode::DataVolume,
+        description: "笛卡尔积导致下游数据爆炸",
+    },
+    InterNodeRule {
+        upstream: "J009",   // Cross join
+        downstream: "T001", // Large sort data
+        mode: PropagationMode::DataVolume,
+        description: "笛卡尔积导致排序数据量爆炸",
+    },
+    // ========================================================================
+    // Memory Propagation (memory pressure → spill)
+    // ========================================================================
     InterNodeRule {
         upstream: "J001",   // Hash table large
         downstream: "Q003", // Spill
@@ -197,6 +448,39 @@ const INTER_NODE_RULES: &[InterNodeRule] = &[
         downstream: "Q003", // Spill
         mode: PropagationMode::Memory,
         description: "聚合内存占用高导致触发Spill",
+    },
+    InterNodeRule {
+        upstream: "T001",   // Large sort data
+        downstream: "Q003", // Spill
+        mode: PropagationMode::Memory,
+        description: "排序数据量大导致触发Spill",
+    },
+    InterNodeRule {
+        upstream: "W001",   // Window function memory
+        downstream: "Q003", // Spill
+        mode: PropagationMode::Memory,
+        description: "窗口函数内存占用导致Spill",
+    },
+    // ========================================================================
+    // IO Wait Propagation (IO bottleneck → downstream stall)
+    // ========================================================================
+    InterNodeRule {
+        upstream: "S007",   // IO bottleneck
+        downstream: "G001", // Time consuming node
+        mode: PropagationMode::IoWait,
+        description: "IO瓶颈导致节点耗时长",
+    },
+    InterNodeRule {
+        upstream: "E002",   // Network bottleneck
+        downstream: "G001", // Time consuming node
+        mode: PropagationMode::IoWait,
+        description: "网络瓶颈导致节点等待",
+    },
+    InterNodeRule {
+        upstream: "Q003",   // Spill to disk
+        downstream: "G001", // Time consuming node
+        mode: PropagationMode::IoWait,
+        description: "磁盘溢出导致节点耗时长",
     },
 ];
 

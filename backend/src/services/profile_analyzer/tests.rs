@@ -1616,4 +1616,270 @@ Query:
             println!("Profile completeness detection test passed!");
         }
     }
+
+    // ========================================================================
+    // Root Cause Analysis Integration Tests
+    // ========================================================================
+    
+    mod root_cause_integration_tests {
+        use super::*;
+        use crate::services::profile_analyzer::analyzer::RootCauseAnalysis;
+        
+        /// Helper to print root cause analysis result
+        fn print_root_cause_analysis(analysis: &RootCauseAnalysis) {
+            println!("\n=== Root Cause Analysis ===");
+            println!("Summary: {}", analysis.summary);
+            println!("Total diagnostics analyzed: {}", analysis.total_diagnostics);
+            println!("Root causes found: {}", analysis.root_causes.len());
+            
+            for rc in &analysis.root_causes {
+                println!("\n  [{}] {} (impact: {:.0}%, confidence: {:.0}%)",
+                    rc.id, rc.description, rc.impact_percentage, rc.confidence * 100.0);
+                println!("    Diagnostic IDs: {:?}", rc.diagnostic_ids);
+                println!("    Affected nodes: {:?}", rc.affected_nodes);
+                if !rc.symptoms.is_empty() {
+                    println!("    Symptoms: {:?}", rc.symptoms);
+                }
+                if !rc.suggestions.is_empty() {
+                    println!("    Suggestions: {:?}", rc.suggestions);
+                }
+            }
+            
+            if !analysis.causal_chains.is_empty() {
+                println!("\n  Causal Chains:");
+                for chain in &analysis.causal_chains {
+                    println!("    {} (confidence: {:.0}%)", 
+                        chain.chain.join(" "), chain.confidence * 100.0);
+                }
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_analysis_profile1() {
+            // Profile1: 9m41s query with data skew issues
+            let profile_text = load_profile("profile1.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile1");
+            
+            println!("\n=== Profile 1 Analysis ===");
+            println!("Total time: {:?}", result.summary.as_ref().map(|s| &s.total_time));
+            println!("Diagnostics count: {}", result.diagnostics.len());
+            println!("Aggregated diagnostics: {}", result.aggregated_diagnostics.len());
+            
+            // Print all diagnostics found
+            for diag in &result.aggregated_diagnostics {
+                println!("  {} [{}]: {} ({} nodes)", 
+                    diag.rule_id, diag.severity, diag.message, diag.node_count);
+            }
+            
+            // Verify root cause analysis exists
+            assert!(result.root_cause_analysis.is_some(), "Root cause analysis should exist");
+            let rca = result.root_cause_analysis.as_ref().unwrap();
+            
+            print_root_cause_analysis(rca);
+            
+            // Verify analysis produces meaningful results
+            assert!(!rca.summary.is_empty(), "Summary should not be empty");
+        }
+        
+        #[test]
+        fn test_root_cause_analysis_profile6() {
+            // Profile6: 4m13s complex query with multiple joins
+            let profile_text = load_profile("profile6.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile6");
+            
+            println!("\n=== Profile 6 Analysis ===");
+            println!("Query ID: {:?}", result.summary.as_ref().map(|s| &s.query_id));
+            println!("Total time: {:?}", result.summary.as_ref().map(|s| &s.total_time));
+            println!("Diagnostics count: {}", result.diagnostics.len());
+            
+            // Print all diagnostics
+            for diag in &result.aggregated_diagnostics {
+                println!("  {} [{}]: {} ({} nodes)", 
+                    diag.rule_id, diag.severity, diag.message, diag.node_count);
+            }
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                print_root_cause_analysis(rca);
+                
+                // Verify structure
+                assert!(!rca.summary.is_empty(), "Summary should exist");
+                assert_eq!(rca.total_diagnostics, result.diagnostics.len());
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_analysis_profile7_error() {
+            // Profile7: 5m1s query that ended in Error state
+            let profile_text = load_profile("profile7.text");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile7");
+            
+            println!("\n=== Profile 7 Analysis (Error State) ===");
+            println!("Query state: {:?}", result.summary.as_ref().map(|s| &s.query_state));
+            println!("Total time: {:?}", result.summary.as_ref().map(|s| &s.total_time));
+            println!("Diagnostics count: {}", result.diagnostics.len());
+            
+            // Print all diagnostics
+            for diag in &result.aggregated_diagnostics {
+                println!("  {} [{}]: {} ({} nodes)", 
+                    diag.rule_id, diag.severity, diag.message, diag.node_count);
+            }
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                print_root_cause_analysis(rca);
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_analysis_profile8() {
+            // Profile8: 3m50s query - similar pattern to profile6
+            let profile_text = load_profile("profile8.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile8");
+            
+            println!("\n=== Profile 8 Analysis ===");
+            println!("Query ID: {:?}", result.summary.as_ref().map(|s| &s.query_id));
+            println!("Total time: {:?}", result.summary.as_ref().map(|s| &s.total_time));
+            println!("Diagnostics count: {}", result.diagnostics.len());
+            
+            // Print all diagnostics
+            for diag in &result.aggregated_diagnostics {
+                println!("  {} [{}]: {} ({} nodes)", 
+                    diag.rule_id, diag.severity, diag.message, diag.node_count);
+            }
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                print_root_cause_analysis(rca);
+                
+                // Verify root causes have reasonable structure
+                for rc in &rca.root_causes {
+                    assert!(!rc.id.is_empty(), "Root cause ID should not be empty");
+                    assert!(!rc.diagnostic_ids.is_empty(), "Should have diagnostic IDs");
+                    assert!(rc.impact_percentage >= 0.0 && rc.impact_percentage <= 100.0, 
+                        "Impact should be 0-100%");
+                    assert!(rc.confidence >= 0.0 && rc.confidence <= 1.0, 
+                        "Confidence should be 0-1");
+                }
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_causal_chain_detection() {
+            // Test that causal chains are correctly detected
+            // Using profile1 which has complex execution with potential causal chains
+            let profile_text = load_profile("profile1.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile");
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                println!("\n=== Causal Chain Detection Test ===");
+                println!("Root causes: {}", rca.root_causes.len());
+                println!("Causal chains: {}", rca.causal_chains.len());
+                
+                for chain in &rca.causal_chains {
+                    println!("  Chain: {:?}", chain.chain);
+                    println!("    Explanation: {}", chain.explanation);
+                    println!("    Confidence: {:.0}%", chain.confidence * 100.0);
+                    
+                    // Verify chain structure
+                    assert!(chain.chain.len() >= 2, "Chain should have at least 2 elements");
+                    assert!(!chain.explanation.is_empty(), "Chain should have explanation");
+                }
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_impact_sorting() {
+            // Verify root causes are sorted by impact
+            let profile_text = load_profile("profile1.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile");
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                if rca.root_causes.len() >= 2 {
+                    // Verify sorted by impact (descending)
+                    let impacts: Vec<f64> = rca.root_causes.iter()
+                        .map(|rc| rc.impact_percentage)
+                        .collect();
+                    
+                    for i in 0..impacts.len() - 1 {
+                        assert!(impacts[i] >= impacts[i + 1], 
+                            "Root causes should be sorted by impact descending: {} < {}",
+                            impacts[i], impacts[i + 1]);
+                    }
+                    
+                    println!("Root cause impacts (sorted): {:?}", impacts);
+                }
+            }
+        }
+        
+        #[test]
+        fn test_all_profiles_root_cause_analysis() {
+            // Test all available profiles produce valid root cause analysis
+            let profiles = vec![
+                "profile1.txt",
+                "profile2.txt", 
+                "profile3.txt",
+                "profile4.txt",
+                "profile5.txt",
+                "profile6.txt",
+                "profile7.text",
+                "profile8.txt",
+            ];
+            
+            println!("\n=== All Profiles Root Cause Analysis Summary ===\n");
+            
+            for profile_name in profiles {
+                let profile_text = load_profile(profile_name);
+                let result = analyze_profile(&profile_text);
+                
+                match result {
+                    Ok(analysis) => {
+                        let diag_count = analysis.diagnostics.len();
+                        let rca_info = analysis.root_cause_analysis.as_ref()
+                            .map(|rca| format!("{} root causes, {} chains", 
+                                rca.root_causes.len(), rca.causal_chains.len()))
+                            .unwrap_or_else(|| "No analysis".to_string());
+                        
+                        println!("{}: {} diagnostics, {}", profile_name, diag_count, rca_info);
+                        
+                        // Verify root cause analysis is present when diagnostics exist
+                        if diag_count > 0 {
+                            assert!(analysis.root_cause_analysis.is_some(), 
+                                "Root cause analysis should exist when diagnostics found for {}", 
+                                profile_name);
+                        }
+                    }
+                    Err(e) => {
+                        println!("{}: ERROR - {}", profile_name, e);
+                        // Some profiles might fail to parse, that's ok for this test
+                    }
+                }
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_symptoms_tracking() {
+            // Test that symptoms are correctly tracked for root causes
+            let profile_text = load_profile("profile1.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile");
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                println!("\n=== Symptoms Tracking Test ===");
+                
+                for rc in &rca.root_causes {
+                    println!("\n{} ({}):", rc.id, rc.diagnostic_ids.join(", "));
+                    println!("  Impact: {:.0}%", rc.impact_percentage);
+                    
+                    if rc.symptoms.is_empty() {
+                        println!("  Symptoms: (none - this is a terminal symptom)");
+                    } else {
+                        println!("  Symptoms: {:?}", rc.symptoms);
+                        
+                        // Verify symptoms are valid diagnostic IDs
+                        for symptom in &rc.symptoms {
+                            assert!(symptom.len() <= 5 && symptom.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false),
+                                "Symptom '{}' should be a valid rule ID format", symptom);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

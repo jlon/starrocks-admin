@@ -12,32 +12,30 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::services::llm::{
-    CreateProviderRequest, LLMError, LLMProviderInfo, LLMService, LLMServiceImpl,
+    CreateProviderRequest, LLMError, LLMProviderInfo, LLMService,
 };
-
-/// Application state containing LLM service
-pub type LLMState = Arc<LLMServiceImpl>;
+use crate::AppState;
 
 // ============================================================================
 // Provider Management APIs
 // ============================================================================
 
 /// List all LLM providers
-/// GET /api/v1/llm/providers
+/// GET /api/llm/providers
 pub async fn list_providers(
-    State(llm_service): State<LLMState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, LLMApiError> {
-    let providers = llm_service.list_providers().await?;
+    let providers = state.llm_service.list_providers().await?;
     Ok(Json(providers))
 }
 
 /// Get provider by ID
-/// GET /api/v1/llm/providers/:id
+/// GET /api/llm/providers/:id
 pub async fn get_provider(
-    State(llm_service): State<LLMState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, LLMApiError> {
-    let providers = llm_service.list_providers().await?;
+    let providers = state.llm_service.list_providers().await?;
     let provider = providers.into_iter()
         .find(|p| p.id == id)
         .ok_or(LLMError::ProviderNotFound(id.to_string()))?;
@@ -45,22 +43,22 @@ pub async fn get_provider(
 }
 
 /// Create a new provider
-/// POST /api/v1/llm/providers
+/// POST /api/llm/providers
 pub async fn create_provider(
-    State(llm_service): State<LLMState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<CreateProviderRequest>,
 ) -> Result<impl IntoResponse, LLMApiError> {
-    let provider = llm_service.create_provider(req).await?;
+    let provider = state.llm_service.create_provider(req).await?;
     Ok((StatusCode::CREATED, Json(LLMProviderInfo::from(&provider))))
 }
 
 /// Activate a provider
-/// POST /api/v1/llm/providers/:id/activate
+/// POST /api/llm/providers/:id/activate
 pub async fn activate_provider(
-    State(llm_service): State<LLMState>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, LLMApiError> {
-    llm_service.activate_provider(id).await?;
+    state.llm_service.activate_provider(id).await?;
     Ok(Json(ActivateResponse { success: true, message: "Provider activated".to_string() }))
 }
 
@@ -75,15 +73,15 @@ struct ActivateResponse {
 // ============================================================================
 
 /// Get LLM service status
-/// GET /api/v1/llm/status
+/// GET /api/llm/status
 pub async fn get_status(
-    State(llm_service): State<LLMState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, LLMApiError> {
-    let providers = llm_service.list_providers().await?;
+    let providers = state.llm_service.list_providers().await?;
     let active_provider = providers.iter().find(|p| p.is_active);
     
     Ok(Json(LLMStatusResponse {
-        enabled: llm_service.is_available(),
+        enabled: state.llm_service.is_available(),
         active_provider: active_provider.cloned(),
         provider_count: providers.len(),
     }))
@@ -101,13 +99,13 @@ pub struct LLMStatusResponse {
 // ============================================================================
 
 /// Request root cause analysis
-/// POST /api/v1/llm/analyze/root-cause
+/// POST /api/llm/analyze/root-cause
 pub async fn analyze_root_cause(
-    State(llm_service): State<LLMState>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<RootCauseAnalysisApiRequest>,
 ) -> Result<impl IntoResponse, LLMApiError> {
     use crate::services::llm::{
-        ExecutionPlanForLLM, KeyMetricsForLLM, QuerySummaryForLLM, RootCauseAnalysisRequest,
+        ExecutionPlanForLLM, QuerySummaryForLLM, RootCauseAnalysisRequest,
         RootCauseAnalysisResponse,
     };
     
@@ -133,7 +131,7 @@ pub async fn analyze_root_cause(
         .map_err(|e| LLMError::ApiError(e.to_string()))?;
     
     // Call LLM service
-    let response: RootCauseAnalysisResponse = llm_service
+    let response: RootCauseAnalysisResponse = state.llm_service
         .analyze(&llm_request, &req.query_id, req.cluster_id)
         .await?;
     
@@ -168,14 +166,10 @@ pub struct RootCauseAnalysisApiRequest {
 fn default_be_count() -> u32 { 3 }
 
 fn truncate_sql(sql: &str, max_len: usize) -> String {
-    if sql.len() <= max_len {
-        sql.to_string()
-    } else {
-        format!("{}... (truncated)", &sql[..max_len])
-    }
+    if sql.len() <= max_len { sql.to_string() } else { format!("{}... (truncated)", &sql[..max_len]) }
 }
 
-use crate::services::llm::KeyMetricsForLLM;
+use crate::services::llm::{KeyMetricsForLLM, DiagnosticForLLM};
 
 // ============================================================================
 // Error Handling

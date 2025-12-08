@@ -78,6 +78,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   isTop10Collapsed = false;
   isSummaryCollapsed = false;
   isDiagnosisCollapsed = false;
+  isRootCauseCollapsed = false; // Root cause analysis section
   showMemoryView = false; // Toggle between Time and Memory view
   
   // Graph direction: 'BT' (bottom-to-top) or 'LR' (left-to-right)

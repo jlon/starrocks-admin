@@ -2,6 +2,7 @@ pub mod auth_service;
 pub mod casbin_service;
 pub mod cluster_service;
 pub mod data_statistics_service;
+pub mod llm;
 pub mod materialized_view_service;
 pub mod metrics_collector_service;
 pub mod mysql_client;
@@ -19,6 +20,7 @@ pub mod user_service;
 pub use auth_service::AuthService;
 pub use casbin_service::CasbinService;
 pub use cluster_service::ClusterService;
+pub use llm::{LLMService, LLMServiceImpl, LLMError, LLMProviderInfo, LLMScenario};
 pub use data_statistics_service::{
     DataStatistics, DataStatisticsService, TopTableByAccess, TopTableBySize,
 };

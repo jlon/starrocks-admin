@@ -1,0 +1,228 @@
+//! LLM Service Trait and Implementation
+//!
+//! Defines the generic LLM service interface and its implementation.
+
+use async_trait::async_trait;
+use serde::{de::DeserializeOwned, Serialize};
+use std::sync::Arc;
+
+use super::client::LLMClient;
+use super::models::*;
+use super::repository::LLMRepository;
+
+// ============================================================================
+// LLM Analysis Request/Response Traits
+// ============================================================================
+
+/// Trait for LLM analysis requests
+/// Implemented by each scenario (RootCause, SqlOptimization, etc.)
+pub trait LLMAnalysisRequestTrait: Serialize + Send + Sync {
+    /// The scenario type for this request
+    fn scenario(&self) -> LLMScenario;
+    
+    /// Get the system prompt for this scenario
+    fn system_prompt(&self) -> &'static str;
+    
+    /// Build cache key for deduplication
+    fn cache_key(&self) -> String;
+    
+    /// Get SQL hash for tracking
+    fn sql_hash(&self) -> String;
+    
+    /// Get profile hash for tracking
+    fn profile_hash(&self) -> String;
+}
+
+/// Trait for LLM analysis responses
+pub trait LLMAnalysisResponseTrait: DeserializeOwned + Serialize + Send + Sync {
+    /// Get summary text for logging
+    fn summary(&self) -> &str;
+    
+    /// Get confidence score (if applicable)
+    fn confidence(&self) -> Option<f64>;
+}
+
+// ============================================================================
+// LLM Service Trait
+// ============================================================================
+
+/// LLM Service - the core abstraction for all LLM operations
+#[async_trait]
+pub trait LLMService: Send + Sync {
+    /// Check if LLM service is available
+    fn is_available(&self) -> bool;
+    
+    /// Get the currently active provider info
+    fn active_provider(&self) -> Option<LLMProviderInfo>;
+    
+    /// Analyze with LLM, returns structured response
+    async fn analyze<Req, Resp>(
+        &self,
+        request: &Req,
+        query_id: &str,
+        cluster_id: Option<i64>,
+    ) -> Result<Resp, LLMError>
+    where
+        Req: LLMAnalysisRequestTrait,
+        Resp: LLMAnalysisResponseTrait;
+    
+    /// Get all providers
+    async fn list_providers(&self) -> Result<Vec<LLMProviderInfo>, LLMError>;
+    
+    /// Activate a provider
+    async fn activate_provider(&self, provider_id: i64) -> Result<(), LLMError>;
+    
+    /// Create a new provider
+    async fn create_provider(&self, req: CreateProviderRequest) -> Result<LLMProvider, LLMError>;
+}
+
+// ============================================================================
+// LLM Service Implementation
+// ============================================================================
+
+/// LLM Service implementation
+pub struct LLMServiceImpl {
+    repository: LLMRepository,
+    client: LLMClient,
+    enabled: bool,
+    cache_ttl_hours: i64,
+}
+
+impl LLMServiceImpl {
+    /// Create a new LLM service
+    pub fn new(
+        pool: sqlx::SqlitePool,
+        enabled: bool,
+        cache_ttl_hours: i64,
+    ) -> Self {
+        Self {
+            repository: LLMRepository::new(pool),
+            client: LLMClient::new(),
+            enabled,
+            cache_ttl_hours,
+        }
+    }
+    
+    /// Create with custom client (for testing)
+    pub fn with_client(
+        pool: sqlx::SqlitePool,
+        client: LLMClient,
+        enabled: bool,
+        cache_ttl_hours: i64,
+    ) -> Self {
+        Self {
+            repository: LLMRepository::new(pool),
+            client,
+            enabled,
+            cache_ttl_hours,
+        }
+    }
+}
+
+#[async_trait]
+impl LLMService for LLMServiceImpl {
+    fn is_available(&self) -> bool {
+        self.enabled
+    }
+    
+    fn active_provider(&self) -> Option<LLMProviderInfo> {
+        // This is a sync method, so we can't query DB here
+        // The actual provider is fetched in analyze()
+        None
+    }
+    
+    async fn analyze<Req, Resp>(
+        &self,
+        request: &Req,
+        query_id: &str,
+        cluster_id: Option<i64>,
+    ) -> Result<Resp, LLMError>
+    where
+        Req: LLMAnalysisRequestTrait,
+        Resp: LLMAnalysisResponseTrait,
+    {
+        if !self.enabled {
+            return Err(LLMError::Disabled);
+        }
+        
+        // 1. Get active provider
+        let provider = self.repository
+            .get_active_provider()
+            .await?
+            .ok_or(LLMError::NoProviderConfigured)?;
+        
+        // 2. Check cache
+        let cache_key = request.cache_key();
+        if let Some(cached) = self.repository.get_cached_response(&cache_key).await? {
+            tracing::debug!("LLM cache hit for key: {}", cache_key);
+            return serde_json::from_str(&cached).map_err(LLMError::from);
+        }
+        
+        // 3. Create session
+        let session_id = self.repository
+            .create_session(query_id, provider.id, cluster_id, request.scenario())
+            .await?;
+        
+        // 4. Save request for debugging
+        let request_json = serde_json::to_string(request)?;
+        self.repository
+            .save_request(&session_id, &request_json, &request.sql_hash(), &request.profile_hash())
+            .await?;
+        
+        // 5. Update session to processing
+        self.repository.update_session_status(&session_id, SessionStatus::Processing).await?;
+        
+        // 6. Call LLM API
+        let start = std::time::Instant::now();
+        let result = self.client
+            .chat_completion::<Req, Resp>(&provider, request)
+            .await;
+        let latency_ms = start.elapsed().as_millis() as i32;
+        
+        match result {
+            Ok((response, input_tokens, output_tokens)) => {
+                // 7. Save result
+                let response_json = serde_json::to_string(&response)?;
+                self.repository
+                    .save_result(&session_id, &response_json, response.confidence())
+                    .await?;
+                
+                // 8. Update session to completed
+                self.repository
+                    .complete_session(&session_id, SessionStatus::Completed, input_tokens, output_tokens, latency_ms, None)
+                    .await?;
+                
+                // 9. Cache response
+                self.repository
+                    .cache_response(&cache_key, request.scenario(), &request.sql_hash(), &response_json, self.cache_ttl_hours)
+                    .await?;
+                
+                Ok(response)
+            }
+            Err(e) => {
+                // Update session to failed
+                self.repository
+                    .complete_session(&session_id, SessionStatus::Failed, 0, 0, latency_ms, Some(&e.to_string()))
+                    .await?;
+                
+                Err(e)
+            }
+        }
+    }
+    
+    async fn list_providers(&self) -> Result<Vec<LLMProviderInfo>, LLMError> {
+        let providers = self.repository.list_providers().await?;
+        Ok(providers.iter().map(LLMProviderInfo::from).collect())
+    }
+    
+    async fn activate_provider(&self, provider_id: i64) -> Result<(), LLMError> {
+        self.repository.activate_provider(provider_id).await
+    }
+    
+    async fn create_provider(&self, req: CreateProviderRequest) -> Result<LLMProvider, LLMError> {
+        self.repository.create_provider(req).await
+    }
+}
+
+// Note: Arc<T> automatically implements LLMService through async_trait delegation
+// when T: LLMService, so we don't need to manually implement it.

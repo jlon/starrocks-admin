@@ -1034,23 +1034,19 @@ impl S017FileFragmentation {
     }
     
     /// Get suggestions based on table type (internal vs external)
+    /// For external tables, provide a single consolidated suggestion to avoid repetition
     fn get_suggestions(is_external: bool, format: &str, table: &str) -> Vec<String> {
         if is_external {
-            vec![
-                format!("【Hive 合并-简单】ALTER TABLE {} PARTITION(...) CONCATENATE（仅ORC/RCFile，可能需多次执行）", table),
-                format!("【Hive 重写-推荐】INSERT OVERWRITE TABLE {} PARTITION(...) SELECT * FROM {}，配合设置 mapreduce.job.reduces 控制文件数", table, table),
-                format!("【Spark 合并-大数据量】df.repartition(N).write.mode('overwrite').option('{}.stripe.size','67108864').saveAsTable('{}')", 
-                    format.to_lowercase(), table),
-                format!("【预防小文件】写入时设置 hive.merge.mapfiles=true, hive.merge.smallfiles.avgsize=256MB, {}.stripe.size=64MB", 
-                    format.to_lowercase()),
-                "【StarRocks 临时优化】SET connector_io_tasks_per_scan_operator=64; SET enable_scan_datacache=true".to_string(),
-            ]
+            // Single consolidated suggestion for external tables
+            vec![format!(
+                "外表小文件合并方案: ①Hive简单合并: ALTER TABLE {} PARTITION(...) CONCATENATE; \
+                 ②推荐重写: INSERT OVERWRITE TABLE {} PARTITION(...) SELECT * FROM {}; \
+                 ③大数据量用Spark: df.repartition(N).saveAsTable('{}'); \
+                 ④StarRocks临时优化: SET connector_io_tasks_per_scan_operator=64",
+                table, table, table, table
+            )]
         } else {
-            vec![
-                format!("执行 Compaction: ALTER TABLE {} COMPACT", table),
-                format!("手动触发 Base Compaction: ALTER TABLE {} BASE COMPACT", table),
-                format!("调整写入参数: {}.stripe.size=64MB", format.to_lowercase()),
-            ]
+            vec![format!("执行 Compaction 合并碎片: ALTER TABLE {} COMPACT", table)]
         }
     }
     

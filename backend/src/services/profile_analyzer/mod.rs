@@ -260,7 +260,7 @@ pub fn analyze_profile_with_context(
 /// Aggregate diagnostics by rule_id for overview display
 /// Groups multiple diagnostics of the same rule together
 fn aggregate_diagnostics(diagnostics: &[DiagnosticResult]) -> Vec<AggregatedDiagnostic> {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     // Group by rule_id
     let mut groups: HashMap<String, Vec<&DiagnosticResult>> = HashMap::new();
@@ -273,18 +273,11 @@ fn aggregate_diagnostics(diagnostics: &[DiagnosticResult]) -> Vec<AggregatedDiag
         .into_iter()
         .map(|(rule_id, diags)| {
             let first = diags.first().unwrap();
-
-            // Collect affected nodes
             let affected_nodes: Vec<String> = diags.iter().map(|d| d.node_path.clone()).collect();
+            let node_count = affected_nodes.len();
 
-            // Merge and deduplicate suggestions
-            let mut suggestions_set: HashSet<String> = HashSet::new();
-            for diag in &diags {
-                for suggestion in &diag.suggestions {
-                    suggestions_set.insert(suggestion.clone());
-                }
-            }
-            let suggestions: Vec<String> = suggestions_set.into_iter().collect();
+            // Smart suggestion merging: dedupe by pattern, not exact match
+            let suggestions = merge_suggestions(&diags, node_count);
 
             // Merge parameter suggestions (take first non-empty)
             let parameter_suggestions = diags
@@ -302,7 +295,6 @@ fn aggregate_diagnostics(diagnostics: &[DiagnosticResult]) -> Vec<AggregatedDiag
                 .clone();
 
             // Generate aggregated message
-            let node_count = affected_nodes.len();
             let message = if node_count > 1 {
                 format!("{} 个节点存在此问题", node_count)
             } else {
@@ -326,14 +318,74 @@ fn aggregate_diagnostics(diagnostics: &[DiagnosticResult]) -> Vec<AggregatedDiag
     // Sort by severity (Error > Warning > Info) then by node_count
     result.sort_by(|a, b| {
         let severity_cmp = severity_order(&b.severity).cmp(&severity_order(&a.severity));
-        if severity_cmp != std::cmp::Ordering::Equal {
-            severity_cmp
-        } else {
-            b.node_count.cmp(&a.node_count)
-        }
+        if severity_cmp != std::cmp::Ordering::Equal { severity_cmp } 
+        else { b.node_count.cmp(&a.node_count) }
     });
 
     result
+}
+
+/// Merge suggestions intelligently to avoid repetition
+/// When multiple nodes have similar suggestions (differing only by table name), consolidate them
+fn merge_suggestions(diags: &[&DiagnosticResult], node_count: usize) -> Vec<String> {
+    if node_count == 1 {
+        return diags.first().map(|d| d.suggestions.clone()).unwrap_or_default();
+    }
+    
+    // Extract table names from reason field (format: "外表「table_name」的 ORC...")
+    let tables: Vec<String> = diags.iter()
+        .filter_map(|d| extract_table_from_reason(&d.reason))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    
+    // Collect first suggestion to check pattern
+    let first_sug = diags.first().and_then(|d| d.suggestions.first()).map(|s| s.as_str()).unwrap_or("");
+    
+    // Check if this looks like file fragmentation suggestion
+    if first_sug.contains("外表小文件合并方案") || first_sug.contains("Compaction 合并碎片") {
+        let tables_str = if tables.is_empty() {
+            format!("{} 个表", node_count)
+        } else if tables.len() <= 3 {
+            tables.join(", ")
+        } else {
+            format!("{} 等 {} 个表", tables.first().unwrap_or(&"unknown".to_string()), tables.len())
+        };
+        
+        let generic = if first_sug.contains("外表小文件合并方案") {
+            format!(
+                "外表小文件合并 (涉及: {}): ①ALTER TABLE <table> PARTITION(...) CONCATENATE; \
+                 ②INSERT OVERWRITE TABLE <table> SELECT * FROM <table>; \
+                 ③Spark: df.repartition(N).saveAsTable('<table>'); \
+                 ④SET connector_io_tasks_per_scan_operator=64",
+                tables_str
+            )
+        } else {
+            format!("执行 Compaction: ALTER TABLE <{}> COMPACT", tables_str)
+        };
+        return vec![generic];
+    }
+    
+    // Default: dedupe by exact match but limit to 3
+    let mut seen = std::collections::HashSet::new();
+    diags.iter()
+        .flat_map(|d| d.suggestions.iter())
+        .filter(|s| seen.insert(s.as_str()))
+        .take(3)
+        .cloned()
+        .collect()
+}
+
+/// Extract table name from reason field like "外表「table_name」的 ORC..."
+fn extract_table_from_reason(reason: &str) -> Option<String> {
+    let start = reason.find('「')?;
+    let end = reason.find('」')?;
+    if end > start {
+        // Skip the 「 character (3 bytes in UTF-8)
+        Some(reason[start + 3..end].to_string())
+    } else {
+        None
+    }
 }
 
 /// Get severity order for sorting (higher = more severe)

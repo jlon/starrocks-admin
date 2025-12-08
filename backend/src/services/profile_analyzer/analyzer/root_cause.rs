@@ -896,6 +896,9 @@ impl RootCauseAnalyzer {
                 let symptom_bonus = symptoms.len() as f64 * 10.0;
                 let impact = (base_impact + symptom_bonus).min(100.0);
                 
+                // Merge suggestions intelligently when multiple nodes have the same issue
+                let suggestions = Self::merge_suggestions_for_root_cause(diags);
+                
                 root_causes.push(RootCause {
                     id: format!("RC{:03}", rc_counter),
                     diagnostic_ids: vec![rule_id.to_string()],
@@ -905,7 +908,7 @@ impl RootCauseAnalyzer {
                     affected_nodes: diags.iter().map(|d| d.node_path.clone()).collect(),
                     evidence: vec![first_diag.reason.clone()],
                     symptoms,
-                    suggestions: first_diag.suggestions.clone(),
+                    suggestions,
                 });
             }
         }
@@ -916,76 +919,128 @@ impl RootCauseAnalyzer {
         root_causes
     }
     
+    /// Merge suggestions from multiple diagnostics of the same rule
+    /// Consolidates similar suggestions (e.g., different table names) into one
+    fn merge_suggestions_for_root_cause(diags: &[&Diagnostic]) -> Vec<String> {
+        if diags.len() == 1 {
+            return diags[0].suggestions.clone();
+        }
+        
+        // Extract table names from reason fields
+        let tables: Vec<String> = diags.iter()
+            .filter_map(|d| Self::extract_table_name(&d.reason))
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        
+        let first_sug = diags[0].suggestions.first().map(|s| s.as_str()).unwrap_or("");
+        
+        // Check if this is a file fragmentation issue
+        if first_sug.contains("外表小文件合并方案") || first_sug.contains("Compaction 合并碎片") {
+            let tables_str = if tables.is_empty() {
+                format!("{} 个表", diags.len())
+            } else if tables.len() <= 3 {
+                tables.join(", ")
+            } else {
+                format!("{} 等 {} 个表", tables[0], tables.len())
+            };
+            
+            return if first_sug.contains("外表小文件合并方案") {
+                vec![format!(
+                    "外表小文件合并 (涉及: {}): ①ALTER TABLE <table> PARTITION(...) CONCATENATE; \
+                     ②INSERT OVERWRITE TABLE <table> SELECT * FROM <table>; \
+                     ③Spark: df.repartition(N).saveAsTable('<table>'); \
+                     ④SET connector_io_tasks_per_scan_operator=64",
+                    tables_str
+                )]
+            } else {
+                vec![format!("执行 Compaction: ALTER TABLE <{}> COMPACT", tables_str)]
+            };
+        }
+        
+        // Default: dedupe and limit to 3
+        let mut seen = HashSet::new();
+        diags.iter()
+            .flat_map(|d| d.suggestions.iter())
+            .filter(|s| seen.insert(s.as_str()))
+            .take(3)
+            .cloned()
+            .collect()
+    }
+    
+    /// Extract table name from reason like "外表「table_name」的 ORC..."
+    fn extract_table_name(reason: &str) -> Option<String> {
+        let start = reason.find('「')?;
+        let end = reason.find('」')?;
+        (end > start).then(|| reason[start + 3..end].to_string())
+    }
+    
     /// Build causal chains from root causes to symptoms
-    /// Deduplicates and merges similar chains
+    /// Deduplicates by rule_name chain (not rule_id) to avoid visual duplicates
     fn build_causal_chains(
         root_causes: &[RootCause],
         edges: &[(String, String, String)],
         diag_map: &HashMap<String, Vec<&Diagnostic>>,
     ) -> Vec<CausalChain> {
         let mut chains = Vec::new();
-        let mut seen_chains: HashSet<String> = HashSet::new();
+        let mut seen_rule_id_chains: HashSet<String> = HashSet::new();
+        let mut seen_name_chains: HashSet<String> = HashSet::new();
         
         for rc in root_causes {
             for diag_id in &rc.diagnostic_ids {
                 let paths = Self::find_paths_from(diag_id, edges, 3);
                 
                 for path in paths {
-                    if path.len() >= 2 {
-                        // Build chain key for deduplication (just the rule_ids)
-                        let chain_key = path.join("->");
-                        if seen_chains.contains(&chain_key) {
-                            continue;
-                        }
-                        seen_chains.insert(chain_key);
-                        
-                        // Build human-readable chain
-                        let mut chain = Vec::new();
-                        let mut explanations = Vec::new();
-                        
-                        for (i, node_id) in path.iter().enumerate() {
-                            let desc = diag_map.get(node_id)
-                                .and_then(|d| d.first())
-                                .map(|d| d.rule_name.clone())
-                                .unwrap_or_else(|| node_id.clone());
-                            
-                            chain.push(desc);
-                            
-                            if i < path.len() - 1 {
-                                chain.push("→".to_string());
-                                if let Some((_, _, edge_desc)) = edges.iter()
-                                    .find(|(cause, effect, _)| cause == node_id && effect == &path[i + 1])
-                                {
-                                    explanations.push(edge_desc.clone());
-                                }
+                    if path.len() < 2 { continue; }
+                    
+                    // Deduplicate by rule_id path first
+                    let id_key = path.join("->");
+                    if seen_rule_id_chains.contains(&id_key) { continue; }
+                    seen_rule_id_chains.insert(id_key);
+                    
+                    // Build human-readable chain and deduplicate by name
+                    let names: Vec<String> = path.iter()
+                        .map(|id| diag_map.get(id)
+                            .and_then(|d| d.first())
+                            .map(|d| d.rule_name.clone())
+                            .unwrap_or_else(|| id.clone()))
+                        .collect();
+                    
+                    let name_key = names.join("->");
+                    if seen_name_chains.contains(&name_key) { continue; }
+                    seen_name_chains.insert(name_key);
+                    
+                    // Build display chain with arrows
+                    let mut chain = Vec::new();
+                    let mut explanations = Vec::new();
+                    
+                    for (i, (node_id, name)) in path.iter().zip(names.iter()).enumerate() {
+                        chain.push(name.clone());
+                        if i < path.len() - 1 {
+                            chain.push("→".to_string());
+                            if let Some((_, _, desc)) = edges.iter()
+                                .find(|(c, e, _)| c == node_id && e == &path[i + 1]) {
+                                explanations.push(desc.clone());
                             }
                         }
-                        
-                        let explanation = if explanations.is_empty() {
-                            format!("{} 导致 {}", path[0], path.last().unwrap_or(&path[0]))
-                        } else {
-                            explanations.join("; ")
-                        };
-                        
-                        chains.push(CausalChain { chain, explanation, confidence: 1.0 });
                     }
+                    
+                    let explanation = if explanations.is_empty() {
+                        format!("{} 导致 {}", names.first().unwrap_or(&path[0]), names.last().unwrap_or(&path[0]))
+                    } else {
+                        explanations.join("; ")
+                    };
+                    
+                    chains.push(CausalChain { chain, explanation, confidence: 1.0 });
                 }
             }
         }
         
-        // Sort chains by length (shorter first) and content for consistent display
-        chains.sort_by(|a, b| {
-            let len_cmp = a.chain.len().cmp(&b.chain.len());
-            if len_cmp != std::cmp::Ordering::Equal { return len_cmp; }
-            a.chain.join("").cmp(&b.chain.join(""))
-        });
+        // Sort: shorter chains first, then alphabetically
+        chains.sort_by(|a, b| a.chain.len().cmp(&b.chain.len()).then_with(|| a.chain.join("").cmp(&b.chain.join(""))));
         
-        // Limit to top N chains to avoid overwhelming output
-        const MAX_CHAINS: usize = 10;
-        if chains.len() > MAX_CHAINS {
-            chains.truncate(MAX_CHAINS);
-        }
-        
+        // Limit output
+        chains.truncate(10);
         chains
     }
     

@@ -150,6 +150,9 @@ impl DiagnosticRule for A004HighCardinality {
             .or_else(|| context.node.metrics.pull_row_num.map(|v| v as f64))?;
 
         if hash_size > 10_000_000.0 {
+            let group_keys = context.get_group_by_keys().unwrap_or_else(|| "未知".to_string());
+            let memory = context.get_memory_usage().unwrap_or(0);
+            
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -161,13 +164,14 @@ impl DiagnosticRule for A004HighCardinality {
                 ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!("GROUP BY 基数过高 ({:.0} 个分组)", hash_size),
-                reason:
-                    "GROUP BY 键的基数过高，导致 HashTable 条目过多，内存使用增加且聚合效率下降。"
-                        .to_string(),
+                reason: format!(
+                    "GROUP BY 键「{}」的基数过高（{:.0} 个唯一值），导致 HashTable 占用 {} 内存，聚合效率下降。",
+                    group_keys, hash_size, format_bytes(memory)
+                ),
                 suggestions: vec![
-                    "检查 GROUP BY 键的选择是否合理".to_string(),
-                    "考虑使用流式聚合".to_string(),
-                    "考虑创建物化视图预聚合".to_string(),
+                    format!("检查 GROUP BY 键「{}」是否都必要，减少不必要的分组列", group_keys),
+                    "考虑使用流式聚合: SET streaming_preaggregation_mode = 'force_streaming'".to_string(),
+                    "考虑创建物化视图预聚合常用分组".to_string(),
                 ],
                 parameter_suggestions: vec![],
             })
@@ -317,15 +321,22 @@ impl DiagnosticRule for A006LowLocalAggregation {
                     "本地聚合效果差，聚合比 {:.2}:1 (输入 {:.0} 行 → 输出 {:.0} 行)",
                     agg_ratio, input_rows, output_rows
                 ),
-                reason:
-                    "在执行聚合操作时，各计算节点通常会先在本地聚合获取较小结果后再分发到其它节点。\
-                    但本地聚合未能有效缩减数据量时，不仅不能减少网络传输，反而会消耗大量计算资源。"
-                        .to_string(),
-                suggestions: vec![
-                    "如果聚合整体执行时间较长，考虑关闭二阶段聚合".to_string(),
-                    "检查 GROUP BY 键的基数是否过高".to_string(),
-                    "考虑在数据源端预聚合".to_string(),
-                ],
+                reason: {
+                    let group_keys = context.get_group_by_keys().unwrap_or_else(|| "未知".to_string());
+                    format!(
+                        "GROUP BY「{}」在本地聚合时，输入 {:.0} 行仅聚合为 {:.0} 行（缩减比 {:.2}:1），\
+                        未能有效减少数据量。这会增加网络传输和后续计算开销。",
+                        group_keys, input_rows, output_rows, agg_ratio
+                    )
+                },
+                suggestions: {
+                    let group_keys = context.get_group_by_keys().unwrap_or_else(|| "未知".to_string());
+                    vec![
+                        format!("GROUP BY「{}」基数可能过高，考虑关闭二阶段聚合: SET new_planner_agg_stage = 1", group_keys),
+                        "检查 GROUP BY 键是否包含高基数列（如 ID、时间戳）".to_string(),
+                        "考虑在数据写入时预聚合或使用物化视图".to_string(),
+                    ]
+                },
                 parameter_suggestions: vec![ParameterSuggestion::new(
                     "new_planner_agg_stage",
                     ParameterType::Session,

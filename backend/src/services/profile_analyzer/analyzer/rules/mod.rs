@@ -312,6 +312,41 @@ impl<'a> RuleContext<'a> {
     pub fn get_memory_usage(&self) -> Option<u64> {
         self.node.metrics.memory_usage
     }
+    
+    /// Get table name from unique_metrics (e.g., "Table" metric)
+    pub fn get_table_name(&self) -> String {
+        self.node.unique_metrics.get("Table")
+            .map(|s| s.as_str())
+            .unwrap_or("unknown")
+            .to_string()
+    }
+    
+    /// Get full table name with database prefix
+    pub fn get_full_table_name(&self) -> String {
+        let table = self.get_table_name();
+        if table.contains('.') {
+            return table;
+        }
+        match self.default_db {
+            Some(db) if !db.is_empty() => format!("{}.{}", db, table),
+            _ => table,
+        }
+    }
+    
+    /// Get Join EQ predicate info if available
+    pub fn get_join_predicates(&self) -> Option<String> {
+        self.node.unique_metrics.get("EQJoinConjuncts")
+            .or(self.node.unique_metrics.get("JoinPredicates"))
+            .or(self.node.unique_metrics.get("JoinConjuncts"))
+            .cloned()
+    }
+    
+    /// Get GROUP BY key info if available  
+    pub fn get_group_by_keys(&self) -> Option<String> {
+        self.node.unique_metrics.get("GroupingKeys")
+            .or(self.node.unique_metrics.get("GroupByKeys"))
+            .cloned()
+    }
 
     /// Check if a session variable is already set to the expected value
     /// Returns true if the variable is set and matches the expected value

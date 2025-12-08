@@ -353,15 +353,25 @@ impl DiagnosticRule for J005HashCollision {
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let keys_per_bucket = context.get_metric("BuildKeysPerBucket%")?;
         if keys_per_bucket > 10.0 {
+            let join_pred = context.get_join_predicates().unwrap_or_else(|| "未知".to_string());
+            let build_rows = context.get_metric("BuildRows").unwrap_or(0.0);
+            
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
-                message: format!("Hash 表碰撞严重，平均每桶 {:.1} 个键", keys_per_bucket),
-                reason: "Hash 表存在大量冲突，导致探测效率下降。可能是 Join 键分布不均匀或 Hash 函数效果差。".to_string(),
-                suggestions: vec!["优化 Join 键选择".to_string(), "检查数据是否存在大量重复值".to_string()],
+                message: format!("Hash 表碰撞严重，平均每桶 {:.0} 个键", keys_per_bucket),
+                reason: format!(
+                    "Join 条件「{}」的 Hash 表存在大量冲突（Build 端 {:.0} 行），导致探测效率下降。可能是 Join 键分布不均匀或 Hash 函数效果差。",
+                    join_pred, build_rows
+                ),
+                suggestions: vec![
+                    format!("检查 Join 键「{}」是否存在大量重复值或 NULL 值", join_pred),
+                    "考虑添加更多等值 Join 条件分散 Hash 分布".to_string(),
+                    "检查 Build 表的数据分布，必要时添加预过滤".to_string(),
+                ],
                 parameter_suggestions: vec![],
             })
         } else {
@@ -394,11 +404,11 @@ impl DiagnosticRule for J006ShuffleSkew {
         }
         let ratio = max_probe / ((max_probe + min_probe) / 2.0);
         
-        // v2.0: Use dynamic skew threshold based on cluster size
-        // For shuffle skew, use a slightly higher threshold (skew_threshold + 1.0)
         let skew_threshold = context.thresholds.get_skew_threshold() + 1.0;
         
         if ratio > skew_threshold {
+            let join_pred = context.get_join_predicates().unwrap_or_else(|| "未知".to_string());
+            
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -406,8 +416,15 @@ impl DiagnosticRule for J006ShuffleSkew {
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
                 message: format!("Join 数据分布倾斜，max/avg 比率为 {:.2} (阈值: {:.1})", ratio, skew_threshold),
-                reason: "Shuffle Join 的数据分布不均匀，部分节点处理更多数据。通常是 Join 键存在热点值。".to_string(),
-                suggestions: vec!["切换到更高基数的连接键".to_string(), "对键添加盐值".to_string()],
+                reason: format!(
+                    "Shuffle Join 按「{}」分发数据时分布不均匀，max 实例处理 {:.0} 行，min 实例仅 {:.0} 行。通常是 Join 键存在热点值导致。",
+                    join_pred, max_probe, min_probe
+                ),
+                suggestions: vec![
+                    format!("检查 Join 键「{}」中是否存在热点值（如 NULL 或高频值）", join_pred),
+                    "考虑添加更多 Join 条件分散数据分布".to_string(),
+                    "对热点键值单独处理或添加盐值打散".to_string(),
+                ],
                 parameter_suggestions: vec![],
             })
         } else {
@@ -546,6 +563,9 @@ impl DiagnosticRule for J011BroadcastNotRecommended {
         let memory_threshold = 100.0 * 1024.0 * 1024.0; // 100MB
 
         if build_rows > rows_threshold || hash_table_memory > memory_threshold {
+            let join_pred = context.get_join_predicates().unwrap_or_else(|| "未知".to_string());
+            let probe_rows = context.get_metric("ProbeRows").unwrap_or(0.0);
+            
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -557,18 +577,21 @@ impl DiagnosticRule for J011BroadcastNotRecommended {
                 ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!(
-                    "Broadcast Join Build 端数据量过大 ({:.0} 行, {:.2} MB)",
+                    "Broadcast Join Build 端数据量过大 ({:.0} 行, {})",
                     build_rows,
-                    hash_table_memory / 1024.0 / 1024.0
+                    format_bytes(hash_table_memory as u64)
                 ),
-                reason: "当小表与大表 Join 时，Broadcast Join 会将小表广播到所有节点。\
+                reason: format!(
+                    "当小表与大表 Join 时，Broadcast Join 会将小表广播到所有节点。\
                     但当 Build 端数据量过大时，会增加网络和计算成本。\
-                    可能是统计信息不准确导致优化器错误估计了表大小。"
-                    .to_string(),
+                    当前 Join 条件「{}」的 Build 端有 {:.0} 行，Probe 端有 {:.0} 行，\
+                    可能是统计信息不准确导致优化器错误估计了表大小。",
+                    join_pred, build_rows, probe_rows
+                ),
                 suggestions: vec![
-                    "在 JOIN 关键字后添加 [shuffle] Hint 限制使用 Broadcast Join".to_string(),
-                    "检查统计信息是否收集或过期，执行 ANALYZE TABLE".to_string(),
-                    "检查 Join 顺序是否合理".to_string(),
+                    format!("在 JOIN 关键字后添加 [shuffle] Hint: SELECT ... FROM a JOIN [shuffle] b ON {}", join_pred),
+                    "执行 ANALYZE TABLE <build_table> 更新统计信息".to_string(),
+                    "检查 Join 顺序，确保小表在 Build 端".to_string(),
                 ],
                 parameter_suggestions: vec![],
             })

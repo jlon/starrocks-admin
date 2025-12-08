@@ -80,12 +80,21 @@ impl DiagnosticRule for S001DataSkew {
                     "Scan 存在数据倾斜，max/avg 比率为 {:.2} (阈值: {:.1})",
                     ratio, skew_threshold
                 ),
-                reason: "StarRocks 数据在各个存储节点分布不均，使得某些节点在读取数据时需要扫描更多的数据，导致查询延迟。通常是分桶键选择不当导致数据分布不均匀。".to_string(),
-                suggestions: vec![
-                    "检查分桶键选择是否合理".to_string(),
-                    "考虑重新分桶以均匀分布数据".to_string(),
-                    "检查是否存在热点数据".to_string(),
-                ],
+                reason: {
+                    let table = context.get_full_table_name();
+                    format!(
+                        "表「{}」数据在各节点分布不均（max {:.0} 行，min {:.0} 行，比率 {:.2}）。通常是分桶键选择不当导致数据倾斜。",
+                        table, max_rows, min_rows, ratio
+                    )
+                },
+                suggestions: {
+                    let table = context.get_full_table_name();
+                    vec![
+                        format!("检查表「{}」的分桶键是否选择了高基数列", table),
+                        format!("查看数据分布: SELECT COUNT(*) FROM {} GROUP BY <bucket_key> ORDER BY 1 DESC LIMIT 10", table),
+                        format!("必要时重建分桶: ALTER TABLE {} DISTRIBUTED BY HASH(<high_cardinality_column>) BUCKETS N", table),
+                    ]
+                },
                 parameter_suggestions: vec![],
             })
         } else {
@@ -137,13 +146,22 @@ impl DiagnosticRule for S003PoorFilter {
                     "过滤效果差，仅过滤了 {:.1}% 的数据 (读取 {:.0} 行 / 原始 {:.0} 行)",
                     (1.0 - ratio) * 100.0, rows_read, raw_rows_read
                 ),
-                reason: "基于扫描原始数据量以及最终输出数据量判断，Scan 算子扫描数据量较大但输出给下游的数据量未显著减少。StarRocks 提供索引、谓词下推、Runtime Filter 等多种方式过滤数据。".to_string(),
-                suggestions: vec![
-                    "添加更精确的过滤条件".to_string(),
-                    "检查谓词是否可以下推到存储层".to_string(),
-                    "考虑使用分区裁剪".to_string(),
-                    "检查 ZoneMap 索引是否生效".to_string(),
-                ],
+                reason: {
+                    let table = context.get_full_table_name();
+                    format!(
+                        "表「{}」扫描了 {:.0} 行原始数据，但仅过滤掉 {:.1}%。StarRocks 提供 ZoneMap、BloomFilter、谓词下推等方式提前过滤数据。",
+                        table, raw_rows_read, (1.0 - ratio) * 100.0
+                    )
+                },
+                suggestions: {
+                    let table = context.get_full_table_name();
+                    vec![
+                        format!("为表「{}」的过滤列添加 ZoneMap 或 BloomFilter 索引", table),
+                        "检查 WHERE 条件是否支持下推（避免函数包裹、类型转换）".to_string(),
+                        format!("检查表「{}」的分区是否能裁剪（WHERE 条件包含分区列）", table),
+                        "通过 EXPLAIN 查看谓词下推情况".to_string(),
+                    ]
+                },
                 parameter_suggestions: vec![],
             })
         } else {
@@ -411,12 +429,21 @@ impl DiagnosticRule for S010RFNotEffective {
                     "Runtime Filter 未过滤任何行，扫描了 {:.0} 行",
                     raw_rows
                 ),
-                reason: "Runtime Filter 未能有效过滤数据。可能是 Filter 构建失败、超时或 Filter 选择性差。".to_string(),
-                suggestions: vec![
-                    "检查 Runtime Filter 是否被生成".to_string(),
-                    "检查 Join 条件是否适合生成 RF".to_string(),
-                    "确认 enable_global_runtime_filter 已启用".to_string(),
-                ],
+                reason: {
+                    let table = context.get_full_table_name();
+                    format!(
+                        "表「{}」扫描了 {:.0} 行但 Runtime Filter 未过滤任何数据。可能是 RF 构建失败、超时或选择性差。",
+                        table, raw_rows
+                    )
+                },
+                suggestions: {
+                    let table = context.get_full_table_name();
+                    vec![
+                        format!("检查 Join 侧是否生成了针对「{}」的 Runtime Filter", table),
+                        "确认 enable_global_runtime_filter = true".to_string(),
+                        "检查 RF 是否因 Build 端数据量过大而被跳过".to_string(),
+                    ]
+                },
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
                     if let Some(s) = context.suggest_parameter_smart("enable_global_runtime_filter") {
@@ -667,6 +694,7 @@ impl DiagnosticRule for S006RowsetFragmentation {
         let rowsets = context.get_metric("RowsetsReadCount").unwrap_or(0.0);
         let init_time = context.get_metric("SegmentInitTime").unwrap_or(0.0);
         if rowsets > 100.0 && init_time > 500_000_000.0 {
+            let table = context.get_full_table_name();
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -674,8 +702,15 @@ impl DiagnosticRule for S006RowsetFragmentation {
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
                 message: format!("Rowset 数量过多 ({:.0})，初始化耗时 {:.1}ms", rowsets, init_time / 1_000_000.0),
-                reason: "Rowset 数量过多导致 Segment 初始化时间过长。通常是频繁小批量导入或 Compaction 不及时导致。".to_string(),
-                suggestions: vec!["触发手动 Compaction".to_string(), "批量合并小型导入任务".to_string()],
+                reason: format!(
+                    "表「{}」的 Rowset 数量过多（{:.0} 个），导致 Segment 初始化耗时 {:.1}ms。通常是频繁小批量导入或 Compaction 不及时导致。",
+                    table, rowsets, init_time / 1_000_000.0
+                ),
+                suggestions: vec![
+                    format!("触发手动 Compaction: ALTER TABLE {} COMPACT", table),
+                    format!("查看 Compaction 状态: SHOW TABLET FROM {}", table),
+                    "批量合并小型导入任务，减少导入频率".to_string(),
+                ],
                 parameter_suggestions: vec![],
             })
         } else {
@@ -703,6 +738,7 @@ impl DiagnosticRule for S008ZoneMapNotEffective {
         let zonemap_rows = context.get_metric("ZoneMapIndexFilterRows").unwrap_or(0.0);
         let raw_rows = context.get_metric("RawRowsRead").unwrap_or(0.0);
         if zonemap_rows == 0.0 && raw_rows > 100000.0 {
+            let table = context.get_full_table_name();
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -710,8 +746,15 @@ impl DiagnosticRule for S008ZoneMapNotEffective {
                 node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
                 plan_node_id: context.node.plan_node_id,
                 message: "ZoneMap 索引未能过滤数据".to_string(),
-                reason: "ZoneMap 索引未能有效过滤数据。ZoneMap 基于排序键的 min/max 值过滤，需要查询条件包含排序键或前缀列。".to_string(),
-                suggestions: vec!["确保查询条件包含排序键或前缀列".to_string()],
+                reason: format!(
+                    "表「{}」扫描了 {:.0} 行但 ZoneMap 未过滤任何数据。ZoneMap 基于排序键的 min/max 值过滤，需要 WHERE 条件包含排序键前缀列。",
+                    table, raw_rows
+                ),
+                suggestions: vec![
+                    format!("查看表「{}」的排序键: SHOW CREATE TABLE {}", table, table),
+                    "确保 WHERE 条件包含排序键的前缀列（如 WHERE dt = '2024-01-01'）".to_string(),
+                    "避免在排序键上使用函数（如 WHERE DATE(dt) = ...）".to_string(),
+                ],
                 parameter_suggestions: vec![],
             })
         } else {

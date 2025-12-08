@@ -234,6 +234,13 @@ pub fn analyze_profile_with_context(
     let all_suggestions = RuleEngine::generate_suggestions(&rule_diagnostics);
     let performance_score = RuleEngine::calculate_performance_score(&rule_diagnostics, &profile);
 
+    // Perform root cause analysis (v5.0 - rule-based, without LLM)
+    let root_cause_analysis = if !rule_diagnostics.is_empty() {
+        Some(analyzer::RootCauseAnalyzer::analyze(&rule_diagnostics))
+    } else {
+        None
+    };
+
     Ok(ProfileAnalysisResponse {
         hotspots,
         conclusion,
@@ -246,6 +253,7 @@ pub fn analyze_profile_with_context(
         node_diagnostics,
         profile_content: Some(profile_text.to_string()),
         fragments: profile.fragments.clone(),
+        root_cause_analysis,
     })
 }
 

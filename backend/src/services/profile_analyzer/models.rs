@@ -593,6 +593,9 @@ pub struct ProfileAnalysisResponse {
     /// Fragment and Pipeline information for node detail view
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fragments: Vec<Fragment>,
+    /// Root cause analysis result (rule-based, without LLM)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_cause_analysis: Option<super::analyzer::RootCauseAnalysis>,
 }
 
 /// Aggregated diagnostic for overview display

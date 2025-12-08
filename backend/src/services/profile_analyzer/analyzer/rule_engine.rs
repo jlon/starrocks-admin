@@ -3,6 +3,7 @@
 //! Orchestrates rule evaluation, deduplication, suggestion generation,
 //! conclusion and performance score calculation.
 
+use super::baseline::QueryComplexity;
 use super::rules::{
     Diagnostic, DiagnosticRule, RuleContext, RuleSeverity, get_all_rules, get_query_rules,
 };
@@ -65,11 +66,14 @@ impl RuleEngine {
         // Detect query type from SQL for dynamic thresholds
         let query_type = QueryType::from_sql(&profile.summary.sql_statement);
         
+        // Detect query complexity for adaptive thresholds
+        let query_complexity = QueryComplexity::from_sql(&profile.summary.sql_statement);
+        
         // Get cluster info for smart recommendations
         let cluster_info = profile.get_cluster_info();
         
-        // Create dynamic thresholds based on cluster info and query type
-        let thresholds = DynamicThresholds::new(cluster_info.clone(), query_type);
+        // Create dynamic thresholds based on cluster info, query type, and complexity
+        let thresholds = DynamicThresholds::new(cluster_info.clone(), query_type, query_complexity);
 
         // P0.1: Skip diagnosis for fast queries
         // v2.0: Use dynamic threshold based on query type (ETL allows faster queries to be diagnosed)

@@ -1,4 +1,5 @@
 pub mod auth_service;
+pub mod baseline_refresh_task;
 pub mod baseline_service;
 pub mod casbin_service;
 pub mod cluster_service;
@@ -19,7 +20,8 @@ pub mod user_role_service;
 pub mod user_service;
 
 pub use auth_service::AuthService;
-pub use baseline_service::BaselineService;
+pub use baseline_refresh_task::{BaselineRefreshTask, start_baseline_refresh_task};
+pub use baseline_service::{BaselineService, RefreshResult, init_baseline_system, init_baseline_system_with_ttl};
 pub use casbin_service::CasbinService;
 pub use cluster_service::ClusterService;
 pub use llm::{LLMService, LLMServiceImpl, LLMError, LLMProviderInfo, LLMScenario};

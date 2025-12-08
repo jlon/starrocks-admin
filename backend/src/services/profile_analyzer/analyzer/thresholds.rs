@@ -10,7 +10,7 @@
 //! Reference: profile-diagnostic-system-review.md Section 4
 
 use crate::services::profile_analyzer::models::ClusterInfo;
-use super::baseline::{PerformanceBaseline, QueryComplexity, AdaptiveThresholdCalculator};
+use super::baseline::{PerformanceBaseline, QueryComplexity, AdaptiveThresholdCalculator, BaselineStats};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -441,10 +441,16 @@ mod tests {
 
     #[test]
     fn test_skew_threshold_by_cluster_size() {
-        let small_cluster =
-            DynamicThresholds::new(ClusterInfo { backend_num: 4, ..Default::default() }, QueryType::Select);
-        let large_cluster =
-            DynamicThresholds::new(ClusterInfo { backend_num: 64, ..Default::default() }, QueryType::Select);
+        let small_cluster = DynamicThresholds::new(
+            ClusterInfo { backend_num: 4, ..Default::default() }, 
+            QueryType::Select,
+            QueryComplexity::Medium,
+        );
+        let large_cluster = DynamicThresholds::new(
+            ClusterInfo { backend_num: 64, ..Default::default() }, 
+            QueryType::Select,
+            QueryComplexity::Medium,
+        );
 
         assert!(
             large_cluster.get_skew_threshold() > small_cluster.get_skew_threshold(),
@@ -461,6 +467,7 @@ mod tests {
                 ..Default::default()
             },
             QueryType::Select,
+            QueryComplexity::Medium,
         );
         assert_eq!(
             small_be.get_operator_memory_threshold(),
@@ -475,6 +482,7 @@ mod tests {
                 ..Default::default()
             },
             QueryType::Select,
+            QueryComplexity::Medium,
         );
         assert_eq!(
             large_be.get_operator_memory_threshold(),
@@ -696,6 +704,210 @@ pub fn generate_small_file_suggestions(scan_type: &ExternalScanType, table: &str
         ],
         // Database types don't have small file issues
         ExternalScanType::Jdbc | ExternalScanType::Mysql | ExternalScanType::Elasticsearch => vec![],
+    }
+}
+
+#[cfg(test)]
+mod dynamic_thresholds_tests {
+    use super::*;
+    use crate::services::profile_analyzer::analyzer::baseline::BaselineStats;
+    use crate::services::profile_analyzer::models::ClusterInfo;
+    
+    #[test]
+    fn test_query_time_threshold_with_complexity() {
+        let cluster_info = ClusterInfo {
+            backend_num: 16,
+            ..Default::default()
+        };
+        
+        // Simple query - stricter threshold
+        let simple_thresholds = DynamicThresholds::new(
+            cluster_info.clone(),
+            QueryType::Select,
+            QueryComplexity::Simple,
+        );
+        let simple_threshold = simple_thresholds.get_query_time_threshold_ms();
+        
+        // Medium query - normal threshold
+        let medium_thresholds = DynamicThresholds::new(
+            cluster_info.clone(),
+            QueryType::Select,
+            QueryComplexity::Medium,
+        );
+        let medium_threshold = medium_thresholds.get_query_time_threshold_ms();
+        
+        // Complex query - relaxed threshold
+        let complex_thresholds = DynamicThresholds::new(
+            cluster_info.clone(),
+            QueryType::Select,
+            QueryComplexity::Complex,
+        );
+        let complex_threshold = complex_thresholds.get_query_time_threshold_ms();
+        
+        // VeryComplex query - most relaxed
+        let very_complex_thresholds = DynamicThresholds::new(
+            cluster_info,
+            QueryType::Select,
+            QueryComplexity::VeryComplex,
+        );
+        let very_complex_threshold = very_complex_thresholds.get_query_time_threshold_ms();
+        
+        // Thresholds should increase with complexity
+        assert!(simple_threshold < medium_threshold);
+        assert!(medium_threshold < complex_threshold);
+        assert!(complex_threshold < very_complex_threshold);
+    }
+    
+    #[test]
+    fn test_query_time_threshold_with_baseline() {
+        let cluster_info = ClusterInfo {
+            backend_num: 16,
+            ..Default::default()
+        };
+        
+        // Create baseline with specific stats
+        let baseline = PerformanceBaseline {
+            complexity: QueryComplexity::Medium,
+            stats: BaselineStats {
+                avg_ms: 5000.0,
+                p50_ms: 4000.0,
+                p95_ms: 8000.0,
+                p99_ms: 12000.0,
+                max_ms: 15000.0,
+                std_dev_ms: 2000.0,
+            },
+            sample_size: 100,
+            time_range_hours: 168,
+        };
+        
+        let thresholds = DynamicThresholds::with_baseline(
+            cluster_info,
+            QueryType::Select,
+            QueryComplexity::Medium,
+            baseline,
+        );
+        
+        let threshold = thresholds.get_query_time_threshold_ms();
+        
+        // Should be P95 + 2*std_dev = 8000 + 4000 = 12000
+        // But minimum for Medium is 10000
+        assert!(threshold >= 10000.0);
+        assert!(threshold <= 15000.0);
+        
+        // With our baseline: 8000 + 2*2000 = 12000
+        assert!((threshold - 12000.0).abs() < 1.0);
+    }
+    
+    #[test]
+    fn test_skew_threshold_by_cluster_size() {
+        // Small cluster (8 BE) - stricter
+        let small_cluster = ClusterInfo {
+            backend_num: 8,
+            ..Default::default()
+        };
+        let small_thresholds = DynamicThresholds::new(
+            small_cluster,
+            QueryType::Select,
+            QueryComplexity::Medium,
+        );
+        let small_skew = small_thresholds.get_skew_threshold();
+        
+        // Medium cluster (16 BE)
+        let medium_cluster = ClusterInfo {
+            backend_num: 16,
+            ..Default::default()
+        };
+        let medium_thresholds = DynamicThresholds::new(
+            medium_cluster,
+            QueryType::Select,
+            QueryComplexity::Medium,
+        );
+        let medium_skew = medium_thresholds.get_skew_threshold();
+        
+        // Large cluster (64 BE) - more tolerant
+        let large_cluster = ClusterInfo {
+            backend_num: 64,
+            ..Default::default()
+        };
+        let large_thresholds = DynamicThresholds::new(
+            large_cluster,
+            QueryType::Select,
+            QueryComplexity::Medium,
+        );
+        let large_skew = large_thresholds.get_skew_threshold();
+        
+        // Larger clusters should have higher skew tolerance
+        assert!(small_skew < medium_skew);
+        assert!(medium_skew < large_skew);
+        
+        // Verify ranges
+        assert!(small_skew >= 2.0 && small_skew <= 2.5);
+        assert!(large_skew >= 3.5);
+    }
+    
+    #[test]
+    fn test_skew_threshold_with_baseline() {
+        let cluster_info = ClusterInfo {
+            backend_num: 16,
+            ..Default::default()
+        };
+        
+        // Create baseline with high variance (P99/P50 = 3.0)
+        let baseline = PerformanceBaseline {
+            complexity: QueryComplexity::Medium,
+            stats: BaselineStats {
+                avg_ms: 5000.0,
+                p50_ms: 4000.0,
+                p95_ms: 8000.0,
+                p99_ms: 12000.0, // P99/P50 = 3.0
+                max_ms: 15000.0,
+                std_dev_ms: 2000.0,
+            },
+            sample_size: 100,
+            time_range_hours: 168,
+        };
+        
+        let thresholds = DynamicThresholds::with_baseline(
+            cluster_info,
+            QueryType::Select,
+            QueryComplexity::Medium,
+            baseline,
+        );
+        
+        let skew_threshold = thresholds.get_skew_threshold();
+        
+        // Base for 16 BE: 3.0
+        // Historical adjustment: (3.0 - 2.0) * 0.2 = 0.2
+        // Final: 3.0 + 0.2 = 3.2
+        assert!(skew_threshold > 3.0);
+        assert!(skew_threshold < 4.0);
+    }
+    
+    #[test]
+    fn test_detect_complexity() {
+        // Simple
+        let sql1 = "SELECT * FROM users WHERE id = 1";
+        assert_eq!(DynamicThresholds::detect_complexity(sql1), QueryComplexity::Simple);
+        
+        // Medium (with JOIN)
+        let sql2 = "SELECT * FROM users u JOIN orders o ON u.id = o.user_id";
+        assert_eq!(DynamicThresholds::detect_complexity(sql2), QueryComplexity::Medium);
+    }
+    
+    #[test]
+    fn test_min_threshold_by_complexity() {
+        let cluster_info = ClusterInfo::default();
+        
+        let simple = DynamicThresholds::new(cluster_info.clone(), QueryType::Select, QueryComplexity::Simple);
+        let medium = DynamicThresholds::new(cluster_info.clone(), QueryType::Select, QueryComplexity::Medium);
+        let complex = DynamicThresholds::new(cluster_info.clone(), QueryType::Select, QueryComplexity::Complex);
+        let very_complex = DynamicThresholds::new(cluster_info, QueryType::Select, QueryComplexity::VeryComplex);
+        
+        // Minimum thresholds
+        assert!(simple.get_query_time_threshold_ms() >= 5_000.0);
+        assert!(medium.get_query_time_threshold_ms() >= 10_000.0);
+        assert!(complex.get_query_time_threshold_ms() >= 30_000.0);
+        assert!(very_complex.get_query_time_threshold_ms() >= 60_000.0);
     }
 }
 

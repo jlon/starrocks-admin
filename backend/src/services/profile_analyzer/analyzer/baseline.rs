@@ -116,7 +116,7 @@ pub struct AuditLogRecord {
 /// Baseline calculator from audit logs
 pub struct BaselineCalculator {
     /// Minimum sample size required for reliable baseline
-    min_sample_size: usize,
+    pub min_sample_size: usize,
 }
 
 impl BaselineCalculator {
@@ -306,11 +306,11 @@ mod tests {
         let sql1 = "SELECT * FROM users WHERE id = 1";
         assert_eq!(QueryComplexity::from_sql(sql1), QueryComplexity::Simple);
         
-        // Medium query
+        // Medium query (2 table JOIN)
         let sql2 = "SELECT u.name, o.amount FROM users u JOIN orders o ON u.id = o.user_id";
         assert_eq!(QueryComplexity::from_sql(sql2), QueryComplexity::Medium);
         
-        // Complex query
+        // Complex query (3 JOINs + window function)
         let sql3 = r#"
             SELECT u.name, SUM(o.amount) OVER (PARTITION BY u.id) 
             FROM users u 
@@ -320,7 +320,7 @@ mod tests {
         "#;
         assert_eq!(QueryComplexity::from_sql(sql3), QueryComplexity::Complex);
         
-        // Very complex query
+        // Very complex query (CTE + window + subquery + UNION)
         let sql4 = r#"
             WITH sales AS (
                 SELECT user_id, SUM(amount) as total FROM orders GROUP BY user_id
@@ -336,9 +336,29 @@ mod tests {
     }
     
     #[test]
+    fn test_query_complexity_edge_cases() {
+        // Empty SQL -> Simple
+        assert_eq!(QueryComplexity::from_sql(""), QueryComplexity::Simple);
+        
+        // Single JOIN -> Medium
+        let sql = "SELECT * FROM a JOIN b ON a.id = b.id";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Medium);
+        
+        // Multiple JOINs -> Complex
+        let sql = "SELECT * FROM a JOIN b ON a.id = b.id JOIN c ON b.id = c.id JOIN d ON c.id = d.id";
+        assert_eq!(QueryComplexity::from_sql(sql), QueryComplexity::Complex);
+        
+        // Window function alone -> Medium/Complex
+        let sql = "SELECT id, ROW_NUMBER() OVER (ORDER BY id) FROM t";
+        let complexity = QueryComplexity::from_sql(sql);
+        assert!(complexity == QueryComplexity::Medium || complexity == QueryComplexity::Complex);
+    }
+    
+    #[test]
     fn test_baseline_calculation() {
         let calculator = BaselineCalculator::new();
         
+        // Single record - not enough samples
         let records = vec![
             AuditLogRecord {
                 query_id: "1".to_string(),
@@ -352,10 +372,9 @@ mod tests {
             },
         ];
         
-        // Not enough samples
         assert!(calculator.calculate(&records).is_none());
         
-        // Generate 50 samples
+        // Generate 50 samples with increasing query times
         let mut records = Vec::new();
         for i in 0..50 {
             records.push(AuditLogRecord {
@@ -364,7 +383,7 @@ mod tests {
                 db: "db1".to_string(),
                 stmt: "SELECT * FROM t1".to_string(),
                 query_type: "Query".to_string(),
-                query_time_ms: 100 + i * 10,
+                query_time_ms: 100 + (i as i64) * 10,
                 state: "EOF".to_string(),
                 timestamp: "2025-12-08 10:00:00".to_string(),
             });
@@ -374,5 +393,241 @@ mod tests {
         assert_eq!(baseline.sample_size, 50);
         assert!(baseline.stats.avg_ms > 0.0);
         assert!(baseline.stats.p95_ms > baseline.stats.p50_ms);
+        assert!(baseline.stats.p99_ms >= baseline.stats.p95_ms);
+    }
+    
+    #[test]
+    fn test_baseline_stats_calculation() {
+        let calculator = BaselineCalculator::new();
+        
+        // Generate 100 samples with known distribution
+        let mut records = Vec::new();
+        for i in 0..100 {
+            records.push(AuditLogRecord {
+                query_id: i.to_string(),
+                user: "test".to_string(),
+                db: "db1".to_string(),
+                stmt: "SELECT * FROM t1".to_string(),
+                query_type: "Query".to_string(),
+                query_time_ms: 1000 + (i as i64) * 100, // 1000ms to 10900ms
+                state: "EOF".to_string(),
+                timestamp: "2025-12-08 10:00:00".to_string(),
+            });
+        }
+        
+        let baseline = calculator.calculate(&records).unwrap();
+        
+        // Check avg (should be around 5950ms = (1000 + 10900) / 2)
+        assert!(baseline.stats.avg_ms > 5000.0 && baseline.stats.avg_ms < 7000.0);
+        
+        // Check P50 (should be around 5950ms)
+        assert!(baseline.stats.p50_ms > 5000.0 && baseline.stats.p50_ms < 7000.0);
+        
+        // Check P95 (should be around 10450ms)
+        assert!(baseline.stats.p95_ms > 9000.0 && baseline.stats.p95_ms < 11000.0);
+        
+        // Check std_dev > 0
+        assert!(baseline.stats.std_dev_ms > 0.0);
+    }
+    
+    #[test]
+    fn test_baseline_filters_failed_queries() {
+        let calculator = BaselineCalculator::new();
+        
+        let mut records = Vec::new();
+        
+        // Add 30 successful queries
+        for i in 0..30 {
+            records.push(AuditLogRecord {
+                query_id: format!("success_{}", i),
+                user: "test".to_string(),
+                db: "db1".to_string(),
+                stmt: "SELECT * FROM t1".to_string(),
+                query_type: "Query".to_string(),
+                query_time_ms: 1000,
+                state: "EOF".to_string(),
+                timestamp: "2025-12-08 10:00:00".to_string(),
+            });
+        }
+        
+        // Add 20 failed queries (should be filtered out)
+        for i in 0..20 {
+            records.push(AuditLogRecord {
+                query_id: format!("failed_{}", i),
+                user: "test".to_string(),
+                db: "db1".to_string(),
+                stmt: "SELECT * FROM t1".to_string(),
+                query_type: "Query".to_string(),
+                query_time_ms: 50000, // Very high time (would skew results)
+                state: "ERROR".to_string(),
+                timestamp: "2025-12-08 10:00:00".to_string(),
+            });
+        }
+        
+        let baseline = calculator.calculate(&records).unwrap();
+        
+        // Should only include successful queries
+        assert_eq!(baseline.sample_size, 30);
+        
+        // Avg should be around 1000ms (not skewed by failed queries)
+        assert!((baseline.stats.avg_ms - 1000.0).abs() < 1.0);
+    }
+    
+    #[test]
+    fn test_baseline_by_complexity() {
+        let calculator = BaselineCalculator::new();
+        
+        let mut records = Vec::new();
+        
+        // Add 35 Simple queries
+        for i in 0..35 {
+            records.push(AuditLogRecord {
+                query_id: format!("simple_{}", i),
+                user: "test".to_string(),
+                db: "db1".to_string(),
+                stmt: "SELECT * FROM users".to_string(),
+                query_type: "Query".to_string(),
+                query_time_ms: 500 + (i as i64) * 10,
+                state: "EOF".to_string(),
+                timestamp: "2025-12-08 10:00:00".to_string(),
+            });
+        }
+        
+        // Add 35 Medium queries (with JOIN)
+        for i in 0..35 {
+            records.push(AuditLogRecord {
+                query_id: format!("medium_{}", i),
+                user: "test".to_string(),
+                db: "db1".to_string(),
+                stmt: "SELECT * FROM users u JOIN orders o ON u.id = o.user_id".to_string(),
+                query_type: "Query".to_string(),
+                query_time_ms: 2000 + (i as i64) * 20,
+                state: "OK".to_string(),
+                timestamp: "2025-12-08 10:00:00".to_string(),
+            });
+        }
+        
+        let baselines = calculator.calculate_by_complexity(&records);
+        
+        // Should have baselines for both Simple and Medium
+        assert!(baselines.contains_key(&QueryComplexity::Simple));
+        assert!(baselines.contains_key(&QueryComplexity::Medium));
+        
+        // Simple queries should have lower avg than Medium
+        let simple_avg = baselines.get(&QueryComplexity::Simple).unwrap().stats.avg_ms;
+        let medium_avg = baselines.get(&QueryComplexity::Medium).unwrap().stats.avg_ms;
+        assert!(simple_avg < medium_avg);
+    }
+    
+    #[test]
+    fn test_baseline_for_table() {
+        let calculator = BaselineCalculator::new();
+        
+        let mut records = Vec::new();
+        
+        // Add 35 queries for 'users' table
+        for i in 0..35 {
+            records.push(AuditLogRecord {
+                query_id: format!("users_{}", i),
+                user: "test".to_string(),
+                db: "db1".to_string(),
+                stmt: "SELECT * FROM users WHERE id > 0".to_string(),
+                query_type: "Query".to_string(),
+                query_time_ms: 100 + (i as i64) * 5,
+                state: "EOF".to_string(),
+                timestamp: "2025-12-08 10:00:00".to_string(),
+            });
+        }
+        
+        // Add 35 queries for 'orders' table
+        for i in 0..35 {
+            records.push(AuditLogRecord {
+                query_id: format!("orders_{}", i),
+                user: "test".to_string(),
+                db: "db1".to_string(),
+                stmt: "SELECT * FROM orders WHERE amount > 100".to_string(),
+                query_type: "Query".to_string(),
+                query_time_ms: 500 + (i as i64) * 10,
+                state: "EOF".to_string(),
+                timestamp: "2025-12-08 10:00:00".to_string(),
+            });
+        }
+        
+        // Get baseline for 'users' table
+        let users_baseline = calculator.calculate_for_table(&records, "users").unwrap();
+        assert_eq!(users_baseline.sample_size, 35);
+        
+        // Get baseline for 'orders' table
+        let orders_baseline = calculator.calculate_for_table(&records, "orders").unwrap();
+        assert_eq!(orders_baseline.sample_size, 35);
+        
+        // Users should be faster than orders
+        assert!(users_baseline.stats.avg_ms < orders_baseline.stats.avg_ms);
+    }
+    
+    #[test]
+    fn test_adaptive_threshold_calculator() {
+        let mut baselines = HashMap::new();
+        
+        // Create a baseline for Medium complexity
+        baselines.insert(QueryComplexity::Medium, PerformanceBaseline {
+            complexity: QueryComplexity::Medium,
+            stats: BaselineStats {
+                avg_ms: 5000.0,
+                p50_ms: 4000.0,
+                p95_ms: 8000.0,
+                p99_ms: 12000.0,
+                max_ms: 15000.0,
+                std_dev_ms: 2000.0,
+            },
+            sample_size: 100,
+            time_range_hours: 168,
+        });
+        
+        let calculator = AdaptiveThresholdCalculator::new(baselines);
+        
+        // Get threshold for Medium complexity
+        let threshold = calculator.get_query_time_threshold(QueryComplexity::Medium);
+        
+        // Should be P95 + 2*std_dev = 8000 + 2*2000 = 12000
+        // But at least 10000 (min for Medium)
+        assert!(threshold >= 10000.0);
+        assert!(threshold <= 15000.0);
+        
+        // Get threshold for Simple complexity (no baseline)
+        let simple_threshold = calculator.get_query_time_threshold(QueryComplexity::Simple);
+        
+        // Should use default threshold for Simple (10000ms)
+        assert_eq!(simple_threshold, 10_000.0);
+    }
+    
+    #[test]
+    fn test_adaptive_skew_threshold() {
+        let mut baselines = HashMap::new();
+        
+        // Create a baseline with high variance (P99/P50 = 3.0)
+        baselines.insert(QueryComplexity::Medium, PerformanceBaseline {
+            complexity: QueryComplexity::Medium,
+            stats: BaselineStats {
+                avg_ms: 5000.0,
+                p50_ms: 4000.0,
+                p95_ms: 8000.0,
+                p99_ms: 12000.0, // P99/P50 = 3.0
+                max_ms: 15000.0,
+                std_dev_ms: 2000.0,
+            },
+            sample_size: 100,
+            time_range_hours: 168,
+        });
+        
+        let calculator = AdaptiveThresholdCalculator::new(baselines);
+        
+        // Get skew threshold for Medium complexity
+        let skew_threshold = calculator.get_skew_threshold(QueryComplexity::Medium);
+        
+        // Base: 2.0, Adjustment: (3.0 - 2.0) * 0.2 = 0.2
+        // Final: 2.0 + 0.2 = 2.2
+        assert!(skew_threshold > 2.0);
+        assert!(skew_threshold < 3.0);
     }
 }

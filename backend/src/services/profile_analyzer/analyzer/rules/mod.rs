@@ -17,6 +17,17 @@ pub mod sort;
 
 use crate::services::profile_analyzer::models::*;
 use super::thresholds::DynamicThresholds;
+use regex::Regex;
+use once_cell::sync::Lazy;
+
+/// Regex to clean slot IDs from column names (e.g., "46: dayno" -> "dayno")
+static SLOT_ID_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d+:\s*").unwrap());
+
+/// Clean slot IDs from StarRocks profile column references
+/// e.g., "46: dayno, 47: case, 18: open_traceid" -> "dayno, case, open_traceid"
+pub fn clean_slot_ids(s: &str) -> String {
+    SLOT_ID_REGEX.replace_all(s, "").to_string()
+}
 
 // ============================================================================
 // Rule Trait and Types
@@ -341,11 +352,33 @@ impl<'a> RuleContext<'a> {
             .cloned()
     }
     
-    /// Get GROUP BY key info if available  
+    /// Get GROUP BY key info if available (with slot IDs cleaned)
     pub fn get_group_by_keys(&self) -> Option<String> {
         self.node.unique_metrics.get("GroupingKeys")
             .or(self.node.unique_metrics.get("GroupByKeys"))
-            .cloned()
+            .map(|s| clean_slot_ids(s))
+    }
+    
+    /// Check if this is an internal table (OLAP_SCAN)
+    pub fn is_internal_table(&self) -> bool {
+        let op = self.node.operator_name.to_uppercase();
+        op.contains("OLAP_SCAN") || op.contains("OLAP_TABLE")
+    }
+    
+    /// Check if this is an external table (CONNECTOR_SCAN, HDFS_SCAN, etc.)
+    pub fn is_external_table(&self) -> bool {
+        let op = self.node.operator_name.to_uppercase();
+        if op.contains("CONNECTOR") || op.contains("HDFS") || op.contains("HIVE") 
+            || op.contains("ICEBERG") || op.contains("HUDI") || op.contains("DELTA") 
+            || op.contains("PAIMON") || op.contains("FILE_SCAN") {
+            return true;
+        }
+        if let Some(ds) = self.node.unique_metrics.get("DataSourceType") {
+            let ds_up = ds.to_uppercase();
+            return ds_up.contains("HIVE") || ds_up.contains("ICEBERG") 
+                || ds_up.contains("HUDI") || ds_up.contains("DELTA");
+        }
+        false
     }
 
     /// Check if a session variable is already set to the expected value

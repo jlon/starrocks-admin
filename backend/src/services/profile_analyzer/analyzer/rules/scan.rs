@@ -396,7 +396,8 @@ impl DiagnosticRule for S009LowCacheHit {
     }
 }
 
-/// S010: Runtime Filter not effective on Scan
+/// S010: Runtime Filter not effective on Scan (Internal tables only)
+/// Runtime Filter is primarily for internal tables with sorted keys
 /// Condition: RuntimeFilterRows == 0 && RawRowsRead > 100k
 pub struct S010RFNotEffective;
 
@@ -409,7 +410,8 @@ impl DiagnosticRule for S010RFNotEffective {
     }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("SCAN")
+        // Runtime Filter is mainly effective on OLAP internal tables
+        node.operator_name.to_uppercase().contains("OLAP_SCAN")
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
@@ -687,7 +689,8 @@ impl DiagnosticRule for S006RowsetFragmentation {
     }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("SCAN")
+        // Rowset is a StarRocks internal table concept
+        node.operator_name.to_uppercase().contains("OLAP_SCAN")
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
@@ -719,7 +722,8 @@ impl DiagnosticRule for S006RowsetFragmentation {
     }
 }
 
-/// S008: ZoneMap index not effective
+/// S008: ZoneMap index not effective (Internal tables only)
+/// ZoneMap is a StarRocks internal table feature, not applicable to external tables
 pub struct S008ZoneMapNotEffective;
 
 impl DiagnosticRule for S008ZoneMapNotEffective {
@@ -731,7 +735,8 @@ impl DiagnosticRule for S008ZoneMapNotEffective {
     }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("SCAN")
+        // ZoneMap is only for internal OLAP tables
+        node.operator_name.to_uppercase().contains("OLAP_SCAN")
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
@@ -763,7 +768,7 @@ impl DiagnosticRule for S008ZoneMapNotEffective {
     }
 }
 
-/// S012: Bitmap index not effective
+/// S012: Bitmap index not effective (Internal tables only)
 /// Condition: BitmapIndexFilterRows = 0 with low cardinality column filter
 ///
 /// Reason: Bitmap索引适用于基数较低且大量重复的字段（如性别、状态）。
@@ -782,7 +787,8 @@ impl DiagnosticRule for S012BitmapIndexNotEffective {
     }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("SCAN")
+        // Bitmap index is only for internal OLAP tables
+        node.operator_name.to_uppercase().contains("OLAP_SCAN")
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
@@ -839,7 +845,8 @@ impl DiagnosticRule for S013BloomFilterNotEffective {
     }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
-        node.operator_name.to_uppercase().contains("SCAN")
+        // Bloom Filter index is only for internal OLAP tables
+        node.operator_name.to_uppercase().contains("OLAP_SCAN")
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {

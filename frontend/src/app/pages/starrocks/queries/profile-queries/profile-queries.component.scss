@@ -1234,33 +1234,79 @@
         font-size: 11px;
         font-weight: 600;
         color: #222b45;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
         
         nb-icon {
           font-size: 14px;
         }
+        
+        .chain-count {
+          font-weight: 400;
+          color: #8f96aa;
+          font-size: 10px;
+        }
+      }
+      
+      .chain-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
       
       .chain-item {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 4px;
+        gap: 2px;
         font-size: 11px;
-        padding: 6px 8px;
-        background: rgba(143, 150, 170, 0.04);
-        border-radius: 4px;
-        margin-bottom: 6px;
-        
-        &:last-child {
-          margin-bottom: 0;
-        }
+        padding: 8px 10px;
+        background: linear-gradient(135deg, rgba(0, 149, 255, 0.03) 0%, rgba(143, 150, 170, 0.03) 100%);
+        border-radius: 6px;
+        border-left: 3px solid #0095ff;
         
         .chain-node {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 3px 8px;
+          border-radius: 12px;
           color: #222b45;
+          background: rgba(143, 150, 170, 0.08);
+          font-size: 10px;
+          white-space: nowrap;
           
-          &:contains('→') {
-            color: #8f96aa;
+          .node-icon {
+            font-size: 11px;
+          }
+          
+          &.root-cause {
+            background: rgba(255, 61, 113, 0.1);
+            color: #ff3d71;
+            font-weight: 500;
+            
+            .node-icon {
+              color: #ff3d71;
+            }
+          }
+          
+          &.symptom {
+            background: rgba(0, 149, 255, 0.1);
+            color: #0095ff;
+            
+            .node-icon {
+              color: #0095ff;
+            }
+          }
+        }
+        
+        .chain-arrow {
+          display: inline-flex;
+          align-items: center;
+          color: #8f96aa;
+          margin: 0 2px;
+          
+          nb-icon {
+            font-size: 12px;
           }
         }
       }

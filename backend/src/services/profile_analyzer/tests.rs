@@ -1436,7 +1436,12 @@ Query:
                     total_time: "1s".to_string(),
                     ..Default::default()
                 },
-                planner: PlannerInfo { details: std::collections::HashMap::new() },
+                planner: PlannerInfo { 
+                    details: std::collections::HashMap::new(),
+                    hms_metrics: Default::default(),
+                    total_time_ms: 0.0,
+                    optimizer_time_ms: 0.0,
+                },
                 execution: ExecutionInfo {
                     topology: String::new(),
                     metrics: std::collections::HashMap::new(),
@@ -1762,6 +1767,108 @@ Query:
         }
         
         #[test]
+        fn test_root_cause_analysis_profile9() {
+            // Profile9: 2m49s complex query with JOIN and aggregation
+            let profile_text = load_profile("profile9.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile9");
+            
+            println!("\n=== Profile 9 Analysis ===");
+            println!("Query ID: {:?}", result.summary.as_ref().map(|s| &s.query_id));
+            println!("Total time: {:?}", result.summary.as_ref().map(|s| &s.total_time));
+            println!("Diagnostics count: {}", result.diagnostics.len());
+            
+            for diag in &result.aggregated_diagnostics {
+                println!("  {} [{}]: {} ({} nodes)", 
+                    diag.rule_id, diag.severity, diag.message, diag.node_count);
+            }
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                print_root_cause_analysis(rca);
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_analysis_profile10() {
+            // Profile10: 1m24s simple aggregation query
+            let profile_text = load_profile("profile10.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile10");
+            
+            println!("\n=== Profile 10 Analysis ===");
+            println!("Query ID: {:?}", result.summary.as_ref().map(|s| &s.query_id));
+            println!("Total time: {:?}", result.summary.as_ref().map(|s| &s.total_time));
+            println!("Diagnostics count: {}", result.diagnostics.len());
+            
+            for diag in &result.aggregated_diagnostics {
+                println!("  {} [{}]: {} ({} nodes)", 
+                    diag.rule_id, diag.severity, diag.message, diag.node_count);
+            }
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                print_root_cause_analysis(rca);
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_analysis_profile3() {
+            // Profile3: Simple query analysis
+            let profile_text = load_profile("profile3.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile3");
+            
+            println!("\n=== Profile 3 Analysis ===");
+            println!("Query ID: {:?}", result.summary.as_ref().map(|s| &s.query_id));
+            println!("Total time: {:?}", result.summary.as_ref().map(|s| &s.total_time));
+            println!("Diagnostics count: {}", result.diagnostics.len());
+            
+            for diag in &result.aggregated_diagnostics {
+                println!("  {} [{}]: {} ({} nodes)", 
+                    diag.rule_id, diag.severity, diag.message, diag.node_count);
+            }
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                print_root_cause_analysis(rca);
+            }
+        }
+        
+        #[test]
+        fn test_root_cause_analysis_profile11() {
+            // Profile11: 4m43s complex HDFS query with severe IO issues
+            let profile_text = load_profile("profile11.txt");
+            let result = analyze_profile(&profile_text).expect("Failed to analyze profile11");
+            
+            println!("\n=== Profile 11 Analysis ===");
+            println!("Query ID: {:?}", result.summary.as_ref().map(|s| &s.query_id));
+            println!("Total time: {:?}", result.summary.as_ref().map(|s| &s.total_time));
+            println!("Diagnostics count: {}", result.diagnostics.len());
+            
+            for diag in &result.aggregated_diagnostics {
+                println!("  {} [{}]: {} ({} nodes)", 
+                    diag.rule_id, diag.severity, diag.message, diag.node_count);
+            }
+            
+            if let Some(rca) = &result.root_cause_analysis {
+                print_root_cause_analysis(rca);
+            }
+            
+            // Debug: Check if stripe metrics exist in CONNECTOR_SCAN nodes
+            if let Some(tree) = &result.execution_tree {
+                for node in &tree.nodes {
+                    if node.operator_name.contains("SCAN") {
+                        println!("\n=== {} Unique Metrics (count: {}) ===", node.operator_name, node.unique_metrics.len());
+                        // Show first 20 metrics
+                        for (i, (k, v)) in node.unique_metrics.iter().enumerate() {
+                            if i < 20 || k.contains("Stripe") || k.contains("IOTask") || k.contains("DataSource") {
+                                println!("  {}: {}", k, v);
+                            }
+                        }
+                        if node.unique_metrics.len() > 20 {
+                            println!("  ... and {} more", node.unique_metrics.len() - 20);
+                        }
+                    }
+                }
+            }
+        }
+        
+        #[test]
         fn test_root_cause_causal_chain_detection() {
             // Test that causal chains are correctly detected
             // Using profile1 which has complex execution with potential causal chains
@@ -1821,6 +1928,9 @@ Query:
                 "profile6.txt",
                 "profile7.text",
                 "profile8.txt",
+                "profile9.txt",
+                "profile10.txt",
+                "profile11.txt",
             ];
             
             println!("\n=== All Profiles Root Cause Analysis Summary ===\n");

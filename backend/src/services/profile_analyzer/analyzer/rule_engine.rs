@@ -109,6 +109,25 @@ impl RuleEngine {
                 });
             }
         }
+        
+        // Evaluate planner-level rules (HMS metadata, optimizer, etc.)
+        let query_time_ms = Self::parse_total_time(&profile.summary.total_time)
+            .map(|s| s * 1000.0)
+            .unwrap_or(0.0);
+        let planner_ctx = super::rules::planner::PlannerRuleContext {
+            planner: &profile.planner,
+            query_time_ms,
+        };
+        for rule in super::rules::planner::get_rules() {
+            if let Some(mut diag) = rule.evaluate(&planner_ctx)
+                && diag.severity >= self.config.min_severity
+            {
+                if !self.config.include_parameters {
+                    diag.parameter_suggestions.clear();
+                }
+                diagnostics.push(diag);
+            }
+        }
 
         // Evaluate node-level rules
         if let Some(execution_tree) = &profile.execution_tree {

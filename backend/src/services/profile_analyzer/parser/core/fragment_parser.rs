@@ -211,7 +211,8 @@ impl FragmentParser {
     }
 
     /// Parse metrics text to HashMap
-    /// This function recursively parses nested metrics blocks like DataCache:
+    /// This function recursively parses nested metrics blocks like DataCache:, ORC:
+    /// It flattens all nested metrics into a single level HashMap
     fn parse_metrics_to_hashmap(text: &str) -> HashMap<String, String> {
         let mut metrics = HashMap::new();
 
@@ -223,6 +224,11 @@ impl FragmentParser {
                 if let Some(colon_pos) = rest.find(": ") {
                     let key = rest[..colon_pos].trim().to_string();
                     let value = rest[colon_pos + 2..].trim().to_string();
+                    
+                    // Skip empty values (these are section headers like "ORC: " with empty value)
+                    if value.is_empty() {
+                        continue;
+                    }
 
                     // Include __MAX_OF_ metrics as they are needed for time percentage calculation
                     // Skip __MIN_OF_ metrics for cleaner output

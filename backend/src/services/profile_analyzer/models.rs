@@ -330,6 +330,34 @@ pub struct TopNode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlannerInfo {
     pub details: HashMap<String, String>,
+    /// HMS (Hive MetaStore) call metrics
+    #[serde(default)]
+    pub hms_metrics: HMSMetrics,
+    /// Total planner time in ms
+    #[serde(default)]
+    pub total_time_ms: f64,
+    /// Optimizer time in ms
+    #[serde(default)]
+    pub optimizer_time_ms: f64,
+}
+
+/// HMS (Hive MetaStore) call metrics
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HMSMetrics {
+    /// Time for getDatabase calls (ms)
+    pub get_database_ms: f64,
+    /// Time for getTable calls (ms)
+    pub get_table_ms: f64,
+    /// Time for getPartitionsByNames calls (ms)
+    pub get_partitions_ms: f64,
+    /// Time for getPartitionColumnStats calls (ms)
+    pub get_partition_stats_ms: f64,
+    /// Time for listPartitionNamesByValue calls (ms)
+    pub list_partition_names_ms: f64,
+    /// Time for LIST_FS_PARTITIONS calls (ms)
+    pub list_fs_partitions_ms: f64,
+    /// Total HMS time (sum of all above)
+    pub total_hms_time_ms: f64,
 }
 
 /// Execution phase information including topology

@@ -99,9 +99,39 @@ const INTRA_NODE_RULES: &[IntraNodeRule] = &[
         description: "小文件/碎片化导致IO瓶颈",
     },
     IntraNodeRule {
+        causes: &["S017"],          // ORC Stripe fragmentation
+        effect: "S007",             // IO bottleneck
+        description: "Stripe碎片化导致IO瓶颈",
+    },
+    IntraNodeRule {
+        causes: &["S017"],          // ORC Stripe fragmentation
+        effect: "S018",             // IO wait time
+        description: "Stripe碎片化导致IO等待时间长",
+    },
+    IntraNodeRule {
+        causes: &["S017"],          // ORC Stripe fragmentation
+        effect: "G001",             // Time consuming node
+        description: "Stripe碎片化导致SCAN耗时长",
+    },
+    IntraNodeRule {
+        causes: &["S018"],          // IO wait time
+        effect: "G001",             // Time consuming node
+        description: "IO等待时间长导致SCAN耗时长",
+    },
+    IntraNodeRule {
+        causes: &["S018"],          // IO wait time
+        effect: "Q004",             // Low CPU utilization
+        description: "IO等待导致CPU空闲",
+    },
+    IntraNodeRule {
         causes: &["S009"],          // Low cache hit ratio
         effect: "S007",             // IO bottleneck
         description: "缓存命中率低导致IO瓶颈",
+    },
+    IntraNodeRule {
+        causes: &["S009"],          // Low cache hit ratio
+        effect: "G001",             // Time consuming node (SCAN)
+        description: "缓存命中率低导致SCAN耗时长",
     },
     IntraNodeRule {
         causes: &["S008", "S012", "S013"],  // ZoneMap/Bitmap/BloomFilter ineffective
@@ -246,37 +276,103 @@ const INTRA_NODE_RULES: &[IntraNodeRule] = &[
         description: "分区倾斜导致执行时间倾斜",
     },
     // ========================================================================
-    // Query-Level Causality (9 rules covered)
+    // Query-Level Causality - CRITICAL: Link symptoms to root causes
     // ========================================================================
+    // Spill causes timeout
     IntraNodeRule {
         causes: &["Q003"],          // Spill to disk
-        effect: "Q001",             // Query timeout (spill slows down query)
+        effect: "Q001",             // Query timeout
         description: "磁盘溢出导致查询变慢可能超时",
     },
-    IntraNodeRule {
-        causes: &["Q004"],          // Cardinality estimation error
-        effect: "J002",             // Suboptimal join order
-        description: "基数估计错误导致Join顺序不优",
-    },
-    IntraNodeRule {
-        causes: &["Q004"],          // Cardinality estimation error
-        effect: "A004",             // Missing streaming aggregation
-        description: "基数估计错误导致聚合策略不优",
-    },
-    IntraNodeRule {
-        causes: &["Q005"],          // Pipeline parallelism issue
-        effect: "G003",             // Execution time skew
-        description: "Pipeline并行度问题导致执行倾斜",
-    },
+    // Resource waiting causes timeout
     IntraNodeRule {
         causes: &["Q006"],          // Resource queue waiting
         effect: "Q001",             // Query timeout
         description: "资源队列等待可能导致超时",
     },
+    // IO/Wait bottleneck causes low CPU
     IntraNodeRule {
-        causes: &["Q002"],          // Query scans too much data
-        effect: "S007",             // IO bottleneck
-        description: "扫描数据量过大导致IO瓶颈",
+        causes: &["S007"],          // IO bottleneck
+        effect: "Q004",             // Low CPU utilization
+        description: "IO瓶颈导致CPU利用率低",
+    },
+    IntraNodeRule {
+        causes: &["S009"],          // Low cache hit
+        effect: "Q004",             // Low CPU (waiting for remote IO)
+        description: "缓存未命中导致等待远程IO，CPU空闲",
+    },
+    IntraNodeRule {
+        causes: &["E002"],          // Network bottleneck
+        effect: "Q004",             // Low CPU (waiting for network)
+        description: "网络等待导致CPU利用率低",
+    },
+    // ========================================================================
+    // G001/G001b/G002 Causality - Most consuming nodes cause query symptoms
+    // ========================================================================
+    // SCAN bottleneck causes scan time ratio high
+    IntraNodeRule {
+        causes: &["G001", "G001b"], // Most/Second consuming node (usually SCAN)
+        effect: "Q005",              // Scan time ratio high
+        description: "扫描算子耗时长导致扫描时间占比高",
+    },
+    // High memory nodes cause query peak memory
+    IntraNodeRule {
+        causes: &["G002"],          // High memory usage node
+        effect: "Q002",             // Query peak memory high
+        description: "算子内存高导致查询峰值内存高",
+    },
+    // Slow execution causes query timeout
+    IntraNodeRule {
+        causes: &["G001"],          // Most consuming node
+        effect: "Q001",             // Query timeout
+        description: "耗时算子导致查询超时",
+    },
+    // ========================================================================
+    // Memory Hierarchy Causality - Specific memory → General memory
+    // ========================================================================
+    // Join HashTable memory causes node high memory
+    IntraNodeRule {
+        causes: &["J003"],          // Join HashTable memory high
+        effect: "G002",             // Node memory high
+        description: "Join HashTable内存高导致节点内存高",
+    },
+    // Aggregation HashTable causes node high memory  
+    IntraNodeRule {
+        causes: &["A002"],          // Aggregation HashTable memory high
+        effect: "G002",             // Node memory high
+        description: "聚合HashTable内存高导致节点内存高",
+    },
+    // Hash collision causes HashTable memory high
+    IntraNodeRule {
+        causes: &["J005"],          // Hash collision
+        effect: "J003",             // HashTable memory high
+        description: "Hash碰撞导致HashTable内存增大",
+    },
+    // Broadcast too large causes memory issues
+    IntraNodeRule {
+        causes: &["J011"],          // Broadcast build side too large
+        effect: "J003",             // HashTable memory high
+        description: "Broadcast端数据量大导致HashTable内存高",
+    },
+    IntraNodeRule {
+        causes: &["J011"],          // Broadcast build side too large
+        effect: "G002",             // Node memory high
+        description: "Broadcast端数据量大导致节点内存高",
+    },
+    // ========================================================================
+    // Network/Scheduling Causality
+    // ========================================================================
+    // Large shuffle causes scheduling overhead
+    IntraNodeRule {
+        causes: &["E001"],          // Large shuffle data
+        effect: "Q008",             // Scheduling overhead high
+        description: "Shuffle数据量大导致调度开销增加",
+    },
+    // Scheduling overhead causes timeout
+    IntraNodeRule {
+        causes: &["Q008"],          // Scheduling overhead
+        effect: "Q001",             // Query timeout
+        description: "调度开销大导致查询变慢",
     },
     // ========================================================================
     // PROJECT/LIMIT Causality
@@ -463,24 +559,174 @@ const INTER_NODE_RULES: &[InterNodeRule] = &[
     },
     // ========================================================================
     // IO Wait Propagation (IO bottleneck → downstream stall)
+    // Note: These are conditionally applied - E002 should only cause G001 
+    // when they are on the SAME or related EXCHANGE nodes, not globally.
+    // We remove E002→G001 as it causes incorrect causality for non-EXCHANGE G001.
     // ========================================================================
     InterNodeRule {
-        upstream: "S007",   // IO bottleneck
-        downstream: "G001", // Time consuming node
+        upstream: "S007",   // IO bottleneck (SCAN level)
+        downstream: "G001", // Time consuming node (if same SCAN node)
         mode: PropagationMode::IoWait,
-        description: "IO瓶颈导致节点耗时长",
+        description: "IO瓶颈导致SCAN节点耗时长",
     },
     InterNodeRule {
-        upstream: "E002",   // Network bottleneck
+        upstream: "S017",   // ORC Stripe fragmentation
         downstream: "G001", // Time consuming node
         mode: PropagationMode::IoWait,
-        description: "网络瓶颈导致节点等待",
+        description: "Stripe碎片化导致SCAN节点耗时长",
+    },
+    InterNodeRule {
+        upstream: "S017",   // Stripe fragmentation
+        downstream: "S018", // IO wait time
+        mode: PropagationMode::IoWait,
+        description: "Stripe碎片化导致IO等待",
+    },
+    InterNodeRule {
+        upstream: "S018",   // IO wait time
+        downstream: "G001", // Time consuming node
+        mode: PropagationMode::IoWait,
+        description: "IO等待导致节点耗时长",
+    },
+    InterNodeRule {
+        upstream: "S018",   // IO wait time
+        downstream: "Q004", // Low CPU
+        mode: PropagationMode::IoWait,
+        description: "IO等待导致CPU利用率低",
     },
     InterNodeRule {
         upstream: "Q003",   // Spill to disk
         downstream: "G001", // Time consuming node
         mode: PropagationMode::IoWait,
         description: "磁盘溢出导致节点耗时长",
+    },
+    // ========================================================================
+    // Query-Level Symptom Propagation (node issues → query symptoms)
+    // These link operator-level issues to query-level aggregated symptoms
+    // ========================================================================
+    InterNodeRule {
+        upstream: "G001",   // Most consuming node (SCAN)
+        downstream: "Q005", // Scan time ratio high (Query level)
+        mode: PropagationMode::DataVolume,
+        description: "SCAN耗时长导致扫描时间占比高",
+    },
+    InterNodeRule {
+        upstream: "G001b",  // Second consuming node
+        downstream: "Q005", // Scan time ratio high
+        mode: PropagationMode::DataVolume,
+        description: "次耗时SCAN导致扫描时间占比高",
+    },
+    InterNodeRule {
+        upstream: "G002",   // High memory node
+        downstream: "Q002", // Query peak memory high
+        mode: PropagationMode::Memory,
+        description: "节点内存高导致查询峰值内存高",
+    },
+    InterNodeRule {
+        upstream: "G001",   // Most consuming node
+        downstream: "Q001", // Query timeout
+        mode: PropagationMode::IoWait,
+        description: "耗时算子导致查询超时",
+    },
+    InterNodeRule {
+        upstream: "J003",   // Join HashTable memory
+        downstream: "Q002", // Query peak memory
+        mode: PropagationMode::Memory,
+        description: "Join内存高导致查询峰值内存高",
+    },
+    InterNodeRule {
+        upstream: "A002",   // Aggregation memory
+        downstream: "Q002", // Query peak memory
+        mode: PropagationMode::Memory,
+        description: "聚合内存高导致查询峰值内存高",
+    },
+    InterNodeRule {
+        upstream: "E001",   // Large shuffle
+        downstream: "Q008", // Scheduling overhead
+        mode: PropagationMode::DataVolume,
+        description: "Shuffle数据量大导致调度开销增加",
+    },
+    InterNodeRule {
+        upstream: "Q008",   // Scheduling overhead
+        downstream: "Q001", // Query timeout
+        mode: PropagationMode::IoWait,
+        description: "调度开销大导致查询超时",
+    },
+    InterNodeRule {
+        upstream: "J011",   // Broadcast too large
+        downstream: "G002", // High memory node
+        mode: PropagationMode::Memory,
+        description: "Broadcast数据大导致节点内存高",
+    },
+    InterNodeRule {
+        upstream: "J005",   // Hash collision
+        downstream: "G002", // High memory node
+        mode: PropagationMode::Memory,
+        description: "Hash碰撞导致节点内存增大",
+    },
+    // ========================================================================
+    // Additional Query-Level Causality
+    // ========================================================================
+    // High memory pressure can cause timeout
+    InterNodeRule {
+        upstream: "Q002",   // Query peak memory high
+        downstream: "Q001", // Query timeout
+        mode: PropagationMode::Memory,
+        description: "内存压力过大可能导致查询超时",
+    },
+    // Aggregation as root cause for G001 (when AGG is most consuming)
+    InterNodeRule {
+        upstream: "A002",   // Aggregation HashTable large
+        downstream: "G001", // Most consuming node (AGG)
+        mode: PropagationMode::Memory,
+        description: "聚合HashTable过大导致聚合算子耗时长",
+    },
+    // Join as root cause for G001 (when JOIN is most consuming)
+    InterNodeRule {
+        upstream: "J003",   // Join HashTable memory
+        downstream: "G001", // Most consuming node (JOIN)
+        mode: PropagationMode::Memory,
+        description: "Join HashTable过大导致Join算子耗时长",
+    },
+    InterNodeRule {
+        upstream: "J001",   // Join hash table too large
+        downstream: "G001", // Most consuming node
+        mode: PropagationMode::Memory,
+        description: "Join数据量大导致Join算子耗时长",
+    },
+    // E001 large shuffle can cause G001 for EXCHANGE nodes
+    InterNodeRule {
+        upstream: "E001",   // Large shuffle data
+        downstream: "G001", // Most consuming node (EXCHANGE)
+        mode: PropagationMode::DataVolume,
+        description: "Shuffle数据量大导致EXCHANGE算子耗时长",
+    },
+    // E002 network ratio causes E001 which then causes G001
+    InterNodeRule {
+        upstream: "E001",   // Large shuffle (cause)
+        downstream: "E002", // Network ratio high (effect)
+        mode: PropagationMode::IoWait,
+        description: "大Shuffle导致网络时间占比高",
+    },
+    // ========================================================================
+    // IO/Cache → CPU Utilization (cross-node symptom propagation)
+    // ========================================================================
+    InterNodeRule {
+        upstream: "S009",   // Low cache hit
+        downstream: "Q004", // Low CPU utilization
+        mode: PropagationMode::IoWait,
+        description: "缓存未命中导致等待远程IO，CPU空闲",
+    },
+    InterNodeRule {
+        upstream: "S007",   // IO bottleneck
+        downstream: "Q004", // Low CPU utilization  
+        mode: PropagationMode::IoWait,
+        description: "IO瓶颈导致CPU利用率低",
+    },
+    InterNodeRule {
+        upstream: "E002",   // Network time ratio high
+        downstream: "Q004", // Low CPU (waiting for network)
+        mode: PropagationMode::IoWait,
+        description: "网络等待导致CPU利用率低",
     },
 ];
 
@@ -671,26 +917,33 @@ impl RootCauseAnalyzer {
     }
     
     /// Build causal chains from root causes to symptoms
+    /// Deduplicates and merges similar chains
     fn build_causal_chains(
         root_causes: &[RootCause],
         edges: &[(String, String, String)],
         diag_map: &HashMap<String, Vec<&Diagnostic>>,
     ) -> Vec<CausalChain> {
         let mut chains = Vec::new();
+        let mut seen_chains: HashSet<String> = HashSet::new();
         
         for rc in root_causes {
             for diag_id in &rc.diagnostic_ids {
-                // BFS to find all paths from this root cause
-                let paths = Self::find_paths_from(diag_id, edges, 3); // max depth 3
+                let paths = Self::find_paths_from(diag_id, edges, 3);
                 
                 for path in paths {
                     if path.len() >= 2 {
-                        // Build chain representation
+                        // Build chain key for deduplication (just the rule_ids)
+                        let chain_key = path.join("->");
+                        if seen_chains.contains(&chain_key) {
+                            continue;
+                        }
+                        seen_chains.insert(chain_key);
+                        
+                        // Build human-readable chain
                         let mut chain = Vec::new();
                         let mut explanations = Vec::new();
                         
                         for (i, node_id) in path.iter().enumerate() {
-                            // Get description from diagnostic
                             let desc = diag_map.get(node_id)
                                 .and_then(|d| d.first())
                                 .map(|d| d.rule_name.clone())
@@ -700,7 +953,6 @@ impl RootCauseAnalyzer {
                             
                             if i < path.len() - 1 {
                                 chain.push("→".to_string());
-                                // Find edge description
                                 if let Some((_, _, edge_desc)) = edges.iter()
                                     .find(|(cause, effect, _)| cause == node_id && effect == &path[i + 1])
                                 {
@@ -715,14 +967,23 @@ impl RootCauseAnalyzer {
                             explanations.join("; ")
                         };
                         
-                        chains.push(CausalChain {
-                            chain,
-                            explanation,
-                            confidence: 1.0,
-                        });
+                        chains.push(CausalChain { chain, explanation, confidence: 1.0 });
                     }
                 }
             }
+        }
+        
+        // Sort chains by length (shorter first) and content for consistent display
+        chains.sort_by(|a, b| {
+            let len_cmp = a.chain.len().cmp(&b.chain.len());
+            if len_cmp != std::cmp::Ordering::Equal { return len_cmp; }
+            a.chain.join("").cmp(&b.chain.join(""))
+        });
+        
+        // Limit to top N chains to avoid overwhelming output
+        const MAX_CHAINS: usize = 10;
+        if chains.len() > MAX_CHAINS {
+            chains.truncate(MAX_CHAINS);
         }
         
         chains

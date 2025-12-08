@@ -996,6 +996,176 @@ impl DiagnosticRule for S016SmallFiles {
     }
 }
 
+/// S017: File format fragmentation detection (ORC Stripes / Parquet RowGroups)
+/// Detects when files have too many small stripes/rowgroups, causing excessive IO
+/// Distinguishes between internal tables (Compaction) and external tables (Hive merge)
+pub struct S017FileFragmentation;
+
+impl DiagnosticRule for S017FileFragmentation {
+    fn id(&self) -> &str { "S017" }
+    fn name(&self) -> &str { "文件格式碎片化" }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        node.operator_name.to_uppercase().contains("SCAN")
+    }
+
+    fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
+        if let Some(diag) = self.check_orc_fragmentation(context) { return Some(diag); }
+        if let Some(diag) = self.check_parquet_fragmentation(context) { return Some(diag); }
+        None
+    }
+}
+
+impl S017FileFragmentation {
+    /// Detect if this is an external table (Hive/HDFS) vs internal table
+    fn is_external_table(context: &RuleContext) -> bool {
+        let op = context.node.operator_name.to_uppercase();
+        if op.contains("CONNECTOR") || op.contains("HDFS") || op.contains("HIVE") 
+            || op.contains("ICEBERG") || op.contains("HUDI") || op.contains("DELTA") {
+            return true;
+        }
+        if let Some(ds) = context.node.unique_metrics.get("DataSourceType") {
+            let ds_up = ds.to_uppercase();
+            if ds_up.contains("HIVE") || ds_up.contains("ICEBERG") || ds_up.contains("HUDI") || ds_up.contains("DELTA") {
+                return true;
+            }
+        }
+        false
+    }
+    
+    /// Get suggestions based on table type (internal vs external)
+    fn get_suggestions(is_external: bool, format: &str, table: &str) -> Vec<String> {
+        if is_external {
+            vec![
+                format!("【Hive 合并-简单】ALTER TABLE {} PARTITION(...) CONCATENATE（仅ORC/RCFile，可能需多次执行）", table),
+                format!("【Hive 重写-推荐】INSERT OVERWRITE TABLE {} PARTITION(...) SELECT * FROM {}，配合设置 mapreduce.job.reduces 控制文件数", table, table),
+                format!("【Spark 合并-大数据量】df.repartition(N).write.mode('overwrite').option('{}.stripe.size','67108864').saveAsTable('{}')", 
+                    format.to_lowercase(), table),
+                format!("【预防小文件】写入时设置 hive.merge.mapfiles=true, hive.merge.smallfiles.avgsize=256MB, {}.stripe.size=64MB", 
+                    format.to_lowercase()),
+                "【StarRocks 临时优化】SET connector_io_tasks_per_scan_operator=64; SET enable_scan_datacache=true".to_string(),
+            ]
+        } else {
+            vec![
+                format!("执行 Compaction: ALTER TABLE {} COMPACT", table),
+                format!("手动触发 Base Compaction: ALTER TABLE {} BASE COMPACT", table),
+                format!("调整写入参数: {}.stripe.size=64MB", format.to_lowercase()),
+            ]
+        }
+    }
+    
+    fn check_orc_fragmentation(&self, context: &RuleContext) -> Option<Diagnostic> {
+        let stripe_count = context.get_metric("TotalStripeNumber")?;
+        let stripe_size = context.get_metric_bytes("TotalStripeSize").unwrap_or(0.0);
+        let tiny_stripe_size = context.get_metric_bytes("TotalTinyStripeSize").unwrap_or(0.0);
+        
+        if stripe_count <= 10000.0 { return None; }
+        
+        let avg_stripe_size = if stripe_count > 0.0 { stripe_size / stripe_count } else { 0.0 };
+        let tiny_ratio = if stripe_size > 0.0 { tiny_stripe_size / stripe_size * 100.0 } else { 0.0 };
+        
+        if avg_stripe_size >= 64.0 * 1024.0 * 1024.0 && tiny_ratio < 2.0 { return None; }
+        
+        let table = context.node.unique_metrics.get("Table").map(|s| s.as_str()).unwrap_or("unknown");
+        let is_external = Self::is_external_table(context);
+        let severity = if stripe_count > 500000.0 || tiny_ratio > 10.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
+        let table_type = if is_external { "外表" } else { "内表" };
+        
+        Some(Diagnostic {
+            rule_id: self.id().to_string(),
+            rule_name: self.name().to_string(),
+            severity,
+            node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+            plan_node_id: context.node.plan_node_id,
+            message: format!("ORC 文件存在 {:.0} 个 Stripe（平均 {}），TinyStripe 占比 {:.1}%", 
+                stripe_count, format_bytes(avg_stripe_size as u64), tiny_ratio),
+            reason: format!("{}「{}」的 ORC 文件 Stripe 碎片化严重（共 {:.0} 个），导致大量 IO 请求和文件打开开销。", 
+                table_type, table, stripe_count),
+            suggestions: Self::get_suggestions(is_external, "ORC", table),
+            parameter_suggestions: vec![],
+        })
+    }
+    
+    fn check_parquet_fragmentation(&self, context: &RuleContext) -> Option<Diagnostic> {
+        let total_rowgroups = context.get_metric("TotalRowGroups")?;
+        if total_rowgroups <= 10000.0 { return None; }
+        
+        let table = context.node.unique_metrics.get("Table").map(|s| s.as_str()).unwrap_or("unknown");
+        let is_external = Self::is_external_table(context);
+        let severity = if total_rowgroups > 100000.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
+        let table_type = if is_external { "外表" } else { "内表" };
+        
+        Some(Diagnostic {
+            rule_id: self.id().to_string(),
+            rule_name: self.name().to_string(),
+            severity,
+            node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+            plan_node_id: context.node.plan_node_id,
+            message: format!("Parquet 文件存在 {:.0} 个 RowGroup，文件碎片化严重", total_rowgroups),
+            reason: format!("{}「{}」的 Parquet 文件 RowGroup 过多（共 {:.0} 个），导致元数据开销和 IO 效率低。", 
+                table_type, table, total_rowgroups),
+            suggestions: Self::get_suggestions(is_external, "Parquet", table),
+            parameter_suggestions: vec![],
+        })
+    }
+}
+
+/// S018: IO wait time detection for HDFS/external scans
+/// Condition: IOTaskWaitTime > threshold (significant IO queue waiting)
+pub struct S018IOWaitTime;
+
+impl DiagnosticRule for S018IOWaitTime {
+    fn id(&self) -> &str { "S018" }
+    fn name(&self) -> &str { "IO 等待时间过长" }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        // Applies to any scan node
+        let op = node.operator_name.to_uppercase();
+        op.contains("SCAN")
+    }
+
+    fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
+        // Check IOTaskWaitTime - time spent waiting for IO tasks in queue
+        let io_wait = context.get_metric_duration("IOTaskWaitTime")
+            .or_else(|| context.get_metric_duration("__MAX_OF_IOTaskWaitTime"))?;
+        
+        // Also get IOTaskExecTime for comparison
+        let io_exec = context.get_metric_duration("IOTaskExecTime")
+            .or_else(|| context.get_metric_duration("__MAX_OF_IOTaskExecTime"))
+            .unwrap_or(0.0);
+        
+        // Threshold: IO wait > 10 seconds is significant
+        let wait_threshold_ms = 10_000.0;
+        if io_wait < wait_threshold_ms { return None; }
+        
+        // Calculate wait ratio
+        let total_io = io_wait + io_exec;
+        let wait_ratio = if total_io > 0.0 { io_wait / total_io * 100.0 } else { 0.0 };
+        
+        let severity = if io_wait > 60_000.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
+        
+        Some(Diagnostic {
+            rule_id: self.id().to_string(),
+            rule_name: self.name().to_string(),
+            severity,
+            node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+            plan_node_id: context.node.plan_node_id,
+            message: format!(
+                "IO 等待时间 {}（占 IO 总时间 {:.1}%），存在 IO 排队瓶颈",
+                format_duration_ms(io_wait), wait_ratio
+            ),
+            reason: "大量并发 IO 请求在队列中等待，可能是文件碎片化或 IO 资源不足导致".to_string(),
+            suggestions: vec![
+                "合并小文件减少 IO 请求数".to_string(),
+                "增加 io_tasks_per_scan_operator 参数".to_string(),
+                "检查存储系统 IO 性能".to_string(),
+                "考虑启用 Data Cache 缓存热点数据".to_string(),
+            ],
+            parameter_suggestions: vec![],
+        })
+    }
+}
+
 /// Get all scan rules
 pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
     vec![
@@ -1014,5 +1184,7 @@ pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
         Box::new(S013BloomFilterNotEffective),
         Box::new(S014ColocateJoinOpportunity),
         Box::new(S016SmallFiles),
+        Box::new(S017FileFragmentation),
+        Box::new(S018IOWaitTime),
     ]
 }

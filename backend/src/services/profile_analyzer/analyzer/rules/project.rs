@@ -1,4 +1,8 @@
-//! Project and LocalExchange operator rules (P001, L001)
+//! Project and LocalExchange operator rules (P001, P002, L001)
+//!
+//! P001: Project 表达式计算耗时高
+//! P002: 公共子表达式计算耗时高 (CASE WHEN 等重复计算)
+//! L001: LocalExchange 内存使用过高
 
 use super::*;
 
@@ -47,6 +51,72 @@ impl DiagnosticRule for P001ProjectExprHigh {
         } else {
             None
         }
+    }
+}
+
+/// P002: Common sub-expression compute time high (CASE WHEN repeated calculation)
+/// Source: project_operator.cpp - CommonSubExprComputeTime
+pub struct P002CommonSubExprHigh;
+
+impl DiagnosticRule for P002CommonSubExprHigh {
+    fn id(&self) -> &str { "P002" }
+    fn name(&self) -> &str { "公共子表达式计算耗时高" }
+
+    fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
+        node.operator_name.to_uppercase().contains("PROJECT")
+    }
+
+    fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
+        // Check CommonSubExprComputeTime
+        let common_sub_expr_time = context.get_metric("CommonSubExprComputeTime")
+            .or_else(|| context.get_metric_duration("CommonSubExprComputeTime"))?;
+        
+        // Convert to ms if needed (could be in ns)
+        let time_ms = if common_sub_expr_time > 1_000_000.0 {
+            common_sub_expr_time / 1_000_000.0  // ns to ms
+        } else {
+            common_sub_expr_time
+        };
+        
+        // Threshold: 500ms is significant
+        if time_ms < 500.0 {
+            return None;
+        }
+        
+        // Also get ExprComputeTime to calculate ratio
+        let expr_time = context.get_metric("ExprComputeTime")
+            .or_else(|| context.get_metric_duration("ExprComputeTime"))
+            .unwrap_or(0.0);
+        let expr_time_ms = if expr_time > 1_000_000.0 { expr_time / 1_000_000.0 } else { expr_time };
+        
+        let total_expr_time = time_ms + expr_time_ms;
+        let common_ratio = if total_expr_time > 0.0 { time_ms / total_expr_time * 100.0 } else { 0.0 };
+        
+        let severity = if time_ms > 5000.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
+        
+        Some(Diagnostic {
+            rule_id: self.id().to_string(),
+            rule_name: self.name().to_string(),
+            severity,
+            node_path: format!(
+                "{} (plan_node_id={})",
+                context.node.operator_name,
+                context.node.plan_node_id.unwrap_or(-1)
+            ),
+            plan_node_id: context.node.plan_node_id,
+            message: format!(
+                "公共子表达式计算耗时 {}（占表达式总时间 {:.1}%）",
+                format_duration_ms(time_ms), common_ratio
+            ),
+            reason: "复杂 CASE WHEN 表达式或重复子表达式导致计算开销高。StarRocks 会尝试提取公共子表达式以避免重复计算，但提取本身也有开销。".to_string(),
+            suggestions: vec![
+                "简化 CASE WHEN 表达式，减少分支数量".to_string(),
+                "将复杂条件判断移到物化视图预计算".to_string(),
+                "检查是否存在大量重复的表达式计算".to_string(),
+                "考虑使用 IF() 替代简单的 CASE WHEN".to_string(),
+            ],
+            parameter_suggestions: vec![],
+        })
     }
 }
 
@@ -103,5 +173,9 @@ impl DiagnosticRule for L001LocalExchangeMemory {
 }
 
 pub fn get_rules() -> Vec<Box<dyn DiagnosticRule>> {
-    vec![Box::new(P001ProjectExprHigh), Box::new(L001LocalExchangeMemory)]
+    vec![
+        Box::new(P001ProjectExprHigh),
+        Box::new(P002CommonSubExprHigh),
+        Box::new(L001LocalExchangeMemory),
+    ]
 }

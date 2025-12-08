@@ -8,6 +8,7 @@ pub mod common;
 pub mod exchange;
 pub mod fragment;
 pub mod join;
+pub mod planner;
 pub mod project;
 pub mod query;
 pub mod scan;
@@ -282,6 +283,16 @@ impl<'a> RuleContext<'a> {
             .unique_metrics
             .get(name)
             .and_then(|v| parse_metric_value(v))
+    }
+
+    /// Get a metric value that represents bytes (e.g., "13.227 TB")
+    pub fn get_metric_bytes(&self, name: &str) -> Option<f64> {
+        self.node.unique_metrics.get(name).and_then(|v| parse_bytes_value(v))
+    }
+
+    /// Get a metric value that represents duration (e.g., "2m4s", "1.5s", "100ms")
+    pub fn get_metric_duration(&self, name: &str) -> Option<f64> {
+        self.node.unique_metrics.get(name).and_then(|v| parse_duration_to_ms(v))
     }
 
     /// Get operator total time in ms
@@ -647,6 +658,16 @@ pub trait DiagnosticRule: Send + Sync {
 pub fn parse_metric_value(value: &str) -> Option<f64> {
     let s = value.trim();
 
+    // Handle "1.056M (1056421)" format - extract value from parentheses
+    if let Some(start) = s.find('(') {
+        if let Some(end) = s.find(')') {
+            let inner = &s[start + 1..end].trim();
+            if let Ok(v) = inner.parse::<f64>() {
+                return Some(v);
+            }
+        }
+    }
+
     // Handle percentage
     if s.ends_with('%') {
         return s.trim_end_matches('%').parse().ok();
@@ -662,6 +683,16 @@ pub fn parse_metric_value(value: &str) -> Option<f64> {
         return Some(ms);
     }
 
+    // Handle "1.056M" format (without parentheses) - K/M/B suffixes
+    if let Some(multiplier) = get_suffix_multiplier(s) {
+        let numeric_part: String = s.chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+            .collect();
+        if let Ok(v) = numeric_part.parse::<f64>() {
+            return Some(v * multiplier);
+        }
+    }
+
     // Handle plain numbers with optional suffix
     let numeric_part: String = s
         .chars()
@@ -669,6 +700,16 @@ pub fn parse_metric_value(value: &str) -> Option<f64> {
         .collect();
 
     numeric_part.parse().ok()
+}
+
+/// Get multiplier for K/M/B suffixes in metric values
+fn get_suffix_multiplier(s: &str) -> Option<f64> {
+    let s = s.trim().to_uppercase();
+    if s.ends_with('K') { return Some(1000.0); }
+    if s.ends_with('M') { return Some(1_000_000.0); }
+    if s.ends_with('B') || s.ends_with('G') { return Some(1_000_000_000.0); }
+    if s.ends_with('T') { return Some(1_000_000_000_000.0); }
+    None
 }
 
 /// Parse bytes string to u64
@@ -778,6 +819,33 @@ pub fn format_duration_ms(ms: f64) -> String {
     } else {
         format!("{:.1}h", ms / 3600000.0)
     }
+}
+
+/// Parse bytes value string (e.g., "13.227 TB", "347.476 GB") to f64 bytes
+pub fn parse_bytes_value(s: &str) -> Option<f64> {
+    let s = s.trim();
+    let parts: Vec<&str> = s.split_whitespace().collect();
+    if parts.len() < 2 { return None; }
+    
+    let value: f64 = parts[0].parse().ok()?;
+    let unit = parts[1].to_uppercase();
+    
+    let multiplier: f64 = match unit.as_str() {
+        "B" => 1.0,
+        "KB" | "K" => 1024.0,
+        "MB" | "M" => 1024.0 * 1024.0,
+        "GB" | "G" => 1024.0 * 1024.0 * 1024.0,
+        "TB" | "T" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        "PB" | "P" => 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        _ => return None,
+    };
+    
+    Some(value * multiplier)
+}
+
+/// Parse duration string to milliseconds (handles "2m4s", "1.5s", "100ms", etc.)
+pub fn parse_duration_to_ms(s: &str) -> Option<f64> {
+    parse_duration_ms(s)
 }
 
 // ============================================================================

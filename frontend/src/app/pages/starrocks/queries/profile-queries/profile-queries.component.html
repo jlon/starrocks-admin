@@ -804,16 +804,29 @@
                       </div>
                     </div>
                     
-                    <!-- Causal Chains -->
+                    <!-- Causal Chains - Visual chain display -->
                     <div class="causal-chains" *ngIf="analysisData.root_cause_analysis.causal_chains?.length">
                       <div class="chain-header">
                         <nb-icon icon="trending-up-outline" class="text-info"></nb-icon>
                         <span>因果链</span>
+                        <span class="chain-count">({{ analysisData.root_cause_analysis.causal_chains.length }})</span>
                       </div>
-                      <div *ngFor="let chain of analysisData.root_cause_analysis.causal_chains" class="chain-item">
-                        <span *ngFor="let node of chain.chain; let last = last" class="chain-node">
-                          {{ node }}
-                        </span>
+                      <div class="chain-list">
+                        <div *ngFor="let chain of analysisData.root_cause_analysis.causal_chains; let i = index" class="chain-item">
+                          <ng-container *ngFor="let node of chain.chain; let j = index; let last = last">
+                            <span *ngIf="node !== '→'" class="chain-node" [ngClass]="{
+                              'root-cause': j === 0,
+                              'symptom': last
+                            }">
+                              <nb-icon *ngIf="j === 0" icon="alert-circle-outline" class="node-icon"></nb-icon>
+                              <nb-icon *ngIf="last && j > 0" icon="flag-outline" class="node-icon"></nb-icon>
+                              {{ node }}
+                            </span>
+                            <span *ngIf="node === '→'" class="chain-arrow">
+                              <nb-icon icon="arrow-forward-outline"></nb-icon>
+                            </span>
+                          </ng-container>
+                        </div>
                       </div>
                     </div>
                   </div>

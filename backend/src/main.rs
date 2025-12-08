@@ -412,6 +412,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Metrics collector disabled by configuration");
     }
 
+    // Start baseline refresh task for adaptive thresholds (every hour)
+    // This task fetches audit log data and calculates performance baselines
+    let _baseline_refresh_handle = services::start_baseline_refresh_task(
+        Arc::clone(&mysql_pool_manager),
+        Arc::clone(&cluster_service),
+        3600, // 1 hour refresh interval
+    );
+    tracing::info!("Baseline refresh task started (interval: 1 hour)");
+
     // Wrap AppState in Arc for shared ownership across routes
     let app_state_arc = Arc::new(app_state);
 

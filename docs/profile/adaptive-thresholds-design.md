@@ -1,9 +1,9 @@
 # 自适应阈值系统设计文档
 
-> **版本**: v1.0  
+> **版本**: v1.1  
 > **日期**: 2025-12-08  
 > **作者**: StarRocks Admin Team  
-> **状态**: 已实现
+> **状态**: 已集成到 main.rs
 
 ---
 
@@ -527,6 +527,53 @@ let mem_bytes = thresholds.get_operator_memory_threshold();
 
 ---
 
-**文档版本**: v1.0  
+## 附录 B: 集成说明
+
+### B.1 main.rs 集成
+
+在 `main.rs` 中已完成以下集成：
+
+```rust
+// 在 metrics collector 启动之后添加
+// Start baseline refresh task for adaptive thresholds (every hour)
+let _baseline_refresh_handle = services::start_baseline_refresh_task(
+    Arc::clone(&mysql_pool_manager),
+    Arc::clone(&cluster_service),
+    3600, // 1 hour refresh interval
+);
+tracing::info!("Baseline refresh task started (interval: 1 hour)");
+```
+
+### B.2 启动时序
+
+```
+应用启动
+   │
+   ├─→ 初始化数据库连接
+   ├─→ 初始化服务层
+   ├─→ 启动 Metrics Collector (可选)
+   ├─→ 启动 Baseline Refresh Task ← 新增
+   │      │
+   │      └─→ 初始化全局缓存 (BaselineProvider::init)
+   │      └─→ 首次刷新基线数据
+   │      └─→ 每小时后台刷新
+   │
+   └─→ 启动 HTTP 服务器
+```
+
+### B.3 文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `baseline.rs` | 基线计算核心 |
+| `baseline_cache.rs` | 内存缓存层 |
+| `baseline_service.rs` | 服务层（审计日志查询） |
+| `baseline_refresh_task.rs` | 定时任务 |
+| `thresholds.rs` | 动态阈值计算（增强） |
+| `main.rs` | 集成启动代码 |
+
+---
+
+**文档版本**: v1.1  
 **最后更新**: 2025-12-08  
 **维护者**: StarRocks Admin Team

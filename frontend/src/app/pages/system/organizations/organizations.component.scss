@@ -1,42 +1,240 @@
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
+@import '../../../@theme/styles/themes';
 
-.header__info {
-  flex: 1;
-}
+@include nb-install-component() {
+  .organizations-card {
+    margin-bottom: 0;
+  }
 
-.header__title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-}
+  // ============================================
+  // Header Section
+  // ============================================
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 1rem;
+  }
 
-.header__subtitle {
-  margin: 0.25rem 0 0 0;
-  color: var(--text-hint-color);
-  font-size: 0.875rem;
-}
+  .header__info {
+    flex: 1;
+  }
 
-.loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 200px;
-}
+  .header__title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
 
-:host ::ng-deep ng2-smart-table table {
-  width: 100%;
-  td {
-    .badge {
-      display: inline-block;
+  .header__icon {
+    font-size: 1.5rem;
+    color: nb-theme(color-primary-default);
+  }
+
+  .header__title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: nb-theme(text-basic-color);
+  }
+
+  .header__subtitle {
+    margin: 0.375rem 0 0 0;
+    padding-left: 2rem;
+    color: nb-theme(text-hint-color);
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+
+  .header__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  // ============================================
+  // Loading State
+  // ============================================
+  .loading-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    gap: 1rem;
+  }
+
+  .loading-text {
+    font-size: 0.875rem;
+    color: nb-theme(text-hint-color);
+  }
+
+  // ============================================
+  // Permission Alert
+  // ============================================
+  .permission-alert {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    nb-icon {
+      font-size: 1.25rem;
     }
   }
-  
-  tbody tr td:nth-child(5) {
-    text-align: center;
+
+  // ============================================
+  // Table Container & Styling
+  // ============================================
+  .table-container {
+    border-radius: nb-theme(border-radius);
+    overflow: hidden;
+  }
+
+  ::ng-deep {
+    ng2-smart-table {
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+
+        thead {
+          tr {
+            th {
+              background: nb-theme(background-basic-color-2);
+              border-bottom: 2px solid nb-theme(border-basic-color-3);
+              padding: 0.875rem 1rem;
+              font-weight: 600;
+              font-size: 0.8125rem;
+              text-transform: uppercase;
+              letter-spacing: 0.025em;
+              color: nb-theme(text-hint-color);
+              white-space: nowrap;
+
+              &:first-child {
+                border-top-left-radius: nb-theme(border-radius);
+              }
+
+              &:last-child {
+                border-top-right-radius: nb-theme(border-radius);
+              }
+            }
+          }
+        }
+
+        tbody {
+          tr {
+            transition: background-color 0.15s ease;
+
+            &:hover {
+              background: nb-theme(background-basic-color-2);
+            }
+
+            td {
+              padding: 0.75rem 1rem;
+              vertical-align: middle;
+              border-bottom: 1px solid nb-theme(border-basic-color-3);
+              font-size: 0.875rem;
+              color: nb-theme(text-basic-color);
+
+              // Code column
+              &:first-child {
+                font-weight: 500;
+                font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 0.8125rem;
+              }
+
+              // Name column
+              &:nth-child(2) {
+                font-weight: 500;
+              }
+
+              // Badge styling
+              .badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.25rem 0.5rem;
+                border-radius: 0.25rem;
+                font-size: 0.75rem;
+                font-weight: 500;
+              }
+
+              .badge-danger {
+                background: rgba(nb-theme(color-danger-default), 0.15);
+                color: nb-theme(color-danger-default);
+              }
+
+              .badge-basic {
+                background: nb-theme(background-basic-color-3);
+                color: nb-theme(text-hint-color);
+              }
+            }
+
+            &:last-child td {
+              border-bottom: none;
+            }
+          }
+        }
+      }
+
+      .ng2-smart-actions {
+        display: none;
+      }
+
+      .ng2-smart-pagination {
+        padding: 1rem;
+        border-top: 1px solid nb-theme(border-basic-color-3);
+        background: nb-theme(background-basic-color-2);
+
+        nav {
+          display: flex;
+          justify-content: center;
+        }
+      }
+
+      .ng2-smart-filters {
+        input {
+          padding: 0.5rem 0.75rem;
+          font-size: 0.875rem;
+          border: 1px solid nb-theme(border-basic-color-3);
+          border-radius: nb-theme(border-radius);
+          background: nb-theme(background-basic-color-1);
+          color: nb-theme(text-basic-color);
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+          &:focus {
+            outline: none;
+            border-color: nb-theme(color-primary-default);
+            box-shadow: 0 0 0 3px rgba(nb-theme(color-primary-default), 0.15);
+          }
+
+          &::placeholder {
+            color: nb-theme(text-hint-color);
+          }
+        }
+      }
+    }
+  }
+
+  // ============================================
+  // Responsive
+  // ============================================
+  @media (max-width: 768px) {
+    .header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .header__subtitle {
+      padding-left: 0;
+    }
+
+    .header__actions {
+      width: 100%;
+
+      button {
+        flex: 1;
+      }
+    }
   }
 }

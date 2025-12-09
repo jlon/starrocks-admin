@@ -1,213 +1,103 @@
-<nb-card>
-  <nb-card-header>
-    <h5>{{ isEditMode ? '编辑集群' : '添加集群' }}</h5>
-  </nb-card-header>
-  <nb-card-body>
-    <form [formGroup]="clusterForm" (ngSubmit)="onSubmit()">
-      <!-- 基本信息 -->
-      <div class="row">
-        <!-- 所属组织 (Super Admin Only) -->
-        <div class="col-md-4" *ngIf="isSuperAdmin">
-          <div class="form-group">
+<div class="row">
+  <div class="col-lg-8 offset-lg-2">
+    <nb-card>
+      <nb-card-header>
+        <h5>{{ isEditMode ? '编辑集群' : '添加集群' }}</h5>
+      </nb-card-header>
+      <nb-card-body>
+        <form [formGroup]="clusterForm" (ngSubmit)="onSubmit()">
+          <!-- Organization Selection (Super Admin Only) -->
+          <div class="form-group" *ngIf="isSuperAdmin">
             <label for="organization" class="label">所属组织 *</label>
-            <nb-select
-              formControlName="organization_id"
-              id="organization"
-              placeholder="请选择组织"
-              [status]="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched ? 'danger' : 'basic'"
-              fullWidth
-            >
-              <nb-option *ngFor="let org of organizations" [value]="org.id">
-                {{ org.name }}
-                <span class="text-hint" *ngIf="org.code"> ({{ org.code }})</span>
-              </nb-option>
-            </nb-select>
-            <small class="form-text text-danger" *ngIf="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched">
-              请选择组织
-            </small>
+            <nb-form-field>
+              <nb-select
+                formControlName="organization_id"
+                id="organization"
+                placeholder="请选择组织"
+                [status]="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched ? 'danger' : 'basic'"
+                fullWidth
+              >
+                <nb-option *ngFor="let org of organizations" [value]="org.id">
+                  {{ org.name }}
+                  <span class="text-hint" *ngIf="org.code"> ({{ org.code }})</span>
+                </nb-option>
+              </nb-select>
+            </nb-form-field>
+            <ng-container *ngIf="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched">
+              <small class="form-text text-danger">
+                请选择组织
+              </small>
+            </ng-container>
           </div>
-        </div>
 
-        <!-- 所属组织显示 (Org Admin) -->
-        <div class="col-md-4" *ngIf="!isSuperAdmin && currentOrganization">
-          <div class="form-group">
+          <!-- Organization Display (Org Admin) -->
+          <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
             <label class="label">所属组织</label>
-            <input nbInput fullWidth [value]="currentOrganization.name + ' (' + currentOrganization.code + ')'" disabled />
+            <div class="alert alert-info d-flex align-items-center">
+              <nb-icon icon="info-outline" class="me-2"></nb-icon>
+              <span>{{ currentOrganization.name }} <span class="text-hint">({{ currentOrganization.code }})</span></span>
+            </div>
           </div>
-        </div>
 
-        <div class="col-md-4">
-          <div class="form-group">
-            <label for="name" class="label">集群名称 *</label>
-            <input
-              nbInput
-              fullWidth
-              type="text"
-              id="name"
-              formControlName="name"
-              placeholder="输入集群名称"
-              [status]="clusterForm.get('name')?.invalid && clusterForm.get('name')?.touched ? 'danger' : 'basic'"
-            />
-            <small class="form-text text-danger" *ngIf="clusterForm.get('name')?.invalid && clusterForm.get('name')?.touched">
-              请输入集群名称
-            </small>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="name" class="label">集群名称 *</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="text"
+                  id="name"
+                  formControlName="name"
+                  placeholder="输入集群名称"
+                  [status]="clusterForm.get('name')?.invalid && clusterForm.get('name')?.touched ? 'danger' : 'basic'"
+                />
+                <small class="form-text text-danger" *ngIf="clusterForm.get('name')?.invalid && clusterForm.get('name')?.touched">
+                  请输入集群名称
+                </small>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="catalog" class="label">Catalog</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="text"
+                  id="catalog"
+                  formControlName="catalog"
+                  placeholder="default_catalog"
+                />
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div class="col-md-4">
-          <div class="form-group">
-            <label for="deployment_mode" class="label">部署模式 *</label>
-            <nb-select
-              formControlName="deployment_mode"
-              id="deployment_mode"
-              placeholder="请选择部署模式"
-              [status]="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched ? 'danger' : 'basic'"
-              fullWidth
-            >
-              <nb-option value="shared_nothing">存算一体 (Shared-Nothing)</nb-option>
-              <nb-option value="shared_data">存算分离 (Shared-Data)</nb-option>
-            </nb-select>
-            <small class="form-text text-danger" *ngIf="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched">
-              请选择部署模式
-            </small>
+          <div class="row">
+            <div class="col-md-12">
+              <div class="form-group">
+                <label for="deployment_mode" class="label">部署模式 *</label>
+                <nb-form-field>
+                  <nb-select
+                    formControlName="deployment_mode"
+                    id="deployment_mode"
+                    placeholder="请选择部署模式"
+                    [status]="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched ? 'danger' : 'basic'"
+                    fullWidth
+                  >
+                    <nb-option value="shared_nothing">存算一体 (Shared-Nothing)</nb-option>
+                    <nb-option value="shared_data">存算分离 (Shared-Data)</nb-option>
+                  </nb-select>
+                </nb-form-field>
+                <ng-container *ngIf="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched">
+                  <small class="form-text text-danger">
+                    请选择部署模式
+                  </small>
+                </ng-container>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- 连接信息 -->
-      <h6>连接信息</h6>
-      <hr />
-      <div class="row">
-        <div class="col-md-4">
-          <div class="form-group">
-            <label for="fe_host" class="label">FE 地址 *</label>
-            <input
-              nbInput
-              fullWidth
-              type="text"
-              id="fe_host"
-              formControlName="fe_host"
-              placeholder="192.168.1.100"
-              [status]="clusterForm.get('fe_host')?.invalid && clusterForm.get('fe_host')?.touched ? 'danger' : 'basic'"
-            />
-          </div>
-        </div>
-
-        <div class="col-md-2">
-          <div class="form-group">
-            <label for="fe_http_port" class="label">HTTP 端口 *</label>
-            <input
-              nbInput
-              fullWidth
-              type="number"
-              id="fe_http_port"
-              formControlName="fe_http_port"
-              placeholder="8030"
-            />
-          </div>
-        </div>
-
-        <div class="col-md-2">
-          <div class="form-group">
-            <label for="fe_query_port" class="label">查询端口 *</label>
-            <input
-              nbInput
-              fullWidth
-              type="number"
-              id="fe_query_port"
-              formControlName="fe_query_port"
-              placeholder="9030"
-            />
-          </div>
-        </div>
-
-        <div class="col-md-2">
-          <div class="form-group">
-            <label for="username" class="label">用户名 *</label>
-            <input
-              nbInput
-              fullWidth
-              type="text"
-              id="username"
-              formControlName="username"
-              placeholder="root"
-              [status]="clusterForm.get('username')?.invalid && clusterForm.get('username')?.touched ? 'danger' : 'basic'"
-            />
-          </div>
-        </div>
-
-        <div class="col-md-2">
-          <div class="form-group">
-            <label for="password" class="label">密码 {{ isEditMode ? '(留空不改)' : '*' }}</label>
-            <input
-              nbInput
-              fullWidth
-              type="password"
-              id="password"
-              formControlName="password"
-              placeholder="输入密码"
-              [status]="clusterForm.get('password')?.invalid && clusterForm.get('password')?.touched ? 'danger' : 'basic'"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- 高级选项 -->
-      <h6>高级选项</h6>
-      <hr />
-      <div class="row">
-        <div class="col-md-3">
-          <div class="form-group">
-            <label for="catalog" class="label">Catalog</label>
-            <input
-              nbInput
-              fullWidth
-              type="text"
-              id="catalog"
-              formControlName="catalog"
-              placeholder="default_catalog"
-            />
-          </div>
-        </div>
-
-        <div class="col-md-2">
-          <div class="form-group">
-            <label for="connection_timeout" class="label">连接超时（秒）</label>
-            <input
-              nbInput
-              fullWidth
-              type="number"
-              id="connection_timeout"
-              formControlName="connection_timeout"
-              placeholder="10"
-            />
-          </div>
-        </div>
-
-        <div class="col-md-3">
-          <div class="form-group">
-            <label for="tags" class="label">标签（逗号分隔）</label>
-            <input
-              nbInput
-              fullWidth
-              type="text"
-              id="tags"
-              formControlName="tags"
-              placeholder="生产, 北京, 主集群"
-            />
-          </div>
-        </div>
-
-        <div class="col-md-2 d-flex align-items-end">
-          <div class="form-group">
-            <nb-checkbox formControlName="enable_ssl">启用 SSL</nb-checkbox>
-          </div>
-        </div>
-      </div>
-
-      <!-- 描述 -->
-      <div class="row">
-        <div class="col-md-12">
           <div class="form-group">
             <label for="description" class="label">描述</label>
             <textarea
@@ -216,55 +106,173 @@
               id="description"
               formControlName="description"
               placeholder="输入集群描述（可选）"
-              rows="2"
+              rows="3"
             ></textarea>
           </div>
-        </div>
-      </div>
 
-      <!-- 操作按钮 -->
-      <div class="d-flex justify-content-between align-items-center pt-3" style="border-top: 1px solid #edf1f7;">
-        <button
-          nbButton
-          outline
-          size="medium"
-          status="info"
-          type="button"
-          (click)="testConnection()"
-          [disabled]="loading"
-        >
-          <nb-icon icon="refresh-outline"></nb-icon>
-          测试连接
-        </button>
+          <h6 class="mt-4">连接信息</h6>
+          <hr />
 
-        <div class="d-flex gap-3">
-          <button
-            nbButton
-            outline
-            size="medium"
-            status="basic"
-            type="button"
-            (click)="onCancel()"
-            [disabled]="loading"
-          >
-            取消
-          </button>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="fe_host" class="label">FE 地址 *</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="text"
+                  id="fe_host"
+                  formControlName="fe_host"
+                  placeholder="192.168.1.100"
+                  [status]="clusterForm.get('fe_host')?.invalid && clusterForm.get('fe_host')?.touched ? 'danger' : 'basic'"
+                />
+              </div>
+            </div>
 
-          <button
-            nbButton
-            outline
-            size="medium"
-            status="primary"
-            type="submit"
-            [disabled]="loading"
-          >
-            <nb-icon icon="save-outline" *ngIf="!loading"></nb-icon>
-            <nb-icon icon="loader-outline" class="spin" *ngIf="loading"></nb-icon>
-            {{ isEditMode ? '更新' : '创建' }}
-          </button>
-        </div>
-      </div>
-    </form>
-  </nb-card-body>
-</nb-card>
+            <div class="col-md-3">
+              <div class="form-group">
+                <label for="fe_http_port" class="label">HTTP 端口 *</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="number"
+                  id="fe_http_port"
+                  formControlName="fe_http_port"
+                  placeholder="8030"
+                />
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <div class="form-group">
+                <label for="fe_query_port" class="label">查询端口 *</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="number"
+                  id="fe_query_port"
+                  formControlName="fe_query_port"
+                  placeholder="9030"
+                />
+              </div>
+            </div>
+          </div>
+
+          <h6 class="mt-4">认证信息</h6>
+          <hr />
+
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="username" class="label">用户名 *</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="text"
+                  id="username"
+                  formControlName="username"
+                  placeholder="root"
+                  [status]="clusterForm.get('username')?.invalid && clusterForm.get('username')?.touched ? 'danger' : 'basic'"
+                />
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="password" class="label">密码 {{ isEditMode ? '(留空表示不修改)' : '*' }}</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="password"
+                  id="password"
+                  formControlName="password"
+                  placeholder="输入密码"
+                  [status]="clusterForm.get('password')?.invalid && clusterForm.get('password')?.touched ? 'danger' : 'basic'"
+                />
+              </div>
+            </div>
+          </div>
+
+          <h6 class="mt-4">高级选项</h6>
+          <hr />
+
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="connection_timeout" class="label">连接超时（秒）</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="number"
+                  id="connection_timeout"
+                  formControlName="connection_timeout"
+                  placeholder="10"
+                />
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="tags" class="label">标签（逗号分隔）</label>
+                <input
+                  nbInput
+                  fullWidth
+                  type="text"
+                  id="tags"
+                  formControlName="tags"
+                  placeholder="生产, 北京, 主集群"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <nb-checkbox formControlName="enable_ssl">启用 SSL</nb-checkbox>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mt-4 pt-3" style="border-top: 1px solid #edf1f7;">
+            <button
+              nbButton
+              outline
+              size="medium"
+              status="info"
+              type="button"
+              (click)="testConnection()"
+              [disabled]="loading"
+            >
+              <nb-icon icon="refresh-outline"></nb-icon>
+              测试连接
+            </button>
+
+            <div class="d-flex gap-3">
+              <button
+                nbButton
+                outline
+                size="medium"
+                status="basic"
+                type="button"
+                (click)="onCancel()"
+                [disabled]="loading"
+              >
+                取消
+              </button>
+
+              <button
+                nbButton
+                outline
+                size="medium"
+                status="primary"
+                type="submit"
+                [disabled]="loading"
+              >
+                <nb-icon icon="loader-outline" class="spin" *ngIf="loading"></nb-icon>
+                保存
+              </button>
+            </div>
+          </div>
+        </form>
+      </nb-card-body>
+    </nb-card>
+  </div>
+</div>
 

@@ -5,7 +5,7 @@ import { UserWithRoles } from '../../../../@core/data/user.service';
 @Component({
   selector: 'ngx-users-actions-cell',
   template: `
-    <div class="actions">
+    <div class="actions-container">
       <button
         nbButton
         ghost
@@ -13,8 +13,9 @@ import { UserWithRoles } from '../../../../@core/data/user.service';
         status="primary"
         *ngIf="value?.canEdit"
         (click)="editUser.emit(rowData)"
-        nbTooltip="编辑用户"
+        nbTooltip="编辑用户信息"
         nbTooltipPlacement="top"
+        class="action-btn"
       >
         <nb-icon icon="edit-2-outline"></nb-icon>
       </button>
@@ -28,6 +29,7 @@ import { UserWithRoles } from '../../../../@core/data/user.service';
         (click)="deleteUser.emit(rowData)"
         nbTooltip="删除用户"
         nbTooltipPlacement="top"
+        class="action-btn"
       >
         <nb-icon icon="trash-2-outline"></nb-icon>
       </button>
@@ -35,10 +37,23 @@ import { UserWithRoles } from '../../../../@core/data/user.service';
   `,
   styles: [
     `
-      .actions {
+      .actions-container {
         display: flex;
-        gap: var(--nb-space-xs);
+        gap: 0.25rem;
         justify-content: center;
+        align-items: center;
+      }
+
+      .action-btn {
+        transition: all 0.2s ease;
+
+        &:hover:not(:disabled) {
+          transform: translateY(-1px);
+        }
+
+        &:active:not(:disabled) {
+          transform: translateY(0);
+        }
       }
     `,
   ],
@@ -49,5 +64,3 @@ export class UsersActionsCellComponent {
   @Output() editUser = new EventEmitter<UserWithRoles>();
   @Output() deleteUser = new EventEmitter<UserWithRoles>();
 }
-
-

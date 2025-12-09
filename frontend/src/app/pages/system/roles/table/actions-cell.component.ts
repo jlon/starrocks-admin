@@ -10,16 +10,17 @@ export interface RoleActionPermissions {
 @Component({
   selector: 'ngx-roles-actions-cell',
   template: `
-    <div class="actions">
+    <div class="actions-container">
       <button
         nbButton
         ghost
         size="tiny"
         status="primary"
-        nbTooltip="编辑角色"
+        [nbTooltip]="rowData?.is_system ? '系统角色无法编辑' : '编辑角色'"
         nbTooltipPlacement="top"
         [disabled]="!value?.canEdit"
         (click)="onEditClick($event)"
+        class="action-btn"
       >
         <nb-icon icon="edit-2-outline"></nb-icon>
       </button>
@@ -28,10 +29,11 @@ export interface RoleActionPermissions {
         ghost
         size="tiny"
         status="danger"
-        nbTooltip="删除角色"
+        [nbTooltip]="rowData?.is_system ? '系统角色无法删除' : '删除角色'"
         nbTooltipPlacement="top"
         [disabled]="!value?.canDelete"
         (click)="onDeleteClick($event)"
+        class="action-btn"
       >
         <nb-icon icon="trash-2-outline"></nb-icon>
       </button>
@@ -39,10 +41,23 @@ export interface RoleActionPermissions {
   `,
   styles: [
     `
-      .actions {
+      .actions-container {
         display: flex;
         justify-content: center;
-        gap: var(--nb-space-xs);
+        gap: 0.25rem;
+        align-items: center;
+      }
+
+      .action-btn {
+        transition: all 0.2s ease;
+
+        &:hover:not(:disabled) {
+          transform: translateY(-1px);
+        }
+
+        &:active:not(:disabled) {
+          transform: translateY(0);
+        }
       }
     `,
   ],

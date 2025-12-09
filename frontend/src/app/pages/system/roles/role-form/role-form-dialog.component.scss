@@ -3,9 +3,8 @@
 @include nb-install-component() {
   :host {
     display: block;
-    width: 60rem;
+    width: 56rem;
     max-width: calc(100vw - 2rem);
-    min-width: 48rem;
   }
 
   .role-dialog {
@@ -20,29 +19,75 @@
     flex-direction: column;
   }
 
+  // ============================================
+  // Dialog Header
+  // ============================================
   .dialog-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: var(--nb-space-md);
-    padding-bottom: var(--nb-space-md);
+    gap: 1rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .dialog-header__info {
+    flex: 1;
+  }
+
+  .dialog-header__title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 
     h5 {
       margin: 0;
       font-weight: 600;
       font-size: 1.125rem;
+      color: nb-theme(text-basic-color);
+    }
+  }
+
+  .dialog-header__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+
+    nb-icon {
+      font-size: 1.125rem;
+    }
+
+    &.icon--create {
+      background: linear-gradient(135deg, rgba(nb-theme(color-primary-default), 0.15) 0%, rgba(nb-theme(color-primary-default), 0.08) 100%);
+      color: nb-theme(color-primary-default);
+    }
+
+    &.icon--edit {
+      background: linear-gradient(135deg, rgba(nb-theme(color-info-default), 0.15) 0%, rgba(nb-theme(color-info-default), 0.08) 100%);
+      color: nb-theme(color-info-default);
     }
   }
 
   .dialog-subtitle {
-    margin: 0;
-    margin-top: var(--nb-space-xs);
+    margin: 0.375rem 0 0 0;
+    padding-left: 3rem;
     color: nb-theme(text-hint-color);
     font-size: 0.875rem;
   }
 
+  .close-btn {
+    flex-shrink: 0;
+    margin: -0.25rem -0.5rem 0 0;
+  }
+
+  // ============================================
+  // Form Container
+  // ============================================
   .role-form {
-    padding: var(--nb-space-md) 0;
+    padding: 0.5rem 0;
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
@@ -52,9 +97,27 @@
   .form-layout {
     display: grid;
     grid-template-columns: minmax(14rem, 18rem) minmax(17rem, 1fr);
-    gap: 1.25rem;
+    gap: 1.5rem;
     align-items: stretch;
     flex: 1 1 auto;
+  }
+
+  // Section Labels
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: nb-theme(text-basic-color);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+
+    nb-icon {
+      font-size: 1rem;
+      color: nb-theme(color-primary-default);
+    }
   }
 
   // Basic Info Section (Left)
@@ -62,7 +125,7 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0;
     height: 100%;
   }
 
@@ -71,12 +134,17 @@
     flex-direction: column;
   }
 
-  .basic-info-section .form-group:last-child textarea {
-    flex: 1 1 auto;
-    min-height: 8rem;
+  .basic-info-section .form-group--grow {
+    flex: 1;
+
+    textarea {
+      flex: 1 1 auto;
+      min-height: 6rem;
+      resize: vertical;
+    }
   }
 
-  // Permission Section (Right) - Responsive width
+  // Permission Section (Right)
   .permission-section {
     width: 100%;
     min-width: 17rem;
@@ -84,20 +152,13 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-
-    .section-label {
-      display: block;
-      margin-bottom: 0.75rem;
-      font-weight: 600;
-      font-size: 0.9375rem;
-      color: nb-theme(text-basic-color);
-    }
   }
 
   .form-group {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    margin-bottom: 1rem;
 
     .label {
       font-weight: 500;
@@ -110,7 +171,12 @@
       width: 100%;
       margin-bottom: 0;
 
-      // Fix nb-select prefix icon spacing to match nbInput (ngx-admin native spacing)
+      [nbPrefix] {
+        color: nb-theme(text-hint-color);
+        font-size: 1rem;
+      }
+
+      // Fix nb-select prefix icon spacing
       nb-select {
         ::ng-deep {
           button {
@@ -127,7 +193,7 @@
 
     .caption {
       display: block;
-      margin-top: var(--nb-space-xs);
+      margin-top: 0.25rem;
       font-size: 0.75rem;
       line-height: 1.4;
       min-height: 1.2rem;
@@ -143,15 +209,14 @@
   }
 
   // ============================================
-  // Permission Tree Styles (Inspired by query-execution tree)
+  // Permission Tree Styles
   // ============================================
-
   .permission-tree-container {
     width: 100%;
     min-width: 17rem;
     background: nb-theme(background-basic-color-1);
     border: 1px solid nb-theme(border-basic-color-3);
-    border-radius: nb-theme(radius);
+    border-radius: nb-theme(border-radius);
     overflow: hidden;
     flex: 1 1 auto;
     display: flex;
@@ -185,7 +250,7 @@
     }
   }
 
-  // Simple tree structure (no accordion)
+  // Simple tree structure
   .permission-tree {
     list-style: none;
     margin: 0;
@@ -202,7 +267,7 @@
       column-gap: 0.5rem;
       padding: 0.25rem 0.75rem;
       margin: 0.125rem 0;
-      border-radius: nb-theme(radius);
+      border-radius: nb-theme(border-radius);
       transition: all 0.15s ease;
       cursor: pointer;
 
@@ -225,7 +290,7 @@
         }
       }
 
-      // Checkbox with text (center, takes remaining space)
+      // Checkbox with text (center)
       .node-checkbox {
         min-width: 0;
         margin: 0;
@@ -258,7 +323,7 @@
         }
       }
 
-      // Toggle button (expand/collapse, right side)
+      // Toggle button (right side)
       .toggle-btn {
         padding: 0;
         width: 1.5rem;
@@ -277,7 +342,7 @@
 
         &:hover {
           background: nb-theme(background-basic-color-3);
-          border-radius: nb-theme(radius-sm);
+          border-radius: nb-theme(border-radius);
         }
       }
     }
@@ -312,12 +377,12 @@
 
   .org-code {
     color: nb-theme(text-hint-color);
-    font-size: 0.813rem;
-    margin-left: var(--nb-space-xs);
+    font-size: 0.8125rem;
+    margin-left: 0.25rem;
     font-weight: normal;
   }
 
-  // Fix nb-option left padding - remove checkbox space
+  // Fix nb-option left padding
   ::ng-deep {
     nb-option {
       padding-left: 1rem !important;
@@ -328,7 +393,6 @@
       }
     }
     
-    // Remove checkbox/icon space in dropdown
     .select-button + .options-list {
       nb-option {
         padding-left: 1rem !important;
@@ -336,19 +400,28 @@
     }
   }
 
+  // ============================================
+  // Footer Actions
+  // ============================================
   .footer-actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--nb-space-md);
-    padding: var(--nb-space-md) var(--nb-space-lg);
-    background: nb-theme(background-basic-color-1);
+
+    button {
+      min-width: 6rem;
+
+      nb-icon {
+        margin-right: 0.25rem;
+      }
+    }
   }
 
-  // Responsive adjustments
+  // ============================================
+  // Responsive
+  // ============================================
   @media (max-width: 1024px) {
     :host {
       width: calc(100vw - 2rem);
-      min-width: calc(100vw - 2rem);
     }
 
     .form-layout {
@@ -362,12 +435,17 @@
   }
 
   @media (max-width: 768px) {
+    .dialog-subtitle {
+      padding-left: 0;
+      margin-top: 0.5rem;
+    }
+
     .role-form {
-      padding: var(--nb-space-md);
+      padding: 0.5rem;
     }
 
     .basic-info-section {
-      gap: 0.875rem;
+      gap: 0;
     }
   }
 }

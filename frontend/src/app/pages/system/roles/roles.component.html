@@ -1,37 +1,48 @@
-<nb-card>
+<nb-card class="roles-card">
   <nb-card-header>
     <div class="header">
       <div class="header__info">
-        <h5 class="header__title">角色管理</h5>
+        <div class="header__title-row">
+          <nb-icon icon="shield-outline" class="header__icon"></nb-icon>
+          <h5 class="header__title">角色管理</h5>
+        </div>
         <p class="header__subtitle">维护系统角色，并为其分配访问权限</p>
       </div>
-      <button
-        nbButton
-        status="primary"
-        size="small"
-        (click)="openCreateRole()"
-        [disabled]="!canCreateRole"
-        ngxHasPermission="api:roles:create"
-      >
-        <nb-icon icon="plus-outline"></nb-icon>
-        创建角色
-      </button>
+      <div class="header__actions">
+        <button
+          nbButton
+          status="primary"
+          size="small"
+          (click)="openCreateRole()"
+          [disabled]="!canCreateRole"
+          ngxHasPermission="api:roles:create"
+        >
+          <nb-icon icon="plus-outline"></nb-icon>
+          创建角色
+        </button>
+      </div>
     </div>
   </nb-card-header>
 
   <nb-card-body>
-    <div *ngIf="loading" class="loading">
+    <!-- Loading spinner -->
+    <div *ngIf="loading" class="loading-container">
       <nb-spinner size="large" status="primary"></nb-spinner>
+      <span class="loading-text">加载中...</span>
     </div>
 
-    <nb-alert *ngIf="!loading && !hasListPermission" status="warning">
+    <!-- No permission alert -->
+    <nb-alert *ngIf="!loading && !hasListPermission" status="warning" class="permission-alert">
+      <nb-icon icon="alert-triangle-outline"></nb-icon>
       您暂无查看角色的权限，请联系管理员获取授权。
     </nb-alert>
 
-    <ng2-smart-table
-      *ngIf="!loading && hasListPermission"
-      [settings]="settings"
-      [source]="source"
-    ></ng2-smart-table>
+    <!-- Table with enhanced styling -->
+    <div class="table-container" *ngIf="!loading && hasListPermission">
+      <ng2-smart-table
+        [settings]="settings"
+        [source]="source"
+      ></ng2-smart-table>
+    </div>
   </nb-card-body>
 </nb-card>

@@ -35,7 +35,7 @@ export class LLMProviderFormDialogComponent implements OnInit {
     { name: 'openai', display: 'OpenAI', api_base: 'https://api.openai.com/v1', model: 'gpt-4o' },
     { name: 'deepseek', display: 'DeepSeek', api_base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
     { name: 'qwen', display: '通义千问', api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
-    { name: 'azure', display: 'Azure OpenAI', api_base: 'https://YOUR_RESOURCE.openai.azure.com', model: 'gpt-4' },
+    { name: 'openrouter', display: 'OpenRouter', api_base: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o' },
     { name: 'custom', display: '自定义', api_base: '', model: '' },
   ];
 
@@ -77,26 +77,13 @@ export class LLMProviderFormDialogComponent implements OnInit {
   }
 
   applyPreset(preset: any): void {
-    if (preset.name === 'custom') {
-      return;
-    }
+    if (!preset || preset.name === 'custom') return;
     this.form.patchValue({
       name: preset.name,
       display_name: preset.display,
       api_base: preset.api_base,
       model_name: preset.model,
     });
-  }
-
-  getPresetIcon(name: string): string {
-    const icons: Record<string, string> = {
-      openai: 'globe-2-outline',
-      deepseek: 'compass-outline',
-      qwen: 'message-circle-outline',
-      azure: 'cloud-outline',
-      custom: 'settings-outline',
-    };
-    return icons[name] || 'cube-outline';
   }
 
   toggleApiKeyVisibility(): void {

@@ -9,16 +9,17 @@ import { PermissionService } from '../../../../@core/data/permission.service';
 @Component({
   selector: 'ngx-organizations-actions-cell',
   template: `
-    <div class="actions">
+    <div class="actions-container">
       <button
         nbButton
         ghost
         size="tiny"
         status="primary"
-        nbTooltip="编辑组织"
+        nbTooltip="编辑组织信息"
         nbTooltipPlacement="top"
         [disabled]="!canEdit"
         (click)="onEditClick($event)"
+        class="action-btn"
       >
         <nb-icon icon="edit-2-outline"></nb-icon>
       </button>
@@ -27,10 +28,11 @@ import { PermissionService } from '../../../../@core/data/permission.service';
         ghost
         size="tiny"
         status="danger"
-        nbTooltip="删除组织"
+        [nbTooltip]="rowData?.is_system ? '系统组织无法删除' : '删除组织'"
         nbTooltipPlacement="top"
         [disabled]="!canDelete"
         (click)="onDeleteClick($event)"
+        class="action-btn"
       >
         <nb-icon icon="trash-2-outline"></nb-icon>
       </button>
@@ -38,10 +40,23 @@ import { PermissionService } from '../../../../@core/data/permission.service';
   `,
   styles: [
     `
-      .actions {
+      .actions-container {
         display: flex;
         justify-content: center;
-        gap: var(--nb-space-xs);
+        gap: 0.25rem;
+        align-items: center;
+      }
+
+      .action-btn {
+        transition: all 0.2s ease;
+
+        &:hover:not(:disabled) {
+          transform: translateY(-1px);
+        }
+
+        &:active:not(:disabled) {
+          transform: translateY(0);
+        }
       }
     `,
   ],
@@ -60,14 +75,12 @@ export class OrganizationsActionsCellComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Subscribe to permission changes to trigger change detection
     this.permissionService.permissions$
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         this.cdr.markForCheck();
       });
 
-    // Subscribe to user changes to trigger change detection
     this.authService.currentUser
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
@@ -81,28 +94,22 @@ export class OrganizationsActionsCellComponent implements OnInit, OnDestroy {
   }
 
   get canEdit(): boolean {
-    // System organizations cannot be edited
     if (this.rowData?.is_system) {
       return false;
     }
-    // Check super admin first
     if (this.authService.isSuperAdmin()) {
       return true;
     }
-    // Then check specific permission
     return this.permissionService.hasPermission('api:organizations:update');
   }
 
   get canDelete(): boolean {
-    // System organizations cannot be deleted
     if (this.rowData?.is_system) {
       return false;
     }
-    // Check super admin first
     if (this.authService.isSuperAdmin()) {
       return true;
     }
-    // Then check specific permission
     return this.permissionService.hasPermission('api:organizations:delete');
   }
 
@@ -120,4 +127,3 @@ export class OrganizationsActionsCellComponent implements OnInit, OnDestroy {
     }
   }
 }
-

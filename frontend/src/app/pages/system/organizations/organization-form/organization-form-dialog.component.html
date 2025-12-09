@@ -1,114 +1,61 @@
 <nb-card class="organization-dialog">
   <nb-card-header>
     <div class="dialog-header">
-      <div>
-        <h5>{{ mode === 'create' ? '创建组织' : '编辑组织' }}</h5>
-        <p class="dialog-subtitle">
-          {{ mode === 'create' ? '创建新组织' : '修改组织与管理员配置' }}
-        </p>
-      </div>
-      <button nbButton ghost status="basic" (click)="cancel()">
+      <h5>{{ mode === 'create' ? '创建组织' : '编辑组织' }}</h5>
+      <button nbButton ghost status="basic" size="small" (click)="cancel()">
         <nb-icon icon="close-outline"></nb-icon>
       </button>
     </div>
   </nb-card-header>
 
   <nb-card-body>
-    <form [formGroup]="form" class="organization-form" novalidate>
-      <div class="form-container">
-        <!-- Code (only in create mode) -->
-        <div class="form-group" *ngIf="mode === 'create'">
-          <label class="label" for="input-code">组织代码</label>
-          <nb-form-field>
-            <input
-              nbInput
-              fullWidth
-              id="input-code"
-              placeholder="请输入组织代码（小写字母、数字、下划线）"
-              formControlName="code"
-              [status]="form.get('code')?.invalid && form.get('code')?.touched ? 'danger' : 'basic'"
-              maxlength="50"
-            />
-          </nb-form-field>
-          <ng-container *ngIf="form.get('code')?.invalid && form.get('code')?.touched">
-            <p class="caption status-danger" *ngIf="form.get('code')?.errors?.['required']">
-              组织代码不能为空
-            </p>
-            <p class="caption status-danger" *ngIf="form.get('code')?.errors?.['pattern']">
-              组织代码只能包含小写字母、数字和下划线
-            </p>
-          </ng-container>
-        </div>
-
-        <!-- Name -->
+    <form [formGroup]="form" novalidate>
+      <!-- Code & Name (create mode) -->
+      <div class="form-row" *ngIf="mode === 'create'">
         <div class="form-group">
-          <label class="label" for="input-name">组织名称</label>
-          <nb-form-field>
-            <input
-              nbInput
-              fullWidth
-              id="input-name"
-              placeholder="请输入组织名称"
-              formControlName="name"
-              [status]="form.get('name')?.invalid && form.get('name')?.touched ? 'danger' : 'basic'"
-              maxlength="100"
-            />
-          </nb-form-field>
-          <ng-container *ngIf="form.get('name')?.invalid && form.get('name')?.touched">
-            <p class="caption status-danger" *ngIf="form.get('name')?.errors?.['required']">
-              组织名称不能为空
-            </p>
-          </ng-container>
+          <label class="label">组织代码</label>
+          <input nbInput fullWidth formControlName="code" placeholder="小写字母、数字、下划线"
+            [status]="form.get('code')?.invalid && form.get('code')?.touched ? 'danger' : 'basic'" />
         </div>
-
-        <!-- Description -->
         <div class="form-group">
-          <label class="label" for="input-description">描述</label>
-          <nb-form-field>
-            <textarea
-              nbInput
-              fullWidth
-              id="input-description"
-              placeholder="请输入组织描述（可选）"
-              formControlName="description"
-              rows="3"
-              maxlength="500"
-            ></textarea>
-          </nb-form-field>
+          <label class="label">组织名称</label>
+          <input nbInput fullWidth formControlName="name" placeholder="组织名称"
+            [status]="form.get('name')?.invalid && form.get('name')?.touched ? 'danger' : 'basic'" />
         </div>
+      </div>
 
-        <!-- Admin Section (only in edit mode) -->
-        <div class="form-group" *ngIf="mode === 'edit'">
-          <label class="label" for="input-admin-user-id">组织管理员（可选）</label>
-          <nb-form-field>
-            <nb-select
-              formControlName="admin_user_id"
-              id="input-admin-user-id"
-              placeholder="请选择组织内的用户作为管理员"
-              fullWidth
-            >
-              <nb-option *ngFor="let user of availableUsers; trackBy: trackByUserId" [value]="user.id">
-                {{ user.username }}
-                <span class="user-email" *ngIf="user.email"> - {{ user.email }}</span>
-              </nb-option>
-              <nb-option *ngIf="availableUsers.length === 0" disabled>暂无该组织的用户</nb-option>
-            </nb-select>
-          </nb-form-field>
-          <p class="caption status-hint">
-            仅可选择已属于该组织的用户。留空则保持当前管理员不变。
-          </p>
+      <!-- Name only (edit mode) -->
+      <div class="form-row" *ngIf="mode === 'edit'">
+        <div class="form-group full">
+          <label class="label">组织名称</label>
+          <input nbInput fullWidth formControlName="name" placeholder="组织名称"
+            [status]="form.get('name')?.invalid && form.get('name')?.touched ? 'danger' : 'basic'" />
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="form-row">
+        <div class="form-group full">
+          <label class="label">描述</label>
+          <textarea nbInput fullWidth formControlName="description" placeholder="组织描述（可选）" rows="2"></textarea>
+        </div>
+      </div>
+
+      <!-- Admin (edit mode) -->
+      <div class="form-row" *ngIf="mode === 'edit'">
+        <div class="form-group full">
+          <label class="label">管理员</label>
+          <nb-select formControlName="admin_user_id" placeholder="选择管理员（可选）" fullWidth>
+            <nb-option *ngFor="let user of availableUsers; trackBy: trackByUserId" [value]="user.id">
+              {{ user.username }} <span class="hint" *ngIf="user.email">- {{ user.email }}</span>
+            </nb-option>
+          </nb-select>
         </div>
       </div>
     </form>
   </nb-card-body>
 
   <nb-card-footer>
-    <div class="footer-actions">
-      <button nbButton ghost status="basic" (click)="cancel()">取消</button>
-      <button nbButton status="primary" (click)="submit()" [disabled]="form.invalid">
-        {{ mode === 'create' ? '创建组织' : '保存修改' }}
-      </button>
-    </div>
+    <button nbButton status="primary" size="small" (click)="submit()" [disabled]="form.invalid">保存</button>
   </nb-card-footer>
 </nb-card>
-

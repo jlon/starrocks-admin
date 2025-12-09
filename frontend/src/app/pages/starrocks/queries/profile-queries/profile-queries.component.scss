@@ -338,7 +338,7 @@
     }
   }
 
-  // Top 1 Node (RED)
+  // Top 1 Node (RED) - Most time consuming
   &.is-top-1 {
     border-color: #cf1322;
     
@@ -355,8 +355,9 @@
       }
     }
     
-    .node-bottom-progress {
-      display: none;
+    // Top 1 also shows progress bar (red color)
+    .node-bottom-progress .progress-bar {
+      background: #cf1322 !important;
     }
   }
 

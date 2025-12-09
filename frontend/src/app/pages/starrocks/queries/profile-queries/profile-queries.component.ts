@@ -2183,12 +2183,15 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     return 'header-gray';
   }
 
-  // Get progress bar color
+  // Get progress bar color based on node rank and type
+  // Top 1: Red (most time consuming)
+  // Top 2/3 or SCAN/JOIN: Orange
+  // Others: Gray
   getProgressColor(node: any): string {
-    if (this.isScanNode(node) || this.isJoinNode(node)) {
-      return '#fa8c16';
-    }
-    return '#d9d9d9';
+    const rank = this.getNodeRank(node);
+    if (rank === 1) return '#cf1322';  // Red for Top 1
+    if (rank > 0 || this.isScanNode(node) || this.isJoinNode(node)) return '#fa8c16';  // Orange
+    return '#d9d9d9';  // Gray
   }
 
   // Toggle functions for right panel sections

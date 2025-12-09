@@ -197,8 +197,8 @@
                         </div>
                       </div>
 
-                      <!-- Bottom Progress Line -->
-                      <div class="node-bottom-progress" *ngIf="getNodeRank(node) !== 1">
+                      <!-- Bottom Progress Line (all nodes including Top 1) -->
+                      <div class="node-bottom-progress">
                          <div class="progress-bar" [style.width.%]="node.time_percentage" [style.background]="getProgressColor(node)"></div>
                       </div>
                     </div>

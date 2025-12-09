@@ -122,19 +122,18 @@
                     
                     <!-- Edges - Lines with dynamic width based on rows -->
                     <svg class="edges-svg" [attr.width]="graphWidth" [attr.height]="graphHeight">
-                      <!-- Arrow marker definitions -->
+                      <!-- Arrow marker definitions - dynamic size based on stroke width -->
                       <defs>
                         <marker *ngFor="let edge of graphEdges"
                                 [attr.id]="edge.markerId"
-                                [attr.markerWidth]="edge.arrowSize * 1.5"
-                                [attr.markerHeight]="edge.arrowSize * 1.5"
-                                [attr.refX]="edge.arrowSize * 0.8"
-                                [attr.refY]="edge.arrowSize / 2"
+                                [attr.markerWidth]="edge.arrowSize"
+                                [attr.markerHeight]="edge.arrowSize"
+                                [attr.refX]="edge.arrowRefX"
+                                [attr.refY]="edge.arrowRefY"
                                 orient="auto"
                                 markerUnits="userSpaceOnUse">
-                          <!-- Triangle arrow head -->
-                          <polygon [attr.points]="'0,0 ' + edge.arrowSize + ',' + (edge.arrowSize/2) + ' 0,' + edge.arrowSize"
-                                   [attr.fill]="edge.strokeColor"/>
+                          <!-- Dynamic triangle arrow head: scales with stroke width -->
+                          <polygon [attr.points]="edge.arrowPoints" [attr.fill]="edge.strokeColor"/>
                         </marker>
                       </defs>
                       <g *ngFor="let edge of graphEdges">
@@ -143,7 +142,6 @@
                               [attr.stroke]="edge.strokeColor"
                               [attr.stroke-width]="edge.strokeWidth"
                               stroke-linejoin="round"
-                              stroke-linecap="round"
                               [attr.marker-end]="'url(#' + edge.markerId + ')'" />
                       </g>
                     </svg>

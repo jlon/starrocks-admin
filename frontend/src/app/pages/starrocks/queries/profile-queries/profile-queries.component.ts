@@ -998,11 +998,29 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         };
       }
 
+      // Determine stroke color based on target node type
+      let strokeColor = '#bfbfbf';
+      if (targetNode) {
+        const name = targetNode.operator_name?.toUpperCase() || '';
+        if (name.includes('SCAN') || name.includes('JOIN')) {
+          strokeColor = '#fa8c16';
+        }
+      }
+
+      // Calculate arrow size based on stroke width
+      // Arrow must be larger than stroke width to avoid being covered
+      const arrowSize = Math.max(12, strokeWidth * 2.5);
+      const arrowRefY = arrowSize / 2;
+      // Polygon points: triangle pointing right - (0,0) -> (arrowSize, arrowSize/2) -> (0, arrowSize)
+      const arrowPoints = `0,0 ${arrowSize},${arrowRefY} 0,${arrowSize}`;
+      // refX = 0: arrow BASE aligns to path end, arrow TIP extends to original target
+      const arrowRefX = 0;
+
       // Build edge path: For multi-child parents, use vertical-then-diagonal pattern (like Figure 2)
       // Path: childTop -> verticalLift -> parentBottom (3 points: vertical segment + diagonal segment)
       const hasMultipleChildren = targetNode?.children && targetNode.children.length >= 2;
       let displayPoints: { x: number, y: number }[] = [visibleStart, visibleEnd];
-      
+
       if (hasMultipleChildren) {
         // Calculate vertical lift distance (how far to go up before turning diagonal)
         const deltaY = Math.abs(visibleStart.y - visibleEnd.y);
@@ -1018,20 +1036,27 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         displayPoints = [visibleStart, middlePoint, visibleEnd];
       }
 
-      // Label position: geometric middle of the path
-      const labelPos = this.getEdgeLabelPosition(displayPoints);
-
-      // Determine stroke color based on target node type
-      let strokeColor = '#bfbfbf';
-      if (targetNode) {
-        const name = targetNode.operator_name?.toUpperCase() || '';
-        if (name.includes('SCAN') || name.includes('JOIN')) {
-          strokeColor = '#fa8c16';
+      // **KEY FIX**: Shorten the path by arrowSize so the stroke doesn't overlap the arrow
+      // The arrow marker will "extend" from the shortened end to the original target
+      if (displayPoints.length >= 2) {
+        const lastIdx = displayPoints.length - 1;
+        const prevIdx = lastIdx - 1;
+        const dx = displayPoints[lastIdx].x - displayPoints[prevIdx].x;
+        const dy = displayPoints[lastIdx].y - displayPoints[prevIdx].y;
+        const segmentLen = Math.sqrt(dx * dx + dy * dy);
+        
+        if (segmentLen > arrowSize) {
+          // Shorten the last segment by arrowSize
+          const shortenRatio = (segmentLen - arrowSize) / segmentLen;
+          displayPoints[lastIdx] = {
+            x: displayPoints[prevIdx].x + dx * shortenRatio,
+            y: displayPoints[prevIdx].y + dy * shortenRatio
+          };
         }
       }
 
-      // Calculate arrow size based on stroke width
-      const arrowSize = Math.max(8, strokeWidth * 2);
+      // Label position: geometric middle of the path
+      const labelPos = this.getEdgeLabelPosition(displayPoints);
 
       return {
         v: e.v,
@@ -1042,6 +1067,9 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         strokeColor,
         strokeWidth,
         arrowSize,
+        arrowRefX,
+        arrowRefY,
+        arrowPoints,
         label: rows,
         labelFormatted,
       };
@@ -1115,26 +1143,42 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         
         // Source node: arrow starts from its TOP edge
         const newStartY = sourceNode.y - sourceNode.height / 2;
-        // Target node: arrow ends at its BOTTOM edge
-        const newEndY = (targetNode.y - targetNode.height / 2) + targetActualH;
+        // Target node: arrow ends at its BOTTOM edge (original target position)
+        const originalEndY = (targetNode.y - targetNode.height / 2) + targetActualH;
         
         const hasMultipleChildren = targetNode.children && targetNode.children.length >= 2;
         
         if (hasMultipleChildren && edge.points.length === 3) {
           // 3-point path: [start, middle, end] - vertical + diagonal pattern
-          const deltaY = Math.abs(newStartY - newEndY);
+          const deltaY = Math.abs(newStartY - originalEndY);
           const liftDistance = Math.min(50, deltaY * 0.35);
           
           edge.points[0] = { x: edge.points[0].x, y: newStartY };
-          edge.points[1] = { x: edge.points[0].x, y: newStartY - liftDistance }; // Middle point (vertical lift)
-          edge.points[2] = { x: edge.points[2].x, y: newEndY }; // End point
+          edge.points[1] = { x: edge.points[0].x, y: newStartY - liftDistance };
+          edge.points[2] = { x: edge.points[2].x, y: originalEndY };
         } else {
           // 2-point path: direct line
           edge.points[0] = { x: edge.points[0].x, y: newStartY };
-          edge.points[edge.points.length - 1] = { x: edge.points[edge.points.length - 1].x, y: newEndY };
+          edge.points[edge.points.length - 1] = { x: edge.points[edge.points.length - 1].x, y: originalEndY };
         }
         
-        // Update label position using geometric middle
+        // **KEY FIX**: Shorten the last segment by arrowSize so stroke doesn't overlap arrow
+        const arrowSize = edge.arrowSize || 12;
+        const lastIdx = edge.points.length - 1;
+        const prevIdx = lastIdx - 1;
+        const dx = edge.points[lastIdx].x - edge.points[prevIdx].x;
+        const dy = edge.points[lastIdx].y - edge.points[prevIdx].y;
+        const segmentLen = Math.sqrt(dx * dx + dy * dy);
+        
+        if (segmentLen > arrowSize) {
+          const shortenRatio = (segmentLen - arrowSize) / segmentLen;
+          edge.points[lastIdx] = {
+            x: edge.points[prevIdx].x + dx * shortenRatio,
+            y: edge.points[prevIdx].y + dy * shortenRatio
+          };
+        }
+        
+        // Update label position
         edge.labelPos = this.getEdgeLabelPosition(edge.points);
       }
       

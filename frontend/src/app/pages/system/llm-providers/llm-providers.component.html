@@ -1,46 +1,60 @@
-<nb-card>
+<nb-card class="llm-providers-card">
   <nb-card-header>
     <div class="header">
       <div class="header__info">
-        <h5 class="header__title">LLM 提供商管理</h5>
+        <div class="header__title-row">
+          <nb-icon icon="flash-outline" class="header__icon"></nb-icon>
+          <h5 class="header__title">LLM 提供商管理</h5>
+        </div>
         <p class="header__subtitle">配置大语言模型 API，用于增强根因分析和智能诊断</p>
       </div>
-      <button
-        nbButton
-        status="primary"
-        size="small"
-        (click)="openCreateProvider()"
-        [disabled]="!canCreate"
-      >
-        <nb-icon icon="plus-outline"></nb-icon>
-        添加提供商
-      </button>
+      <div class="header__actions">
+        <button
+          nbButton
+          status="primary"
+          size="small"
+          (click)="openCreateProvider()"
+          [disabled]="!canCreate"
+        >
+          <nb-icon icon="plus-outline"></nb-icon>
+          添加提供商
+        </button>
+      </div>
     </div>
   </nb-card-header>
 
   <nb-card-body>
-    <!-- Info alert -->
-    <nb-alert status="info" closable class="mb-3">
-      <nb-icon icon="info-outline"></nb-icon>
-      LLM 提供商用于增强 Profile 根因分析。系统会使用<strong>已激活</strong>的提供商进行分析。
-      支持 OpenAI、DeepSeek、通义千问等兼容 OpenAI API 的服务。
-    </nb-alert>
+    <!-- Info alert with better styling -->
+    <div class="info-banner">
+      <div class="info-banner__icon">
+        <nb-icon icon="bulb-outline"></nb-icon>
+      </div>
+      <div class="info-banner__content">
+        <span class="info-banner__text">
+          LLM 提供商用于增强 Profile 根因分析。系统会使用<strong>已激活</strong>的提供商进行分析。
+          支持 OpenAI、DeepSeek、通义千问等兼容 OpenAI API 的服务。
+        </span>
+      </div>
+    </div>
 
     <!-- Loading spinner -->
-    <div *ngIf="loading" class="loading">
+    <div *ngIf="loading" class="loading-container">
       <nb-spinner size="large" status="primary"></nb-spinner>
+      <span class="loading-text">加载中...</span>
     </div>
 
     <!-- No permission alert -->
-    <nb-alert *ngIf="!loading && !hasListPermission" status="warning">
+    <nb-alert *ngIf="!loading && !hasListPermission" status="warning" class="permission-alert">
+      <nb-icon icon="alert-triangle-outline"></nb-icon>
       您暂无查看 LLM 提供商的权限，请联系管理员获取授权。
     </nb-alert>
 
-    <!-- Table -->
-    <ng2-smart-table
-      *ngIf="!loading && hasListPermission"
-      [settings]="settings"
-      [source]="source"
-    ></ng2-smart-table>
+    <!-- Table with enhanced styling -->
+    <div class="table-container" *ngIf="!loading && hasListPermission">
+      <ng2-smart-table
+        [settings]="settings"
+        [source]="source"
+      ></ng2-smart-table>
+    </div>
   </nb-card-body>
 </nb-card>

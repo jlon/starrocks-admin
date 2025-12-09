@@ -88,6 +88,17 @@ export class LLMProviderFormDialogComponent implements OnInit {
     });
   }
 
+  getPresetIcon(name: string): string {
+    const icons: Record<string, string> = {
+      openai: 'globe-2-outline',
+      deepseek: 'compass-outline',
+      qwen: 'message-circle-outline',
+      azure: 'cloud-outline',
+      custom: 'settings-outline',
+    };
+    return icons[name] || 'cube-outline';
+  }
+
   toggleApiKeyVisibility(): void {
     this.showApiKey = !this.showApiKey;
   }

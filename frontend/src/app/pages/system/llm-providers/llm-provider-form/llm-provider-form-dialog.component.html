@@ -1,13 +1,18 @@
 <nb-card class="llm-provider-dialog">
   <nb-card-header>
     <div class="dialog-header">
-      <div>
-        <h5>{{ mode === 'create' ? '添加 LLM 提供商' : '编辑 LLM 提供商' }}</h5>
+      <div class="dialog-header__info">
+        <div class="dialog-header__title-row">
+          <div class="dialog-header__icon" [ngClass]="mode === 'create' ? 'icon--create' : 'icon--edit'">
+            <nb-icon [icon]="mode === 'create' ? 'plus-outline' : 'edit-2-outline'"></nb-icon>
+          </div>
+          <h5>{{ mode === 'create' ? '添加 LLM 提供商' : '编辑 LLM 提供商' }}</h5>
+        </div>
         <p class="dialog-subtitle">
           {{ mode === 'create' ? '配置新的大语言模型 API 服务' : '修改 LLM 提供商配置' }}
         </p>
       </div>
-      <button nbButton ghost status="basic" (click)="cancel()">
+      <button nbButton ghost status="basic" (click)="cancel()" class="close-btn">
         <nb-icon icon="close-outline"></nb-icon>
       </button>
     </div>
@@ -15,197 +20,247 @@
 
   <nb-card-body>
     <form [formGroup]="form" class="llm-form" novalidate>
-      <!-- Quick Presets -->
-      <div class="form-group" *ngIf="mode === 'create'">
-        <label class="label">快速选择</label>
-        <div class="preset-buttons">
-          <button
+      <!-- Quick Presets - Enhanced card style -->
+      <div class="preset-section" *ngIf="mode === 'create'">
+        <label class="section-label">
+          <nb-icon icon="flash-outline"></nb-icon>
+          快速选择
+        </label>
+        <div class="preset-grid">
+          <div
             *ngFor="let preset of presets"
-            nbButton
-            size="small"
-            [status]="form.get('name')?.value === preset.name ? 'primary' : 'basic'"
+            class="preset-card"
+            [class.preset-card--active]="form.get('name')?.value === preset.name"
+            [class.preset-card--custom]="preset.name === 'custom'"
             (click)="applyPreset(preset)"
-            type="button"
           >
-            {{ preset.display }}
-          </button>
+            <div class="preset-card__icon">
+              <nb-icon [icon]="getPresetIcon(preset.name)"></nb-icon>
+            </div>
+            <span class="preset-card__name">{{ preset.display }}</span>
+          </div>
         </div>
       </div>
 
-      <div class="form-row">
-        <!-- Name -->
-        <div class="form-group form-group--half">
-          <label class="label" for="input-name">标识名称</label>
-          <input
-            nbInput
-            fullWidth
-            id="input-name"
-            placeholder="如: openai, deepseek"
-            formControlName="name"
-            [status]="form.get('name')?.invalid && form.get('name')?.touched ? 'danger' : 'basic'"
-            maxlength="50"
-          />
-          <ng-container *ngIf="form.get('name')?.invalid && form.get('name')?.touched">
-            <p class="caption status-danger" *ngIf="form.get('name')?.errors?.['required']">
-              标识名称不能为空
-            </p>
-            <p class="caption status-danger" *ngIf="form.get('name')?.errors?.['pattern']">
-              只能包含小写字母、数字、下划线和连字符
-            </p>
-          </ng-container>
+      <!-- Basic Info Section -->
+      <div class="form-section">
+        <label class="section-label" *ngIf="mode === 'create'">
+          <nb-icon icon="settings-2-outline"></nb-icon>
+          基本配置
+        </label>
+
+        <div class="form-row">
+          <!-- Name -->
+          <div class="form-group form-group--half">
+            <label class="label" for="input-name">标识名称</label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="hash-outline"></nb-icon>
+              <input
+                nbInput
+                fullWidth
+                id="input-name"
+                placeholder="如: openai, deepseek"
+                formControlName="name"
+                [status]="form.get('name')?.invalid && form.get('name')?.touched ? 'danger' : 'basic'"
+                maxlength="50"
+              />
+            </nb-form-field>
+            <ng-container *ngIf="form.get('name')?.invalid && form.get('name')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('name')?.errors?.['required']">
+                标识名称不能为空
+              </p>
+              <p class="caption status-danger" *ngIf="form.get('name')?.errors?.['pattern']">
+                只能包含小写字母、数字、下划线和连字符
+              </p>
+            </ng-container>
+          </div>
+
+          <!-- Display Name -->
+          <div class="form-group form-group--half">
+            <label class="label" for="input-display-name">显示名称</label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="text-outline"></nb-icon>
+              <input
+                nbInput
+                fullWidth
+                id="input-display-name"
+                placeholder="如: OpenAI GPT-4"
+                formControlName="display_name"
+                [status]="form.get('display_name')?.invalid && form.get('display_name')?.touched ? 'danger' : 'basic'"
+                maxlength="100"
+              />
+            </nb-form-field>
+            <ng-container *ngIf="form.get('display_name')?.invalid && form.get('display_name')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('display_name')?.errors?.['required']">
+                显示名称不能为空
+              </p>
+            </ng-container>
+          </div>
         </div>
 
-        <!-- Display Name -->
-        <div class="form-group form-group--half">
-          <label class="label" for="input-display-name">显示名称</label>
-          <input
-            nbInput
-            fullWidth
-            id="input-display-name"
-            placeholder="如: OpenAI GPT-4"
-            formControlName="display_name"
-            [status]="form.get('display_name')?.invalid && form.get('display_name')?.touched ? 'danger' : 'basic'"
-            maxlength="100"
-          />
-          <ng-container *ngIf="form.get('display_name')?.invalid && form.get('display_name')?.touched">
-            <p class="caption status-danger" *ngIf="form.get('display_name')?.errors?.['required']">
-              显示名称不能为空
-            </p>
-          </ng-container>
-        </div>
-      </div>
-
-      <!-- API Base URL -->
-      <div class="form-group">
-        <label class="label" for="input-api-base">API 地址</label>
-        <input
-          nbInput
-          fullWidth
-          id="input-api-base"
-          placeholder="https://api.openai.com/v1"
-          formControlName="api_base"
-          [status]="form.get('api_base')?.invalid && form.get('api_base')?.touched ? 'danger' : 'basic'"
-        />
-        <ng-container *ngIf="form.get('api_base')?.invalid && form.get('api_base')?.touched">
-          <p class="caption status-danger" *ngIf="form.get('api_base')?.errors?.['required']">
-            API 地址不能为空
-          </p>
-          <p class="caption status-danger" *ngIf="form.get('api_base')?.errors?.['pattern']">
-            请输入有效的 HTTP/HTTPS 地址
-          </p>
-        </ng-container>
-      </div>
-
-      <div class="form-row">
-        <!-- Model Name -->
-        <div class="form-group form-group--half">
-          <label class="label" for="input-model">模型名称</label>
-          <input
-            nbInput
-            fullWidth
-            id="input-model"
-            placeholder="如: gpt-4o, deepseek-chat"
-            formControlName="model_name"
-            [status]="form.get('model_name')?.invalid && form.get('model_name')?.touched ? 'danger' : 'basic'"
-            maxlength="100"
-          />
-          <ng-container *ngIf="form.get('model_name')?.invalid && form.get('model_name')?.touched">
-            <p class="caption status-danger" *ngIf="form.get('model_name')?.errors?.['required']">
-              模型名称不能为空
-            </p>
-          </ng-container>
-        </div>
-
-        <!-- API Key -->
-        <div class="form-group form-group--half">
-          <label class="label" for="input-api-key">
-            API Key
-            <span class="text-hint" *ngIf="mode === 'edit'">（留空保持不变）</span>
-          </label>
+        <!-- API Base URL -->
+        <div class="form-group">
+          <label class="label" for="input-api-base">API 地址</label>
           <nb-form-field>
+            <nb-icon nbPrefix icon="globe-outline"></nb-icon>
             <input
               nbInput
               fullWidth
-              id="input-api-key"
-              [type]="showApiKey ? 'text' : 'password'"
-              placeholder="sk-..."
-              formControlName="api_key"
-              [status]="form.get('api_key')?.invalid && form.get('api_key')?.touched ? 'danger' : 'basic'"
+              id="input-api-base"
+              placeholder="https://api.openai.com/v1"
+              formControlName="api_base"
+              [status]="form.get('api_base')?.invalid && form.get('api_base')?.touched ? 'danger' : 'basic'"
             />
-            <button nbSuffix nbButton ghost (click)="toggleApiKeyVisibility()" type="button">
-              <nb-icon [icon]="showApiKey ? 'eye-off-outline' : 'eye-outline'"></nb-icon>
-            </button>
           </nb-form-field>
-          <ng-container *ngIf="form.get('api_key')?.invalid && form.get('api_key')?.touched">
-            <p class="caption status-danger" *ngIf="form.get('api_key')?.errors?.['required']">
-              API Key 不能为空
+          <ng-container *ngIf="form.get('api_base')?.invalid && form.get('api_base')?.touched">
+            <p class="caption status-danger" *ngIf="form.get('api_base')?.errors?.['required']">
+              API 地址不能为空
+            </p>
+            <p class="caption status-danger" *ngIf="form.get('api_base')?.errors?.['pattern']">
+              请输入有效的 HTTP/HTTPS 地址
             </p>
           </ng-container>
         </div>
+
+        <div class="form-row">
+          <!-- Model Name -->
+          <div class="form-group form-group--half">
+            <label class="label" for="input-model">模型名称</label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="cube-outline"></nb-icon>
+              <input
+                nbInput
+                fullWidth
+                id="input-model"
+                placeholder="如: gpt-4o, deepseek-chat"
+                formControlName="model_name"
+                [status]="form.get('model_name')?.invalid && form.get('model_name')?.touched ? 'danger' : 'basic'"
+                maxlength="100"
+              />
+            </nb-form-field>
+            <ng-container *ngIf="form.get('model_name')?.invalid && form.get('model_name')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('model_name')?.errors?.['required']">
+                模型名称不能为空
+              </p>
+            </ng-container>
+          </div>
+
+          <!-- API Key -->
+          <div class="form-group form-group--half">
+            <label class="label" for="input-api-key">
+              API Key
+              <span class="label-hint" *ngIf="mode === 'edit'">（留空保持不变）</span>
+            </label>
+            <nb-form-field>
+              <nb-icon nbPrefix icon="lock-outline"></nb-icon>
+              <input
+                nbInput
+                fullWidth
+                id="input-api-key"
+                [type]="showApiKey ? 'text' : 'password'"
+                placeholder="sk-..."
+                formControlName="api_key"
+                [status]="form.get('api_key')?.invalid && form.get('api_key')?.touched ? 'danger' : 'basic'"
+              />
+              <button nbSuffix nbButton ghost size="small" (click)="toggleApiKeyVisibility()" type="button">
+                <nb-icon [icon]="showApiKey ? 'eye-off-outline' : 'eye-outline'"></nb-icon>
+              </button>
+            </nb-form-field>
+            <ng-container *ngIf="form.get('api_key')?.invalid && form.get('api_key')?.touched">
+              <p class="caption status-danger" *ngIf="form.get('api_key')?.errors?.['required']">
+                API Key 不能为空
+              </p>
+            </ng-container>
+          </div>
+        </div>
       </div>
 
-      <!-- Advanced Settings -->
-      <nb-accordion>
-        <nb-accordion-item>
-          <nb-accordion-item-header>高级设置</nb-accordion-item-header>
-          <nb-accordion-item-body>
-            <div class="form-row">
-              <div class="form-group form-group--quarter">
-                <label class="label" for="input-max-tokens">最大 Token</label>
-                <input
-                  nbInput
-                  fullWidth
-                  type="number"
-                  id="input-max-tokens"
-                  formControlName="max_tokens"
-                  min="1"
-                  max="128000"
-                />
+      <!-- Advanced Settings - Enhanced accordion -->
+      <div class="advanced-section">
+        <nb-accordion>
+          <nb-accordion-item [expanded]="false">
+            <nb-accordion-item-header>
+              <div class="accordion-header">
+                <nb-icon icon="options-2-outline"></nb-icon>
+                <span>高级设置</span>
+                <span class="accordion-hint">可选配置</span>
               </div>
-              <div class="form-group form-group--quarter">
-                <label class="label" for="input-temperature">温度</label>
-                <input
-                  nbInput
-                  fullWidth
-                  type="number"
-                  id="input-temperature"
-                  formControlName="temperature"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                />
+            </nb-accordion-item-header>
+            <nb-accordion-item-body>
+              <div class="advanced-grid">
+                <div class="form-group">
+                  <label class="label" for="input-max-tokens">
+                    <nb-icon icon="maximize-outline" class="label-icon"></nb-icon>
+                    最大 Token
+                  </label>
+                  <input
+                    nbInput
+                    fullWidth
+                    type="number"
+                    id="input-max-tokens"
+                    formControlName="max_tokens"
+                    min="1"
+                    max="128000"
+                  />
+                  <p class="caption status-hint">单次请求最大 Token 数</p>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="input-temperature">
+                    <nb-icon icon="thermometer-outline" class="label-icon"></nb-icon>
+                    温度
+                  </label>
+                  <input
+                    nbInput
+                    fullWidth
+                    type="number"
+                    id="input-temperature"
+                    formControlName="temperature"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                  />
+                  <p class="caption status-hint">0 = 确定性，2 = 创造性</p>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="input-timeout">
+                    <nb-icon icon="clock-outline" class="label-icon"></nb-icon>
+                    超时（秒）
+                  </label>
+                  <input
+                    nbInput
+                    fullWidth
+                    type="number"
+                    id="input-timeout"
+                    formControlName="timeout_seconds"
+                    min="5"
+                    max="600"
+                  />
+                  <p class="caption status-hint">请求超时时间</p>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="input-priority">
+                    <nb-icon icon="award-outline" class="label-icon"></nb-icon>
+                    优先级
+                  </label>
+                  <input
+                    nbInput
+                    fullWidth
+                    type="number"
+                    id="input-priority"
+                    formControlName="priority"
+                    min="0"
+                    max="100"
+                  />
+                  <p class="caption status-hint">数字越大优先级越高</p>
+                </div>
               </div>
-              <div class="form-group form-group--quarter">
-                <label class="label" for="input-timeout">超时（秒）</label>
-                <input
-                  nbInput
-                  fullWidth
-                  type="number"
-                  id="input-timeout"
-                  formControlName="timeout_seconds"
-                  min="5"
-                  max="600"
-                />
-              </div>
-              <div class="form-group form-group--quarter">
-                <label class="label" for="input-priority">优先级</label>
-                <input
-                  nbInput
-                  fullWidth
-                  type="number"
-                  id="input-priority"
-                  formControlName="priority"
-                  min="0"
-                  max="100"
-                />
-              </div>
-            </div>
-            <p class="caption status-hint">
-              优先级：数字越大优先级越高，用于 fallback 时选择备用提供商
-            </p>
-          </nb-accordion-item-body>
-        </nb-accordion-item>
-      </nb-accordion>
+            </nb-accordion-item-body>
+          </nb-accordion-item>
+        </nb-accordion>
+      </div>
     </form>
   </nb-card-body>
 
@@ -213,6 +268,7 @@
     <div class="footer-actions">
       <button nbButton ghost status="basic" (click)="cancel()">取消</button>
       <button nbButton status="primary" (click)="submit()" [disabled]="form.invalid">
+        <nb-icon [icon]="mode === 'create' ? 'plus-outline' : 'checkmark-outline'"></nb-icon>
         {{ mode === 'create' ? '添加提供商' : '保存修改' }}
       </button>
     </div>

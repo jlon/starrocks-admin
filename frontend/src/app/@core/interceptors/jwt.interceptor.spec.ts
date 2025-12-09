@@ -46,7 +46,7 @@ describe('JwtInterceptor', () => {
   it('attaches Authorization header when token exists', () => {
     const request = new HttpRequest('GET', '/api/test');
     const handleSpy = jasmine.createSpy('handle').and.returnValue(
-      throwError(() => new HttpErrorResponse({ status: 500 })),
+      throwError(new HttpErrorResponse({ status: 500 })),
     );
     const handler: HttpHandler = {
       handle: handleSpy,
@@ -64,7 +64,7 @@ describe('JwtInterceptor', () => {
     authServiceMock.normalizeReturnUrl.and.returnValue('/pages/starrocks/dashboard');
     const request = new HttpRequest('GET', '/api/test');
     const handler: HttpHandler = {
-      handle: () => throwError(() => new HttpErrorResponse({
+      handle: () => throwError(new HttpErrorResponse({
         status: 401,
         error: { message: 'Token expired' },
       })),

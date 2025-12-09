@@ -1,48 +1,44 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { NbToastrService } from '@nebular/theme';
 
 export class ErrorHandler {
   static extractErrorMessage(error: any): string {
-    console.log('[ErrorHandler] Full error object:', error);
-    console.log('[ErrorHandler] Error type:', typeof error);
-    console.log('[ErrorHandler] Error keys:', error ? Object.keys(error) : 'null/undefined');
-    console.log('[ErrorHandler] Error constructor:', error?.constructor?.name);
-    console.log('[ErrorHandler] Is HttpErrorResponse:', error instanceof HttpErrorResponse);
+    if (!error) return '操作失败，请稍后重试';
+
+    // Handle string error directly
+    if (typeof error === 'string') return error;
+
+    // HttpErrorResponse: error.error contains the response body
+    let body = error.error;
     
-    // 处理Angular HttpErrorResponse
-    if (error && typeof error === 'object') {
-      // 检查是否有后端返回的message（嵌套结构）
-      if (error.error && typeof error.error === 'object' && error.error.message) {
-        console.log('[ErrorHandler] Using error.error.message:', error.error.message);
-        return error.error.message;
-      }
-      
-      // 检查是否有嵌套的错误信息
-      if (error.error && error.error.error && error.error.error.message) {
-        console.log('[ErrorHandler] Using nested error.message:', error.error.error.message);
-        return error.error.error.message;
-      }
-      
-      // 检查是否有直接的message（后端直接返回的结构）
-      if (error.message) {
-        console.log('[ErrorHandler] Using error.message:', error.message);
-        return error.message;
-      }
-      
-      // 检查是否有statusText
-      if (error.statusText) {
-        console.log('[ErrorHandler] Using error.statusText:', error.statusText);
-        return error.statusText;
-      }
-      
-      // HTTP状态码对应的默认消息
-      if (error.status) {
-        console.log('[ErrorHandler] Using status-based message for status:', error.status);
-        return this.getDefaultMessageByStatus(error.status);
+    // If body is a string, try to parse it as JSON
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch (e) {
+        return body; // plain string error message
       }
     }
     
-    console.log('[ErrorHandler] Using fallback message');
+    // Backend returns {code, message} format
+    if (body && typeof body === 'object' && body.message) {
+      return body.message;
+    }
+    
+    // Nested error structure
+    if (body?.error?.message) {
+      return body.error.message;
+    }
+    
+    // Direct message on error object (but not Angular's generic Http failure message)
+    if (error.message && !error.message.includes('Http failure')) {
+      return error.message;
+    }
+    
+    // Status code based message
+    if (error.status) {
+      return this.getDefaultMessageByStatus(error.status);
+    }
+    
     return '操作失败，请稍后重试';
   }
   

@@ -57,7 +57,7 @@ export class JwtInterceptor implements HttpInterceptor {
             // This happens when user logs out but components are still running auto-refresh
           }
         }
-        return throwError(() => error);
+        return throwError(error);
       }),
     );
   }

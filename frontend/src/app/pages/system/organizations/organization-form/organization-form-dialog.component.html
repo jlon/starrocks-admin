@@ -1,7 +1,7 @@
 <nb-card class="organization-dialog">
   <nb-card-header>
     <div class="dialog-header">
-      <h5>{{ mode === 'create' ? '创建组织' : '编辑组织' }}</h5>
+        <h5>{{ mode === 'create' ? '创建组织' : '编辑组织' }}</h5>
       <button nbButton ghost status="basic" size="small" (click)="cancel()">
         <nb-icon icon="close-outline"></nb-icon>
       </button>
@@ -31,25 +31,25 @@
           <input nbInput fullWidth formControlName="name" placeholder="组织名称"
             [status]="form.get('name')?.invalid && form.get('name')?.touched ? 'danger' : 'basic'" />
         </div>
-      </div>
+        </div>
 
-      <!-- Description -->
+        <!-- Description -->
       <div class="form-row">
         <div class="form-group full">
           <label class="label">描述</label>
           <textarea nbInput fullWidth formControlName="description" placeholder="组织描述（可选）" rows="2"></textarea>
         </div>
-      </div>
+        </div>
 
       <!-- Admin (edit mode) -->
       <div class="form-row" *ngIf="mode === 'edit'">
         <div class="form-group full">
           <label class="label">管理员</label>
           <nb-select formControlName="admin_user_id" placeholder="选择管理员（可选）" fullWidth>
-            <nb-option *ngFor="let user of availableUsers; trackBy: trackByUserId" [value]="user.id">
+              <nb-option *ngFor="let user of availableUsers; trackBy: trackByUserId" [value]="user.id">
               {{ user.username }} <span class="hint" *ngIf="user.email">- {{ user.email }}</span>
-            </nb-option>
-          </nb-select>
+              </nb-option>
+            </nb-select>
         </div>
       </div>
     </form>

@@ -1,7 +1,7 @@
 <nb-card class="llm-provider-dialog">
   <nb-card-header>
     <div class="dialog-header">
-      <h5>{{ mode === 'create' ? '添加 LLM 提供商' : '编辑 LLM 提供商' }}</h5>
+        <h5>{{ mode === 'create' ? '添加 LLM 提供商' : '编辑 LLM 提供商' }}</h5>
       <button nbButton ghost status="basic" size="small" (click)="cancel()">
         <nb-icon icon="close-outline"></nb-icon>
       </button>
@@ -13,10 +13,10 @@
       <!-- Quick Preset (dropdown) -->
       <div class="form-row" *ngIf="mode === 'create'">
         <div class="form-group full">
-          <label class="label">快速选择</label>
+        <label class="label">快速选择</label>
           <nb-select placeholder="选择预设模板" fullWidth (selectedChange)="applyPreset($event)">
             <nb-option *ngFor="let preset of presets" [value]="preset">
-              {{ preset.display }}
+            {{ preset.display }}
             </nb-option>
           </nb-select>
         </div>

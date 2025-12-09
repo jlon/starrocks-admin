@@ -126,13 +126,13 @@
                       <defs>
                         <marker *ngFor="let edge of graphEdges"
                                 [attr.id]="edge.markerId"
-                                [attr.markerWidth]="edge.arrowSize"
-                                [attr.markerHeight]="edge.arrowSize"
-                                [attr.refX]="edge.arrowSize"
+                                [attr.markerWidth]="edge.arrowSize * 1.5"
+                                [attr.markerHeight]="edge.arrowSize * 1.5"
+                                [attr.refX]="edge.arrowSize * 0.8"
                                 [attr.refY]="edge.arrowSize / 2"
                                 orient="auto"
                                 markerUnits="userSpaceOnUse">
-                          <!-- Triangle pointing RIGHT (orient=auto rotates to path direction) -->
+                          <!-- Triangle arrow head -->
                           <polygon [attr.points]="'0,0 ' + edge.arrowSize + ',' + (edge.arrowSize/2) + ' 0,' + edge.arrowSize"
                                    [attr.fill]="edge.strokeColor"/>
                         </marker>
@@ -142,6 +142,8 @@
                               class="edge-path" 
                               [attr.stroke]="edge.strokeColor"
                               [attr.stroke-width]="edge.strokeWidth"
+                              stroke-linejoin="round"
+                              stroke-linecap="round"
                               [attr.marker-end]="'url(#' + edge.markerId + ')'" />
                       </g>
                     </svg>
@@ -164,7 +166,12 @@
                          [ngClass]="{
                            'selected': selectedNode?.id === node.id,
                            'is-top-1': getNodeRank(node) === 1, 
-                           'is-top-node': getNodeRank(node) > 0
+                           'is-top-node': getNodeRank(node) > 0,
+                           'node-scan': isScanNode(node),
+                           'node-join': isJoinNode(node),
+                           'node-project': isProjectNode(node),
+                           'node-exchange': isExchangeNode(node),
+                           'node-agg': isAggregationNode(node)
                          }"
                          [style.left.px]="node.x - (node.width/2)"
                          [style.top.px]="node.y - (node.height/2)"

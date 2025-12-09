@@ -8,17 +8,17 @@
   // ============================================
   // Header Section
   // ============================================
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
     gap: 1rem;
-  }
+}
 
-  .header__info {
-    flex: 1;
-  }
+.header__info {
+  flex: 1;
+}
 
   .header__title-row {
     display: flex;
@@ -31,14 +31,14 @@
     color: nb-theme(color-primary-default);
   }
 
-  .header__title {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
+.header__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
     color: nb-theme(text-basic-color);
-  }
+}
 
-  .header__subtitle {
+.header__subtitle {
     margin: 0.375rem 0 0 0;
     padding-left: 2rem; // Align with title (icon width + gap)
     color: nb-theme(text-hint-color);
@@ -93,7 +93,7 @@
   }
 
   .info-banner__text {
-    font-size: 0.875rem;
+  font-size: 0.875rem;
     line-height: 1.5;
     color: nb-theme(text-basic-color);
 
@@ -107,13 +107,13 @@
   // Loading State
   // ============================================
   .loading-container {
-    display: flex;
+  display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    min-height: 200px;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
     gap: 1rem;
-  }
+}
 
   .loading-text {
     font-size: 0.875rem;
@@ -130,7 +130,7 @@
 
     nb-icon {
       font-size: 1.25rem;
-    }
+}
   }
 
   // ============================================
@@ -145,7 +145,7 @@
   ::ng-deep {
     ng2-smart-table {
       table {
-        width: 100%;
+  width: 100%;
         border-collapse: separate;
         border-spacing: 0;
 
@@ -183,7 +183,7 @@
 
             td {
               padding: 0.75rem 1rem;
-              vertical-align: middle;
+    vertical-align: middle;
               border-bottom: 1px solid nb-theme(border-basic-color-3);
               font-size: 0.875rem;
               color: nb-theme(text-basic-color);

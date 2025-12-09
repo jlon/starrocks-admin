@@ -27,16 +27,16 @@ export class ErrorHandler {
     // Nested error structure
     if (body?.error?.message) {
       return body.error.message;
-    }
-    
+      }
+      
     // Direct message on error object (but not Angular's generic Http failure message)
     if (error.message && !error.message.includes('Http failure')) {
-      return error.message;
-    }
-    
+        return error.message;
+      }
+      
     // Status code based message
-    if (error.status) {
-      return this.getDefaultMessageByStatus(error.status);
+      if (error.status) {
+        return this.getDefaultMessageByStatus(error.status);
     }
     
     return '操作失败，请稍后重试';

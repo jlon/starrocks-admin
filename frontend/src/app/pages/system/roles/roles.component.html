@@ -4,22 +4,22 @@
       <div class="header__info">
         <div class="header__title-row">
           <nb-icon icon="shield-outline" class="header__icon"></nb-icon>
-          <h5 class="header__title">角色管理</h5>
+        <h5 class="header__title">角色管理</h5>
         </div>
         <p class="header__subtitle">维护系统角色，并为其分配访问权限</p>
       </div>
       <div class="header__actions">
-        <button
-          nbButton
-          status="primary"
-          size="small"
-          (click)="openCreateRole()"
-          [disabled]="!canCreateRole"
-          ngxHasPermission="api:roles:create"
-        >
-          <nb-icon icon="plus-outline"></nb-icon>
-          创建角色
-        </button>
+      <button
+        nbButton
+        status="primary"
+        size="small"
+        (click)="openCreateRole()"
+        [disabled]="!canCreateRole"
+        ngxHasPermission="api:roles:create"
+      >
+        <nb-icon icon="plus-outline"></nb-icon>
+        创建角色
+      </button>
       </div>
     </div>
   </nb-card-header>
@@ -39,10 +39,10 @@
 
     <!-- Table with enhanced styling -->
     <div class="table-container" *ngIf="!loading && hasListPermission">
-      <ng2-smart-table
-        [settings]="settings"
-        [source]="source"
-      ></ng2-smart-table>
+    <ng2-smart-table
+      [settings]="settings"
+      [source]="source"
+    ></ng2-smart-table>
     </div>
   </nb-card-body>
 </nb-card>

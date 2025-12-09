@@ -1,9 +1,9 @@
 @import '../../../@theme/styles/themes';
 
 @include nb-install-component() {
-  :host {
-    display: block;
-  }
+:host {
+  display: block;
+}
 
   .roles-card {
     margin-bottom: 0;
@@ -12,10 +12,10 @@
   // ============================================
   // Header Section
   // ============================================
-  .header {
-    display: flex;
+.header {
+  display: flex;
     justify-content: space-between;
-    align-items: center;
+  align-items: center;
     width: 100%;
     gap: 1rem;
   }
@@ -54,15 +54,15 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-  }
+}
 
   // ============================================
   // Loading State
   // ============================================
   .loading-container {
-    display: flex;
+  display: flex;
     flex-direction: column;
-    justify-content: center;
+  justify-content: center;
     align-items: center;
     min-height: 200px;
     gap: 1rem;
@@ -83,7 +83,7 @@
 
     nb-icon {
       font-size: 1.25rem;
-    }
+}
   }
 
   // ============================================
@@ -97,7 +97,7 @@
   ::ng-deep {
     ng2-smart-table {
       table {
-        width: 100%;
+  width: 100%;
         border-collapse: separate;
         border-spacing: 0;
 
@@ -153,7 +153,7 @@
               }
 
               // Badge styling
-              .badge {
+    .badge {
                 display: inline-flex;
                 align-items: center;
                 padding: 0.25rem 0.5rem;
@@ -170,9 +170,9 @@
               .badge-basic {
                 background: nb-theme(background-basic-color-3);
                 color: nb-theme(text-hint-color);
-              }
-            }
-
+    }
+  }
+  
             &:last-child td {
               border-bottom: none;
             }

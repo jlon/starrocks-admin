@@ -95,7 +95,7 @@ import { LLMProvider } from '../../../../@core/data/llm-provider.service';
 
         nb-icon {
           font-size: 0.75rem;
-        }
+      }
       }
 
       .status-tag--enabled {

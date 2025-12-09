@@ -952,8 +952,8 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
 
       // Calculate dynamic stroke width based on rows (Algorithm: Logarithmic Scale)
       // Use Log scale because rows can vary from 0 to billions. Linear scale makes small diffs invisible.
-      const minStrokeWidth = 1.5;
-      const maxStrokeWidth = 6;
+      const minStrokeWidth = 2;
+      const maxStrokeWidth = 9;
       
       let strokeWidth = minStrokeWidth;
       if (rows > 0 && maxRows > 0) {
@@ -998,14 +998,28 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         };
       }
 
-      // Define points for the line
-      const displayPoints = [visibleStart, visibleEnd];
+      // Build edge path: For multi-child parents, use vertical-then-diagonal pattern (like Figure 2)
+      // Path: childTop -> verticalLift -> parentBottom (3 points: vertical segment + diagonal segment)
+      const hasMultipleChildren = targetNode?.children && targetNode.children.length >= 2;
+      let displayPoints: { x: number, y: number }[] = [visibleStart, visibleEnd];
+      
+      if (hasMultipleChildren) {
+        // Calculate vertical lift distance (how far to go up before turning diagonal)
+        const deltaY = Math.abs(visibleStart.y - visibleEnd.y);
+        const liftDistance = Math.min(50, deltaY * 0.35); // 35% of vertical distance, max 50px
+        
+        // Middle point: directly above source node (vertical segment)
+        const middlePoint = {
+          x: visibleStart.x,
+          y: visibleStart.y - liftDistance
+        };
+        
+        // Three-point path: vertical up, then diagonal to target
+        displayPoints = [visibleStart, middlePoint, visibleEnd];
+      }
 
-      // Label position: geometric middle of visible segment
-      const labelPos = {
-        x: (visibleStart.x + visibleEnd.x) / 2,
-        y: (visibleStart.y + visibleEnd.y) / 2
-      };
+      // Label position: geometric middle of the path
+      const labelPos = this.getEdgeLabelPosition(displayPoints);
 
       // Determine stroke color based on target node type
       let strokeColor = '#bfbfbf';
@@ -1096,31 +1110,32 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       const sourceNode = this.graphNodes.find(n => n.id === edge.v);
       const targetNode = this.graphNodes.find(n => n.id === edge.w);
       
-      if (sourceNode && targetNode) {
-        const sourceActualH = sourceNode.actualHeight || sourceNode.height;
+      if (sourceNode && targetNode && edge.points && edge.points.length >= 2) {
         const targetActualH = targetNode.actualHeight || targetNode.height;
-        
-        // DOM node is positioned at: top = node.y - dagreHeight/2
-        // So actual TOP edge = node.y - dagreHeight/2
-        // And actual BOTTOM edge = (node.y - dagreHeight/2) + actualDOMHeight
         
         // Source node: arrow starts from its TOP edge
         const newStartY = sourceNode.y - sourceNode.height / 2;
         // Target node: arrow ends at its BOTTOM edge
-        // BOTTOM = (node.y - dagreHeight/2) + actualDOMHeight
         const newEndY = (targetNode.y - targetNode.height / 2) + targetActualH;
         
-        // Update points
-        if (edge.points && edge.points.length >= 2) {
+        const hasMultipleChildren = targetNode.children && targetNode.children.length >= 2;
+        
+        if (hasMultipleChildren && edge.points.length === 3) {
+          // 3-point path: [start, middle, end] - vertical + diagonal pattern
+          const deltaY = Math.abs(newStartY - newEndY);
+          const liftDistance = Math.min(50, deltaY * 0.35);
+          
           edge.points[0] = { x: edge.points[0].x, y: newStartY };
-          edge.points[1] = { x: edge.points[1].x, y: newEndY };
+          edge.points[1] = { x: edge.points[0].x, y: newStartY - liftDistance }; // Middle point (vertical lift)
+          edge.points[2] = { x: edge.points[2].x, y: newEndY }; // End point
+        } else {
+          // 2-point path: direct line
+          edge.points[0] = { x: edge.points[0].x, y: newStartY };
+          edge.points[edge.points.length - 1] = { x: edge.points[edge.points.length - 1].x, y: newEndY };
         }
         
-        // Update label position (middle of line)
-        edge.labelPos = {
-          x: (edge.points[0].x + edge.points[1].x) / 2,
-          y: (newStartY + newEndY) / 2
-        };
+        // Update label position using geometric middle
+        edge.labelPos = this.getEdgeLabelPosition(edge.points);
       }
       
       return edge;
@@ -2088,23 +2103,47 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     return `url(${this.location.path()}#dag-arrow)`;
   }
 
+  private normalizedOperatorName(node: any): string {
+    return (node?.operator_name || '').toUpperCase();
+  }
+
+  isScanNode(node: any): boolean {
+    return this.normalizedOperatorName(node).includes('SCAN');
+  }
+
+  isJoinNode(node: any): boolean {
+    return this.normalizedOperatorName(node).includes('JOIN');
+  }
+
+  isProjectNode(node: any): boolean {
+    return this.normalizedOperatorName(node).includes('PROJECT');
+  }
+
+  isExchangeNode(node: any): boolean {
+    return this.normalizedOperatorName(node).includes('EXCHANGE');
+  }
+
+  isAggregationNode(node: any): boolean {
+    const name = this.normalizedOperatorName(node);
+    return name.includes('AGGREGATION') || name.includes('AGG');
+  }
+
   // Get node header class based on operator type (Figure 1 style)
   getNodeHeaderClass(node: any): string {
-    const name = node.operator_name?.toUpperCase() || '';
-    if (this.getNodeRank(node) === 1) return 'header-red';
-    if (name.includes('SCAN')) return 'header-orange';
-    if (name.includes('JOIN')) return 'header-orange';
-    if (name.includes('EXCHANGE')) return 'header-gray';
-    if (name.includes('PROJECT')) return 'header-gray';
-    if (name.includes('AGGREGATION')) return 'header-gray';
+    if (this.getNodeRank(node) === 1) {
+      return 'header-red';
+    }
+    if (this.isScanNode(node) || this.isJoinNode(node)) {
+      return 'header-orange';
+    }
     return 'header-gray';
   }
 
   // Get progress bar color
   getProgressColor(node: any): string {
-    const name = node.operator_name?.toUpperCase() || '';
-    if (name.includes('SCAN')) return '#fa8c16';
-    if (name.includes('JOIN')) return '#fa8c16';
+    if (this.isScanNode(node) || this.isJoinNode(node)) {
+      return '#fa8c16';
+    }
     return '#d9d9d9';
   }
 

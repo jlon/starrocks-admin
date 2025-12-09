@@ -199,10 +199,10 @@
     width: 100%;
     height: 100%;
     overflow: auto;
-    // Center content logic
     display: flex;
     justify-content: center;
     align-items: center;
+    background: linear-gradient(180deg, #fafbfd 0%, #f1f3f8 100%);
     @include themed-scrollbar;
   }
   
@@ -218,49 +218,63 @@
 // ============================================
 .dag-node {
   position: absolute;
-  background: #ffffff;
-  border: 1px solid #e8e8e8;
-  border-radius: 2px;
+  background: linear-gradient(180deg, #ffffff 0%, #fdfdfd 100%);
+  border: 1px solid #d8dee7;
+  border-radius: 6px;
   cursor: pointer;
   box-sizing: border-box;
   z-index: 10;
   min-width: 200px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
   transition: all 0.2s ease;
+  overflow: hidden;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    pointer-events: none;
+  }
   
   &:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
   }
   
   &.selected {
     border: 2px solid #1890ff;
+    box-shadow: 0 12px 24px rgba(24, 144, 255, 0.25);
   }
 
   // Node Header - Dynamic colors
   .node-header {
-    padding: 8px 12px;
-    border-bottom: 1px solid #e8e8e8;
+    padding: 8px 14px;
+    border-bottom: 1px solid #ccd2df;
     position: relative;
+    background: linear-gradient(180deg, #f8fafc 0%, #e3e8f0 100%);
     
     &.header-gray {
-      background: #e8ecef;
-      .node-title { color: #333; }
+      background: linear-gradient(180deg, #dfe4ee 0%, #c9cfda 100%);
+      border-bottom-color: #b5bccb;
+      .node-title { color: #1f2740; }
     }
     
     &.header-orange {
-      background: #fa8c16;
+      background: linear-gradient(180deg, #ffb76e 0%, #f7931e 100%);
       .node-title { color: #fff; }
     }
     
     &.header-red {
-      background: #cf1322;
+      background: linear-gradient(180deg, #ff7875 0%, #cf1322 100%);
       .node-title { color: #fff; }
     }
     
     .node-title {
       font-weight: 600;
       font-size: 13px;
+      letter-spacing: -0.1px;
     }
     
     .top-mark {
@@ -285,11 +299,11 @@
   }
 
   .node-body {
-    padding: 8px 12px;
+    padding: 10px 14px;
     background: #fff;
     
     .id-row {
-      color: #8c8c8c;
+      color: #9aa0ac;
       font-size: 11px;
       margin-bottom: 6px;
     }
@@ -302,23 +316,25 @@
       
       .time-value {
         font-size: 11px;
-        color: #666;
+        color: #646b79;
       }
       
       .pct-value {
-        font-size: 14px;
-        font-weight: bold;
-        color: #333;
+        font-size: 15px;
+        font-weight: 600;
+        color: #222b45;
       }
     }
   }
 
   .node-bottom-progress {
     height: 3px;
-    background: #f0f0f0;
+    background: #edf0f5;
+    border-radius: 0 0 6px 6px;
     
     .progress-bar {
       height: 100%;
+      border-radius: 0 0 6px 6px;
     }
   }
 
@@ -343,10 +359,36 @@
       display: none;
     }
   }
+
+  &.is-top-node:not(.is-top-1) {
+    border-color: #f7b955;
+    box-shadow: 0 8px 18px rgba(250, 140, 22, 0.2);
+    
+    .pct-value {
+      color: #fa8c16;
+    }
+  }
+
+  &.node-scan .node-body,
+  &.node-join .node-body {
+    background: linear-gradient(180deg, #fff8f1 0%, #ffffff 60%);
+  }
+
+  &.node-project .node-body {
+    background: linear-gradient(180deg, #f5f7fc 0%, #ffffff 60%);
+  }
+
+  &.node-exchange .node-body {
+    background: linear-gradient(180deg, #f6f6f6 0%, #ffffff 60%);
+  }
+
+  &.node-agg .node-body {
+    background: linear-gradient(180deg, #fef9f2 0%, #ffffff 60%);
+  }
 }
 
 // ============================================
-// Edges SVG - Lines (Figure 1 style)
+// Edges SVG - Lines (Figure 2 style: vertical + diagonal)
 // ============================================
 .edges-svg {
   position: absolute;
@@ -358,7 +400,8 @@
   
   .edge-path {
     fill: none;
-    stroke-width: 2.5px; // Thicker line
+    stroke-linejoin: round;
+    stroke-linecap: round;
   }
 }
 
@@ -404,13 +447,16 @@
 .edge-label-text {
   position: absolute;
   transform: translate(-50%, -50%);
-  font-size: 12px;
-  color: #595959;
+  font-size: 11px;
+  color: #1f2540;
+  font-weight: 500;
   white-space: nowrap;
   pointer-events: none;
-  background: #f5f7fa;
-  padding: 2px 8px;
-  border-radius: 2px;
+  background: #ffffff;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(175, 183, 198, 0.8);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
 }
 
 // ============================================

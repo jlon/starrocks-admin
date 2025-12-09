@@ -4,21 +4,21 @@
       <div class="header__info">
         <div class="header__title-row">
           <nb-icon icon="flash-outline" class="header__icon"></nb-icon>
-          <h5 class="header__title">LLM 提供商管理</h5>
+        <h5 class="header__title">LLM 提供商管理</h5>
         </div>
         <p class="header__subtitle">配置大语言模型 API，用于增强根因分析和智能诊断</p>
       </div>
       <div class="header__actions">
-        <button
-          nbButton
-          status="primary"
-          size="small"
-          (click)="openCreateProvider()"
-          [disabled]="!canCreate"
-        >
-          <nb-icon icon="plus-outline"></nb-icon>
-          添加提供商
-        </button>
+      <button
+        nbButton
+        status="primary"
+        size="small"
+        (click)="openCreateProvider()"
+        [disabled]="!canCreate"
+      >
+        <nb-icon icon="plus-outline"></nb-icon>
+        添加提供商
+      </button>
       </div>
     </div>
   </nb-card-header>
@@ -31,8 +31,8 @@
       </div>
       <div class="info-banner__content">
         <span class="info-banner__text">
-          LLM 提供商用于增强 Profile 根因分析。系统会使用<strong>已激活</strong>的提供商进行分析。
-          支持 OpenAI、DeepSeek、通义千问等兼容 OpenAI API 的服务。
+      LLM 提供商用于增强 Profile 根因分析。系统会使用<strong>已激活</strong>的提供商进行分析。
+      支持 OpenAI、DeepSeek、通义千问等兼容 OpenAI API 的服务。
         </span>
       </div>
     </div>
@@ -51,10 +51,10 @@
 
     <!-- Table with enhanced styling -->
     <div class="table-container" *ngIf="!loading && hasListPermission">
-      <ng2-smart-table
-        [settings]="settings"
-        [source]="source"
-      ></ng2-smart-table>
+    <ng2-smart-table
+      [settings]="settings"
+      [source]="source"
+    ></ng2-smart-table>
     </div>
   </nb-card-body>
 </nb-card>

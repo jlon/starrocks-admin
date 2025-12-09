@@ -1,51 +1,51 @@
 @import '../../../../@theme/styles/themes';
 
 @include nb-install-component() {
-  :host {
-    display: block;
+:host {
+  display: block;
     width: 32rem;
     max-width: calc(100vw - 2rem);
-  }
+}
 
-  .dialog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-    h5 {
-      margin: 0;
+  h5 {
+    margin: 0;
       font-size: 1rem;
-      font-weight: 600;
+    font-weight: 600;
     }
-  }
+}
 
   .form-row {
-    display: flex;
+  display: flex;
     gap: 1rem;
     margin-bottom: 0.875rem;
 
     &:last-child {
       margin-bottom: 0;
     }
-  }
+}
 
-  .form-group {
+.form-group {
     flex: 1;
     min-width: 0;
 
     &.full {
       flex: 0 0 100%;
-    }
+  }
 
-    .label {
+  .label {
       display: block;
       margin-bottom: 0.25rem;
       font-size: 0.8125rem;
-      font-weight: 500;
+    font-weight: 500;
       color: nb-theme(text-basic-color);
 
       .hint {
-        font-weight: normal;
+      font-weight: normal;
         color: nb-theme(text-hint-color);
         font-size: 0.75rem;
       }
@@ -53,19 +53,19 @@
   }
 
   nb-card-footer {
-    display: flex;
-    justify-content: flex-end;
+  display: flex;
+  justify-content: flex-end;
     padding: 0.75rem 1rem;
-  }
+}
 
   @media (max-width: 480px) {
-    :host {
+  :host {
       width: calc(100vw - 1rem);
-    }
+  }
 
     .form-row {
       flex-direction: column;
       gap: 0.875rem;
-    }
   }
+}
 }

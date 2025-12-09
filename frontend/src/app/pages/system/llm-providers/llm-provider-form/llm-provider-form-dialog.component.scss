@@ -1,35 +1,35 @@
 @import '../../../../@theme/styles/themes';
 
 @include nb-install-component() {
-  :host {
-    display: block;
+:host {
+  display: block;
     width: 36rem;
     max-width: calc(100vw - 2rem);
-  }
+}
 
-  .dialog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-    h5 {
-      margin: 0;
+  h5 {
+    margin: 0;
       font-size: 1rem;
-      font-weight: 600;
-    }
+    font-weight: 600;
   }
+}
 
   .form-row {
-    display: flex;
+  display: flex;
     gap: 1rem;
     margin-bottom: 0.875rem;
 
     &:last-child {
       margin-bottom: 0;
     }
-  }
+}
 
-  .form-group {
+.form-group {
     flex: 1;
     min-width: 0;
 
@@ -37,18 +37,18 @@
       flex: 0 0 100%;
     }
 
-    .label {
-      display: block;
+  .label {
+    display: block;
       margin-bottom: 0.25rem;
       font-size: 0.8125rem;
-      font-weight: 500;
+    font-weight: 500;
       color: nb-theme(text-basic-color);
 
       .hint {
-        font-weight: normal;
+    font-weight: normal;
         color: nb-theme(text-hint-color);
-        font-size: 0.75rem;
-      }
+    font-size: 0.75rem;
+  }
     }
   }
 
@@ -67,8 +67,8 @@
 
     nb-accordion-item-body {
       padding: 0.875rem;
-    }
   }
+}
 
   .advanced-grid {
     display: grid;
@@ -77,28 +77,28 @@
 
     .form-group {
       margin-bottom: 0;
-    }
+  }
 
     input[type='number'] {
       text-align: center;
-    }
   }
+}
 
   nb-card-footer {
-    display: flex;
-    justify-content: flex-end;
+  display: flex;
+  justify-content: flex-end;
     padding: 0.75rem 1rem;
-  }
+}
 
   @media (max-width: 600px) {
-    :host {
+  :host {
       width: calc(100vw - 1rem);
-    }
+  }
 
-    .form-row {
-      flex-direction: column;
+  .form-row {
+    flex-direction: column;
       gap: 0.875rem;
-    }
+  }
 
     .advanced-grid {
       grid-template-columns: repeat(2, 1fr);

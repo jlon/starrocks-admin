@@ -61,12 +61,20 @@
     }
 
     &.icon--create {
-      background: linear-gradient(135deg, rgba(nb-theme(color-primary-default), 0.15) 0%, rgba(nb-theme(color-primary-default), 0.08) 100%);
+      background: linear-gradient(
+        135deg,
+        rgba(nb-theme(color-primary-default), 0.15) 0%,
+        rgba(nb-theme(color-primary-default), 0.08) 100%
+      );
       color: nb-theme(color-primary-default);
     }
 
     &.icon--edit {
-      background: linear-gradient(135deg, rgba(nb-theme(color-info-default), 0.15) 0%, rgba(nb-theme(color-info-default), 0.08) 100%);
+      background: linear-gradient(
+        135deg,
+        rgba(nb-theme(color-info-default), 0.15) 0%,
+        rgba(nb-theme(color-info-default), 0.08) 100%
+      );
       color: nb-theme(color-info-default);
     }
   }

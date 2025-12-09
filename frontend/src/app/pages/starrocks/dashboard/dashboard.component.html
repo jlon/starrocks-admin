@@ -83,8 +83,8 @@
                   </div>
                   <div class="divider-vertical"></div>
                   <div class="metric-item text-center cursor-pointer" (click)="navigateToBackends(clusterCard.cluster.id)">
-                     <div class="h4 mb-0 font-weight-bold text-info">{{ getBeCount(clusterCard) }}</div>
-                     <div class="caption-2 text-hint text-uppercase">计算节点</div>
+                     <div class="h4 mb-0 font-weight-bold text-info">{{ getComputeNodeCount(clusterCard) }}</div>
+                     <div class="caption-2 text-hint text-uppercase">{{ getComputeNodeLabel(clusterCard) }}</div>
                   </div>
                 </div>
 

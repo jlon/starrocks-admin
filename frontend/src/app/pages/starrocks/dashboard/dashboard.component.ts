@@ -313,20 +313,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return '—';
   }
 
-  // Get BE node count from health checks
-  getBeCount(clusterCard: ClusterCard): string {
+  // Get compute node count from health checks (BE for shared-nothing, CN for shared-data)
+  getComputeNodeCount(clusterCard: ClusterCard): string {
     if (!clusterCard.health?.checks) {
       return '—';
     }
-    const beCheck = clusterCard.health.checks.find(c => 
-      c.name.toLowerCase().includes('be') || 
-      c.name.toLowerCase().includes('backend')
+    // Look for "Compute Nodes" check (backend returns this name)
+    const computeCheck = clusterCard.health.checks.find(c => 
+      c.name.toLowerCase().includes('compute')
     );
-    if (beCheck && beCheck.message) {
-      const match = beCheck.message.match(/(\d+)/);
+    if (computeCheck?.message) {
+      // Extract first number from message like "All 3 BE nodes are online"
+      const match = computeCheck.message.match(/(\d+)/);
       return match ? match[1] : '—';
     }
     return '—';
+  }
+
+  // Check if cluster is shared-data mode
+  isSharedData(clusterCard: ClusterCard): boolean {
+    return clusterCard.cluster.deployment_mode === 'shared_data';
+  }
+
+  // Get compute node label based on deployment mode
+  getComputeNodeLabel(clusterCard: ClusterCard): string {
+    return this.isSharedData(clusterCard) ? 'CN 节点' : 'BE 节点';
   }
 
   // Calculate health score based on checks (return string for better display)

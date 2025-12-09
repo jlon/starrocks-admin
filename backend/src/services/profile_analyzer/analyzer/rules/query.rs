@@ -206,7 +206,7 @@ impl QueryRule for Q001LongRunning {
 
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         use crate::services::profile_analyzer::analyzer::thresholds::QueryType;
-
+        
         let total_time_ms = ctx
             .profile
             .summary
@@ -216,7 +216,7 @@ impl QueryRule for Q001LongRunning {
         // v3.0: Use adaptive threshold from DynamicThresholds (includes baseline)
         let time_threshold_ms = ctx.thresholds.get_query_time_threshold_ms();
         let has_baseline = ctx.thresholds.baseline.is_some();
-
+        
         // Format threshold for display
         let threshold_display = if time_threshold_ms >= 60_000.0 {
             format!("{:.0}分钟", time_threshold_ms / 60_000.0)
@@ -226,7 +226,7 @@ impl QueryRule for Q001LongRunning {
 
         // Threshold source for display
         let threshold_source = if has_baseline { "自适应基线" } else { "默认" };
-
+        
         // Get query type name for display
         let query_type = QueryType::from_sql(&ctx.profile.summary.sql_statement);
         let query_type_name = match query_type {
@@ -257,7 +257,7 @@ impl QueryRule for Q001LongRunning {
                 } else {
                     format!(
                         "根据查询类型 ({}) 使用默认阈值。OLAP 查询期望快速响应 (10s)，而 ETL 任务允许更长时间 (5-30min)。",
-                        query_type_name
+                    query_type_name
                     )
                 },
                 suggestions: vec![

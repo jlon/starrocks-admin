@@ -167,7 +167,7 @@ pub async fn analyze_root_cause(
 
     // Calculate query complexity from SQL for LLM context
     let complexity = QueryComplexity::from_sql(&req.sql_statement);
-    
+
     // Build the LLM request
     let llm_request = RootCauseAnalysisRequest::builder()
         .query_summary(QuerySummaryForLLM {

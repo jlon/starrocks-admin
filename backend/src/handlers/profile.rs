@@ -252,7 +252,7 @@ pub async fn analyze_profile_handler(
     // Step 1: Rule engine analysis (骨架 - skeleton, sync, < 100ms)
     let mut response = analyze_profile_with_context(&profile_content, &context)
         .map_err(|e| ApiError::internal_error(format!("Analysis failed: {}", e)))?;
-
+    
     // Step 2: Mark LLM as available but pending (frontend will call separate API)
     // This allows fast response for DAG rendering while LLM analysis loads async
     if state.llm_service.is_available() {
@@ -262,7 +262,7 @@ pub async fn analyze_profile_handler(
             ..Default::default()
         });
     }
-
+    
     Ok(Json(response))
 }
 
@@ -274,7 +274,7 @@ pub struct EnhanceProfileRequest {
 }
 
 /// POST /api/clusters/:cluster_id/profiles/:query_id/enhance
-///
+/// 
 /// Enhance profile analysis with LLM - called async by frontend after DAG is rendered.
 /// Receives pre-analyzed data to avoid redundant profile parsing.
 pub async fn enhance_profile_handler(
@@ -283,7 +283,7 @@ pub async fn enhance_profile_handler(
     Json(req): Json<EnhanceProfileRequest>,
 ) -> ApiResult<Json<LLMEnhancedAnalysis>> {
     let safe_query_id = sanitize_query_id(&query_id)?;
-
+    
     // Check LLM availability
     if !state.llm_service.is_available() {
         return Ok(Json(LLMEnhancedAnalysis {
@@ -292,7 +292,7 @@ pub async fn enhance_profile_handler(
             ..Default::default()
         }));
     }
-
+    
     // Fetch cluster variables for LLM context (helps avoid redundant suggestions)
     let cluster_variables = {
         let cluster = state.cluster_service.get_cluster(cluster_id).await.ok();
@@ -307,7 +307,7 @@ pub async fn enhance_profile_handler(
             None
         }
     };
-
+    
     // Use pre-analyzed data directly, no need to re-fetch profile
     match enhance_with_llm(
         &state.llm_service,
@@ -343,10 +343,10 @@ async fn enhance_with_llm(
         LLMCausalChain, LLMHiddenIssue, MergedRecommendation, MergedRootCause,
     };
     use std::collections::HashMap;
-
+    
     // Build LLM request from profile analysis
     let summary = response.summary.as_ref();
-
+    
     // Include cluster session variables so LLM knows current settings
     let session_vars: HashMap<String, String> = cluster_variables
         .map(|vars| vars.clone())
@@ -380,7 +380,7 @@ async fn enhance_with_llm(
         spill_bytes: summary.and_then(|s| s.query_spill_bytes.clone()),
         session_variables: session_vars,
     };
-
+    
     // Build execution plan description from tree
     let dag_description = response
         .execution_tree
@@ -394,7 +394,7 @@ async fn enhance_with_llm(
                 .join(" -> ")
         })
         .unwrap_or_else(|| "Unknown DAG".to_string());
-
+    
     // Extract hotspot nodes (time_percentage > 15%)
     let hotspot_nodes: Vec<HotspotNodeForLLM> = response
         .execution_tree
@@ -419,9 +419,9 @@ async fn enhance_with_llm(
                 .collect()
         })
         .unwrap_or_default();
-
+    
     let execution_plan = ExecutionPlanForLLM { dag_description, hotspot_nodes };
-
+    
     // Convert diagnostics to LLM format
     let diagnostics: Vec<DiagnosticForLLM> = response
         .aggregated_diagnostics
@@ -447,7 +447,7 @@ async fn enhance_with_llm(
             threshold_info: None,
         })
         .collect();
-
+    
     // Extract scan details with table type info (CRITICAL for correct LLM suggestions)
     let scan_details: Vec<ScanDetailForLLM> = response
         .execution_tree
@@ -464,7 +464,7 @@ async fn enhance_with_llm(
                     } else {
                         Some("native".to_string())
                     };
-
+                    
                     ScanDetailForLLM {
                         plan_node_id: n.plan_node_id.unwrap_or(-1),
                         table_name: table_name.clone(),
@@ -503,7 +503,7 @@ async fn enhance_with_llm(
                 .collect()
         })
         .unwrap_or_default();
-
+    
     // Build profile data for LLM
     let operators: Vec<OperatorDetailForLLM> = response
         .execution_tree
@@ -524,7 +524,7 @@ async fn enhance_with_llm(
                 .collect()
         })
         .unwrap_or_default();
-
+    
     let profile_data = ProfileDataForLLM {
         operators,
         time_distribution: None,
@@ -533,7 +533,7 @@ async fn enhance_with_llm(
         agg_details: vec![],
         exchange_details: vec![],
     };
-
+    
     // Build the LLM request with profile data
     let llm_request = RootCauseAnalysisRequest::builder()
         .query_summary(query_summary)
@@ -543,17 +543,17 @@ async fn enhance_with_llm(
         .profile_data(profile_data)
         .build()
         .map_err(|e| e.to_string())?;
-
+    
     // Call LLM service
     let llm_response: RootCauseAnalysisResponse = llm_service
         .analyze(&llm_request, query_id, cluster_id)
         .await
         .map_err(|e| e.to_string())?;
-
+    
     // Merge LLM response with rule diagnostics
     let root_causes = merge_root_causes(&response.aggregated_diagnostics, &llm_response);
     let recommendations = merge_recommendations(&response.aggregated_diagnostics, &llm_response);
-
+    
     Ok(LLMEnhancedAnalysis {
         available: true,
         status: "completed".to_string(),
@@ -580,15 +580,15 @@ fn merge_root_causes(
 ) -> Vec<crate::services::profile_analyzer::MergedRootCause> {
     use crate::services::profile_analyzer::MergedRootCause;
     use std::collections::HashSet;
-
+    
     let mut merged = Vec::new();
     let mut seen_ids: HashSet<String> = HashSet::new();
-
+    
     // First, add LLM root causes (higher priority)
     for llm_rc in &llm_response.root_causes {
         let id = llm_rc.root_cause_id.clone();
         seen_ids.insert(id.clone());
-
+        
         // Find related rule diagnostics
         let related_rules: Vec<String> = llm_rc
             .symptoms
@@ -596,9 +596,9 @@ fn merge_root_causes(
             .filter(|s| rule_diagnostics.iter().any(|d| &d.rule_id == *s))
             .cloned()
             .collect();
-
+        
         let source = if related_rules.is_empty() { "llm" } else { "both" };
-
+        
         merged.push(MergedRootCause {
             id,
             related_rule_ids: related_rules,
@@ -610,14 +610,14 @@ fn merge_root_causes(
             symptoms: llm_rc.symptoms.clone(),
         });
     }
-
+    
     // Add uncovered rule diagnostics as independent issues
     for diag in rule_diagnostics {
         let is_covered = llm_response
             .root_causes
             .iter()
             .any(|rc| rc.symptoms.contains(&diag.rule_id));
-
+        
         if !is_covered {
             let id = format!("rule_{}", diag.rule_id);
             if !seen_ids.contains(&id) {
@@ -635,7 +635,7 @@ fn merge_root_causes(
             }
         }
     }
-
+    
     // Sort by confidence (descending)
     merged.sort_by(|a, b| {
         b.confidence
@@ -652,10 +652,10 @@ fn merge_recommendations(
 ) -> Vec<crate::services::profile_analyzer::MergedRecommendation> {
     use crate::services::profile_analyzer::MergedRecommendation;
     use std::collections::HashSet;
-
+    
     let mut merged = Vec::new();
     let mut seen_actions: HashSet<String> = HashSet::new();
-
+    
     // First, add LLM recommendations (root cause fixes)
     for rec in &llm_response.recommendations {
         let action_key = normalize_action(&rec.action);
@@ -672,7 +672,7 @@ fn merge_recommendations(
             });
         }
     }
-
+    
     // Add rule engine suggestions
     let mut rule_priority = merged.len() as u32 + 1;
     for diag in rule_diagnostics {
@@ -700,7 +700,7 @@ fn merge_recommendations(
             }
         }
     }
-
+    
     merged.sort_by_key(|r| r.priority);
     merged
 }

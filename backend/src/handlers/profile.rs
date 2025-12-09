@@ -291,8 +291,23 @@ pub async fn enhance_profile_handler(
         }));
     }
     
+    // Fetch cluster variables for LLM context (helps avoid redundant suggestions)
+    let cluster_variables = {
+        let cluster = state.cluster_service.get_cluster(cluster_id).await.ok();
+        if let Some(ref c) = cluster {
+            if let Ok(pool) = state.mysql_pool_manager.get_pool(c).await {
+                let mysql_client = MySQLClient::from_pool(pool);
+                fetch_cluster_variables(&mysql_client).await
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+    
     // Use pre-analyzed data directly, no need to re-fetch profile
-    match enhance_with_llm(&state.llm_service, &req.analysis_data, &safe_query_id, Some(cluster_id)).await {
+    match enhance_with_llm(&state.llm_service, &req.analysis_data, &safe_query_id, Some(cluster_id), cluster_variables.as_ref()).await {
         Ok(llm_analysis) => Ok(Json(llm_analysis)),
         Err(e) => Ok(Json(LLMEnhancedAnalysis {
             available: false,
@@ -311,6 +326,7 @@ async fn enhance_with_llm(
     response: &ProfileAnalysisResponse,
     query_id: &str,
     cluster_id: Option<i64>,
+    cluster_variables: Option<&ClusterVariables>,
 ) -> Result<LLMEnhancedAnalysis, String> {
     #[allow(unused_imports)]
     use crate::services::profile_analyzer::{MergedRootCause, MergedRecommendation, LLMCausalChain, LLMHiddenIssue};
@@ -318,6 +334,11 @@ async fn enhance_with_llm(
     
     // Build LLM request from profile analysis
     let summary = response.summary.as_ref();
+    
+    // Include cluster session variables so LLM knows current settings
+    let session_vars: HashMap<String, String> = cluster_variables
+        .map(|vars| vars.clone())
+        .unwrap_or_default();
     
     let query_summary = QuerySummaryForLLM {
         sql_statement: summary.map(|s| s.sql_statement.clone()).unwrap_or_default(), // Full SQL, not truncated
@@ -328,7 +349,7 @@ async fn enhance_with_llm(
         be_count: summary.and_then(|s| s.total_instance_count.map(|c| c as u32)).unwrap_or(3),
         has_spill: summary.and_then(|s| s.query_spill_bytes.as_ref().map(|b| !b.is_empty() && b != "0")).unwrap_or(false),
         spill_bytes: summary.and_then(|s| s.query_spill_bytes.clone()),
-        session_variables: HashMap::new(),
+        session_variables: session_vars,
     };
     
     // Build execution plan description from tree

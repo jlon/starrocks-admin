@@ -864,17 +864,21 @@
                       </div>
                     </div>
                     
-                    <!-- LLM Recommendations (executable SQL) -->
-                    <div class="llm-recommendations" *ngIf="hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length">
-                      <div class="rec-header">
-                        <nb-icon icon="flash-outline" class="text-primary"></nb-icon>
-                        <span>优化建议 (可执行)</span>
-                        <span class="rec-count">({{ getRootCauseAnalysis().recommendations.length }})</span>
-                      </div>
-                      <div class="rec-list">
+                  </div>
+                </div>
+
+                <!-- Unified Diagnosis & Recommendations Section -->
+                <div class="right-section diagnosis-section" *ngIf="!selectedNode && (getCurrentDiagnosticsCount() > 0 || (hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length))">
+                  <div class="section-header">
+                    <span class="title">诊断建议</span>
+                    <span class="warning-badge">{{ getTotalRecommendationsCount() }}</span>
+                    <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
+                  </div>
+                  <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
+                      <!-- LLM Recommendations (Priority - show first) -->
+                      <div *ngIf="hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length" class="llm-recommendations-merged">
                         <div *ngFor="let rec of getRootCauseAnalysis().recommendations; let i = index" 
-                             class="rec-item"
-                             [ngClass]="{'llm-rec': rec.source === 'llm' || rec.is_root_cause_fix}">
+                             class="rec-item llm-rec">
                           <div class="rec-priority">
                             <span class="priority-num">{{ rec.priority || (i + 1) }}</span>
                           </div>
@@ -885,23 +889,13 @@
                               <span>{{ rec.expected_improvement }}</span>
                             </div>
                             <div class="rec-sql" *ngIf="rec.sql_example">
-                              <pre><code>{{ rec.sql_example }}</code></pre>
+                              <pre><code (click)="copyToClipboard(rec.sql_example)" nbTooltip="点击复制">{{ rec.sql_example }}</code></pre>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Diagnosis Section - Only show when NO node is selected (aggregated view) -->
-                <div class="right-section diagnosis-section" *ngIf="!selectedNode && getCurrentDiagnosticsCount() > 0">
-                  <div class="section-header">
-                    <span class="title">诊断建议</span>
-                    <span class="warning-badge">{{ getCurrentDiagnosticsCount() }}</span>
-                    <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
-                  </div>
-                  <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
+                      
+                      <!-- Rule-based Diagnostics -->
                       <div *ngIf="analysisData?.aggregated_diagnostics?.length" class="diagnosis-list">
                         <div *ngFor="let diag of analysisData?.aggregated_diagnostics" class="diagnosis-item-detailed">
                           <div class="diag-header">

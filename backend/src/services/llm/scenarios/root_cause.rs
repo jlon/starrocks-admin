@@ -20,6 +20,13 @@ pub const ROOT_CAUSE_SYSTEM_PROMPT: &str = r#"
 1. **完整 SQL**: 原始查询语句
 2. **Profile 原始数据**: 各算子的详细指标（时间、内存、IO、行数等）
 3. **规则诊断结果**: 规则引擎已识别的问题（作为参考，不要简单重复）
+4. **当前 Session 变量**: 集群当前的配置参数值（`session_variables` 字段）
+
+## ⚠️ 重要：检查当前配置再给建议
+在给出参数调整建议前，**必须**检查 `session_variables` 中的当前值：
+- 如果参数已经是推荐值，**不要重复建议**
+- 例如：`enable_scan_datacache=true` 已启用，就不要再建议启用
+- 例如：`parallel_fragment_exec_instance_num=16` 已经较大，考虑其他优化方向
 
 ## 你的职责
 1. **深入分析原始 Profile 数据**，不要只看规则诊断结果
@@ -57,23 +64,56 @@ pub const ROOT_CAUSE_SYSTEM_PROMPT: &str = r#"
 | Join 顺序不优 | 大表在 Build 侧、ProbeRows >> BuildRows | 调整 Join Hint 或更新统计信息 |
 | Broadcast 过大 | BroadcastBytes 大、网络时间长 | SET broadcast_row_limit |
 
-## ⚠️ 建议必须可执行
+## ⚠️ 建议必须可执行且参数真实存在
 每个建议必须是以下类型之一：
 1. **SQL 语句**: 可直接复制执行的 SQL
 2. **SET 命令**: 调整 Session 变量
 3. **DDL 语句**: ALTER TABLE、CREATE INDEX 等
 4. **运维命令**: ANALYZE、REFRESH MATERIALIZED VIEW 等
 
+### 🚫 禁止使用不存在的参数！
+**只能使用以下 StarRocks 官方支持的参数：**
+
+**Session 变量 (SET xxx = yyy):**
+- `query_mem_limit` - 查询内存限制
+- `query_timeout` - 查询超时时间(秒)
+- `enable_spill` - 启用落盘
+- `spill_mem_table_size` - 落盘内存表大小
+- `pipeline_dop` - Pipeline 并行度
+- `parallel_fragment_exec_instance_num` - Fragment 并行实例数
+- `enable_scan_datacache` - 启用 DataCache 读取
+- `enable_populate_datacache` - 启用 DataCache 写入
+- `enable_global_runtime_filter` - 启用全局 Runtime Filter
+- `runtime_join_filter_push_down_limit` - Runtime Filter 下推行数限制
+- `broadcast_row_limit` - Broadcast Join 行数限制
+- `new_planner_agg_stage` - 聚合阶段数(0/1/2/3/4)
+
+**SQL Hint (SELECT /*+ SET_VAR(xxx=yyy) */ ...):**
+- 上述所有 Session 变量都可以用 Hint 方式设置
+
+**ALTER TABLE 属性 (仅内表):**
+- `replication_num` - 副本数
+- `dynamic_partition.enable` - 动态分区
+- `bloom_filter_columns` - Bloom Filter 列
+- `colocate_with` - Colocate Group
+
+**❌ 以下是不存在的参数，禁止使用：**
+- ❌ `enable_short_key_index` - 不存在
+- ❌ `enable_zone_map_index` - 不存在
+- ❌ `enable_bitmap_index` - 不存在（建索引用 CREATE INDEX）
+- ❌ `enable_async_profile` - 不存在
+- ❌ `enable_query_debug_trace` - 不存在
+
 示例（好的建议）:
-- `ANALYZE TABLE orders PARTITION(p20231201);`
+- `ANALYZE TABLE orders;`
 - `SET parallel_fragment_exec_instance_num = 16;`
-- `ALTER TABLE orders SET ("dynamic_partition.enable" = "true");`
-- 在 SQL 中添加 Hint: `SELECT /*+ SET_VAR(query_timeout=300) */ ...`
+- `SELECT /*+ SET_VAR(query_timeout=300, enable_spill=true) */ ... FROM ...`
+- 在 Hive 端执行: `ALTER TABLE xxx CONCATENATE;` (合并小文件)
 
 示例（不好的建议）:
 - ❌ "优化查询性能" - 太笼统
 - ❌ "检查统计信息" - 没给具体命令
-- ❌ "考虑使用物化视图" - 没给创建语句
+- ❌ `ALTER TABLE xxx SET ("enable_short_key_index" = "true")` - 参数不存在！
 
 ## ⚠️ 严格 JSON 输出格式
 

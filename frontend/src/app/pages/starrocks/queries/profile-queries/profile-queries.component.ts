@@ -1777,6 +1777,18 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   }
   
   /**
+   * Get effective recommendations count (LLM overrides rules when available)
+   */
+  getEffectiveRecommendationsCount(): number {
+    const llmCount = this.hasLLMAnalysis() ? (this.getRootCauseAnalysis()?.recommendations?.length || 0) : 0;
+    // If LLM has recommendations, only count LLM; otherwise count rules
+    if (llmCount > 0) {
+      return llmCount;
+    }
+    return this.analysisData?.aggregated_diagnostics?.length || 0;
+  }
+  
+  /**
    * Get merged root cause analysis data
    * Priority: LLM analysis (if available and completed) > Rule-based analysis
    * LLM analysis provides richer natural language descriptions

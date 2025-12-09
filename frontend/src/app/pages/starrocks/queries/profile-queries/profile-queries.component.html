@@ -868,14 +868,16 @@
                 </div>
 
                 <!-- Unified Diagnosis & Recommendations Section -->
+                <!-- When LLM analysis is available, show ONLY LLM recommendations (override rules) -->
                 <div class="right-section diagnosis-section" *ngIf="!selectedNode && (getCurrentDiagnosticsCount() > 0 || (hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length))">
                   <div class="section-header">
                     <span class="title">诊断建议</span>
-                    <span class="warning-badge">{{ getTotalRecommendationsCount() }}</span>
+                    <span class="warning-badge">{{ getEffectiveRecommendationsCount() }}</span>
+                    <span class="llm-badge" *ngIf="hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length">🤖 LLM</span>
                     <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
-                      <!-- LLM Recommendations (Priority - show first) -->
+                      <!-- LLM Recommendations (completely override rule-based when available) -->
                       <div *ngIf="hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length" class="llm-recommendations-merged">
                         <div *ngFor="let rec of getRootCauseAnalysis().recommendations; let i = index" 
                              class="rec-item llm-rec">
@@ -895,8 +897,8 @@
                         </div>
                       </div>
                       
-                      <!-- Rule-based Diagnostics -->
-                      <div *ngIf="analysisData?.aggregated_diagnostics?.length" class="diagnosis-list">
+                      <!-- Rule-based Diagnostics (only show when NO LLM recommendations) -->
+                      <div *ngIf="!(hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length) && analysisData?.aggregated_diagnostics?.length" class="diagnosis-list">
                         <div *ngFor="let diag of analysisData?.aggregated_diagnostics" class="diagnosis-item-detailed">
                           <div class="diag-header">
                             <span class="diag-badge" [ngClass]="{

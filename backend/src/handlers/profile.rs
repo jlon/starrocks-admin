@@ -13,6 +13,8 @@ use crate::services::profile_analyzer::{
 use crate::services::llm::{
     LLMService, RootCauseAnalysisRequest, RootCauseAnalysisResponse,
     QuerySummaryForLLM, ExecutionPlanForLLM, HotspotNodeForLLM, DiagnosticForLLM, KeyMetricsForLLM,
+    ScanDetailForLLM, ProfileDataForLLM, OperatorDetailForLLM,
+    determine_table_type, determine_connector_type,
 };
 use crate::utils::{ApiResult, error::ApiError};
 
@@ -405,12 +407,81 @@ async fn enhance_with_llm(
         })
         .collect();
     
-    // Build the LLM request
+    // Extract scan details with table type info (CRITICAL for correct LLM suggestions)
+    let scan_details: Vec<ScanDetailForLLM> = response.execution_tree.as_ref()
+        .map(|tree| {
+            tree.nodes.iter()
+                .filter(|n| n.operator_name.contains("SCAN"))
+                .map(|n| {
+                    let table_name = n.unique_metrics.get("Table").cloned().unwrap_or_default();
+                    let table_type = determine_table_type(&table_name);
+                    let connector_type = if table_type == "external" {
+                        Some(determine_connector_type(&n.unique_metrics))
+                    } else {
+                        Some("native".to_string())
+                    };
+                    
+                    ScanDetailForLLM {
+                        plan_node_id: n.plan_node_id.unwrap_or(-1),
+                        table_name: table_name.clone(),
+                        scan_type: n.operator_name.clone(),
+                        table_type,
+                        connector_type,
+                        rows_read: n.unique_metrics.get("RawRowsRead")
+                            .and_then(|s| s.replace(",", "").parse().ok())
+                            .unwrap_or(0),
+                        rows_returned: n.rows.unwrap_or(0),
+                        filter_ratio: 0.0,
+                        scan_ranges: n.unique_metrics.get("ScanRanges")
+                            .and_then(|s| s.replace(",", "").parse().ok()),
+                        bytes_read: n.unique_metrics.get("BytesRead")
+                            .and_then(|s| s.replace(",", "").replace(" B", "").parse().ok()),
+                        io_time_ms: None,
+                        cache_hit_rate: n.unique_metrics.get("DataCacheHitRate")
+                            .and_then(|s| s.trim_end_matches('%').parse().ok()),
+                        predicates: n.unique_metrics.get("Predicates").cloned(),
+                        partitions_scanned: n.unique_metrics.get("PartitionsScanned").cloned(),
+                        full_table_path: if table_name.contains('.') { Some(table_name.clone()) } else { None },
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    
+    // Build profile data for LLM
+    let operators: Vec<OperatorDetailForLLM> = response.execution_tree.as_ref()
+        .map(|tree| {
+            tree.nodes.iter()
+                .filter(|n| n.time_percentage.unwrap_or(0.0) > 5.0)
+                .map(|n| OperatorDetailForLLM {
+                    operator: n.operator_name.clone(),
+                    plan_node_id: n.plan_node_id.unwrap_or(-1),
+                    time_pct: n.time_percentage.unwrap_or(0.0),
+                    rows: n.rows.unwrap_or(0),
+                    estimated_rows: None,
+                    memory_bytes: None,
+                    metrics: n.unique_metrics.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    
+    let profile_data = ProfileDataForLLM {
+        operators,
+        time_distribution: None,
+        scan_details,
+        join_details: vec![],
+        agg_details: vec![],
+        exchange_details: vec![],
+    };
+    
+    // Build the LLM request with profile data
     let llm_request = RootCauseAnalysisRequest::builder()
         .query_summary(query_summary)
         .execution_plan(execution_plan)
         .diagnostics(diagnostics)
         .key_metrics(KeyMetricsForLLM::default())
+        .profile_data(profile_data)
         .build()
         .map_err(|e| e.to_string())?;
     

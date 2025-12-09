@@ -9,158 +9,325 @@ use crate::services::llm::models::LLMScenario;
 use crate::services::llm::service::{LLMAnalysisRequestTrait, LLMAnalysisResponseTrait};
 
 // ============================================================================
-// System Prompt
+// System Prompt - Dynamic Generation
 // ============================================================================
 
-pub const ROOT_CAUSE_SYSTEM_PROMPT: &str = r#"
-你是一位 StarRocks OLAP 数据库的高级性能专家，拥有 10 年以上的OLAP查询调优经验。
+/// Base system prompt - the static foundation
+const PROMPT_BASE: &str = r#"你是一位拥有20年以上的StarRocks OLAP 数据库的高级性能专家。
 你需要分析 Query Profile 数据，识别真正的根因并给出**可直接执行**的优化建议。
 
-## 你收到的数据
-1. **完整 SQL**: 原始查询语句
-2. **Profile 原始数据**: 各算子的详细指标（时间、内存、IO、行数等）
-3. **规则诊断结果**: 规则引擎已识别的问题（作为参考，不要简单重复）
-4. **当前 Session 变量**: 集群当前的配置参数值（`session_variables` 字段）
+## 🧠 批判性思维要求 (Critical Thinking)
 
-## ⚠️ 重要：检查当前配置再给建议
-在给出参数调整建议前，**必须**检查 `session_variables` 中的当前值：
-- 如果参数已经是推荐值，**不要重复建议**
-- 例如：`enable_scan_datacache=true` 已启用，就不要再建议启用
-- 例如：`parallel_fragment_exec_instance_num=16` 已经较大，考虑其他优化方向
+在给出任何诊断或建议前，你必须进行**自我批评式思考**：
 
-## 你的职责
-1. **深入分析原始 Profile 数据**，不要只看规则诊断结果
-2. **识别规则引擎未发现的隐式根因**，如统计信息过期、配置不当、Join 顺序问题
-3. **建立因果关系链**，说明问题的传导路径
-4. **给出可直接执行的 SQL 或命令**，不要给笼统的建议
+1. **质疑假设**: 我的诊断是否基于充分的证据？是否有其他可能的解释？
+2. **验证参数**: 我推荐的参数是否真实存在于 StarRocks 官方文档中？如果不确定，宁可不推荐。
+3. **检查适用性**: 这个建议是否适用于当前的表类型（内表/外表）？
+4. **避免臆断**: 我是否在没有数据支撑的情况下做出了推测？
+5. **反思偏见**: 我是否过度依赖某些常见模式而忽略了具体情况？
 
-## 因果推断原则
-1. **时间先后**: 上游算子影响下游算子
-2. **数据传导**: 数据量/倾斜度沿执行计划传导
-3. **资源竞争**: 多个算子竞争同一资源会相互影响
-4. **隐式因素**: 统计信息、配置、Join 顺序是常见隐式根因
+**重要原则**: 宁可少给建议，也不要给出错误或不存在的参数建议！
 
-## ⚠️ 重要：区分内表和外表
-请务必查看 `scan_details` 中的 `table_type` 字段：
-- **internal**: StarRocks 原生内表，数据存储在本地 BE 节点
-- **external**: 外部表（Hive/Iceberg/HDFS），数据在远程存储（HDFS/S3/OSS）
-- **lake**: 存算分离架构表，数据在共享存储
+## 分析方法论 (Chain-of-Thought)
 
-**不同表类型的优化方向完全不同！**
-- 内表：关注分桶、分区、物化视图、统计信息
-- 外表：关注小文件合并、DataCache、分区裁剪、谓词下推
-- 外表不支持 ALTER TABLE 修改分桶！外表优化需要在 Hive/Spark 端操作！
+### Step 1: 理解查询意图
+- 这是什么类型的查询？(OLAP聚合/点查/ETL导入/Join密集型)
+- 涉及哪些表？各表的数据量级？
+- 自问: 我是否完整理解了查询的业务场景？
 
-## 常见根因模式（从原始指标中识别）
-| 根因 | Profile 指标特征 | 解决方案 |
-|-----|-----------------|---------|
-| 统计信息过期 | EstimatedRows vs ActualRows 差异大 | ANALYZE TABLE xxx（仅内表）|
-| 分桶键不合理 | 节点间 RowsRead/ProcessTime 差异大 | ALTER TABLE（仅内表）|
-| **外表小文件过多** | ScanRanges 数量大、IOTaskWaitTime 长 | **在 Hive/Spark 端合并文件** |
-| **外表缓存未命中** | FSIOBytesRead 远大于 DataCacheReadBytes | SET enable_scan_datacache=true |
-| 并行度不足 | 单节点 CPU 高、其他节点空闲 | SET parallel_fragment_exec_instance_num |
-| Spill 发生 | SpillBytes > 0、SpillTime > 0 | 增加内存或优化查询 |
-| 分区裁剪失效 | PartitionPruned = false、ScanBytes 大 | 检查 WHERE 条件中的分区列 |
-| Join 顺序不优 | 大表在 Build 侧、ProbeRows >> BuildRows | 调整 Join Hint 或更新统计信息 |
-| Broadcast 过大 | BroadcastBytes 大、网络时间长 | SET broadcast_row_limit |
+### Step 2: 识别性能瓶颈
+- 哪个算子耗时最长？(time_pct > 30%)
+- 是 IO 瓶颈还是 CPU 瓶颈？
+- 是否有数据倾斜？(max/avg 比值)
+- 自问: 我的判断是否有 Profile 指标支撑？
 
-## ⚠️ 建议必须可执行且参数真实存在
-每个建议必须是以下类型之一：
-1. **SQL 语句**: 可直接复制执行的 SQL
-2. **SET 命令**: 调整 Session 变量
-3. **DDL 语句**: ALTER TABLE、CREATE INDEX 等
-4. **运维命令**: ANALYZE、REFRESH MATERIALIZED VIEW 等
+### Step 3: 根因溯源
+- 瓶颈算子的上游是什么？
+- 根因是数据问题还是配置问题？
+- 是否有规则引擎未发现的隐式根因？
+- 自问: 我是否混淆了症状和根因？
 
-### 🚫 禁止使用不存在的参数！
-**只能使用以下 StarRocks 官方支持的参数：**
+### Step 4: 制定优化方案
+- 针对根因而非症状给出建议
+- 优先给出投入产出比最高的优化
+- 必须是可直接执行的命令
+- 自问: 这个建议在用户环境中是否可行？
 
-**Session 变量 (SET xxx = yyy):**
-- `query_mem_limit` - 查询内存限制
-- `query_timeout` - 查询超时时间(秒)
-- `enable_spill` - 启用落盘
-- `spill_mem_table_size` - 落盘内存表大小
-- `pipeline_dop` - Pipeline 并行度
-- `parallel_fragment_exec_instance_num` - Fragment 并行实例数
+### Step 5: 自我验证 (必做)
+- **参数存在性**: 我推荐的每个参数是否在下方的"官方支持参数列表"中？
+- **表类型匹配**: 对外表建议 ALTER TABLE 分桶是错误的！
+- **配置冲突**: 是否与当前 session_variables 中的值重复？
+- **命令完整性**: SQL/SET 命令是否可以直接复制执行？
+
+## ⚠️ 严格遵守的规则
+1. **检查 session_variables 再给建议**: 参数已启用就不要重复建议
+2. **区分表类型**: 内表和外表的优化方向完全不同
+3. **参数必须存在**: 只使用下方列出的 StarRocks 官方参数，禁止创造参数！
+4. **建议必须可执行**: 给出完整的 SQL/SET/ALTER 命令
+5. **宁缺毋滥**: 不确定的建议宁可不给，也不要误导用户"#;
+
+/// Dynamic prompt section for table types detected
+fn build_table_type_prompt(scan_details: &[ScanDetailForLLM]) -> String {
+    let mut internal_tables = Vec::new();
+    let mut external_tables: HashMap<String, Vec<String>> = HashMap::new();
+    
+    for scan in scan_details {
+        let table_name = &scan.table_name;
+        if scan.table_type == "internal" {
+            internal_tables.push(table_name.clone());
+        } else {
+            let connector = scan.connector_type.clone().unwrap_or_else(|| "unknown".to_string());
+            external_tables.entry(connector).or_default().push(table_name.clone());
+        }
+    }
+    
+    let mut prompt = String::from("\n\n## 📊 本次查询涉及的表\n");
+    
+    if !internal_tables.is_empty() {
+        prompt.push_str(&format!(
+            "\n### StarRocks 内表 ({} 张)\n表名: {}\n\n**内表优化方向:**\n- ANALYZE TABLE 更新统计信息\n- 检查分桶键是否合理\n- 考虑物化视图加速\n- 可使用 ALTER TABLE 调整属性\n",
+            internal_tables.len(),
+            internal_tables.join(", ")
+        ));
+    }
+    
+    for (connector, tables) in &external_tables {
+        let connector_prompt = match connector.as_str() {
+            "hive" => format!(
+                "\n### Hive 外表 ({} 张)\n表名: {}\n\n**Hive 表优化方向:**\n- 启用 DataCache: `SET enable_scan_datacache=true;`\n- 分区裁剪: 确保 WHERE 条件包含分区列\n- 小文件合并: 在 Hive/Spark 端执行 `ALTER TABLE xxx CONCATENATE;`\n- ⚠️ 不能用 ALTER TABLE 改分桶，需在 Hive 端操作\n",
+                tables.len(), tables.join(", ")
+            ),
+            "iceberg" => format!(
+                "\n### Iceberg 外表 ({} 张)\n表名: {}\n\n**Iceberg 表优化方向:**\n- 启用 DataCache: `SET enable_scan_datacache=true;`\n- 文件合并: 使用 Spark `rewrite_data_files` procedure\n- 利用 Iceberg 的 hidden partitioning\n- 检查 delete files 是否过多 (V2 格式)\n- ⚠️ 不能用 ALTER TABLE 改分桶，需在 Iceberg 端操作\n",
+                tables.len(), tables.join(", ")
+            ),
+            "hudi" => format!(
+                "\n### Hudi 外表 ({} 张)\n表名: {}\n\n**Hudi 表优化方向:**\n- 启用 DataCache\n- 检查 compaction 是否及时\n- MOR 表考虑调整读取模式\n",
+                tables.len(), tables.join(", ")
+            ),
+            "jdbc" => format!(
+                "\n### JDBC 外表 ({} 张)\n表名: {}\n\n**JDBC 表优化方向:**\n- 谓词下推: 确保 WHERE 条件能下推到源库\n- 减少 SELECT 列: 只查询必要的列\n- 考虑数据同步到内表加速\n",
+                tables.len(), tables.join(", ")
+            ),
+            "es" => format!(
+                "\n### Elasticsearch 外表 ({} 张)\n表名: {}\n\n**ES 表优化方向:**\n- 确保查询条件能下推到 ES\n- 利用 ES 的索引能力\n- 减少返回字段数\n",
+                tables.len(), tables.join(", ")
+            ),
+            _ => format!(
+                "\n### {} 外表 ({} 张)\n表名: {}\n\n**通用外表优化方向:**\n- 启用 DataCache\n- 分区裁剪\n- 谓词下推\n",
+                connector, tables.len(), tables.join(", ")
+            ),
+        };
+        prompt.push_str(&connector_prompt);
+    }
+    
+    prompt
+}
+
+/// Dynamic prompt section based on detected issues
+fn build_issue_focused_prompt(diagnostics: &[DiagnosticForLLM]) -> String {
+    if diagnostics.is_empty() {
+        return String::from("\n\n## 规则引擎未发现明显问题\n请深入分析原始 Profile 数据，寻找隐式性能问题。\n");
+    }
+    
+    let mut prompt = String::from("\n\n## 规则引擎已识别的问题 (作为参考)\n");
+    for d in diagnostics.iter().take(5) {
+        prompt.push_str(&format!("- **{}** [{}]: {}\n", d.rule_id, d.severity, d.message));
+    }
+    prompt.push_str("\n**你的任务**: 不要简单重复这些问题，而是:\n1. 分析这些症状背后的根因\n2. 找出规则引擎未发现的隐式问题\n3. 建立因果链条\n");
+    
+    prompt
+}
+
+/// Dynamic prompt section for current session variables
+fn build_session_vars_prompt(session_vars: &HashMap<String, String>) -> String {
+    if session_vars.is_empty() {
+        return String::new();
+    }
+    
+    let mut prompt = String::from("\n\n## 当前集群配置 (避免重复建议)\n");
+    
+    // Highlight important settings that are already configured
+    let important_vars = [
+        "enable_scan_datacache", "enable_spill", "parallel_fragment_exec_instance_num",
+        "pipeline_dop", "query_mem_limit", "enable_global_runtime_filter"
+    ];
+    
+    for var in important_vars {
+        if let Some(value) = session_vars.get(var) {
+            prompt.push_str(&format!("- `{}` = `{}`\n", var, value));
+        }
+    }
+    
+    prompt.push_str("\n**注意**: 上述参数已配置，如果值已经是推荐值，请不要重复建议。\n");
+    
+    prompt
+}
+
+/// Static prompt section for valid parameters (verified from StarRocks official docs)
+const PROMPT_VALID_PARAMS: &str = r#"
+
+## ✅ StarRocks 官方支持的参数 (已验证)
+
+以下参数均来自 StarRocks 官方文档，可安全使用。如果你想推荐的参数不在此列表中，请不要推荐！
+
+### Session 变量 (SET xxx = yyy)
+
+**查询资源控制:**
+- `query_mem_limit` - 单个查询内存限制 (bytes)
+- `query_timeout` - 查询超时时间 (秒，默认300)
+- `exec_mem_limit` - 单个 BE 节点内存限制
+
+**并行度控制:**
+- `pipeline_dop` - Pipeline 并行度 (0=自动)
+- `parallel_fragment_exec_instance_num` - Fragment 实例数 (默认1)
+- `max_parallel_scan_instance_num` - Scan 并行实例数
+
+**Spill (落盘):**
+- `enable_spill` - 启用落盘 (true/false)
+- `spill_mem_table_size` - 落盘触发阈值
+- `spill_mem_table_num` - 落盘表数量
+
+**DataCache (外表缓存):**
 - `enable_scan_datacache` - 启用 DataCache 读取
 - `enable_populate_datacache` - 启用 DataCache 写入
-- `enable_global_runtime_filter` - 启用全局 Runtime Filter
-- `runtime_join_filter_push_down_limit` - Runtime Filter 下推行数限制
-- `broadcast_row_limit` - Broadcast Join 行数限制
-- `new_planner_agg_stage` - 聚合阶段数(0/1/2/3/4)
+- `datacache_priority` - 缓存优先级
 
-**SQL Hint (SELECT /*+ SET_VAR(xxx=yyy) */ ...):**
-- 上述所有 Session 变量都可以用 Hint 方式设置
+**Runtime Filter:**
+- `enable_global_runtime_filter` - 全局 Runtime Filter
+- `runtime_filter_wait_time_ms` - 等待时间
+- `runtime_join_filter_push_down_limit` - 下推行数限制
 
-**ALTER TABLE 属性 (仅内表):**
+**Join 优化:**
+- `broadcast_row_limit` - Broadcast 行数限制 (默认25M)
+- `hash_join_push_down_right_table` - 右表下推
+
+**聚合优化:**
+- `new_planner_agg_stage` - 聚合阶段 (0=自动,1/2/3/4)
+- `streaming_preaggregation_mode` - 预聚合模式
+
+### ALTER TABLE 属性 (仅适用于 StarRocks 内表!)
+
 - `replication_num` - 副本数
-- `dynamic_partition.enable` - 动态分区
 - `bloom_filter_columns` - Bloom Filter 列
-- `colocate_with` - Colocate Group
+- `colocate_with` - Colocate Group 名称
+- `dynamic_partition.enable` - 动态分区开关
+- `storage_medium` - 存储介质 (SSD/HDD)
 
-**❌ 以下是不存在的参数，禁止使用：**
-- ❌ `enable_short_key_index` - 不存在
-- ❌ `enable_zone_map_index` - 不存在
-- ❌ `enable_bitmap_index` - 不存在（建索引用 CREATE INDEX）
+### 运维命令
+
+- `ANALYZE TABLE db.table;` - 更新统计信息 (仅内表)
+- `REFRESH MATERIALIZED VIEW mv_name;` - 刷新物化视图
+- `ADMIN SET REPLICA STATUS ...` - 管理副本
+
+### SQL Hint 格式
+
+```sql
+SELECT /*+ SET_VAR(query_timeout=600, enable_spill=true) */ ...
+```
+
+## ❌ 禁止使用的参数 (不存在或已废弃)
+
+以下参数**不存在**于 StarRocks 中，禁止推荐：
+- ❌ `enable_short_key_index` - 不存在！Short Key 是自动的
+- ❌ `enable_zone_map_index` - 不存在！Zone Map 是自动的
+- ❌ `enable_bitmap_index` - 不存在！用 CREATE INDEX 建索引
 - ❌ `enable_async_profile` - 不存在
 - ❌ `enable_query_debug_trace` - 不存在
+- ❌ `optimize_table` - 不存在！内表用 ADMIN COMPACT
+- ❌ 任何你"猜测"可能存在的参数
 
-示例（好的建议）:
-- `ANALYZE TABLE orders;`
-- `SET parallel_fragment_exec_instance_num = 16;`
-- `SELECT /*+ SET_VAR(query_timeout=300, enable_spill=true) */ ... FROM ...`
-- 在 Hive 端执行: `ALTER TABLE xxx CONCATENATE;` (合并小文件)
+## ⚠️ 外表限制 (Hive/Iceberg/JDBC 等)
 
-示例（不好的建议）:
-- ❌ "优化查询性能" - 太笼统
-- ❌ "检查统计信息" - 没给具体命令
-- ❌ `ALTER TABLE xxx SET ("enable_short_key_index" = "true")` - 参数不存在！
+外表**不支持**以下操作，禁止建议：
+- ❌ `ALTER TABLE external_table SET ("xxx" = "yyy")` - 外表属性在源端修改
+- ❌ `ANALYZE TABLE external_catalog.db.table` - 外表统计信息在源端
+- ❌ 任何修改外表分桶/分区的建议
+"#;
 
-## ⚠️ 严格 JSON 输出格式
+/// Output format specification
+const PROMPT_OUTPUT_FORMAT: &str = r#"
+
+## 📤 严格 JSON 输出格式"#;
+
+/// Build the complete dynamic system prompt
+pub fn build_system_prompt(request: &RootCauseAnalysisRequest) -> String {
+    let mut prompt = String::from(PROMPT_BASE);
+    
+    // Add table-type specific guidance
+    if let Some(ref profile_data) = request.profile_data {
+        prompt.push_str(&build_table_type_prompt(&profile_data.scan_details));
+    }
+    
+    // Add issue-focused guidance
+    prompt.push_str(&build_issue_focused_prompt(&request.rule_diagnostics));
+    
+    // Add current session variables
+    prompt.push_str(&build_session_vars_prompt(&request.query_summary.session_variables));
+    
+    // Add valid parameters reference
+    prompt.push_str(PROMPT_VALID_PARAMS);
+    
+    // Add output format specification
+    prompt.push_str(PROMPT_OUTPUT_FORMAT);
+    
+    // Add JSON schema
+    prompt.push_str(PROMPT_JSON_FORMAT);
+    
+    prompt
+}
+
+/// Output format JSON schema (appended to dynamic prompt)
+const PROMPT_JSON_FORMAT: &str = r#"
 
 ```json
 {
   "root_causes": [
     {
       "root_cause_id": "RC001",
-      "description": "根因描述，基于原始指标分析",
+      "description": "root cause description based on raw metrics analysis",
       "confidence": 0.85,
-      "evidence": ["Profile 指标证据1", "指标证据2"],
+      "evidence": ["Profile metric evidence 1", "evidence 2"],
       "symptoms": ["S001", "G003"],
       "is_implicit": false
     }
   ],
   "causal_chains": [
     {
-      "chain": ["根因", "→", "中间原因", "→", "症状"],
-      "explanation": "基于 Profile 数据的因果分析"
+      "chain": ["Root Cause", "->", "Intermediate", "->", "Symptom"],
+      "explanation": "Causal analysis based on Profile data"
     }
   ],
   "recommendations": [
     {
       "priority": 1,
-      "action": "建议操作的简短描述",
-      "expected_improvement": "预期改善效果（定量描述）",
-      "sql_example": "可直接执行的 SQL 或命令"
+      "action": "Brief description of recommended action",
+      "expected_improvement": "Quantitative improvement description",
+      "sql_example": "Executable SQL or command"
     }
   ],
-  "summary": "整体分析摘要，重点说明根因和优化方向",
+  "summary": "Overall analysis summary focusing on root causes and optimization direction",
   "hidden_issues": [
     {
-      "issue": "规则引擎未发现的问题",
-      "suggestion": "可执行的解决命令"
+      "issue": "Issue not detected by rule engine",
+      "suggestion": "Executable solution command"
     }
   ]
 }
 ```
 
-字段说明:
-- root_cause_id: "RC001", "RC002" 格式
-- evidence: **必须引用具体的 Profile 指标数值**
-- symptoms: 关联的规则 ID
-- is_implicit: true 表示规则引擎未检测到
-- priority: 1 为最高优先级
-- sql_example: **必填**，可直接执行的 SQL/命令
+Field descriptions:
+- root_cause_id: Format as "RC001", "RC002", etc.
+- evidence: MUST reference specific Profile metric values
+- symptoms: Related rule IDs
+- is_implicit: true if not detected by rule engine
+- priority: 1 is highest priority
+- sql_example: REQUIRED, executable SQL/command
 "#;
+
+/// Legacy static prompt for backward compatibility (minimal)
+#[allow(dead_code)]
+pub const ROOT_CAUSE_SYSTEM_PROMPT: &str = "You are a StarRocks OLAP database performance expert.";
 
 // ============================================================================
 // Request Types
@@ -190,8 +357,9 @@ impl LLMAnalysisRequestTrait for RootCauseAnalysisRequest {
         LLMScenario::RootCauseAnalysis
     }
     
-    fn system_prompt(&self) -> &'static str {
-        ROOT_CAUSE_SYSTEM_PROMPT
+    /// Generate dynamic system prompt based on request context
+    fn system_prompt(&self) -> String {
+        build_system_prompt(self)
     }
     
     fn cache_key(&self) -> String {
@@ -323,9 +491,13 @@ pub struct ScanDetailForLLM {
     pub table_name: String,
     /// OlapScan / HdfsScan / ConnectorScan etc.
     pub scan_type: String,
-    /// Table storage type: "internal" (StarRocks native), "external" (Hive/Iceberg/HDFS), "lake" (shared-data)
+    /// Table storage type: "internal" (StarRocks native), "external" (foreign table)
     /// This is CRITICAL for LLM to give correct suggestions!
     pub table_type: String,
+    /// Connector type for external tables: "hive", "iceberg", "hudi", "deltalake", "paimon", "jdbc", "es", "unknown"
+    /// For internal tables this is "native"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connector_type: Option<String>,
     /// Total rows read
     pub rows_read: u64,
     /// Rows after filtering
@@ -667,4 +839,111 @@ impl RootCauseAnalysisRequestBuilder {
             user_question: self.user_question,
         })
     }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Determine table type based on CATALOG prefix, not scan operator type!
+/// 
+/// StarRocks has two deployment modes:
+/// 1. Shared-Nothing (存算一体): internal tables use OLAP_SCAN
+/// 2. Shared-Data (存算分离): internal tables use CONNECTOR_SCAN
+/// 
+/// Both modes can access external tables (Hive/Iceberg/ES etc.) via catalogs.
+/// 
+/// ## The ONLY reliable rule:
+/// - `default_catalog` → internal (StarRocks native table)
+/// - Any other catalog name → external (foreign table)
+/// 
+/// # Arguments
+/// * `table_name` - Full table name, may be "catalog.database.table" or "database.table" or just "table"
+/// 
+/// # Returns
+/// * "internal" - StarRocks native table (in default_catalog)
+/// * "external" - External table (any non-default catalog)
+pub fn determine_table_type(table_name: &str) -> String {
+    let parts: Vec<&str> = table_name.split('.').collect();
+    
+    // If table name has 3+ parts: catalog.database.table
+    if parts.len() >= 3 {
+        let catalog = parts[0].to_lowercase();
+        // ONLY default_catalog is internal, everything else is external!
+        if catalog == "default_catalog" {
+            return "internal".to_string();
+        }
+        // Any other catalog → external
+        return "external".to_string();
+    }
+    
+    // If table name has 2 parts: database.table (no catalog prefix)
+    // This is default_catalog implicitly, so internal
+    if parts.len() == 2 {
+        return "internal".to_string();
+    }
+    
+    // Single part (just table name) → internal (default_catalog)
+    "internal".to_string()
+}
+
+/// Determine external table connector type from Profile metrics
+/// 
+/// StarRocks Profile 中各类外表的标识 (from be/src/exec/hdfs_scanner):
+/// - **Iceberg**: Has "IcebergV2FormatTimer" section under ORC/Parquet
+/// - **Hive**: Has "ORC" or "Parquet" section, but NO Iceberg indicators
+/// - **Delta Lake**: Has "DeletionVector" section (Delta uses deletion vectors)
+/// - **Hudi**: Has Hudi-specific metrics
+/// - **Paimon**: Has Paimon-specific metrics (uses deletion vector too)
+/// - **JDBC**: Has JDBC-related metrics
+/// - **ES/Elasticsearch**: Has ES-specific metrics
+/// 
+/// # Arguments
+/// * `metrics` - The unique_metrics map from SCAN node
+/// 
+/// # Returns
+/// * "iceberg", "hive", "hudi", "paimon", "deltalake", "jdbc", "es", or "unknown"
+pub fn determine_connector_type(metrics: &std::collections::HashMap<String, String>) -> String {
+    let keys: Vec<String> = metrics.keys().map(|k| k.to_lowercase()).collect();
+    let keys_str = keys.join(" ");
+    
+    // Check for Iceberg: IcebergV2FormatTimer is the key indicator
+    // It appears under ORC/Parquet section for Iceberg tables
+    if keys_str.contains("iceberg") || keys_str.contains("deletefilebuild") {
+        return "iceberg".to_string();
+    }
+    
+    // Check for Delta Lake: DeletionVector is the key indicator
+    if keys_str.contains("deletionvector") {
+        return "deltalake".to_string();
+    }
+    
+    // Check for Hudi: Hudi-specific metrics
+    if keys_str.contains("hudi") {
+        return "hudi".to_string();
+    }
+    
+    // Check for Paimon: Paimon-specific metrics
+    if keys_str.contains("paimon") {
+        return "paimon".to_string();
+    }
+    
+    // Check for JDBC
+    if keys_str.contains("jdbc") {
+        return "jdbc".to_string();
+    }
+    
+    // Check for Elasticsearch
+    if keys_str.contains("elasticsearch") || keys_str.contains("_es_") {
+        return "es".to_string();
+    }
+    
+    // ORC or Parquet without Iceberg indicators → Hive table
+    if keys_str.contains("orc") || keys_str.contains("parquet") || 
+       keys_str.contains("stripe") || keys_str.contains("rowgroup") {
+        return "hive".to_string();
+    }
+    
+    // Default: unknown external table type
+    "unknown".to_string()
 }

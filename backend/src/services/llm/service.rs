@@ -19,8 +19,8 @@ pub trait LLMAnalysisRequestTrait: Serialize + Send + Sync {
     /// The scenario type for this request
     fn scenario(&self) -> LLMScenario;
     
-    /// Get the system prompt for this scenario
-    fn system_prompt(&self) -> &'static str;
+    /// Get the system prompt for this scenario (dynamic, based on request context)
+    fn system_prompt(&self) -> String;
     
     /// Build cache key for deduplication
     fn cache_key(&self) -> String;

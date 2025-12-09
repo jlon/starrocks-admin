@@ -705,6 +705,9 @@ mod usage_stats_tests {
 // LLM Integration Test with Real Profile
 // ============================================================================
 
+// Use the determine_table_type and determine_connector_type from root_cause module
+use super::scenarios::root_cause::{determine_table_type, determine_connector_type};
+
 mod llm_integration_tests {
     use super::*;
     use crate::services::profile_analyzer::{
@@ -905,34 +908,41 @@ mod llm_integration_tests {
                 })
                 .collect();
             
-            // Scan details - determine table type from scan operator name
+            // Scan details - determine table type from CATALOG, not scan operator!
+            // Key insight:
+            // - default_catalog.db.table or db.table → internal (StarRocks native table)
+            // - hive_catalog.db.table, iceberg_catalog.db.table → external (foreign table)
+            // SCAN operator type (OLAP_SCAN vs CONNECTOR_SCAN) indicates storage architecture,
+            // NOT whether the table is internal or external!
             let scan_details: Vec<ScanDetailForLLM> = tree.nodes.iter()
                 .filter(|n| n.operator_name.contains("SCAN"))
                 .map(|n| {
                     let metrics = &n.unique_metrics;
                     let scan_type = n.operator_name.clone();
                     
-                    // Determine table type from scan operator
-                    // - OLAP_SCAN: internal StarRocks table
-                    // - HDFS_SCAN / CONNECTOR_SCAN: external table (Hive/Iceberg/HDFS)
-                    // - LAKE_SCAN: shared-data architecture
-                    let table_type = if scan_type.contains("OLAP") {
-                        "internal".to_string()
-                    } else if scan_type.contains("HDFS") || scan_type.contains("CONNECTOR") || scan_type.contains("HIVE") {
-                        "external".to_string()
-                    } else if scan_type.contains("LAKE") {
-                        "lake".to_string()
-                    } else {
-                        "unknown".to_string()
-                    };
-                    
+                    // Get full table name (may include catalog.database.table)
                     let table_name = metrics.get("Table").cloned().unwrap_or_else(|| "unknown".to_string());
+                    
+                    // Determine table type from CATALOG prefix, not scan operator!
+                    // - "default_catalog.db.table" or "db.table" (no catalog) → internal
+                    // - "hive_catalog.db.table", "iceberg_catalog.xxx" → external
+                    let table_type = determine_table_type(&table_name);
+                    
+                    // Determine connector type from profile metrics
+                    // For external tables: hive, iceberg, hudi, deltalake, paimon, jdbc, es
+                    // For internal tables: native
+                    let connector_type = if table_type == "external" {
+                        Some(determine_connector_type(&metrics))
+                    } else {
+                        Some("native".to_string())
+                    };
                     
                     ScanDetailForLLM {
                         plan_node_id: n.plan_node_id.unwrap_or(-1),
                         table_name: table_name.clone(),
                         scan_type,
                         table_type,
+                        connector_type,
                         rows_read: parse_number(metrics.get("RawRowsRead").or(metrics.get("RowsRead"))),
                         rows_returned: n.rows.unwrap_or(0),
                         filter_ratio: {
@@ -1313,5 +1323,337 @@ mod llm_integration_tests {
             let truncated: String = s.chars().take(max_chars).collect();
             format!("{}...", truncated)
         }
+    }
+}
+
+// ============================================================================
+// Dynamic Prompt Generation Tests
+// ============================================================================
+
+mod prompt_generation_tests {
+    use super::*;
+    use crate::services::llm::scenarios::root_cause::{
+        RootCauseAnalysisRequest, QuerySummaryForLLM, ExecutionPlanForLLM,
+        DiagnosticForLLM, KeyMetricsForLLM, ProfileDataForLLM, ScanDetailForLLM,
+        OperatorDetailForLLM, build_system_prompt,
+    };
+    use std::collections::HashMap;
+    
+    /// Test dynamic prompt generation with internal tables
+    #[test]
+    fn test_prompt_with_internal_tables() {
+        let scan_details = vec![
+            ScanDetailForLLM {
+                plan_node_id: 1,
+                table_name: "default_catalog.db.orders".to_string(),
+                scan_type: "OLAP_SCAN".to_string(),
+                table_type: "internal".to_string(),
+                connector_type: Some("native".to_string()),
+                rows_read: 1000000,
+                rows_returned: 50000,
+                filter_ratio: 0.95,
+                scan_ranges: Some(128),
+                bytes_read: Some(1024 * 1024 * 100),
+                io_time_ms: None,
+                cache_hit_rate: None,
+                predicates: Some("order_date > '2024-01-01'".to_string()),
+                partitions_scanned: Some("10/100".to_string()),
+                full_table_path: Some("default_catalog.db.orders".to_string()),
+            },
+        ];
+        
+        let profile_data = ProfileDataForLLM {
+            operators: vec![],
+            time_distribution: None,
+            scan_details,
+            join_details: vec![],
+            agg_details: vec![],
+            exchange_details: vec![],
+        };
+        
+        let request = RootCauseAnalysisRequest {
+            query_summary: QuerySummaryForLLM {
+                sql_statement: "SELECT * FROM orders".to_string(),
+                query_type: "SELECT".to_string(),
+                total_time_seconds: 5.0,
+                scan_bytes: 100 * 1024 * 1024,
+                output_rows: 50000,
+                be_count: 3,
+                has_spill: false,
+                spill_bytes: None,
+                session_variables: HashMap::new(),
+            },
+            profile_data: Some(profile_data),
+            execution_plan: ExecutionPlanForLLM {
+                dag_description: "SCAN -> AGG".to_string(),
+                hotspot_nodes: vec![],
+            },
+            rule_diagnostics: vec![],
+            key_metrics: KeyMetricsForLLM::default(),
+            user_question: None,
+        };
+        
+        let prompt = build_system_prompt(&request);
+        
+        // Verify internal table guidance is included
+        assert!(prompt.contains("StarRocks 内表"), "Should mention internal tables");
+        assert!(prompt.contains("ANALYZE TABLE"), "Should suggest ANALYZE for internal tables");
+        assert!(prompt.contains("分桶键"), "Should mention bucket key optimization");
+        
+        // Verify critical thinking section
+        assert!(prompt.contains("批判性思维"), "Should include critical thinking section");
+        assert!(prompt.contains("自我批评"), "Should mention self-criticism");
+        
+        // Verify parameter validation
+        assert!(prompt.contains("禁止使用的参数"), "Should list forbidden parameters");
+        assert!(prompt.contains("enable_short_key_index"), "Should blacklist fake params");
+        
+        println!("✅ Internal table prompt test passed!");
+        println!("Prompt length: {} chars", prompt.len());
+    }
+    
+    /// Test dynamic prompt generation with Iceberg external tables
+    #[test]
+    fn test_prompt_with_iceberg_tables() {
+        let scan_details = vec![
+            ScanDetailForLLM {
+                plan_node_id: 1,
+                table_name: "iceberg_catalog.db.events".to_string(),
+                scan_type: "CONNECTOR_SCAN".to_string(),
+                table_type: "external".to_string(),
+                connector_type: Some("iceberg".to_string()),
+                rows_read: 5000000,
+                rows_returned: 100000,
+                filter_ratio: 0.98,
+                scan_ranges: Some(500),
+                bytes_read: Some(1024 * 1024 * 1024),
+                io_time_ms: Some(5000.0),
+                cache_hit_rate: Some(30.0),
+                predicates: None,
+                partitions_scanned: None,
+                full_table_path: Some("iceberg_catalog.db.events".to_string()),
+            },
+        ];
+        
+        let profile_data = ProfileDataForLLM {
+            operators: vec![],
+            time_distribution: None,
+            scan_details,
+            join_details: vec![],
+            agg_details: vec![],
+            exchange_details: vec![],
+        };
+        
+        let request = RootCauseAnalysisRequest {
+            query_summary: QuerySummaryForLLM {
+                sql_statement: "SELECT * FROM events".to_string(),
+                query_type: "SELECT".to_string(),
+                total_time_seconds: 30.0,
+                scan_bytes: 1024 * 1024 * 1024,
+                output_rows: 100000,
+                be_count: 3,
+                has_spill: false,
+                spill_bytes: None,
+                session_variables: HashMap::new(),
+            },
+            profile_data: Some(profile_data),
+            execution_plan: ExecutionPlanForLLM {
+                dag_description: "CONNECTOR_SCAN -> AGG".to_string(),
+                hotspot_nodes: vec![],
+            },
+            rule_diagnostics: vec![],
+            key_metrics: KeyMetricsForLLM::default(),
+            user_question: None,
+        };
+        
+        let prompt = build_system_prompt(&request);
+        
+        // Verify Iceberg-specific guidance
+        assert!(prompt.contains("Iceberg 外表"), "Should mention Iceberg tables");
+        assert!(prompt.contains("rewrite_data_files"), "Should suggest Iceberg file compaction");
+        assert!(prompt.contains("DataCache"), "Should suggest DataCache for external tables");
+        assert!(prompt.contains("不能用 ALTER TABLE 改分桶"), "Should warn about external table limitations");
+        
+        println!("✅ Iceberg table prompt test passed!");
+    }
+    
+    /// Test prompt with session variables to avoid redundant suggestions
+    #[test]
+    fn test_prompt_with_existing_session_vars() {
+        let mut session_vars = HashMap::new();
+        session_vars.insert("enable_scan_datacache".to_string(), "true".to_string());
+        session_vars.insert("enable_spill".to_string(), "true".to_string());
+        session_vars.insert("parallel_fragment_exec_instance_num".to_string(), "16".to_string());
+        
+        let request = RootCauseAnalysisRequest {
+            query_summary: QuerySummaryForLLM {
+                sql_statement: "SELECT * FROM t".to_string(),
+                query_type: "SELECT".to_string(),
+                total_time_seconds: 10.0,
+                scan_bytes: 0,
+                output_rows: 0,
+                be_count: 3,
+                has_spill: false,
+                spill_bytes: None,
+                session_variables: session_vars,
+            },
+            profile_data: None,
+            execution_plan: ExecutionPlanForLLM {
+                dag_description: "SCAN".to_string(),
+                hotspot_nodes: vec![],
+            },
+            rule_diagnostics: vec![],
+            key_metrics: KeyMetricsForLLM::default(),
+            user_question: None,
+        };
+        
+        let prompt = build_system_prompt(&request);
+        
+        // Verify session variables are included
+        assert!(prompt.contains("enable_scan_datacache"), "Should show current datacache setting");
+        assert!(prompt.contains("enable_spill"), "Should show current spill setting");
+        assert!(prompt.contains("不要重复建议"), "Should warn about duplicate suggestions");
+        
+        println!("✅ Session variables prompt test passed!");
+    }
+    
+    /// Test prompt with rule engine diagnostics
+    #[test]
+    fn test_prompt_with_diagnostics() {
+        let diagnostics = vec![
+            DiagnosticForLLM {
+                rule_id: "SCAN_HIGH_FILTER_RATIO".to_string(),
+                severity: "warning".to_string(),
+                operator: "OLAP_SCAN".to_string(),
+                plan_node_id: Some(1),
+                message: "Filter ratio > 80%, consider adding partition".to_string(),
+                evidence: HashMap::new(),
+            },
+            DiagnosticForLLM {
+                rule_id: "JOIN_SKEW".to_string(),
+                severity: "critical".to_string(),
+                operator: "HASH_JOIN".to_string(),
+                plan_node_id: Some(5),
+                message: "Data skew detected in join".to_string(),
+                evidence: HashMap::new(),
+            },
+        ];
+        
+        let request = RootCauseAnalysisRequest {
+            query_summary: QuerySummaryForLLM {
+                sql_statement: "SELECT * FROM t".to_string(),
+                query_type: "SELECT".to_string(),
+                total_time_seconds: 10.0,
+                scan_bytes: 0,
+                output_rows: 0,
+                be_count: 3,
+                has_spill: false,
+                spill_bytes: None,
+                session_variables: HashMap::new(),
+            },
+            profile_data: None,
+            execution_plan: ExecutionPlanForLLM {
+                dag_description: "SCAN -> JOIN".to_string(),
+                hotspot_nodes: vec![],
+            },
+            rule_diagnostics: diagnostics,
+            key_metrics: KeyMetricsForLLM::default(),
+            user_question: None,
+        };
+        
+        let prompt = build_system_prompt(&request);
+        
+        // Verify diagnostics are included
+        assert!(prompt.contains("SCAN_HIGH_FILTER_RATIO"), "Should include rule IDs");
+        assert!(prompt.contains("JOIN_SKEW"), "Should include all diagnostics");
+        assert!(prompt.contains("规则引擎已识别的问题"), "Should have diagnostics section");
+        assert!(prompt.contains("隐式问题"), "Should guide to find hidden issues");
+        
+        println!("✅ Diagnostics prompt test passed!");
+    }
+    
+    /// Test prompt output includes JSON format specification
+    #[test]
+    fn test_prompt_includes_json_format() {
+        let request = RootCauseAnalysisRequest {
+            query_summary: QuerySummaryForLLM {
+                sql_statement: "SELECT 1".to_string(),
+                query_type: "SELECT".to_string(),
+                total_time_seconds: 0.1,
+                scan_bytes: 0,
+                output_rows: 1,
+                be_count: 1,
+                has_spill: false,
+                spill_bytes: None,
+                session_variables: HashMap::new(),
+            },
+            profile_data: None,
+            execution_plan: ExecutionPlanForLLM {
+                dag_description: "".to_string(),
+                hotspot_nodes: vec![],
+            },
+            rule_diagnostics: vec![],
+            key_metrics: KeyMetricsForLLM::default(),
+            user_question: None,
+        };
+        
+        let prompt = build_system_prompt(&request);
+        
+        // Verify JSON format is specified
+        assert!(prompt.contains("root_causes"), "Should specify root_causes field");
+        assert!(prompt.contains("recommendations"), "Should specify recommendations field");
+        assert!(prompt.contains("sql_example"), "Should require sql_example");
+        assert!(prompt.contains("JSON"), "Should mention JSON format");
+        
+        println!("✅ JSON format prompt test passed!");
+    }
+}
+
+// ============================================================================
+// Table Type Detection Tests
+// ============================================================================
+
+mod table_type_tests {
+    use super::*;
+    
+    #[test]
+    fn test_determine_table_type() {
+        // Internal tables
+        assert_eq!(determine_table_type("default_catalog.db.table"), "internal");
+        assert_eq!(determine_table_type("db.table"), "internal");
+        assert_eq!(determine_table_type("table"), "internal");
+        
+        // External tables
+        assert_eq!(determine_table_type("hive_catalog.db.table"), "external");
+        assert_eq!(determine_table_type("iceberg_cat.db.table"), "external");
+        assert_eq!(determine_table_type("my_lake.schema.table"), "external");
+        
+        println!("✅ Table type detection tests passed!");
+    }
+    
+    #[test]
+    fn test_determine_connector_type() {
+        // Iceberg detection
+        let mut metrics = HashMap::new();
+        metrics.insert("IcebergV2FormatTimer".to_string(), "100ms".to_string());
+        assert_eq!(determine_connector_type(&metrics), "iceberg");
+        
+        // Hive/ORC detection
+        let mut metrics = HashMap::new();
+        metrics.insert("ORC".to_string(), "".to_string());
+        metrics.insert("TotalStripeSize".to_string(), "1GB".to_string());
+        assert_eq!(determine_connector_type(&metrics), "hive");
+        
+        // Hudi detection
+        let mut metrics = HashMap::new();
+        metrics.insert("HudiScanTimer".to_string(), "50ms".to_string());
+        assert_eq!(determine_connector_type(&metrics), "hudi");
+        
+        // JDBC detection
+        let mut metrics = HashMap::new();
+        metrics.insert("JDBCReadRows".to_string(), "1000".to_string());
+        assert_eq!(determine_connector_type(&metrics), "jdbc");
+        
+        println!("✅ Connector type detection tests passed!");
     }
 }

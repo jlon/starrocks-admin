@@ -26,8 +26,12 @@ use super::*;
 pub struct S001DataSkew;
 
 impl DiagnosticRule for S001DataSkew {
-    fn id(&self) -> &str { "S001" }
-    fn name(&self) -> &str { "Scan 数据倾斜" }
+    fn id(&self) -> &str {
+        "S001"
+    }
+    fn name(&self) -> &str {
+        "Scan 数据倾斜"
+    }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("SCAN")
@@ -35,12 +39,18 @@ impl DiagnosticRule for S001DataSkew {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let min_rows = context.get_metric("__MIN_OF_RowsRead").unwrap_or(0.0);
-        let max_rows = context.get_metric("__MAX_OF_RowsRead").or_else(|| context.get_metric("RowsRead"))?;
+        let max_rows = context
+            .get_metric("__MAX_OF_RowsRead")
+            .or_else(|| context.get_metric("RowsRead"))?;
 
-        if min_rows == 0.0 && max_rows > 0.0 { return None; }
+        if min_rows == 0.0 && max_rows > 0.0 {
+            return None;
+        }
 
         let min_rows_threshold = context.thresholds.get_min_rows_for_skew();
-        if max_rows < min_rows_threshold { return None; }
+        if max_rows < min_rows_threshold {
+            return None;
+        }
 
         let avg_rows = (max_rows + min_rows) / 2.0;
         let ratio = max_rows / avg_rows;
@@ -49,24 +59,36 @@ impl DiagnosticRule for S001DataSkew {
         if ratio > skew_threshold {
             let table = context.get_full_table_name();
             let is_internal = context.is_internal_table();
-            
+
             let (reason, suggestions) = if is_internal {
                 (
-                    format!("内表「{}」数据在各节点分布不均（max {:.0} 行，min {:.0} 行）。通常是分桶键选择不当导致数据倾斜。", table, max_rows, min_rows),
+                    format!(
+                        "内表「{}」数据在各节点分布不均（max {:.0} 行，min {:.0} 行）。通常是分桶键选择不当导致数据倾斜。",
+                        table, max_rows, min_rows
+                    ),
                     vec![
                         format!("检查表「{}」的分桶键是否选择了高基数列", table),
-                        format!("查看数据分布: SELECT COUNT(*) FROM {} GROUP BY <bucket_key> ORDER BY 1 DESC", table),
-                        format!("必要时重建分桶: ALTER TABLE {} DISTRIBUTED BY HASH(<high_cardinality_column>) BUCKETS N", table),
-                    ]
+                        format!(
+                            "查看数据分布: SELECT COUNT(*) FROM {} GROUP BY <bucket_key> ORDER BY 1 DESC",
+                            table
+                        ),
+                        format!(
+                            "必要时重建分桶: ALTER TABLE {} DISTRIBUTED BY HASH(<high_cardinality_column>) BUCKETS N",
+                            table
+                        ),
+                    ],
                 )
             } else {
                 (
-                    format!("外表「{}」数据在各节点分布不均（max {:.0} 行，min {:.0} 行）。可能是 Hive 分区大小不均或文件分布不均。", table, max_rows, min_rows),
+                    format!(
+                        "外表「{}」数据在各节点分布不均（max {:.0} 行，min {:.0} 行）。可能是 Hive 分区大小不均或文件分布不均。",
+                        table, max_rows, min_rows
+                    ),
                     vec![
                         format!("检查外表「{}」的分区数据量是否均衡", table),
                         "检查是否存在热点分区或超大文件".to_string(),
                         "考虑在 Hive 侧重新分区或合并小文件".to_string(),
-                    ]
+                    ],
                 )
             };
 
@@ -74,12 +96,20 @@ impl DiagnosticRule for S001DataSkew {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
-                message: format!("Scan 存在数据倾斜，max/avg 比率为 {:.2} (阈值: {:.1})", ratio, skew_threshold),
+                message: format!(
+                    "Scan 存在数据倾斜，max/avg 比率为 {:.2} (阈值: {:.1})",
+                    ratio, skew_threshold
+                ),
                 reason,
                 suggestions,
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -93,8 +123,12 @@ impl DiagnosticRule for S001DataSkew {
 pub struct S003PoorFilter;
 
 impl DiagnosticRule for S003PoorFilter {
-    fn id(&self) -> &str { "S003" }
-    fn name(&self) -> &str { "过滤效果差" }
+    fn id(&self) -> &str {
+        "S003"
+    }
+    fn name(&self) -> &str {
+        "过滤效果差"
+    }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("SCAN")
@@ -103,7 +137,9 @@ impl DiagnosticRule for S003PoorFilter {
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let rows_read = context.get_metric("RowsRead")?;
         let raw_rows_read = context.get_metric("RawRowsRead")?;
-        if raw_rows_read == 0.0 { return None; }
+        if raw_rows_read == 0.0 {
+            return None;
+        }
 
         let ratio = rows_read / raw_rows_read;
         let min_rows_threshold = context.thresholds.get_min_rows_for_filter();
@@ -111,31 +147,39 @@ impl DiagnosticRule for S003PoorFilter {
         if ratio > 0.8 && raw_rows_read > min_rows_threshold {
             let table = context.get_full_table_name();
             let is_internal = context.is_internal_table();
-            
+
             let (reason, suggestions) = if is_internal {
                 (
                     format!(
                         "内表「{}」扫描了 {:.0} 行但仅过滤掉 {:.1}%。可通过 ZoneMap、BloomFilter 索引或谓词下推提前过滤。",
-                        table, raw_rows_read, (1.0 - ratio) * 100.0
+                        table,
+                        raw_rows_read,
+                        (1.0 - ratio) * 100.0
                     ),
                     vec![
                         format!("为表「{}」的过滤列添加 ZoneMap 或 BloomFilter 索引", table),
                         "检查 WHERE 条件是否支持下推（避免函数包裹、类型转换）".to_string(),
                         format!("检查表「{}」的分区是否能裁剪", table),
                         "通过 EXPLAIN 查看谓词下推情况".to_string(),
-                    ]
+                    ],
                 )
             } else {
                 (
                     format!(
                         "外表「{}」扫描了 {:.0} 行但仅过滤掉 {:.1}%。外表过滤依赖 Hive 分区裁剪和文件格式的统计信息。",
-                        table, raw_rows_read, (1.0 - ratio) * 100.0
+                        table,
+                        raw_rows_read,
+                        (1.0 - ratio) * 100.0
                     ),
                     vec![
-                        format!("检查外表「{}」的 Hive 分区是否能裁剪（WHERE 条件包含分区列）", table),
-                        "ORC/Parquet 文件利用 min/max 统计信息过滤，确保文件有 statistics".to_string(),
+                        format!(
+                            "检查外表「{}」的 Hive 分区是否能裁剪（WHERE 条件包含分区列）",
+                            table
+                        ),
+                        "ORC/Parquet 文件利用 min/max 统计信息过滤，确保文件有 statistics"
+                            .to_string(),
                         "检查 WHERE 条件是否支持下推到外部存储".to_string(),
-                    ]
+                    ],
                 )
             };
 
@@ -143,12 +187,22 @@ impl DiagnosticRule for S003PoorFilter {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
-                message: format!("过滤效果差，仅过滤了 {:.1}% 的数据 (读取 {:.0} 行 / 原始 {:.0} 行)", (1.0 - ratio) * 100.0, rows_read, raw_rows_read),
+                message: format!(
+                    "过滤效果差，仅过滤了 {:.1}% 的数据 (读取 {:.0} 行 / 原始 {:.0} 行)",
+                    (1.0 - ratio) * 100.0,
+                    rows_read,
+                    raw_rows_read
+                ),
                 reason,
                 suggestions,
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -218,6 +272,7 @@ impl DiagnosticRule for S007ColdStorage {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -302,6 +357,7 @@ impl DiagnosticRule for S009LowCacheHit {
                             "SET enable_populate_datacache = true;"
                         ),
                     ].into_iter().flatten().collect(),
+                    threshold_metadata: None,
                 });
             }
         }
@@ -342,6 +398,7 @@ impl DiagnosticRule for S009LowCacheHit {
                         "true",
                         "SET enable_scan_datacache = true;"
                     ).into_iter().collect(),
+                    threshold_metadata: None,
                 });
             }
         }
@@ -374,6 +431,7 @@ impl DiagnosticRule for S009LowCacheHit {
                             "检查是否有其他查询竞争缓存".to_string(),
                         ],
                     parameter_suggestions: vec![],
+                threshold_metadata: None,
                 });
             }
         }
@@ -409,14 +467,13 @@ impl DiagnosticRule for S010RFNotEffective {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
-                node_path: format!("{} (plan_node_id={})", 
+                node_path: format!(
+                    "{} (plan_node_id={})",
                     context.node.operator_name,
-                    context.node.plan_node_id.unwrap_or(-1)),
-                plan_node_id: context.node.plan_node_id,
-                message: format!(
-                    "Runtime Filter 未过滤任何行，扫描了 {:.0} 行",
-                    raw_rows
+                    context.node.plan_node_id.unwrap_or(-1)
                 ),
+                plan_node_id: context.node.plan_node_id,
+                message: format!("Runtime Filter 未过滤任何行，扫描了 {:.0} 行", raw_rows),
                 reason: {
                     let table = context.get_full_table_name();
                     format!(
@@ -434,11 +491,13 @@ impl DiagnosticRule for S010RFNotEffective {
                 },
                 parameter_suggestions: {
                     let mut suggestions = Vec::new();
-                    if let Some(s) = context.suggest_parameter_smart("enable_global_runtime_filter") {
+                    if let Some(s) = context.suggest_parameter_smart("enable_global_runtime_filter")
+                    {
                         suggestions.push(s);
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -525,6 +584,7 @@ impl DiagnosticRule for S011SoftDeletes {
                     format!("查看表 Tablet 状态: SHOW TABLET FROM {};", full_table_name),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -568,10 +628,10 @@ impl DiagnosticRule for S002IOSkew {
         }
 
         let ratio = max_io / ((max_io + min_io) / 2.0);
-        
+
         // v2.0: Use dynamic skew threshold based on cluster size
         let skew_threshold = context.thresholds.get_skew_threshold();
-        
+
         if ratio > skew_threshold {
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
@@ -583,6 +643,7 @@ impl DiagnosticRule for S002IOSkew {
                 reason: "Scan 算子多个实例在读取数据时，部分实例花费的时间显著大于其它实例。可能是节点 IO 使用率不均或数据在节点上分布不均。".to_string(),
                 suggestions: vec!["检查节点 IO 使用率是否不均".to_string(), "检查存储设备是否存在性能问题".to_string()],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -595,8 +656,12 @@ impl DiagnosticRule for S002IOSkew {
 pub struct S004PredicateNotPushed;
 
 impl DiagnosticRule for S004PredicateNotPushed {
-    fn id(&self) -> &str { "S004" }
-    fn name(&self) -> &str { "谓词未下推" }
+    fn id(&self) -> &str {
+        "S004"
+    }
+    fn name(&self) -> &str {
+        "谓词未下推"
+    }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("SCAN")
@@ -606,7 +671,7 @@ impl DiagnosticRule for S004PredicateNotPushed {
         let pushdown = context.get_metric("PushdownPredicates").unwrap_or(0.0);
         let pred_filter = context.get_metric("PredFilterRows").unwrap_or(0.0);
         let raw_rows = context.get_metric("RawRowsRead").unwrap_or(0.0);
-        
+
         if pushdown == 0.0 && raw_rows > 10000.0 && pred_filter / raw_rows > 0.1 {
             let is_internal = context.is_internal_table();
             let suggestions = if is_internal {
@@ -622,7 +687,7 @@ impl DiagnosticRule for S004PredicateNotPushed {
                     "检查 ORC/Parquet 文件是否有统计信息".to_string(),
                 ]
             };
-            
+
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -633,6 +698,7 @@ impl DiagnosticRule for S004PredicateNotPushed {
                 reason: "查询条件未能下推到存储层执行，导致需要在计算层过滤大量数据。可能是查询条件包含函数、类型不匹配或不支持下推的表达式。".to_string(),
                 suggestions,
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -669,6 +735,7 @@ impl DiagnosticRule for S005IOThreadPoolSaturation {
                 reason: "IO 线程池使用率过高，导致 IO 任务等待时间过长。可能是并发查询过多或存储性能不足。".to_string(),
                 suggestions: vec!["增加 BE 上的 max_io_threads 配置".to_string()],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -701,12 +768,22 @@ impl DiagnosticRule for S006RowsetFragmentation {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
-                message: format!("Rowset 数量过多 ({:.0})，初始化耗时 {:.1}ms", rowsets, init_time / 1_000_000.0),
+                message: format!(
+                    "Rowset 数量过多 ({:.0})，初始化耗时 {:.1}ms",
+                    rowsets,
+                    init_time / 1_000_000.0
+                ),
                 reason: format!(
                     "表「{}」的 Rowset 数量过多（{:.0} 个），导致 Segment 初始化耗时 {:.1}ms。通常是频繁小批量导入或 Compaction 不及时导致。",
-                    table, rowsets, init_time / 1_000_000.0
+                    table,
+                    rowsets,
+                    init_time / 1_000_000.0
                 ),
                 suggestions: vec![
                     format!("触发手动 Compaction: ALTER TABLE {} COMPACT", table),
@@ -714,6 +791,7 @@ impl DiagnosticRule for S006RowsetFragmentation {
                     "批量合并小型导入任务，减少导入频率".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -747,7 +825,11 @@ impl DiagnosticRule for S008ZoneMapNotEffective {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Info,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
                 message: "ZoneMap 索引未能过滤数据".to_string(),
                 reason: format!(
@@ -760,6 +842,7 @@ impl DiagnosticRule for S008ZoneMapNotEffective {
                     "避免在排序键上使用函数（如 WHERE DATE(dt) = ...）".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -818,6 +901,7 @@ impl DiagnosticRule for S012BitmapIndexNotEffective {
                         "检查 Profile 中 BitmapIndexFilterRows 指标".to_string(),
                     ],
                     parameter_suggestions: vec![],
+                threshold_metadata: None,
                 });
             }
         }
@@ -877,6 +961,7 @@ impl DiagnosticRule for S013BloomFilterNotEffective {
                         "检查 Profile 中 BloomFilterFilterRows 指标".to_string(),
                     ],
                     parameter_suggestions: vec![],
+                threshold_metadata: None,
                 });
             }
         }
@@ -934,6 +1019,7 @@ impl DiagnosticRule for S014ColocateJoinOpportunity {
                     "Colocate Join 可避免数据网络传输，显著提升性能".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -964,7 +1050,7 @@ impl DiagnosticRule for S016SmallFiles {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         use crate::services::profile_analyzer::analyzer::thresholds::{
-            generate_small_file_suggestions, ExternalScanType,
+            ExternalScanType, generate_small_file_suggestions,
         };
 
         // v2.0: Detect scan type using ExternalScanType enum
@@ -1038,6 +1124,7 @@ impl DiagnosticRule for S016SmallFiles {
                 ),
                 suggestions,
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -1051,37 +1138,29 @@ impl DiagnosticRule for S016SmallFiles {
 pub struct S017FileFragmentation;
 
 impl DiagnosticRule for S017FileFragmentation {
-    fn id(&self) -> &str { "S017" }
-    fn name(&self) -> &str { "文件格式碎片化" }
+    fn id(&self) -> &str {
+        "S017"
+    }
+    fn name(&self) -> &str {
+        "文件格式碎片化"
+    }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("SCAN")
     }
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
-        if let Some(diag) = self.check_orc_fragmentation(context) { return Some(diag); }
-        if let Some(diag) = self.check_parquet_fragmentation(context) { return Some(diag); }
+        if let Some(diag) = self.check_orc_fragmentation(context) {
+            return Some(diag);
+        }
+        if let Some(diag) = self.check_parquet_fragmentation(context) {
+            return Some(diag);
+        }
         None
     }
 }
 
 impl S017FileFragmentation {
-    /// Detect if this is an external table (Hive/HDFS) vs internal table
-    fn is_external_table(context: &RuleContext) -> bool {
-        let op = context.node.operator_name.to_uppercase();
-        if op.contains("CONNECTOR") || op.contains("HDFS") || op.contains("HIVE") 
-            || op.contains("ICEBERG") || op.contains("HUDI") || op.contains("DELTA") {
-            return true;
-        }
-        if let Some(ds) = context.node.unique_metrics.get("DataSourceType") {
-            let ds_up = ds.to_uppercase();
-            if ds_up.contains("HIVE") || ds_up.contains("ICEBERG") || ds_up.contains("HUDI") || ds_up.contains("DELTA") {
-                return true;
-            }
-        }
-        false
-    }
-    
     /// Get suggestions based on table type (internal vs external)
     /// For external tables, provide a single consolidated suggestion to avoid repetition
     fn get_suggestions(is_external: bool, _format: &str, table: &str) -> Vec<String> {
@@ -1098,59 +1177,101 @@ impl S017FileFragmentation {
             vec![format!("执行 Compaction 合并碎片: ALTER TABLE {} COMPACT", table)]
         }
     }
-    
+
     fn check_orc_fragmentation(&self, context: &RuleContext) -> Option<Diagnostic> {
         let stripe_count = context.get_metric("TotalStripeNumber")?;
         let stripe_size = context.get_metric_bytes("TotalStripeSize").unwrap_or(0.0);
-        let tiny_stripe_size = context.get_metric_bytes("TotalTinyStripeSize").unwrap_or(0.0);
-        
-        if stripe_count <= 10000.0 { return None; }
-        
+        let tiny_stripe_size = context
+            .get_metric_bytes("TotalTinyStripeSize")
+            .unwrap_or(0.0);
+
+        if stripe_count <= 10000.0 {
+            return None;
+        }
+
         let avg_stripe_size = if stripe_count > 0.0 { stripe_size / stripe_count } else { 0.0 };
-        let tiny_ratio = if stripe_size > 0.0 { tiny_stripe_size / stripe_size * 100.0 } else { 0.0 };
-        
-        if avg_stripe_size >= 64.0 * 1024.0 * 1024.0 && tiny_ratio < 2.0 { return None; }
-        
-        let table = context.node.unique_metrics.get("Table").map(|s| s.as_str()).unwrap_or("unknown");
-        let is_external = Self::is_external_table(context);
-        let severity = if stripe_count > 500000.0 || tiny_ratio > 10.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
+        let tiny_ratio =
+            if stripe_size > 0.0 { tiny_stripe_size / stripe_size * 100.0 } else { 0.0 };
+
+        if avg_stripe_size >= 64.0 * 1024.0 * 1024.0 && tiny_ratio < 2.0 {
+            return None;
+        }
+
+        let table = context
+            .node
+            .unique_metrics
+            .get("Table")
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
+        let is_external = context.is_external_table();
+        let severity = if stripe_count > 500000.0 || tiny_ratio > 10.0 {
+            RuleSeverity::Error
+        } else {
+            RuleSeverity::Warning
+        };
         let table_type = if is_external { "外表" } else { "内表" };
-        
+
         Some(Diagnostic {
             rule_id: self.id().to_string(),
             rule_name: self.name().to_string(),
             severity,
-            node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+            node_path: format!(
+                "{} (plan_node_id={})",
+                context.node.operator_name,
+                context.node.plan_node_id.unwrap_or(-1)
+            ),
             plan_node_id: context.node.plan_node_id,
-            message: format!("ORC 文件存在 {:.0} 个 Stripe（平均 {}），TinyStripe 占比 {:.1}%", 
-                stripe_count, format_bytes(avg_stripe_size as u64), tiny_ratio),
-            reason: format!("{}「{}」的 ORC 文件 Stripe 碎片化严重（共 {:.0} 个），导致大量 IO 请求和文件打开开销。", 
-                table_type, table, stripe_count),
+            message: format!(
+                "ORC 文件存在 {:.0} 个 Stripe（平均 {}），TinyStripe 占比 {:.1}%",
+                stripe_count,
+                format_bytes(avg_stripe_size as u64),
+                tiny_ratio
+            ),
+            reason: format!(
+                "{}「{}」的 ORC 文件 Stripe 碎片化严重（共 {:.0} 个），导致大量 IO 请求和文件打开开销。",
+                table_type, table, stripe_count
+            ),
             suggestions: Self::get_suggestions(is_external, "ORC", table),
             parameter_suggestions: vec![],
+            threshold_metadata: None,
         })
     }
-    
+
     fn check_parquet_fragmentation(&self, context: &RuleContext) -> Option<Diagnostic> {
         let total_rowgroups = context.get_metric("TotalRowGroups")?;
-        if total_rowgroups <= 10000.0 { return None; }
-        
-        let table = context.node.unique_metrics.get("Table").map(|s| s.as_str()).unwrap_or("unknown");
-        let is_external = Self::is_external_table(context);
-        let severity = if total_rowgroups > 100000.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
+        if total_rowgroups <= 10000.0 {
+            return None;
+        }
+
+        let table = context
+            .node
+            .unique_metrics
+            .get("Table")
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
+        let is_external = context.is_external_table();
+        let severity =
+            if total_rowgroups > 100000.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
         let table_type = if is_external { "外表" } else { "内表" };
-        
+
         Some(Diagnostic {
             rule_id: self.id().to_string(),
             rule_name: self.name().to_string(),
             severity,
-            node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+            node_path: format!(
+                "{} (plan_node_id={})",
+                context.node.operator_name,
+                context.node.plan_node_id.unwrap_or(-1)
+            ),
             plan_node_id: context.node.plan_node_id,
             message: format!("Parquet 文件存在 {:.0} 个 RowGroup，文件碎片化严重", total_rowgroups),
-            reason: format!("{}「{}」的 Parquet 文件 RowGroup 过多（共 {:.0} 个），导致元数据开销和 IO 效率低。", 
-                table_type, table, total_rowgroups),
+            reason: format!(
+                "{}「{}」的 Parquet 文件 RowGroup 过多（共 {:.0} 个），导致元数据开销和 IO 效率低。",
+                table_type, table, total_rowgroups
+            ),
             suggestions: Self::get_suggestions(is_external, "Parquet", table),
             parameter_suggestions: vec![],
+            threshold_metadata: None,
         })
     }
 }
@@ -1160,8 +1281,12 @@ impl S017FileFragmentation {
 pub struct S018IOWaitTime;
 
 impl DiagnosticRule for S018IOWaitTime {
-    fn id(&self) -> &str { "S018" }
-    fn name(&self) -> &str { "IO 等待时间过长" }
+    fn id(&self) -> &str {
+        "S018"
+    }
+    fn name(&self) -> &str {
+        "IO 等待时间过长"
+    }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         // Applies to any scan node
@@ -1171,33 +1296,42 @@ impl DiagnosticRule for S018IOWaitTime {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         // Check IOTaskWaitTime - time spent waiting for IO tasks in queue
-        let io_wait = context.get_metric_duration("IOTaskWaitTime")
+        let io_wait = context
+            .get_metric_duration("IOTaskWaitTime")
             .or_else(|| context.get_metric_duration("__MAX_OF_IOTaskWaitTime"))?;
-        
+
         // Also get IOTaskExecTime for comparison
-        let io_exec = context.get_metric_duration("IOTaskExecTime")
+        let io_exec = context
+            .get_metric_duration("IOTaskExecTime")
             .or_else(|| context.get_metric_duration("__MAX_OF_IOTaskExecTime"))
             .unwrap_or(0.0);
-        
+
         // Threshold: IO wait > 10 seconds is significant
         let wait_threshold_ms = 10_000.0;
-        if io_wait < wait_threshold_ms { return None; }
-        
+        if io_wait < wait_threshold_ms {
+            return None;
+        }
+
         // Calculate wait ratio
         let total_io = io_wait + io_exec;
         let wait_ratio = if total_io > 0.0 { io_wait / total_io * 100.0 } else { 0.0 };
-        
+
         let severity = if io_wait > 60_000.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
-        
+
         Some(Diagnostic {
             rule_id: self.id().to_string(),
             rule_name: self.name().to_string(),
             severity,
-            node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+            node_path: format!(
+                "{} (plan_node_id={})",
+                context.node.operator_name,
+                context.node.plan_node_id.unwrap_or(-1)
+            ),
             plan_node_id: context.node.plan_node_id,
             message: format!(
                 "IO 等待时间 {}（占 IO 总时间 {:.1}%），存在 IO 排队瓶颈",
-                format_duration_ms(io_wait), wait_ratio
+                format_duration_ms(io_wait),
+                wait_ratio
             ),
             reason: "大量并发 IO 请求在队列中等待，可能是文件碎片化或 IO 资源不足导致".to_string(),
             suggestions: vec![
@@ -1207,6 +1341,7 @@ impl DiagnosticRule for S018IOWaitTime {
                 "考虑启用 Data Cache 缓存热点数据".to_string(),
             ],
             parameter_suggestions: vec![],
+            threshold_metadata: None,
         })
     }
 }

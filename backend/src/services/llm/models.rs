@@ -88,12 +88,12 @@ impl From<&LLMProvider> for LLMProviderInfo {
         // Mask API key for display
         let api_key_masked = p.api_key_encrypted.as_ref().map(|key| {
             if key.len() > 8 {
-                format!("{}...{}", &key[..4], &key[key.len()-4..])
+                format!("{}...{}", &key[..4], &key[key.len() - 4..])
             } else {
                 "****".to_string()
             }
         });
-        
+
         Self {
             id: p.id,
             name: p.name.clone(),
@@ -153,10 +153,18 @@ pub struct TestConnectionResponse {
     pub latency_ms: Option<i64>,
 }
 
-fn default_max_tokens() -> i32 { 4096 }
-fn default_temperature() -> f64 { 0.3 }
-fn default_timeout() -> i32 { 60 }
-fn default_priority() -> i32 { 100 }
+fn default_max_tokens() -> i32 {
+    4096
+}
+fn default_temperature() -> f64 {
+    0.3
+}
+fn default_timeout() -> i32 {
+    60
+}
+fn default_priority() -> i32 {
+    100
+}
 
 // ============================================================================
 // LLM Analysis Session
@@ -181,7 +189,7 @@ impl SessionStatus {
             Self::Failed => "failed",
         }
     }
-    
+
     pub fn from_str(s: &str) -> Self {
         match s {
             "pending" => Self::Pending,
@@ -300,28 +308,28 @@ pub struct LLMUsageStats {
 pub enum LLMError {
     #[error("No active LLM provider configured")]
     NoProviderConfigured,
-    
+
     #[error("Provider not found: {0}")]
     ProviderNotFound(String),
-    
+
     #[error("LLM API error: {0}")]
     ApiError(String),
-    
+
     #[error("LLM response parsing error: {0}")]
     ParseError(String),
-    
+
     #[error("LLM timeout after {0}s")]
     Timeout(u64),
-    
+
     #[error("LLM rate limited, retry after {0}s")]
     RateLimited(u64),
-    
+
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
-    
+
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
-    
+
     #[error("LLM service disabled")]
     Disabled,
 }

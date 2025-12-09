@@ -3,8 +3,8 @@
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use super::models::*;
 use super::UpdateProviderRequest;
+use super::models::*;
 
 /// Repository for LLM database operations
 /// Some methods are reserved for future use (admin UI, cache management, usage stats)
@@ -17,64 +17,64 @@ impl LLMRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
-    
+
     /// Get reference to pool (for testing)
     #[cfg(test)]
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
-    
+
     // ========================================================================
     // Provider Operations
     // ========================================================================
-    
+
     /// Get the currently active provider
     pub async fn get_active_provider(&self) -> Result<Option<LLMProvider>, LLMError> {
         sqlx::query_as::<_, LLMProvider>(
             r#"SELECT * FROM llm_providers 
                WHERE is_active = TRUE AND enabled = TRUE 
-               LIMIT 1"#
+               LIMIT 1"#,
         )
         .fetch_optional(&self.pool)
         .await
         .map_err(LLMError::from)
     }
-    
+
     /// List all providers
     pub async fn list_providers(&self) -> Result<Vec<LLMProvider>, LLMError> {
         sqlx::query_as::<_, LLMProvider>(
-            "SELECT * FROM llm_providers ORDER BY priority ASC, name ASC"
+            "SELECT * FROM llm_providers ORDER BY priority ASC, name ASC",
         )
         .fetch_all(&self.pool)
         .await
         .map_err(LLMError::from)
     }
-    
+
     /// Activate a provider (deactivates all others)
     pub async fn activate_provider(&self, provider_id: i64) -> Result<(), LLMError> {
         let mut tx = self.pool.begin().await?;
-        
+
         // Deactivate all providers
         sqlx::query("UPDATE llm_providers SET is_active = FALSE")
             .execute(&mut *tx)
             .await?;
-        
+
         // Activate the specified provider
         let result = sqlx::query(
-            "UPDATE llm_providers SET is_active = TRUE WHERE id = ? AND enabled = TRUE"
+            "UPDATE llm_providers SET is_active = TRUE WHERE id = ? AND enabled = TRUE",
         )
         .bind(provider_id)
         .execute(&mut *tx)
         .await?;
-        
+
         if result.rows_affected() == 0 {
             return Err(LLMError::ProviderNotFound(provider_id.to_string()));
         }
-        
+
         tx.commit().await?;
         Ok(())
     }
-    
+
     /// Get provider by ID
     pub async fn get_provider(&self, id: i64) -> Result<Option<LLMProvider>, LLMError> {
         sqlx::query_as::<_, LLMProvider>("SELECT * FROM llm_providers WHERE id = ?")
@@ -83,17 +83,20 @@ impl LLMRepository {
             .await
             .map_err(LLMError::from)
     }
-    
+
     /// Create a new provider
-    pub async fn create_provider(&self, req: CreateProviderRequest) -> Result<LLMProvider, LLMError> {
+    pub async fn create_provider(
+        &self,
+        req: CreateProviderRequest,
+    ) -> Result<LLMProvider, LLMError> {
         // TODO: Encrypt API key before storing
         let api_key_encrypted = Some(req.api_key);
-        
+
         let result = sqlx::query(
             r#"INSERT INTO llm_providers 
                (name, display_name, api_base, model_name, api_key_encrypted, 
                 max_tokens, temperature, timeout_seconds, enabled, is_active, priority)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, FALSE, ?)"#
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, FALSE, ?)"#,
         )
         .bind(&req.name)
         .bind(&req.display_name)
@@ -106,103 +109,149 @@ impl LLMRepository {
         .bind(req.priority)
         .execute(&self.pool)
         .await?;
-        
+
         let id = result.last_insert_rowid();
-        
+
         sqlx::query_as::<_, LLMProvider>("SELECT * FROM llm_providers WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await
             .map_err(LLMError::from)
     }
-    
+
     /// Update provider
-    pub async fn update_provider(&self, id: i64, req: UpdateProviderRequest) -> Result<LLMProvider, LLMError> {
+    pub async fn update_provider(
+        &self,
+        id: i64,
+        req: UpdateProviderRequest,
+    ) -> Result<LLMProvider, LLMError> {
         // Build dynamic update query
         let mut updates = vec!["updated_at = CURRENT_TIMESTAMP".to_string()];
-        
-        if req.display_name.is_some() { updates.push("display_name = ?".to_string()); }
-        if req.api_base.is_some() { updates.push("api_base = ?".to_string()); }
-        if req.model_name.is_some() { updates.push("model_name = ?".to_string()); }
-        if req.api_key.is_some() { updates.push("api_key_encrypted = ?".to_string()); }
-        if req.max_tokens.is_some() { updates.push("max_tokens = ?".to_string()); }
-        if req.temperature.is_some() { updates.push("temperature = ?".to_string()); }
-        if req.timeout_seconds.is_some() { updates.push("timeout_seconds = ?".to_string()); }
-        if req.priority.is_some() { updates.push("priority = ?".to_string()); }
-        if req.enabled.is_some() { updates.push("enabled = ?".to_string()); }
-        
+
+        if req.display_name.is_some() {
+            updates.push("display_name = ?".to_string());
+        }
+        if req.api_base.is_some() {
+            updates.push("api_base = ?".to_string());
+        }
+        if req.model_name.is_some() {
+            updates.push("model_name = ?".to_string());
+        }
+        if req.api_key.is_some() {
+            updates.push("api_key_encrypted = ?".to_string());
+        }
+        if req.max_tokens.is_some() {
+            updates.push("max_tokens = ?".to_string());
+        }
+        if req.temperature.is_some() {
+            updates.push("temperature = ?".to_string());
+        }
+        if req.timeout_seconds.is_some() {
+            updates.push("timeout_seconds = ?".to_string());
+        }
+        if req.priority.is_some() {
+            updates.push("priority = ?".to_string());
+        }
+        if req.enabled.is_some() {
+            updates.push("enabled = ?".to_string());
+        }
+
         let query = format!("UPDATE llm_providers SET {} WHERE id = ?", updates.join(", "));
         let mut q = sqlx::query(&query);
-        
+
         // Bind values in order
-        if let Some(v) = &req.display_name { q = q.bind(v); }
-        if let Some(v) = &req.api_base { q = q.bind(v); }
-        if let Some(v) = &req.model_name { q = q.bind(v); }
-        if let Some(v) = &req.api_key { q = q.bind(v); }
-        if let Some(v) = &req.max_tokens { q = q.bind(v); }
-        if let Some(v) = &req.temperature { q = q.bind(v); }
-        if let Some(v) = &req.timeout_seconds { q = q.bind(v); }
-        if let Some(v) = &req.priority { q = q.bind(v); }
-        if let Some(v) = &req.enabled { q = q.bind(v); }
+        if let Some(v) = &req.display_name {
+            q = q.bind(v);
+        }
+        if let Some(v) = &req.api_base {
+            q = q.bind(v);
+        }
+        if let Some(v) = &req.model_name {
+            q = q.bind(v);
+        }
+        if let Some(v) = &req.api_key {
+            q = q.bind(v);
+        }
+        if let Some(v) = &req.max_tokens {
+            q = q.bind(v);
+        }
+        if let Some(v) = &req.temperature {
+            q = q.bind(v);
+        }
+        if let Some(v) = &req.timeout_seconds {
+            q = q.bind(v);
+        }
+        if let Some(v) = &req.priority {
+            q = q.bind(v);
+        }
+        if let Some(v) = &req.enabled {
+            q = q.bind(v);
+        }
         q = q.bind(id);
-        
+
         let result = q.execute(&self.pool).await?;
-        
+
         if result.rows_affected() == 0 {
             return Err(LLMError::ProviderNotFound(id.to_string()));
         }
-        
+
         sqlx::query_as::<_, LLMProvider>("SELECT * FROM llm_providers WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await
             .map_err(LLMError::from)
     }
-    
+
     /// Delete provider
     pub async fn delete_provider(&self, id: i64) -> Result<(), LLMError> {
         // Check if provider is active
         let provider = self.get_provider(id).await?;
         if let Some(p) = provider {
             if p.is_active {
-                return Err(LLMError::ApiError("Cannot delete active provider. Deactivate it first.".to_string()));
+                return Err(LLMError::ApiError(
+                    "Cannot delete active provider. Deactivate it first.".to_string(),
+                ));
             }
         }
-        
+
         sqlx::query("DELETE FROM llm_providers WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
         Ok(())
     }
-    
+
     /// Deactivate a provider
     pub async fn deactivate_provider(&self, id: i64) -> Result<(), LLMError> {
         let result = sqlx::query("UPDATE llm_providers SET is_active = FALSE WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
-        
+
         if result.rows_affected() == 0 {
             return Err(LLMError::ProviderNotFound(id.to_string()));
         }
         Ok(())
     }
-    
+
     /// Set provider enabled status
-    pub async fn set_provider_enabled(&self, id: i64, enabled: bool) -> Result<LLMProvider, LLMError> {
+    pub async fn set_provider_enabled(
+        &self,
+        id: i64,
+        enabled: bool,
+    ) -> Result<LLMProvider, LLMError> {
         let result = sqlx::query(
-            "UPDATE llm_providers SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            "UPDATE llm_providers SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .bind(enabled)
         .bind(id)
         .execute(&self.pool)
         .await?;
-        
+
         if result.rows_affected() == 0 {
             return Err(LLMError::ProviderNotFound(id.to_string()));
         }
-        
+
         // If disabling, also deactivate
         if !enabled {
             sqlx::query("UPDATE llm_providers SET is_active = FALSE WHERE id = ?")
@@ -210,18 +259,18 @@ impl LLMRepository {
                 .execute(&self.pool)
                 .await?;
         }
-        
+
         sqlx::query_as::<_, LLMProvider>("SELECT * FROM llm_providers WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
             .await
             .map_err(LLMError::from)
     }
-    
+
     // ========================================================================
     // Session Operations
     // ========================================================================
-    
+
     /// Create a new analysis session
     pub async fn create_session(
         &self,
@@ -231,11 +280,11 @@ impl LLMRepository {
         scenario: LLMScenario,
     ) -> Result<String, LLMError> {
         let session_id = Uuid::new_v4().to_string();
-        
+
         sqlx::query(
             r#"INSERT INTO llm_analysis_sessions 
                (id, provider_id, scenario, query_id, cluster_id, status)
-               VALUES (?, ?, ?, ?, ?, 'pending')"#
+               VALUES (?, ?, ?, ?, ?, 'pending')"#,
         )
         .bind(&session_id)
         .bind(provider_id)
@@ -244,10 +293,10 @@ impl LLMRepository {
         .bind(cluster_id)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(session_id)
     }
-    
+
     /// Update session status
     pub async fn update_session_status(
         &self,
@@ -261,7 +310,7 @@ impl LLMRepository {
             .await?;
         Ok(())
     }
-    
+
     /// Complete a session with metrics
     pub async fn complete_session(
         &self,
@@ -277,7 +326,7 @@ impl LLMRepository {
                status = ?, completed_at = CURRENT_TIMESTAMP,
                input_tokens = ?, output_tokens = ?, latency_ms = ?,
                error_message = ?
-               WHERE id = ?"#
+               WHERE id = ?"#,
         )
         .bind(status.as_str())
         .bind(input_tokens)
@@ -289,22 +338,23 @@ impl LLMRepository {
         .await?;
         Ok(())
     }
-    
+
     /// Get session by ID
-    pub async fn get_session(&self, session_id: &str) -> Result<Option<LLMAnalysisSession>, LLMError> {
-        sqlx::query_as::<_, LLMAnalysisSession>(
-            "SELECT * FROM llm_analysis_sessions WHERE id = ?"
-        )
-        .bind(session_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(LLMError::from)
+    pub async fn get_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<LLMAnalysisSession>, LLMError> {
+        sqlx::query_as::<_, LLMAnalysisSession>("SELECT * FROM llm_analysis_sessions WHERE id = ?")
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(LLMError::from)
     }
-    
+
     // ========================================================================
     // Request Operations (for debugging)
     // ========================================================================
-    
+
     /// Save request for debugging
     pub async fn save_request(
         &self,
@@ -316,7 +366,7 @@ impl LLMRepository {
         let result = sqlx::query(
             r#"INSERT INTO llm_analysis_requests 
                (session_id, request_json, sql_hash, profile_hash)
-               VALUES (?, ?, ?, ?)"#
+               VALUES (?, ?, ?, ?)"#,
         )
         .bind(session_id)
         .bind(request_json)
@@ -324,14 +374,14 @@ impl LLMRepository {
         .bind(profile_hash)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(result.last_insert_rowid())
     }
-    
+
     // ========================================================================
     // Result Operations
     // ========================================================================
-    
+
     /// Save analysis result
     pub async fn save_result(
         &self,
@@ -341,21 +391,43 @@ impl LLMRepository {
     ) -> Result<i64, LLMError> {
         // Parse response to extract structured fields
         let parsed: serde_json::Value = serde_json::from_str(response_json)?;
-        
-        let root_causes = parsed.get("root_causes").map(|v| v.to_string()).unwrap_or_else(|| "[]".to_string());
-        let causal_chains = parsed.get("causal_chains").map(|v| v.to_string()).unwrap_or_else(|| "[]".to_string());
-        let recommendations = parsed.get("recommendations").map(|v| v.to_string()).unwrap_or_else(|| "[]".to_string());
-        let summary = parsed.get("summary").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let hidden_issues = parsed.get("hidden_issues").map(|v| v.to_string()).unwrap_or_else(|| "[]".to_string());
-        
-        let root_cause_count = parsed.get("root_causes").and_then(|v| v.as_array()).map(|a| a.len() as i32);
-        let recommendation_count = parsed.get("recommendations").and_then(|v| v.as_array()).map(|a| a.len() as i32);
-        
+
+        let root_causes = parsed
+            .get("root_causes")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "[]".to_string());
+        let causal_chains = parsed
+            .get("causal_chains")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "[]".to_string());
+        let recommendations = parsed
+            .get("recommendations")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "[]".to_string());
+        let summary = parsed
+            .get("summary")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let hidden_issues = parsed
+            .get("hidden_issues")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "[]".to_string());
+
+        let root_cause_count = parsed
+            .get("root_causes")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len() as i32);
+        let recommendation_count = parsed
+            .get("recommendations")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len() as i32);
+
         let result = sqlx::query(
             r#"INSERT INTO llm_analysis_results 
                (session_id, root_causes_json, causal_chains_json, recommendations_json,
                 summary, hidden_issues_json, confidence_avg, root_cause_count, recommendation_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(session_id)
         .bind(&root_causes)
@@ -368,51 +440,54 @@ impl LLMRepository {
         .bind(recommendation_count)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(result.last_insert_rowid())
     }
-    
+
     /// Get result by session ID
-    pub async fn get_result_by_session(&self, session_id: &str) -> Result<Option<LLMAnalysisResult>, LLMError> {
+    pub async fn get_result_by_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<LLMAnalysisResult>, LLMError> {
         sqlx::query_as::<_, LLMAnalysisResult>(
-            "SELECT * FROM llm_analysis_results WHERE session_id = ?"
+            "SELECT * FROM llm_analysis_results WHERE session_id = ?",
         )
         .bind(session_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(LLMError::from)
     }
-    
+
     // ========================================================================
     // Cache Operations
     // ========================================================================
-    
+
     /// Get cached response
     pub async fn get_cached_response(&self, cache_key: &str) -> Result<Option<String>, LLMError> {
         let result = sqlx::query_scalar::<_, String>(
             r#"SELECT response_json FROM llm_cache 
-               WHERE cache_key = ? AND expires_at > CURRENT_TIMESTAMP"#
+               WHERE cache_key = ? AND expires_at > CURRENT_TIMESTAMP"#,
         )
         .bind(cache_key)
         .fetch_optional(&self.pool)
         .await?;
-        
+
         // Update hit count if found
         if result.is_some() {
             sqlx::query(
                 r#"UPDATE llm_cache SET 
                    hit_count = hit_count + 1, 
                    last_accessed_at = CURRENT_TIMESTAMP
-                   WHERE cache_key = ?"#
+                   WHERE cache_key = ?"#,
             )
             .bind(cache_key)
             .execute(&self.pool)
             .await?;
         }
-        
+
         Ok(result)
     }
-    
+
     /// Cache response
     pub async fn cache_response(
         &self,
@@ -425,7 +500,7 @@ impl LLMRepository {
         sqlx::query(
             r#"INSERT OR REPLACE INTO llm_cache 
                (cache_key, scenario, request_hash, response_json, expires_at)
-               VALUES (?, ?, ?, ?, datetime(CURRENT_TIMESTAMP, '+' || ? || ' hours'))"#
+               VALUES (?, ?, ?, ?, datetime(CURRENT_TIMESTAMP, '+' || ? || ' hours'))"#,
         )
         .bind(cache_key)
         .bind(scenario.as_str())
@@ -434,10 +509,10 @@ impl LLMRepository {
         .bind(ttl_hours)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Clean expired cache entries
     pub async fn clean_expired_cache(&self) -> Result<u64, LLMError> {
         let result = sqlx::query("DELETE FROM llm_cache WHERE expires_at <= CURRENT_TIMESTAMP")
@@ -445,11 +520,11 @@ impl LLMRepository {
             .await?;
         Ok(result.rows_affected())
     }
-    
+
     // ========================================================================
     // Usage Statistics
     // ========================================================================
-    
+
     /// Record usage for statistics
     pub async fn record_usage(
         &self,
@@ -461,7 +536,7 @@ impl LLMRepository {
         cache_hit: bool,
     ) -> Result<(), LLMError> {
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        
+
         sqlx::query(
             r#"INSERT INTO llm_usage_stats 
                (date, provider_id, total_requests, successful_requests, failed_requests,
@@ -486,10 +561,10 @@ impl LLMRepository {
         .bind(if cache_hit { 1 } else { 0 })
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
-    
+
     /// Get usage stats for date range
     pub async fn get_usage_stats(
         &self,
@@ -499,7 +574,7 @@ impl LLMRepository {
         sqlx::query_as::<_, LLMUsageStats>(
             r#"SELECT * FROM llm_usage_stats 
                WHERE date >= ? AND date <= ?
-               ORDER BY date DESC"#
+               ORDER BY date DESC"#,
         )
         .bind(start_date)
         .bind(end_date)

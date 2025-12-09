@@ -16,12 +16,12 @@ use starrocks_admin::db;
 use starrocks_admin::embedded::WebAssets;
 use starrocks_admin::models;
 use starrocks_admin::services::{
-    AuthService, CasbinService, ClusterService, DataStatisticsService, MetricsCollectorService,
-    MySQLPoolManager, OrganizationService, OverviewService, PermissionService, RoleService,
-    SystemFunctionService, UserRoleService, UserService, LLMServiceImpl,
+    AuthService, CasbinService, ClusterService, DataStatisticsService, LLMServiceImpl,
+    MetricsCollectorService, MySQLPoolManager, OrganizationService, OverviewService,
+    PermissionService, RoleService, SystemFunctionService, UserRoleService, UserService,
 };
-use starrocks_admin::{handlers, middleware, services, AppState};
 use starrocks_admin::utils::{JwtUtil, ScheduledExecutor};
+use starrocks_admin::{AppState, handlers, middleware, services};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -586,9 +586,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/users/:id/roles/:role_id", delete(handlers::user_role::remove_role_from_user))
         // LLM Service APIs
         .route("/api/llm/status", get(handlers::llm::get_status))
-        .route("/api/llm/providers", get(handlers::llm::list_providers).post(handlers::llm::create_provider))
+        .route(
+            "/api/llm/providers",
+            get(handlers::llm::list_providers).post(handlers::llm::create_provider),
+        )
         .route("/api/llm/providers/active", get(handlers::llm::get_active_provider))
-        .route("/api/llm/providers/:id", get(handlers::llm::get_provider).put(handlers::llm::update_provider).delete(handlers::llm::delete_provider))
+        .route(
+            "/api/llm/providers/:id",
+            get(handlers::llm::get_provider)
+                .put(handlers::llm::update_provider)
+                .delete(handlers::llm::delete_provider),
+        )
         .route("/api/llm/providers/:id/activate", post(handlers::llm::activate_provider))
         .route("/api/llm/providers/:id/deactivate", post(handlers::llm::deactivate_provider))
         .route("/api/llm/providers/:id/test", post(handlers::llm::test_provider_connection))

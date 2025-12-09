@@ -327,8 +327,9 @@ pub struct TopNode {
 }
 
 /// Planner phase information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PlannerInfo {
+    #[serde(default)]
     pub details: HashMap<String, String>,
     /// HMS (Hive MetaStore) call metrics
     #[serde(default)]
@@ -361,9 +362,11 @@ pub struct HMSMetrics {
 }
 
 /// Execution phase information including topology
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ExecutionInfo {
+    #[serde(default)]
     pub topology: String,
+    #[serde(default)]
     pub metrics: HashMap<String, String>,
 }
 
@@ -763,6 +766,24 @@ pub struct DiagnosticResult {
     pub suggestions: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameter_suggestions: Vec<ParameterTuningSuggestion>,
+    /// Threshold metadata for traceability
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub threshold_metadata: Option<ThresholdMetadataResult>,
+}
+
+/// Threshold metadata for traceability (serializable version)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThresholdMetadataResult {
+    /// Threshold value used (e.g., 10000.0 for 10s)
+    pub threshold_value: f64,
+    /// Threshold source: "baseline" | "default" | "config"
+    pub threshold_source: String,
+    /// Baseline P95 value if baseline was used (ms)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline_p95_ms: Option<f64>,
+    /// Baseline sample count if baseline was used
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline_sample_count: Option<usize>,
 }
 
 /// Parameter tuning suggestion

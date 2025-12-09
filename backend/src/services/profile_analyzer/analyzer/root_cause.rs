@@ -6,8 +6,8 @@
 //! 3. Multiple Root Causes - identify all independent root causes
 //! 4. Causal Graph - build and visualize causal relationships
 
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 use super::rules::Diagnostic;
 
@@ -77,7 +77,7 @@ struct IntraNodeRule {
 }
 
 /// Predefined intra-node causality rules based on v5.0 design
-/// 
+///
 /// Rule Categories:
 /// - S: SCAN node rules (S001-S016)
 /// - J: JOIN node rules (J001-J011)
@@ -94,185 +94,185 @@ const INTRA_NODE_RULES: &[IntraNodeRule] = &[
     // SCAN Node Causality (16 rules covered)
     // ========================================================================
     IntraNodeRule {
-        causes: &["S016", "S006"],  // Small files (S016), Rowset fragmentation (S006)
-        effect: "S007",             // IO bottleneck
+        causes: &["S016", "S006"], // Small files (S016), Rowset fragmentation (S006)
+        effect: "S007",            // IO bottleneck
         description: "小文件/碎片化导致IO瓶颈",
     },
     IntraNodeRule {
-        causes: &["S017"],          // ORC Stripe fragmentation
-        effect: "S007",             // IO bottleneck
+        causes: &["S017"], // ORC Stripe fragmentation
+        effect: "S007",    // IO bottleneck
         description: "Stripe碎片化导致IO瓶颈",
     },
     IntraNodeRule {
-        causes: &["S017"],          // ORC Stripe fragmentation
-        effect: "S018",             // IO wait time
+        causes: &["S017"], // ORC Stripe fragmentation
+        effect: "S018",    // IO wait time
         description: "Stripe碎片化导致IO等待时间长",
     },
     IntraNodeRule {
-        causes: &["S017"],          // ORC Stripe fragmentation
-        effect: "G001",             // Time consuming node
+        causes: &["S017"], // ORC Stripe fragmentation
+        effect: "G001",    // Time consuming node
         description: "Stripe碎片化导致SCAN耗时长",
     },
     IntraNodeRule {
-        causes: &["S018"],          // IO wait time
-        effect: "G001",             // Time consuming node
+        causes: &["S018"], // IO wait time
+        effect: "G001",    // Time consuming node
         description: "IO等待时间长导致SCAN耗时长",
     },
     IntraNodeRule {
-        causes: &["S018"],          // IO wait time
-        effect: "Q004",             // Low CPU utilization
+        causes: &["S018"], // IO wait time
+        effect: "Q004",    // Low CPU utilization
         description: "IO等待导致CPU空闲",
     },
     IntraNodeRule {
-        causes: &["S009"],          // Low cache hit ratio
-        effect: "S007",             // IO bottleneck
+        causes: &["S009"], // Low cache hit ratio
+        effect: "S007",    // IO bottleneck
         description: "缓存命中率低导致IO瓶颈",
     },
     IntraNodeRule {
-        causes: &["S009"],          // Low cache hit ratio
-        effect: "G001",             // Time consuming node (SCAN)
+        causes: &["S009"], // Low cache hit ratio
+        effect: "G001",    // Time consuming node (SCAN)
         description: "缓存命中率低导致SCAN耗时长",
     },
     IntraNodeRule {
-        causes: &["S008", "S012", "S013"],  // ZoneMap/Bitmap/BloomFilter ineffective
-        effect: "S003",                      // Poor filter effectiveness
+        causes: &["S008", "S012", "S013"], // ZoneMap/Bitmap/BloomFilter ineffective
+        effect: "S003",                    // Poor filter effectiveness
         description: "索引未生效导致过滤效果差",
     },
     IntraNodeRule {
-        causes: &["S001"],          // Data skew in SCAN
-        effect: "G003",             // Execution time skew
+        causes: &["S001"], // Data skew in SCAN
+        effect: "G003",    // Execution time skew
         description: "数据倾斜导致执行时间倾斜",
     },
     IntraNodeRule {
-        causes: &["S003"],          // Poor filter effectiveness
-        effect: "S002",             // Full table scan
+        causes: &["S003"], // Poor filter effectiveness
+        effect: "S002",    // Full table scan
         description: "过滤效果差导致全表扫描",
     },
     IntraNodeRule {
-        causes: &["S010"],          // Large compressed ratio
-        effect: "S007",             // IO bottleneck (decompression overhead)
+        causes: &["S010"], // Large compressed ratio
+        effect: "S007",    // IO bottleneck (decompression overhead)
         description: "高压缩率导致解压开销大",
     },
     IntraNodeRule {
-        causes: &["S014"],          // Too many segments
-        effect: "S007",             // IO bottleneck
+        causes: &["S014"], // Too many segments
+        effect: "S007",    // IO bottleneck
         description: "Segment过多导致IO瓶颈",
     },
     // ========================================================================
     // JOIN Node Causality (11 rules covered)
     // ========================================================================
     IntraNodeRule {
-        causes: &["J002"],          // Suboptimal join order
-        effect: "J001",             // Hash table too large
+        causes: &["J002"], // Suboptimal join order
+        effect: "J001",    // Hash table too large
         description: "Join顺序不优导致Hash表过大",
     },
     IntraNodeRule {
-        causes: &["J005"],          // Broadcast table too large
-        effect: "E002",             // Network bottleneck
+        causes: &["J005"], // Broadcast table too large
+        effect: "E002",    // Network bottleneck
         description: "Broadcast表过大导致网络瓶颈",
     },
     IntraNodeRule {
-        causes: &["J003"],          // Join probe rows skew
-        effect: "G003",             // Execution time skew
+        causes: &["J003"], // Join probe rows skew
+        effect: "G003",    // Execution time skew
         description: "Join探测端数据倾斜导致时间倾斜",
     },
     IntraNodeRule {
-        causes: &["J001"],          // Hash table too large
-        effect: "Q003",             // Spill to disk
+        causes: &["J001"], // Hash table too large
+        effect: "Q003",    // Spill to disk
         description: "Hash表过大导致内存溢出到磁盘",
     },
     IntraNodeRule {
-        causes: &["J006"],          // Missing runtime filter
-        effect: "S003",             // Poor filter effectiveness on probe side
+        causes: &["J006"], // Missing runtime filter
+        effect: "S003",    // Poor filter effectiveness on probe side
         description: "缺少Runtime Filter导致探测端过滤差",
     },
     IntraNodeRule {
-        causes: &["J007"],          // Runtime filter not pushed down
-        effect: "S003",             // Poor filter effectiveness
+        causes: &["J007"], // Runtime filter not pushed down
+        effect: "S003",    // Poor filter effectiveness
         description: "Runtime Filter未下推导致过滤效果差",
     },
     IntraNodeRule {
-        causes: &["J008"],          // Join condition not optimal
-        effect: "J001",             // Large hash table
+        causes: &["J008"], // Join condition not optimal
+        effect: "J001",    // Large hash table
         description: "Join条件不优导致Hash表过大",
     },
     IntraNodeRule {
-        causes: &["J009"],          // Cross join detected
-        effect: "G002",             // High CPU utilization
+        causes: &["J009"], // Cross join detected
+        effect: "G002",    // High CPU utilization
         description: "笛卡尔积导致CPU使用率高",
     },
     IntraNodeRule {
-        causes: &["J010"],          // Join type not optimal
-        effect: "E002",             // Network bottleneck (wrong distribution)
+        causes: &["J010"], // Join type not optimal
+        effect: "E002",    // Network bottleneck (wrong distribution)
         description: "Join类型不优导致数据传输过多",
     },
     // ========================================================================
     // AGGREGATE Node Causality (6 rules covered)
     // ========================================================================
     IntraNodeRule {
-        causes: &["A001"],          // Aggregation skew
-        effect: "Q003",             // Spill occurred
+        causes: &["A001"], // Aggregation skew
+        effect: "Q003",    // Spill occurred
         description: "聚合倾斜导致内存溢出",
     },
     IntraNodeRule {
-        causes: &["A001"],          // Aggregation skew
-        effect: "G003",             // Execution time skew
+        causes: &["A001"], // Aggregation skew
+        effect: "G003",    // Execution time skew
         description: "聚合倾斜导致执行时间倾斜",
     },
     IntraNodeRule {
-        causes: &["A003"],          // Too many distinct keys
-        effect: "A002",             // Large hash table
+        causes: &["A003"], // Too many distinct keys
+        effect: "A002",    // Large hash table
         description: "Distinct键过多导致Hash表过大",
     },
     IntraNodeRule {
-        causes: &["A002"],          // Large hash table
-        effect: "Q003",             // Spill to disk
+        causes: &["A002"], // Large hash table
+        effect: "Q003",    // Spill to disk
         description: "聚合Hash表过大导致溢出",
     },
     IntraNodeRule {
-        causes: &["A004"],          // Missing streaming aggregation
-        effect: "A002",             // Large hash table
+        causes: &["A004"], // Missing streaming aggregation
+        effect: "A002",    // Large hash table
         description: "未使用流式聚合导致内存占用高",
     },
     IntraNodeRule {
-        causes: &["A005"],          // High aggregation cardinality
-        effect: "G002",             // High CPU utilization
+        causes: &["A005"], // High aggregation cardinality
+        effect: "G002",    // High CPU utilization
         description: "聚合基数过高导致CPU占用高",
     },
     // ========================================================================
     // SORT Node Causality (5 rules covered)
     // ========================================================================
     IntraNodeRule {
-        causes: &["T001"],          // Sort data too large
-        effect: "Q003",             // Spill to disk
+        causes: &["T001"], // Sort data too large
+        effect: "Q003",    // Spill to disk
         description: "排序数据量过大导致溢出",
     },
     IntraNodeRule {
-        causes: &["T002"],          // TopN not optimized
-        effect: "T001",             // Large sort data
+        causes: &["T002"], // TopN not optimized
+        effect: "T001",    // Large sort data
         description: "TopN未优化导致排序数据量大",
     },
     IntraNodeRule {
-        causes: &["T003"],          // Sort without limit
-        effect: "T001",             // Large sort data
+        causes: &["T003"], // Sort without limit
+        effect: "T001",    // Large sort data
         description: "全量排序导致数据量过大",
     },
     IntraNodeRule {
-        causes: &["T004"],          // Multiple sort keys
-        effect: "G002",             // High CPU utilization
+        causes: &["T004"], // Multiple sort keys
+        effect: "G002",    // High CPU utilization
         description: "多排序键导致CPU占用高",
     },
     // ========================================================================
     // EXCHANGE Node Causality (3 rules covered)
     // ========================================================================
     IntraNodeRule {
-        causes: &["E001"],          // Large data shuffle
-        effect: "E002",             // Network bottleneck
+        causes: &["E001"], // Large data shuffle
+        effect: "E002",    // Network bottleneck
         description: "Shuffle数据量大导致网络瓶颈",
     },
     IntraNodeRule {
-        causes: &["E003"],          // Partition skew
-        effect: "G003",             // Execution time skew
+        causes: &["E003"], // Partition skew
+        effect: "G003",    // Execution time skew
         description: "分区倾斜导致执行时间倾斜",
     },
     // ========================================================================
@@ -280,30 +280,30 @@ const INTRA_NODE_RULES: &[IntraNodeRule] = &[
     // ========================================================================
     // Spill causes timeout
     IntraNodeRule {
-        causes: &["Q003"],          // Spill to disk
-        effect: "Q001",             // Query timeout
+        causes: &["Q003"], // Spill to disk
+        effect: "Q001",    // Query timeout
         description: "磁盘溢出导致查询变慢可能超时",
     },
     // Resource waiting causes timeout
     IntraNodeRule {
-        causes: &["Q006"],          // Resource queue waiting
-        effect: "Q001",             // Query timeout
+        causes: &["Q006"], // Resource queue waiting
+        effect: "Q001",    // Query timeout
         description: "资源队列等待可能导致超时",
     },
     // IO/Wait bottleneck causes low CPU
     IntraNodeRule {
-        causes: &["S007"],          // IO bottleneck
-        effect: "Q004",             // Low CPU utilization
+        causes: &["S007"], // IO bottleneck
+        effect: "Q004",    // Low CPU utilization
         description: "IO瓶颈导致CPU利用率低",
     },
     IntraNodeRule {
-        causes: &["S009"],          // Low cache hit
-        effect: "Q004",             // Low CPU (waiting for remote IO)
+        causes: &["S009"], // Low cache hit
+        effect: "Q004",    // Low CPU (waiting for remote IO)
         description: "缓存未命中导致等待远程IO，CPU空闲",
     },
     IntraNodeRule {
-        causes: &["E002"],          // Network bottleneck
-        effect: "Q004",             // Low CPU (waiting for network)
+        causes: &["E002"], // Network bottleneck
+        effect: "Q004",    // Low CPU (waiting for network)
         description: "网络等待导致CPU利用率低",
     },
     // ========================================================================
@@ -312,19 +312,19 @@ const INTRA_NODE_RULES: &[IntraNodeRule] = &[
     // SCAN bottleneck causes scan time ratio high
     IntraNodeRule {
         causes: &["G001", "G001b"], // Most/Second consuming node (usually SCAN)
-        effect: "Q005",              // Scan time ratio high
+        effect: "Q005",             // Scan time ratio high
         description: "扫描算子耗时长导致扫描时间占比高",
     },
     // High memory nodes cause query peak memory
     IntraNodeRule {
-        causes: &["G002"],          // High memory usage node
-        effect: "Q002",             // Query peak memory high
+        causes: &["G002"], // High memory usage node
+        effect: "Q002",    // Query peak memory high
         description: "算子内存高导致查询峰值内存高",
     },
     // Slow execution causes query timeout
     IntraNodeRule {
-        causes: &["G001"],          // Most consuming node
-        effect: "Q001",             // Query timeout
+        causes: &["G001"], // Most consuming node
+        effect: "Q001",    // Query timeout
         description: "耗时算子导致查询超时",
     },
     // ========================================================================
@@ -332,31 +332,31 @@ const INTRA_NODE_RULES: &[IntraNodeRule] = &[
     // ========================================================================
     // Join HashTable memory causes node high memory
     IntraNodeRule {
-        causes: &["J003"],          // Join HashTable memory high
-        effect: "G002",             // Node memory high
+        causes: &["J003"], // Join HashTable memory high
+        effect: "G002",    // Node memory high
         description: "Join HashTable内存高导致节点内存高",
     },
-    // Aggregation HashTable causes node high memory  
+    // Aggregation HashTable causes node high memory
     IntraNodeRule {
-        causes: &["A002"],          // Aggregation HashTable memory high
-        effect: "G002",             // Node memory high
+        causes: &["A002"], // Aggregation HashTable memory high
+        effect: "G002",    // Node memory high
         description: "聚合HashTable内存高导致节点内存高",
     },
     // Hash collision causes HashTable memory high
     IntraNodeRule {
-        causes: &["J005"],          // Hash collision
-        effect: "J003",             // HashTable memory high
+        causes: &["J005"], // Hash collision
+        effect: "J003",    // HashTable memory high
         description: "Hash碰撞导致HashTable内存增大",
     },
     // Broadcast too large causes memory issues
     IntraNodeRule {
-        causes: &["J011"],          // Broadcast build side too large
-        effect: "J003",             // HashTable memory high
+        causes: &["J011"], // Broadcast build side too large
+        effect: "J003",    // HashTable memory high
         description: "Broadcast端数据量大导致HashTable内存高",
     },
     IntraNodeRule {
-        causes: &["J011"],          // Broadcast build side too large
-        effect: "G002",             // Node memory high
+        causes: &["J011"], // Broadcast build side too large
+        effect: "G002",    // Node memory high
         description: "Broadcast端数据量大导致节点内存高",
     },
     // ========================================================================
@@ -364,35 +364,35 @@ const INTRA_NODE_RULES: &[IntraNodeRule] = &[
     // ========================================================================
     // Large shuffle causes scheduling overhead
     IntraNodeRule {
-        causes: &["E001"],          // Large shuffle data
-        effect: "Q008",             // Scheduling overhead high
+        causes: &["E001"], // Large shuffle data
+        effect: "Q008",    // Scheduling overhead high
         description: "Shuffle数据量大导致调度开销增加",
     },
     // Scheduling overhead causes timeout
     IntraNodeRule {
-        causes: &["Q008"],          // Scheduling overhead
-        effect: "Q001",             // Query timeout
+        causes: &["Q008"], // Scheduling overhead
+        effect: "Q001",    // Query timeout
         description: "调度开销大导致查询变慢",
     },
     // ========================================================================
     // PROJECT/LIMIT Causality
     // ========================================================================
     IntraNodeRule {
-        causes: &["P001"],          // Complex expression in project
-        effect: "G002",             // High CPU utilization
+        causes: &["P001"], // Complex expression in project
+        effect: "G002",    // High CPU utilization
         description: "复杂表达式计算导致CPU占用高",
     },
     // ========================================================================
     // SINK Causality (I001-I003 are terminal - effects, not causes)
     // ========================================================================
     IntraNodeRule {
-        causes: &["E002"],          // Network bottleneck
-        effect: "I001",             // Insert slow
+        causes: &["E002"], // Network bottleneck
+        effect: "I001",    // Insert slow
         description: "网络瓶颈导致数据导入慢",
     },
     IntraNodeRule {
-        causes: &["A001"],          // Aggregation skew
-        effect: "I002",             // Insert skew
+        causes: &["A001"], // Aggregation skew
+        effect: "I002",    // Insert skew
         description: "聚合倾斜导致导入数据倾斜",
     },
 ];
@@ -428,7 +428,7 @@ struct InterNodeRule {
 }
 
 /// Inter-node propagation rules - how issues propagate along the DAG
-/// 
+///
 /// Propagation Modes:
 /// - DataVolume: Data size propagates downstream
 /// - Skew: Data skew propagates downstream
@@ -560,7 +560,7 @@ const INTER_NODE_RULES: &[InterNodeRule] = &[
     },
     // ========================================================================
     // IO Wait Propagation (IO bottleneck → downstream stall)
-    // Note: These are conditionally applied - E002 should only cause G001 
+    // Note: These are conditionally applied - E002 should only cause G001
     // when they are on the SAME or related EXCHANGE nodes, not globally.
     // We remove E002→G001 as it causes incorrect causality for non-EXCHANGE G001.
     // ========================================================================
@@ -719,7 +719,7 @@ const INTER_NODE_RULES: &[InterNodeRule] = &[
     },
     InterNodeRule {
         upstream: "S007",   // IO bottleneck
-        downstream: "Q004", // Low CPU utilization  
+        downstream: "Q004", // Low CPU utilization
         mode: PropagationMode::IoWait,
         description: "IO瓶颈导致CPU利用率低",
     },
@@ -744,30 +744,31 @@ impl RootCauseAnalyzer {
         if diagnostics.is_empty() {
             return RootCauseAnalysis::default();
         }
-        
+
         // Build diagnostic lookup
         let diag_map = Self::build_diagnostic_map(diagnostics);
-        
+
         // Step 1: Find intra-node causal relationships
         let intra_edges = Self::find_intra_node_causality(diagnostics);
-        
+
         // Step 2: Find inter-node causal relationships
         let inter_edges = Self::find_inter_node_propagation(diagnostics);
-        
+
         // Step 3: Build causal graph
-        let all_edges: Vec<(String, String, String)> = intra_edges.into_iter()
+        let all_edges: Vec<(String, String, String)> = intra_edges
+            .into_iter()
             .chain(inter_edges.into_iter())
             .collect();
-        
+
         // Step 4: Find root causes (nodes with no incoming edges)
         let root_causes = Self::identify_root_causes(diagnostics, &all_edges, &diag_map);
-        
+
         // Step 5: Build causal chains
         let causal_chains = Self::build_causal_chains(&root_causes, &all_edges, &diag_map);
-        
+
         // Step 6: Generate summary
         let summary = Self::generate_summary(&root_causes);
-        
+
         RootCauseAnalysis {
             root_causes,
             causal_chains,
@@ -775,7 +776,7 @@ impl RootCauseAnalyzer {
             total_diagnostics: diagnostics.len(),
         }
     }
-    
+
     /// Build a map of rule_id -> diagnostics for quick lookup
     fn build_diagnostic_map(diagnostics: &[Diagnostic]) -> HashMap<String, Vec<&Diagnostic>> {
         let mut map: HashMap<String, Vec<&Diagnostic>> = HashMap::new();
@@ -784,27 +785,27 @@ impl RootCauseAnalyzer {
         }
         map
     }
-    
+
     /// Find intra-node causal relationships
     fn find_intra_node_causality(diagnostics: &[Diagnostic]) -> Vec<(String, String, String)> {
         let mut edges = Vec::new();
-        
+
         // Group diagnostics by node path
         let mut by_node: HashMap<&str, Vec<&Diagnostic>> = HashMap::new();
         for diag in diagnostics {
             by_node.entry(&diag.node_path).or_default().push(diag);
         }
-        
+
         // Check each node for intra-node causality
         for (_node_path, node_diags) in by_node {
             let rule_ids: HashSet<&str> = node_diags.iter().map(|d| d.rule_id.as_str()).collect();
-            
+
             for rule in INTRA_NODE_RULES {
                 // Check if any cause is present
                 let has_cause = rule.causes.iter().any(|c| rule_ids.contains(*c));
                 // Check if effect is present
                 let has_effect = rule_ids.contains(rule.effect);
-                
+
                 if has_cause && has_effect {
                     // Find the specific cause that's present
                     for cause in rule.causes {
@@ -819,15 +820,15 @@ impl RootCauseAnalyzer {
                 }
             }
         }
-        
+
         edges
     }
-    
+
     /// Find inter-node causal relationships based on DAG
     fn find_inter_node_propagation(diagnostics: &[Diagnostic]) -> Vec<(String, String, String)> {
         let mut edges = Vec::new();
         let rule_ids: HashSet<&str> = diagnostics.iter().map(|d| d.rule_id.as_str()).collect();
-        
+
         for rule in INTER_NODE_RULES {
             if rule_ids.contains(rule.upstream) && rule_ids.contains(rule.downstream) {
                 edges.push((
@@ -837,10 +838,10 @@ impl RootCauseAnalyzer {
                 ));
             }
         }
-        
+
         edges
     }
-    
+
     /// Identify root causes (diagnostics with no incoming causal edges)
     fn identify_root_causes(
         diagnostics: &[Diagnostic],
@@ -849,45 +850,46 @@ impl RootCauseAnalyzer {
     ) -> Vec<RootCause> {
         // Find all rule_ids that have incoming edges (are effects)
         let effects: HashSet<&str> = edges.iter().map(|(_, effect, _)| effect.as_str()).collect();
-        
+
         // Note: causes set could be used for more advanced analysis (e.g., cycle detection)
         let _causes: HashSet<&str> = edges.iter().map(|(cause, _, _)| cause.as_str()).collect();
-        
+
         // Root causes: present in diagnostics, not an effect of another, OR has no incoming edge
         let mut root_cause_ids: HashSet<&str> = HashSet::new();
-        
+
         // All unique rule_ids in diagnostics
         let all_ids: HashSet<&str> = diagnostics.iter().map(|d| d.rule_id.as_str()).collect();
-        
+
         for id in &all_ids {
             // If this ID is not caused by anything else in our graph, it's a root cause
             if !effects.contains(id) {
                 root_cause_ids.insert(id);
             }
         }
-        
+
         // If no root causes found, treat the highest severity diagnostics as root causes
         if root_cause_ids.is_empty() {
             for diag in diagnostics.iter().take(3) {
                 root_cause_ids.insert(&diag.rule_id);
             }
         }
-        
+
         // Build RootCause objects
         let mut root_causes: Vec<RootCause> = Vec::new();
         let mut rc_counter = 0;
-        
+
         for rule_id in root_cause_ids {
             if let Some(diags) = diag_map.get(rule_id) {
                 rc_counter += 1;
                 let first_diag = diags[0];
-                
+
                 // Find symptoms caused by this root cause
-                let symptoms: Vec<String> = edges.iter()
+                let symptoms: Vec<String> = edges
+                    .iter()
                     .filter(|(cause, _, _)| cause == rule_id)
                     .map(|(_, effect, _)| effect.clone())
                     .collect();
-                
+
                 // Calculate impact based on severity and symptom count
                 let base_impact = match first_diag.severity {
                     super::rules::RuleSeverity::Error => 40.0,
@@ -896,16 +898,16 @@ impl RootCauseAnalyzer {
                 };
                 let symptom_bonus = symptoms.len() as f64 * 10.0;
                 let impact = (base_impact + symptom_bonus).min(100.0);
-                
+
                 // Merge suggestions intelligently when multiple nodes have the same issue
                 let suggestions = Self::merge_suggestions_for_root_cause(diags);
-                
+
                 root_causes.push(RootCause {
                     id: format!("RC{:03}", rc_counter),
                     diagnostic_ids: vec![rule_id.to_string()],
                     description: first_diag.message.clone(),
                     impact_percentage: impact,
-                    confidence: 1.0,  // Rule-based = 100% confidence
+                    confidence: 1.0, // Rule-based = 100% confidence
                     affected_nodes: diags.iter().map(|d| d.node_path.clone()).collect(),
                     evidence: vec![first_diag.reason.clone()],
                     symptoms,
@@ -913,31 +915,41 @@ impl RootCauseAnalyzer {
                 });
             }
         }
-        
+
         // Sort by impact (descending)
-        root_causes.sort_by(|a, b| b.impact_percentage.partial_cmp(&a.impact_percentage).unwrap_or(std::cmp::Ordering::Equal));
-        
+        root_causes.sort_by(|a, b| {
+            b.impact_percentage
+                .partial_cmp(&a.impact_percentage)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         root_causes
     }
-    
+
     /// Merge suggestions from multiple diagnostics of the same rule
     /// Consolidates similar suggestions (e.g., different table names) into one
     fn merge_suggestions_for_root_cause(diags: &[&Diagnostic]) -> Vec<String> {
         if diags.len() == 1 {
             return diags[0].suggestions.clone();
         }
-        
+
         // Extract table names from reason fields
-        let tables: Vec<String> = diags.iter()
+        let tables: Vec<String> = diags
+            .iter()
             .filter_map(|d| Self::extract_table_name(&d.reason))
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        
-        let first_sug = diags[0].suggestions.first().map(|s| s.as_str()).unwrap_or("");
-        
+
+        let first_sug = diags[0]
+            .suggestions
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("");
+
         // Check if this is a file fragmentation issue
-        if first_sug.contains("外表小文件合并方案") || first_sug.contains("Compaction 合并碎片") {
+        if first_sug.contains("外表小文件合并方案") || first_sug.contains("Compaction 合并碎片")
+        {
             let tables_str = if tables.is_empty() {
                 format!("{} 个表", diags.len())
             } else if tables.len() <= 3 {
@@ -945,7 +957,7 @@ impl RootCauseAnalyzer {
             } else {
                 format!("{} 等 {} 个表", tables[0], tables.len())
             };
-            
+
             return if first_sug.contains("外表小文件合并方案") {
                 vec![format!(
                     "外表小文件合并 (涉及: {}): ①ALTER TABLE <table> PARTITION(...) CONCATENATE; \
@@ -958,24 +970,25 @@ impl RootCauseAnalyzer {
                 vec![format!("执行 Compaction: ALTER TABLE <{}> COMPACT", tables_str)]
             };
         }
-        
+
         // Default: dedupe and limit to 3
         let mut seen = HashSet::new();
-        diags.iter()
+        diags
+            .iter()
             .flat_map(|d| d.suggestions.iter())
             .filter(|s| seen.insert(s.as_str()))
             .take(3)
             .cloned()
             .collect()
     }
-    
+
     /// Extract table name from reason like "外表「table_name」的 ORC..."
     fn extract_table_name(reason: &str) -> Option<String> {
         let start = reason.find('「')?;
         let end = reason.find('」')?;
         (end > start).then(|| reason[start + 3..end].to_string())
     }
-    
+
     /// Build causal chains from root causes to symptoms
     /// Deduplicates by rule_name chain (not rule_id) to avoid visual duplicates
     fn build_causal_chains(
@@ -986,70 +999,95 @@ impl RootCauseAnalyzer {
         let mut chains = Vec::new();
         let mut seen_rule_id_chains: HashSet<String> = HashSet::new();
         let mut seen_name_chains: HashSet<String> = HashSet::new();
-        
+
         for rc in root_causes {
             for diag_id in &rc.diagnostic_ids {
                 let paths = Self::find_paths_from(diag_id, edges, 3);
-                
+
                 for path in paths {
-                    if path.len() < 2 { continue; }
-                    
+                    if path.len() < 2 {
+                        continue;
+                    }
+
                     // Deduplicate by rule_id path first
                     let id_key = path.join("->");
-                    if seen_rule_id_chains.contains(&id_key) { continue; }
+                    if seen_rule_id_chains.contains(&id_key) {
+                        continue;
+                    }
                     seen_rule_id_chains.insert(id_key);
-                    
+
                     // Build human-readable chain and deduplicate by name
-                    let names: Vec<String> = path.iter()
-                        .map(|id| diag_map.get(id)
-                            .and_then(|d| d.first())
-                            .map(|d| d.rule_name.clone())
-                            .unwrap_or_else(|| id.clone()))
+                    let names: Vec<String> = path
+                        .iter()
+                        .map(|id| {
+                            diag_map
+                                .get(id)
+                                .and_then(|d| d.first())
+                                .map(|d| d.rule_name.clone())
+                                .unwrap_or_else(|| id.clone())
+                        })
                         .collect();
-                    
+
                     let name_key = names.join("->");
-                    if seen_name_chains.contains(&name_key) { continue; }
+                    if seen_name_chains.contains(&name_key) {
+                        continue;
+                    }
                     seen_name_chains.insert(name_key);
-                    
+
                     // Build display chain with arrows
                     let mut chain = Vec::new();
                     let mut explanations = Vec::new();
-                    
+
                     for (i, (node_id, name)) in path.iter().zip(names.iter()).enumerate() {
                         chain.push(name.clone());
                         if i < path.len() - 1 {
                             chain.push("→".to_string());
-                            if let Some((_, _, desc)) = edges.iter()
-                                .find(|(c, e, _)| c == node_id && e == &path[i + 1]) {
+                            if let Some((_, _, desc)) = edges
+                                .iter()
+                                .find(|(c, e, _)| c == node_id && e == &path[i + 1])
+                            {
                                 explanations.push(desc.clone());
                             }
                         }
                     }
-                    
+
                     let explanation = if explanations.is_empty() {
-                        format!("{} 导致 {}", names.first().unwrap_or(&path[0]), names.last().unwrap_or(&path[0]))
+                        format!(
+                            "{} 导致 {}",
+                            names.first().unwrap_or(&path[0]),
+                            names.last().unwrap_or(&path[0])
+                        )
                     } else {
                         explanations.join("; ")
                     };
-                    
+
                     chains.push(CausalChain { chain, explanation, confidence: 1.0 });
                 }
             }
         }
-        
+
         // Sort: shorter chains first, then alphabetically
-        chains.sort_by(|a, b| a.chain.len().cmp(&b.chain.len()).then_with(|| a.chain.join("").cmp(&b.chain.join(""))));
-        
+        chains.sort_by(|a, b| {
+            a.chain
+                .len()
+                .cmp(&b.chain.len())
+                .then_with(|| a.chain.join("").cmp(&b.chain.join("")))
+        });
+
         // Limit output
         chains.truncate(10);
         chains
     }
-    
+
     /// Find all paths from a starting node using BFS
-    fn find_paths_from(start: &str, edges: &[(String, String, String)], max_depth: usize) -> Vec<Vec<String>> {
+    fn find_paths_from(
+        start: &str,
+        edges: &[(String, String, String)],
+        max_depth: usize,
+    ) -> Vec<Vec<String>> {
         let mut paths = Vec::new();
         let mut queue: Vec<(Vec<String>, usize)> = vec![(vec![start.to_string()], 0)];
-        
+
         while let Some((path, depth)) = queue.pop() {
             if depth >= max_depth {
                 if path.len() > 1 {
@@ -1057,10 +1095,10 @@ impl RootCauseAnalyzer {
                 }
                 continue;
             }
-            
+
             let current = path.last().unwrap();
             let mut found_next = false;
-            
+
             for (cause, effect, _) in edges {
                 if cause == current && !path.contains(effect) {
                     found_next = true;
@@ -1069,21 +1107,21 @@ impl RootCauseAnalyzer {
                     queue.push((new_path, depth + 1));
                 }
             }
-            
+
             if !found_next && path.len() > 1 {
                 paths.push(path);
             }
         }
-        
+
         paths
     }
-    
+
     /// Generate a natural language summary
     fn generate_summary(root_causes: &[RootCause]) -> String {
         if root_causes.is_empty() {
             return "未发现明显的性能问题根因".to_string();
         }
-        
+
         if root_causes.len() == 1 {
             let rc = &root_causes[0];
             if rc.symptoms.is_empty() {
@@ -1096,11 +1134,12 @@ impl RootCauseAnalyzer {
                 )
             }
         } else {
-            let top_causes: Vec<&str> = root_causes.iter()
+            let top_causes: Vec<&str> = root_causes
+                .iter()
                 .take(3)
                 .map(|rc| rc.diagnostic_ids.first().map(|s| s.as_str()).unwrap_or(""))
                 .collect();
-            
+
             format!(
                 "发现 {} 个独立根因，主要包括: {}。建议按优先级依次解决",
                 root_causes.len(),
@@ -1112,9 +1151,9 @@ impl RootCauseAnalyzer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::rules::RuleSeverity;
-    
+    use super::*;
+
     fn make_diag(rule_id: &str, node_path: &str, severity: RuleSeverity) -> Diagnostic {
         Diagnostic {
             rule_id: rule_id.to_string(),
@@ -1126,9 +1165,10 @@ mod tests {
             reason: format!("Reason for {}", rule_id),
             suggestions: vec![format!("Fix {}", rule_id)],
             parameter_suggestions: vec![],
+            threshold_metadata: None,
         }
     }
-    
+
     #[test]
     fn test_intra_node_causality() {
         // S016 (small files) + S007 (IO bottleneck) in same SCAN node
@@ -1136,15 +1176,24 @@ mod tests {
             make_diag("S016", "Fragment_1/Pipeline_0/SCAN", RuleSeverity::Warning),
             make_diag("S007", "Fragment_1/Pipeline_0/SCAN", RuleSeverity::Error),
         ];
-        
+
         let result = RootCauseAnalyzer::analyze(&diagnostics);
-        
+
         // S016 should be identified as root cause, S007 as symptom
         assert!(!result.root_causes.is_empty());
-        assert!(result.root_causes.iter().any(|rc| rc.diagnostic_ids.contains(&"S016".to_string())));
-        assert!(result.causal_chains.iter().any(|cc| cc.chain.iter().any(|s| s.contains("S016") || s.contains("小文件"))));
+        assert!(
+            result
+                .root_causes
+                .iter()
+                .any(|rc| rc.diagnostic_ids.contains(&"S016".to_string()))
+        );
+        assert!(result.causal_chains.iter().any(|cc| {
+            cc.chain
+                .iter()
+                .any(|s| s.contains("S016") || s.contains("小文件"))
+        }));
     }
-    
+
     #[test]
     fn test_inter_node_propagation() {
         // S001 (data skew) in SCAN -> G003 (time skew) in JOIN
@@ -1152,14 +1201,19 @@ mod tests {
             make_diag("S001", "Fragment_1/Pipeline_0/SCAN", RuleSeverity::Warning),
             make_diag("G003", "Fragment_1/Pipeline_1/JOIN", RuleSeverity::Warning),
         ];
-        
+
         let result = RootCauseAnalyzer::analyze(&diagnostics);
-        
+
         // S001 should be root cause, G003 should be symptom
         assert!(!result.root_causes.is_empty());
-        assert!(result.root_causes.iter().any(|rc| rc.diagnostic_ids.contains(&"S001".to_string())));
+        assert!(
+            result
+                .root_causes
+                .iter()
+                .any(|rc| rc.diagnostic_ids.contains(&"S001".to_string()))
+        );
     }
-    
+
     #[test]
     fn test_multiple_root_causes() {
         // Two independent issues: S016 (small files) and J002 (bad join order)
@@ -1167,9 +1221,9 @@ mod tests {
             make_diag("S016", "Fragment_1/Pipeline_0/SCAN_1", RuleSeverity::Warning),
             make_diag("J002", "Fragment_1/Pipeline_1/JOIN", RuleSeverity::Warning),
         ];
-        
+
         let result = RootCauseAnalyzer::analyze(&diagnostics);
-        
+
         // Both should be identified as root causes (no causal relationship between them)
         assert_eq!(result.root_causes.len(), 2);
     }

@@ -58,6 +58,7 @@ impl DiagnosticRule for E001NetworkTransferLarge {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -113,6 +114,7 @@ impl DiagnosticRule for E002NetworkTimeHigh {
                     "减少跨节点数据传输".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -167,6 +169,7 @@ impl DiagnosticRule for E003ShuffleSkew {
                     "检查是否存在热点数据".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None

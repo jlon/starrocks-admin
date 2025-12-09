@@ -7,7 +7,7 @@
 //! - Other OpenAI-compatible APIs
 
 use reqwest::Client;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::time::Duration;
 
 use super::models::*;
@@ -30,10 +30,10 @@ impl LLMClient {
             .timeout(Duration::from_secs(120))
             .build()
             .expect("Failed to create HTTP client");
-        
+
         Self { http_client }
     }
-    
+
     /// Call chat completion API
     pub async fn chat_completion<Req, Resp>(
         &self,
@@ -44,13 +44,15 @@ impl LLMClient {
         Req: LLMAnalysisRequestTrait,
         Resp: DeserializeOwned,
     {
-        let api_key = provider.api_key_encrypted.as_ref()
+        let api_key = provider
+            .api_key_encrypted
+            .as_ref()
             .ok_or_else(|| LLMError::ApiError("API key not configured".to_string()))?;
-        
+
         // Build user prompt from request
-        let user_prompt = serde_json::to_string_pretty(request)
-            .map_err(|e| LLMError::SerializationError(e))?;
-        
+        let user_prompt =
+            serde_json::to_string_pretty(request).map_err(|e| LLMError::SerializationError(e))?;
+
         // Build chat completion request
         let chat_request = ChatCompletionRequest {
             model: provider.model_name.clone(),
@@ -59,25 +61,21 @@ impl LLMClient {
                     role: "system".to_string(),
                     content: request.system_prompt().to_string(),
                 },
-                ChatMessage {
-                    role: "user".to_string(),
-                    content: user_prompt,
-                },
+                ChatMessage { role: "user".to_string(), content: user_prompt },
             ],
             max_tokens: Some(provider.max_tokens as u32),
             temperature: Some(provider.temperature),
-            response_format: Some(ResponseFormat {
-                r#type: "json_object".to_string(),
-            }),
+            response_format: Some(ResponseFormat { r#type: "json_object".to_string() }),
         };
-        
+
         // Build URL
         let url = format!("{}/chat/completions", provider.api_base.trim_end_matches('/'));
-        
+
         tracing::debug!("Calling LLM API: {} with model {}", url, provider.model_name);
-        
+
         // Make request with timeout
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -92,7 +90,7 @@ impl LLMClient {
                     LLMError::ApiError(e.to_string())
                 }
             })?;
-        
+
         // Check status
         let status = response.status();
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
@@ -105,44 +103,63 @@ impl LLMClient {
                 .unwrap_or(60);
             return Err(LLMError::RateLimited(retry_after));
         }
-        
+
         if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(LLMError::ApiError(format!("API error {}: {}", status, error_text)));
         }
-        
+
         // Parse response
         let chat_response: ChatCompletionResponse = response
             .json()
             .await
             .map_err(|e| LLMError::ParseError(e.to_string()))?;
-        
+
         // Extract content
-        let content = chat_response.choices
+        let content = chat_response
+            .choices
             .first()
             .and_then(|c| c.message.content.as_ref())
             .ok_or_else(|| LLMError::ParseError("Empty response from LLM".to_string()))?;
-        
+
         // Parse structured response
-        let result: Resp = serde_json::from_str(content)
-            .map_err(|e| LLMError::ParseError(format!("Failed to parse LLM response: {}. Content: {}", e, content)))?;
-        
+        let result: Resp = serde_json::from_str(content).map_err(|e| {
+            LLMError::ParseError(format!(
+                "Failed to parse LLM response: {}. Content: {}",
+                e, content
+            ))
+        })?;
+
         // Extract token counts
-        let input_tokens = chat_response.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0);
-        let output_tokens = chat_response.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0);
-        
+        let input_tokens = chat_response
+            .usage
+            .as_ref()
+            .map(|u| u.prompt_tokens)
+            .unwrap_or(0);
+        let output_tokens = chat_response
+            .usage
+            .as_ref()
+            .map(|u| u.completion_tokens)
+            .unwrap_or(0);
+
         Ok((result, input_tokens, output_tokens))
     }
-    
+
     /// Test connection to provider (simple models list request)
     pub async fn test_connection(&self, provider: &LLMProvider) -> Result<(), LLMError> {
-        let api_key = provider.api_key_encrypted.as_ref()
+        let api_key = provider
+            .api_key_encrypted
+            .as_ref()
             .ok_or_else(|| LLMError::ApiError("API key not configured".to_string()))?;
-        
+
         // Use models endpoint for a lightweight test
         let url = format!("{}/models", provider.api_base.trim_end_matches('/'));
-        
-        let response = self.http_client
+
+        let response = self
+            .http_client
             .get(&url)
             .header("Authorization", format!("Bearer {}", api_key))
             .timeout(Duration::from_secs(10))
@@ -157,39 +174,39 @@ impl LLMClient {
                     LLMError::ApiError(e.to_string())
                 }
             })?;
-        
+
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(LLMError::ApiError("Invalid API key".to_string()));
         }
-        
+
         if !status.is_success() {
             // Some providers don't have /models endpoint, try a minimal chat request
             return self.test_with_chat(provider).await;
         }
-        
+
         Ok(())
     }
-    
+
     /// Fallback test using minimal chat completion
     async fn test_with_chat(&self, provider: &LLMProvider) -> Result<(), LLMError> {
-        let api_key = provider.api_key_encrypted.as_ref()
+        let api_key = provider
+            .api_key_encrypted
+            .as_ref()
             .ok_or_else(|| LLMError::ApiError("API key not configured".to_string()))?;
-        
+
         let url = format!("{}/chat/completions", provider.api_base.trim_end_matches('/'));
-        
+
         let test_request = ChatCompletionRequest {
             model: provider.model_name.clone(),
-            messages: vec![ChatMessage {
-                role: "user".to_string(),
-                content: "Hi".to_string(),
-            }],
+            messages: vec![ChatMessage { role: "user".to_string(), content: "Hi".to_string() }],
             max_tokens: Some(1),
             temperature: Some(0.0),
             response_format: None,
         };
-        
-        let response = self.http_client
+
+        let response = self
+            .http_client
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -198,17 +215,20 @@ impl LLMClient {
             .send()
             .await
             .map_err(|e| LLMError::ApiError(e.to_string()))?;
-        
+
         let status = response.status();
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(LLMError::ApiError("Invalid API key".to_string()));
         }
-        
+
         if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(LLMError::ApiError(format!("API error {}: {}", status, error_text)));
         }
-        
+
         Ok(())
     }
 }

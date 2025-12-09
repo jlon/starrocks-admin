@@ -25,13 +25,17 @@ impl SectionParser {
         let mut fields = HashMap::new();
         let lines: Vec<&str> = summary_block.lines().collect();
         let mut i = 0;
-        
+
         while i < lines.len() {
             let line = lines[i];
             if let Some(cap) = SUMMARY_LINE_REGEX.captures(line) {
                 let key = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-                let mut value = cap.get(2).map(|m| m.as_str().trim()).unwrap_or("").to_string();
-                
+                let mut value = cap
+                    .get(2)
+                    .map(|m| m.as_str().trim())
+                    .unwrap_or("")
+                    .to_string();
+
                 // Handle multi-line SQL Statement
                 if key == "Sql Statement" {
                     let mut sql_lines = vec![value.clone()];
@@ -40,7 +44,10 @@ impl SectionParser {
                     while i < lines.len() {
                         let next_line = lines[i].trim();
                         // Stop at next field or empty line or new section
-                        if next_line.starts_with("- ") || next_line.is_empty() || next_line.contains("Fragment") {
+                        if next_line.starts_with("- ")
+                            || next_line.is_empty()
+                            || next_line.contains("Fragment")
+                        {
                             break;
                         }
                         sql_lines.push(next_line.to_string());
@@ -49,7 +56,7 @@ impl SectionParser {
                     value = sql_lines.join("\n");
                     i -= 1; // Adjust since we'll i += 1 at loop end
                 }
-                
+
                 fields.insert(key.to_string(), value);
             }
             i += 1;
@@ -159,7 +166,7 @@ impl SectionParser {
     /// Parse Planner section from profile text
     pub fn parse_planner(text: &str) -> ParseResult<PlannerInfo> {
         use crate::services::profile_analyzer::models::HMSMetrics;
-        
+
         let planner_block = Self::extract_block(text, "Planner:")?;
         let mut details = HashMap::new();
         let mut hms_metrics = HMSMetrics::default();
@@ -168,7 +175,7 @@ impl SectionParser {
 
         for line in planner_block.lines() {
             let trimmed = line.trim().trim_start_matches('-').trim();
-            
+
             // Parse HMS metrics: "-- HMS.getTable[2] 29ms"
             if trimmed.contains("HMS.") {
                 if let Some((name, time)) = Self::parse_hms_metric(trimmed) {
@@ -177,9 +184,13 @@ impl SectionParser {
                         "getTable" => hms_metrics.get_table_ms += time,
                         "getPartitionsByNames" => hms_metrics.get_partitions_ms += time,
                         "getPartitionColumnStats" => hms_metrics.get_partition_stats_ms += time,
-                        "listPartitionNamesByValue" | "listPartitionNames" => hms_metrics.list_partition_names_ms += time,
-                        "PARTITIONS.LIST_FS_PARTITIONS" | "PARTITIONS.LIST_FS_ASYNC.WAIT" => hms_metrics.list_fs_partitions_ms += time,
-                        _ => {}
+                        "listPartitionNamesByValue" | "listPartitionNames" => {
+                            hms_metrics.list_partition_names_ms += time
+                        },
+                        "PARTITIONS.LIST_FS_PARTITIONS" | "PARTITIONS.LIST_FS_ASYNC.WAIT" => {
+                            hms_metrics.list_fs_partitions_ms += time
+                        },
+                        _ => {},
                     }
                 }
             }
@@ -204,43 +215,43 @@ impl SectionParser {
         }
 
         // Calculate total HMS time
-        hms_metrics.total_hms_time_ms = hms_metrics.get_database_ms 
-            + hms_metrics.get_table_ms 
-            + hms_metrics.get_partitions_ms 
+        hms_metrics.total_hms_time_ms = hms_metrics.get_database_ms
+            + hms_metrics.get_table_ms
+            + hms_metrics.get_partitions_ms
             + hms_metrics.get_partition_stats_ms
             + hms_metrics.list_partition_names_ms
             + hms_metrics.list_fs_partitions_ms;
 
         Ok(PlannerInfo { details, hms_metrics, total_time_ms, optimizer_time_ms })
     }
-    
+
     /// Parse HMS metric line: "HMS.getTable[2] 29ms" or "HMS.PARTITIONS.LIST_FS_PARTITIONS[4] 350ms"
     fn parse_hms_metric(line: &str) -> Option<(String, f64)> {
         use super::ValueParser;
-        
+
         // Pattern: HMS.name[count] time
         let hms_start = line.find("HMS.")?;
         let rest = &line[hms_start + 4..];
-        
+
         // Find the metric name (before [)
         let bracket_pos = rest.find('[')?;
         let name = rest[..bracket_pos].to_string();
-        
+
         // Find the time value (after ] )
         let close_bracket = rest.find(']')?;
         let time_str = rest[close_bracket + 1..].trim();
-        
+
         // Parse time value (e.g., "29ms", "1s46ms", "2s124ms")
         let duration = ValueParser::parse_duration(time_str).ok()?;
         let time_ms = duration.as_millis() as f64;
-        
+
         Some((name, time_ms))
     }
-    
+
     /// Parse planner time line: "Total[1] 1s570ms" -> 1570.0
     fn parse_planner_time(line: &str) -> Option<f64> {
         use super::ValueParser;
-        
+
         let close_bracket = line.find(']')?;
         let time_str = line[close_bracket + 1..].trim();
         let duration = ValueParser::parse_duration(time_str).ok()?;

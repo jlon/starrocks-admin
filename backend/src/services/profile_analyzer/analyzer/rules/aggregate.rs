@@ -64,6 +64,7 @@ impl DiagnosticRule for A001AggregationSkew {
                     "检查是否存在热点键".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -90,7 +91,7 @@ impl DiagnosticRule for A002HashTableTooLarge {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let memory = context.get_memory_usage()?;
-        
+
         // v2.0: Use dynamic hash table memory threshold
         let memory_threshold = context.thresholds.get_hash_table_memory_threshold();
 
@@ -121,6 +122,7 @@ impl DiagnosticRule for A002HashTableTooLarge {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -150,9 +152,11 @@ impl DiagnosticRule for A004HighCardinality {
             .or_else(|| context.node.metrics.pull_row_num.map(|v| v as f64))?;
 
         if hash_size > 10_000_000.0 {
-            let group_keys = context.get_group_by_keys().unwrap_or_else(|| "未知".to_string());
+            let group_keys = context
+                .get_group_by_keys()
+                .unwrap_or_else(|| "未知".to_string());
             let memory = context.get_memory_usage().unwrap_or(0);
-            
+
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -166,14 +170,18 @@ impl DiagnosticRule for A004HighCardinality {
                 message: format!("GROUP BY 基数过高 ({:.0} 个分组)", hash_size),
                 reason: format!(
                     "GROUP BY 键「{}」的基数过高（{:.0} 个唯一值），导致 HashTable 占用 {} 内存，聚合效率下降。",
-                    group_keys, hash_size, format_bytes(memory)
+                    group_keys,
+                    hash_size,
+                    format_bytes(memory)
                 ),
                 suggestions: vec![
                     format!("检查 GROUP BY 键「{}」是否都必要，减少不必要的分组列", group_keys),
-                    "考虑使用流式聚合: SET streaming_preaggregation_mode = 'force_streaming'".to_string(),
+                    "考虑使用流式聚合: SET streaming_preaggregation_mode = 'force_streaming'"
+                        .to_string(),
                     "考虑创建物化视图预聚合常用分组".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -219,6 +227,7 @@ impl DiagnosticRule for A003DataSkew {
                     .to_string(),
                 suggestions: vec!["优化分组键选择".to_string(), "考虑对热点键单独处理".to_string()],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -263,6 +272,7 @@ impl DiagnosticRule for A005ExpensiveKeyExpr {
                     "避免在 GROUP BY 中使用复杂函数".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -322,7 +332,9 @@ impl DiagnosticRule for A006LowLocalAggregation {
                     agg_ratio, input_rows, output_rows
                 ),
                 reason: {
-                    let group_keys = context.get_group_by_keys().unwrap_or_else(|| "未知".to_string());
+                    let group_keys = context
+                        .get_group_by_keys()
+                        .unwrap_or_else(|| "未知".to_string());
                     format!(
                         "GROUP BY「{}」在本地聚合时，输入 {:.0} 行仅聚合为 {:.0} 行（缩减比 {:.2}:1），\
                         未能有效减少数据量。这会增加网络传输和后续计算开销。",
@@ -330,9 +342,14 @@ impl DiagnosticRule for A006LowLocalAggregation {
                     )
                 },
                 suggestions: {
-                    let group_keys = context.get_group_by_keys().unwrap_or_else(|| "未知".to_string());
+                    let group_keys = context
+                        .get_group_by_keys()
+                        .unwrap_or_else(|| "未知".to_string());
                     vec![
-                        format!("GROUP BY「{}」基数可能过高，考虑关闭二阶段聚合: SET new_planner_agg_stage = 1", group_keys),
+                        format!(
+                            "GROUP BY「{}」基数可能过高，考虑关闭二阶段聚合: SET new_planner_agg_stage = 1",
+                            group_keys
+                        ),
                         "检查 GROUP BY 键是否包含高基数列（如 ID、时间戳）".to_string(),
                         "考虑在数据写入时预聚合或使用物化视图".to_string(),
                     ]
@@ -344,6 +361,7 @@ impl DiagnosticRule for A006LowLocalAggregation {
                     "1",
                     "SET new_planner_agg_stage = 1; -- 关闭二阶段聚合",
                 )],
+                threshold_metadata: None,
             })
         } else {
             None

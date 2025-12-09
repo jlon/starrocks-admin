@@ -35,6 +35,7 @@ impl DiagnosticRule for F001ExecutionTimeSkew {
                 reason: "Fragment 执行时间过长，是查询的主要瓶颈。需要分析 Fragment 内的算子找出具体问题。".to_string(),
                 suggestions: vec!["检查数据分布".to_string(), "优化分桶策略".to_string()],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -81,6 +82,7 @@ impl DiagnosticRule for F002MemorySkew {
                 reason: "Fragment 内存使用过高，可能导致查询失败。".to_string(),
                 suggestions: vec!["检查数据倾斜".to_string()],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -120,6 +122,7 @@ impl DiagnosticRule for F003PrepareTimeLong {
                 reason: "Fragment 各实例执行时间差异大，存在数据倾斜或资源不均。".to_string(),
                 suggestions: vec!["检查元数据加载".to_string()],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None

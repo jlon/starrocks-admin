@@ -65,6 +65,8 @@ pub type ClusterVariables = HashMap<String, String>;
 pub struct AnalysisContext {
     /// Live cluster variables (actual current values)
     pub cluster_variables: Option<ClusterVariables>,
+    /// Cluster ID for baseline lookup
+    pub cluster_id: Option<i64>,
 }
 
 /// Analyze a profile text and return complete analysis results
@@ -126,8 +128,10 @@ pub fn analyze_profile_with_context(
     let (total_local, total_remote) = extract_datacache_from_text(profile_text);
     tracing::info!(
         "DataCache metrics - Local: {} bytes ({:.2} GB), Remote: {} bytes ({:.2} GB)",
-        total_local, total_local as f64 / 1024.0 / 1024.0 / 1024.0,
-        total_remote, total_remote as f64 / 1024.0 / 1024.0 / 1024.0
+        total_local,
+        total_local as f64 / 1024.0 / 1024.0 / 1024.0,
+        total_remote,
+        total_remote as f64 / 1024.0 / 1024.0 / 1024.0
     );
     if total_local > 0 || total_remote > 0 {
         let total = total_local + total_remote;
@@ -174,10 +178,13 @@ pub fn analyze_profile_with_context(
     let summary = Some(summary);
     let mut execution_tree = execution_tree;
 
-    // Run RuleEngine for diagnostics with optional cluster variables
+    // Run RuleEngine for diagnostics with optional cluster variables and baseline
     let rule_engine = RuleEngine::new();
-    let rule_diagnostics =
-        rule_engine.analyze_with_cluster_variables(&profile, context.cluster_variables.as_ref());
+    let rule_diagnostics = rule_engine.analyze_with_baseline(
+        &profile,
+        context.cluster_variables.as_ref(),
+        context.cluster_id,
+    );
 
     // Convert rule diagnostics to API response format
     let diagnostics: Vec<DiagnosticResult> = rule_diagnostics
@@ -204,6 +211,16 @@ pub fn analyze_profile_with_context(
                     impact: p.impact.clone(),
                 })
                 .collect(),
+            // Pass through threshold metadata for LLM traceability
+            threshold_metadata: d
+                .threshold_metadata
+                .as_ref()
+                .map(|tm| ThresholdMetadataResult {
+                    threshold_value: tm.threshold_value,
+                    threshold_source: tm.threshold_source.clone(),
+                    baseline_p95_ms: tm.baseline_p95_ms,
+                    baseline_sample_count: tm.baseline_sample_count,
+                }),
         })
         .collect();
 
@@ -326,8 +343,11 @@ fn aggregate_diagnostics(diagnostics: &[DiagnosticResult]) -> Vec<AggregatedDiag
     // Sort by severity (Error > Warning > Info) then by node_count
     result.sort_by(|a, b| {
         let severity_cmp = severity_order(&b.severity).cmp(&severity_order(&a.severity));
-        if severity_cmp != std::cmp::Ordering::Equal { severity_cmp } 
-        else { b.node_count.cmp(&a.node_count) }
+        if severity_cmp != std::cmp::Ordering::Equal {
+            severity_cmp
+        } else {
+            b.node_count.cmp(&a.node_count)
+        }
     });
 
     result
@@ -337,21 +357,30 @@ fn aggregate_diagnostics(diagnostics: &[DiagnosticResult]) -> Vec<AggregatedDiag
 /// When multiple nodes have similar suggestions (differing only by table name), consolidate them
 fn merge_suggestions(diags: &[&DiagnosticResult], node_count: usize) -> Vec<String> {
     if node_count == 1 {
-        return diags.first().map(|d| d.suggestions.clone()).unwrap_or_default();
+        return diags
+            .first()
+            .map(|d| d.suggestions.clone())
+            .unwrap_or_default();
     }
-    
+
     // Extract table names from reason field (format: "外表「table_name」的 ORC...")
-    let tables: Vec<String> = diags.iter()
+    let tables: Vec<String> = diags
+        .iter()
         .filter_map(|d| extract_table_from_reason(&d.reason))
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
-    
+
     // Collect first suggestion to check pattern
-    let first_sug = diags.first().and_then(|d| d.suggestions.first()).map(|s| s.as_str()).unwrap_or("");
-    
+    let first_sug = diags
+        .first()
+        .and_then(|d| d.suggestions.first())
+        .map(|s| s.as_str())
+        .unwrap_or("");
+
     // Check if this looks like file fragmentation suggestion
-    if first_sug.contains("外表小文件合并方案") || first_sug.contains("Compaction 合并碎片") {
+    if first_sug.contains("外表小文件合并方案") || first_sug.contains("Compaction 合并碎片")
+    {
         let tables_str = if tables.is_empty() {
             format!("{} 个表", node_count)
         } else if tables.len() <= 3 {
@@ -359,7 +388,7 @@ fn merge_suggestions(diags: &[&DiagnosticResult], node_count: usize) -> Vec<Stri
         } else {
             format!("{} 等 {} 个表", tables.first().unwrap_or(&"unknown".to_string()), tables.len())
         };
-        
+
         let generic = if first_sug.contains("外表小文件合并方案") {
             format!(
                 "外表小文件合并 (涉及: {}): ①ALTER TABLE <table> PARTITION(...) CONCATENATE; \
@@ -373,10 +402,11 @@ fn merge_suggestions(diags: &[&DiagnosticResult], node_count: usize) -> Vec<Stri
         };
         return vec![generic];
     }
-    
+
     // Default: dedupe by exact match but limit to 3
     let mut seen = std::collections::HashSet::new();
-    diags.iter()
+    diags
+        .iter()
         .flat_map(|d| d.suggestions.iter())
         .filter(|s| seen.insert(s.as_str()))
         .take(3)
@@ -541,7 +571,7 @@ fn extract_datacache_from_text(profile_text: &str) -> (u64, u64) {
         // FSIOBytesRead represents actual remote reads when cache misses
         // This is the primary indicator of cache miss
         total_remote += fsio_bytes;
-        
+
         // DataCacheSkipReadBytes only adds if explicitly skipped (policy-based)
         // Don't add it again if already counted in FSIOBytesRead
         if datacache_skip_bytes > 0 && fsio_bytes == 0 {

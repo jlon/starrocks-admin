@@ -46,6 +46,7 @@ impl DiagnosticRule for G001MostConsuming {
                 suggestions: get_operator_suggestions(&context.node.operator_name),
                 reason: "算子执行时间占整体查询时间比例过高，是查询的主要瓶颈。优化该算子可获得最大收益。".to_string(),
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -95,6 +96,7 @@ impl DiagnosticRule for G001bSecondConsuming {
                 suggestions: get_operator_suggestions(&context.node.operator_name),
                 reason: "算子执行时间占整体查询时间比例过高，是查询的主要瓶颈。优化该算子可获得最大收益。".to_string(),
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -121,7 +123,7 @@ impl DiagnosticRule for G002HighMemory {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let memory = context.get_memory_usage()?;
-        
+
         // v2.0: Use dynamic memory threshold based on BE memory
         let memory_threshold = context.thresholds.get_operator_memory_threshold();
 
@@ -151,6 +153,7 @@ impl DiagnosticRule for G002HighMemory {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -228,6 +231,7 @@ impl DiagnosticRule for G003ExecutionSkew {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -342,7 +346,10 @@ mod tests {
         };
         let result = rule.evaluate(&context);
 
-        assert!(result.is_some(), "G001 should trigger for 99.84% time percentage with 1s operator time");
+        assert!(
+            result.is_some(),
+            "G001 should trigger for 99.84% time percentage with 1s operator time"
+        );
         let diag = result.unwrap();
         assert_eq!(diag.rule_id, "G001");
         assert_eq!(diag.plan_node_id, Some(0));
@@ -390,6 +397,9 @@ mod tests {
         };
         let result = rule.evaluate(&context);
 
-        assert!(result.is_none(), "G001 should NOT trigger for fast operator (100ms < 500ms threshold)");
+        assert!(
+            result.is_none(),
+            "G001 should NOT trigger for fast operator (100ms < 500ms threshold)"
+        );
     }
 }

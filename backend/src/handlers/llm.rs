@@ -3,19 +3,19 @@
 //! REST API endpoints for LLM service management and analysis.
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::services::llm::{
-    CreateProviderRequest, LLMError, LLMProviderInfo, LLMService,
-    UpdateProviderRequest,
-};
 use crate::AppState;
+use crate::services::llm::{
+    CreateProviderRequest, LLMError, LLMProviderInfo, LLMService, UpdateProviderRequest,
+};
+use crate::services::profile_analyzer::analyzer::QueryComplexity;
 
 // ============================================================================
 // Provider Management APIs
@@ -36,7 +36,10 @@ pub async fn get_provider(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, LLMApiError> {
-    let provider = state.llm_service.get_provider(id).await?
+    let provider = state
+        .llm_service
+        .get_provider(id)
+        .await?
         .ok_or(LLMError::ProviderNotFound(id.to_string()))?;
     Ok(Json(provider))
 }
@@ -88,7 +91,10 @@ pub async fn activate_provider(
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, LLMApiError> {
     state.llm_service.activate_provider(id).await?;
-    let provider = state.llm_service.get_provider(id).await?
+    let provider = state
+        .llm_service
+        .get_provider(id)
+        .await?
         .ok_or(LLMError::ProviderNotFound(id.to_string()))?;
     Ok(Json(provider))
 }
@@ -100,7 +106,10 @@ pub async fn deactivate_provider(
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, LLMApiError> {
     state.llm_service.deactivate_provider(id).await?;
-    let provider = state.llm_service.get_provider(id).await?
+    let provider = state
+        .llm_service
+        .get_provider(id)
+        .await?
         .ok_or(LLMError::ProviderNotFound(id.to_string()))?;
     Ok(Json(provider))
 }
@@ -126,7 +135,7 @@ pub async fn get_status(
 ) -> Result<impl IntoResponse, LLMApiError> {
     let providers = state.llm_service.list_providers().await?;
     let active_provider = providers.iter().find(|p| p.is_active);
-    
+
     Ok(Json(LLMStatusResponse {
         enabled: state.llm_service.is_available(),
         active_provider: active_provider.cloned(),
@@ -155,12 +164,16 @@ pub async fn analyze_root_cause(
         ExecutionPlanForLLM, QuerySummaryForLLM, RootCauseAnalysisRequest,
         RootCauseAnalysisResponse,
     };
+
+    // Calculate query complexity from SQL for LLM context
+    let complexity = QueryComplexity::from_sql(&req.sql_statement);
     
     // Build the LLM request
     let llm_request = RootCauseAnalysisRequest::builder()
         .query_summary(QuerySummaryForLLM {
             sql_statement: req.sql_statement.clone(), // Full SQL, not truncated
             query_type: req.query_type.clone(),
+            query_complexity: Some(format!("{:?}", complexity)),
             total_time_seconds: req.total_time_seconds,
             scan_bytes: req.scan_bytes,
             output_rows: req.output_rows,
@@ -171,18 +184,19 @@ pub async fn analyze_root_cause(
         })
         .execution_plan(ExecutionPlanForLLM {
             dag_description: req.dag_description.clone(),
-            hotspot_nodes: vec![],  // TODO: parse from request
+            hotspot_nodes: vec![], // TODO: parse from request
         })
         .diagnostics(req.diagnostics.clone().unwrap_or_default())
         .key_metrics(req.key_metrics.clone().unwrap_or_default())
         .build()
         .map_err(|e| LLMError::ApiError(e.to_string()))?;
-    
+
     // Call LLM service
-    let response: RootCauseAnalysisResponse = state.llm_service
+    let response: RootCauseAnalysisResponse = state
+        .llm_service
         .analyze(&llm_request, &req.query_id, req.cluster_id)
         .await?;
-    
+
     Ok(Json(response))
 }
 
@@ -211,11 +225,17 @@ pub struct RootCauseAnalysisApiRequest {
     pub key_metrics: Option<KeyMetricsForLLM>,
 }
 
-fn default_be_count() -> u32 { 3 }
+fn default_be_count() -> u32 {
+    3
+}
 
 #[allow(dead_code)]
 fn truncate_sql(sql: &str, max_len: usize) -> String {
-    if sql.len() <= max_len { sql.to_string() } else { format!("{}... (truncated)", &sql[..max_len]) }
+    if sql.len() <= max_len {
+        sql.to_string()
+    } else {
+        format!("{}... (truncated)", &sql[..max_len])
+    }
 }
 
 use crate::services::llm::KeyMetricsForLLM;
@@ -242,15 +262,19 @@ impl IntoResponse for LLMApiError {
             LLMError::Timeout(_) => (StatusCode::GATEWAY_TIMEOUT, self.0.to_string()),
             LLMError::ApiError(_) => (StatusCode::BAD_GATEWAY, self.0.to_string()),
             LLMError::ParseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string()),
-            LLMError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()),
-            LLMError::SerializationError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Serialization error".to_string()),
+            LLMError::DatabaseError(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
+            },
+            LLMError::SerializationError(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Serialization error".to_string())
+            },
         };
-        
+
         let body = Json(serde_json::json!({
             "error": message,
             "code": status.as_u16(),
         }));
-        
+
         (status, body).into_response()
     }
 }

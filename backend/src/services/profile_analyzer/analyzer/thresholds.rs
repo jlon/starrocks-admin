@@ -9,8 +9,8 @@
 //!
 //! Reference: profile-diagnostic-system-review.md Section 4
 
-use crate::services::profile_analyzer::models::ClusterInfo;
 use super::baseline::{PerformanceBaseline, QueryComplexity};
+use crate::services::profile_analyzer::models::ClusterInfo;
 
 // ============================================================================
 // Query Type Detection
@@ -60,13 +60,13 @@ impl QueryType {
     /// Get execution time threshold in milliseconds
     pub fn get_time_threshold_ms(&self) -> f64 {
         match self {
-            QueryType::Select => 10_000.0,    // OLAP: 10s
-            QueryType::Insert => 300_000.0,   // ETL: 5min
-            QueryType::Export => 600_000.0,   // Export: 10min
-            QueryType::Analyze => 600_000.0,  // Analyze: 10min
-            QueryType::Ctas => 300_000.0,     // CTAS: 5min
-            QueryType::Load => 1_800_000.0,   // Load: 30min
-            QueryType::Unknown => 60_000.0,   // Default: 1min
+            QueryType::Select => 10_000.0,   // OLAP: 10s
+            QueryType::Insert => 300_000.0,  // ETL: 5min
+            QueryType::Export => 600_000.0,  // Export: 10min
+            QueryType::Analyze => 600_000.0, // Analyze: 10min
+            QueryType::Ctas => 300_000.0,    // CTAS: 5min
+            QueryType::Load => 1_800_000.0,  // Load: 30min
+            QueryType::Unknown => 60_000.0,  // Default: 1min
         }
     }
 
@@ -76,19 +76,19 @@ impl QueryType {
             // INSERT/CTAS: Skip Q001 (different time threshold), skip filter effectiveness rules
             QueryType::Insert | QueryType::Ctas => {
                 matches!(rule_id, "Q001" | "S003")
-            }
+            },
             // EXPORT: Skip IO-related warnings (IO is expected to be high)
             QueryType::Export => {
                 matches!(rule_id, "S007" | "Q005")
-            }
+            },
             // ANALYZE: Skip scan-related warnings
             QueryType::Analyze => {
                 matches!(rule_id, "S003" | "S007" | "Q005" | "Q006")
-            }
+            },
             // LOAD: Only check sink-related rules
             QueryType::Load => {
                 !rule_id.starts_with('I') // Only I001-I003 apply
-            }
+            },
             _ => false,
         }
     }
@@ -110,40 +110,34 @@ pub struct DynamicThresholds {
 
 impl DynamicThresholds {
     /// Create a new threshold calculator
-    pub fn new(cluster_info: ClusterInfo, query_type: QueryType, query_complexity: QueryComplexity) -> Self {
-        Self { 
-            cluster_info, 
-            query_type,
-            query_complexity,
-            baseline: None,
-        }
+    pub fn new(
+        cluster_info: ClusterInfo,
+        query_type: QueryType,
+        query_complexity: QueryComplexity,
+    ) -> Self {
+        Self { cluster_info, query_type, query_complexity, baseline: None }
     }
 
     /// Create with default cluster info
     pub fn with_defaults(query_type: QueryType) -> Self {
-        Self { 
-            cluster_info: ClusterInfo::default(), 
+        Self {
+            cluster_info: ClusterInfo::default(),
             query_type,
             query_complexity: QueryComplexity::Medium,
             baseline: None,
         }
     }
-    
+
     /// Create with historical baseline
     pub fn with_baseline(
-        cluster_info: ClusterInfo, 
+        cluster_info: ClusterInfo,
         query_type: QueryType,
         query_complexity: QueryComplexity,
         baseline: PerformanceBaseline,
     ) -> Self {
-        Self {
-            cluster_info,
-            query_type,
-            query_complexity,
-            baseline: Some(baseline),
-        }
+        Self { cluster_info, query_type, query_complexity, baseline: Some(baseline) }
     }
-    
+
     /// Detect query complexity from SQL
     pub fn detect_complexity(sql: &str) -> QueryComplexity {
         QueryComplexity::from_sql(sql)
@@ -205,19 +199,19 @@ impl DynamicThresholds {
         // Priority 1: Use historical baseline if available
         if let Some(baseline) = &self.baseline {
             let adaptive_threshold = baseline.stats.p95_ms + 2.0 * baseline.stats.std_dev_ms;
-            
+
             // Ensure reasonable minimum
             let min_threshold = self.get_min_threshold_by_complexity();
             return adaptive_threshold.max(min_threshold);
         }
-        
+
         // Priority 2: Use query type + complexity factor
         let base = self.query_type.get_time_threshold_ms();
         let complexity_factor = self.get_complexity_factor();
-        
+
         base * complexity_factor
     }
-    
+
     /// Get complexity factor for threshold adjustment
     fn get_complexity_factor(&self) -> f64 {
         match self.query_complexity {
@@ -227,7 +221,7 @@ impl DynamicThresholds {
             QueryComplexity::VeryComplex => 3.0, // Very complex: 300% of base
         }
     }
-    
+
     /// Get minimum threshold by complexity (to avoid too strict)
     fn get_min_threshold_by_complexity(&self) -> f64 {
         match self.query_complexity {
@@ -262,7 +256,7 @@ impl DynamicThresholds {
     /// 2. Otherwise: use cluster size-based threshold
     pub fn get_skew_threshold(&self) -> f64 {
         let parallelism = self.cluster_info.backend_num;
-        
+
         // Base threshold from cluster size
         let base = match parallelism {
             p if p > 32 => 3.5, // Large cluster: allow more skew
@@ -270,7 +264,7 @@ impl DynamicThresholds {
             p if p > 8 => 2.5,
             _ => 2.0, // Small cluster: stricter
         };
-        
+
         // If baseline available, adjust based on historical variance
         if let Some(baseline) = &self.baseline {
             let historical_ratio = if baseline.stats.p50_ms > 0.0 {
@@ -278,7 +272,7 @@ impl DynamicThresholds {
             } else {
                 2.0
             };
-            
+
             // If historical data shows high variance, allow slightly more skew
             // Increase base by 20% of (historical_ratio - 2.0), capped at 1.0
             let adjustment = ((historical_ratio - 2.0) * 0.2).min(1.0).max(0.0);
@@ -419,16 +413,10 @@ mod tests {
     #[test]
     fn test_query_type_detection() {
         assert_eq!(QueryType::from_sql("SELECT * FROM t"), QueryType::Select);
-        assert_eq!(
-            QueryType::from_sql("INSERT INTO t1 SELECT * FROM t2"),
-            QueryType::Insert
-        );
+        assert_eq!(QueryType::from_sql("INSERT INTO t1 SELECT * FROM t2"), QueryType::Insert);
         assert_eq!(QueryType::from_sql("EXPORT TABLE t TO 's3://'"), QueryType::Export);
         assert_eq!(QueryType::from_sql("ANALYZE TABLE t"), QueryType::Analyze);
-        assert_eq!(
-            QueryType::from_sql("CREATE TABLE t1 AS SELECT * FROM t2"),
-            QueryType::Ctas
-        );
+        assert_eq!(QueryType::from_sql("CREATE TABLE t1 AS SELECT * FROM t2"), QueryType::Ctas);
     }
 
     #[test]
@@ -441,12 +429,12 @@ mod tests {
     #[test]
     fn test_skew_threshold_by_cluster_size() {
         let small_cluster = DynamicThresholds::new(
-            ClusterInfo { backend_num: 4, ..Default::default() }, 
+            ClusterInfo { backend_num: 4, ..Default::default() },
             QueryType::Select,
             QueryComplexity::Medium,
         );
         let large_cluster = DynamicThresholds::new(
-            ClusterInfo { backend_num: 64, ..Default::default() }, 
+            ClusterInfo { backend_num: 64, ..Default::default() },
             QueryType::Select,
             QueryComplexity::Medium,
         );
@@ -499,7 +487,6 @@ mod tests {
         assert_eq!(thresholds.get_small_file_threshold("LOCAL"), 32 * 1024 * 1024);
     }
 }
-
 
 // ============================================================================
 // External Scan Type (Section 5 of review document)
@@ -571,7 +558,10 @@ impl ExternalScanType {
         if upper.contains("FILE_SCAN") {
             return Some(Self::File);
         }
-        if upper.contains("S3_SCAN") || upper.contains("OSS_SCAN") || upper.contains("COS_SCAN") || upper.contains("GCS_SCAN")
+        if upper.contains("S3_SCAN")
+            || upper.contains("OSS_SCAN")
+            || upper.contains("COS_SCAN")
+            || upper.contains("GCS_SCAN")
         {
             return Some(Self::S3);
         }
@@ -692,17 +682,18 @@ pub fn generate_small_file_suggestions(scan_type: &ExternalScanType, table: &str
             "考虑使用更大的 Parquet row group size".to_string(),
             "对于 Iceberg/Hudi 表，执行 OPTIMIZE 或 Compaction".to_string(),
         ],
-        ExternalScanType::File => vec![
-            "合并本地小文件".to_string(),
-            "调整写入程序的输出文件大小".to_string(),
-        ],
+        ExternalScanType::File => {
+            vec!["合并本地小文件".to_string(), "调整写入程序的输出文件大小".to_string()]
+        },
         ExternalScanType::Connector => vec![
             "合并小文件以提升查询性能".to_string(),
             "考虑将热点数据导入 StarRocks 内表".to_string(),
             "调整上游数据写入的文件大小配置".to_string(),
         ],
         // Database types don't have small file issues
-        ExternalScanType::Jdbc | ExternalScanType::Mysql | ExternalScanType::Elasticsearch => vec![],
+        ExternalScanType::Jdbc | ExternalScanType::Mysql | ExternalScanType::Elasticsearch => {
+            vec![]
+        },
     }
 }
 
@@ -711,14 +702,11 @@ mod dynamic_thresholds_tests {
     use super::*;
     use crate::services::profile_analyzer::analyzer::baseline::BaselineStats;
     use crate::services::profile_analyzer::models::ClusterInfo;
-    
+
     #[test]
     fn test_query_time_threshold_with_complexity() {
-        let cluster_info = ClusterInfo {
-            backend_num: 16,
-            ..Default::default()
-        };
-        
+        let cluster_info = ClusterInfo { backend_num: 16, ..Default::default() };
+
         // Simple query - stricter threshold
         let simple_thresholds = DynamicThresholds::new(
             cluster_info.clone(),
@@ -726,7 +714,7 @@ mod dynamic_thresholds_tests {
             QueryComplexity::Simple,
         );
         let simple_threshold = simple_thresholds.get_query_time_threshold_ms();
-        
+
         // Medium query - normal threshold
         let medium_thresholds = DynamicThresholds::new(
             cluster_info.clone(),
@@ -734,7 +722,7 @@ mod dynamic_thresholds_tests {
             QueryComplexity::Medium,
         );
         let medium_threshold = medium_thresholds.get_query_time_threshold_ms();
-        
+
         // Complex query - relaxed threshold
         let complex_thresholds = DynamicThresholds::new(
             cluster_info.clone(),
@@ -742,28 +730,22 @@ mod dynamic_thresholds_tests {
             QueryComplexity::Complex,
         );
         let complex_threshold = complex_thresholds.get_query_time_threshold_ms();
-        
+
         // VeryComplex query - most relaxed
-        let very_complex_thresholds = DynamicThresholds::new(
-            cluster_info,
-            QueryType::Select,
-            QueryComplexity::VeryComplex,
-        );
+        let very_complex_thresholds =
+            DynamicThresholds::new(cluster_info, QueryType::Select, QueryComplexity::VeryComplex);
         let very_complex_threshold = very_complex_thresholds.get_query_time_threshold_ms();
-        
+
         // Thresholds should increase with complexity
         assert!(simple_threshold < medium_threshold);
         assert!(medium_threshold < complex_threshold);
         assert!(complex_threshold < very_complex_threshold);
     }
-    
+
     #[test]
     fn test_query_time_threshold_with_baseline() {
-        let cluster_info = ClusterInfo {
-            backend_num: 16,
-            ..Default::default()
-        };
-        
+        let cluster_info = ClusterInfo { backend_num: 16, ..Default::default() };
+
         // Create baseline with specific stats
         let baseline = PerformanceBaseline {
             complexity: QueryComplexity::Medium,
@@ -778,79 +760,58 @@ mod dynamic_thresholds_tests {
             sample_size: 100,
             time_range_hours: 168,
         };
-        
+
         let thresholds = DynamicThresholds::with_baseline(
             cluster_info,
             QueryType::Select,
             QueryComplexity::Medium,
             baseline,
         );
-        
+
         let threshold = thresholds.get_query_time_threshold_ms();
-        
+
         // Should be P95 + 2*std_dev = 8000 + 4000 = 12000
         // But minimum for Medium is 10000
         assert!(threshold >= 10000.0);
         assert!(threshold <= 15000.0);
-        
+
         // With our baseline: 8000 + 2*2000 = 12000
         assert!((threshold - 12000.0).abs() < 1.0);
     }
-    
+
     #[test]
     fn test_skew_threshold_by_cluster_size() {
         // Small cluster (8 BE) - stricter
-        let small_cluster = ClusterInfo {
-            backend_num: 8,
-            ..Default::default()
-        };
-        let small_thresholds = DynamicThresholds::new(
-            small_cluster,
-            QueryType::Select,
-            QueryComplexity::Medium,
-        );
+        let small_cluster = ClusterInfo { backend_num: 8, ..Default::default() };
+        let small_thresholds =
+            DynamicThresholds::new(small_cluster, QueryType::Select, QueryComplexity::Medium);
         let small_skew = small_thresholds.get_skew_threshold();
-        
+
         // Medium cluster (16 BE)
-        let medium_cluster = ClusterInfo {
-            backend_num: 16,
-            ..Default::default()
-        };
-        let medium_thresholds = DynamicThresholds::new(
-            medium_cluster,
-            QueryType::Select,
-            QueryComplexity::Medium,
-        );
+        let medium_cluster = ClusterInfo { backend_num: 16, ..Default::default() };
+        let medium_thresholds =
+            DynamicThresholds::new(medium_cluster, QueryType::Select, QueryComplexity::Medium);
         let medium_skew = medium_thresholds.get_skew_threshold();
-        
+
         // Large cluster (64 BE) - more tolerant
-        let large_cluster = ClusterInfo {
-            backend_num: 64,
-            ..Default::default()
-        };
-        let large_thresholds = DynamicThresholds::new(
-            large_cluster,
-            QueryType::Select,
-            QueryComplexity::Medium,
-        );
+        let large_cluster = ClusterInfo { backend_num: 64, ..Default::default() };
+        let large_thresholds =
+            DynamicThresholds::new(large_cluster, QueryType::Select, QueryComplexity::Medium);
         let large_skew = large_thresholds.get_skew_threshold();
-        
+
         // Larger clusters should have higher skew tolerance
         assert!(small_skew < medium_skew);
         assert!(medium_skew < large_skew);
-        
+
         // Verify ranges
         assert!(small_skew >= 2.0 && small_skew <= 2.5);
         assert!(large_skew >= 3.5);
     }
-    
+
     #[test]
     fn test_skew_threshold_with_baseline() {
-        let cluster_info = ClusterInfo {
-            backend_num: 16,
-            ..Default::default()
-        };
-        
+        let cluster_info = ClusterInfo { backend_num: 16, ..Default::default() };
+
         // Create baseline with high variance (P99/P50 = 3.0)
         let baseline = PerformanceBaseline {
             complexity: QueryComplexity::Medium,
@@ -865,43 +826,56 @@ mod dynamic_thresholds_tests {
             sample_size: 100,
             time_range_hours: 168,
         };
-        
+
         let thresholds = DynamicThresholds::with_baseline(
             cluster_info,
             QueryType::Select,
             QueryComplexity::Medium,
             baseline,
         );
-        
+
         let skew_threshold = thresholds.get_skew_threshold();
-        
+
         // Base for 16 BE: 3.0
         // Historical adjustment: (3.0 - 2.0) * 0.2 = 0.2
         // Final: 3.0 + 0.2 = 3.2
         assert!(skew_threshold > 3.0);
         assert!(skew_threshold < 4.0);
     }
-    
+
     #[test]
     fn test_detect_complexity() {
         // Simple
         let sql1 = "SELECT * FROM users WHERE id = 1";
         assert_eq!(DynamicThresholds::detect_complexity(sql1), QueryComplexity::Simple);
-        
+
         // Medium (with JOIN)
         let sql2 = "SELECT * FROM users u JOIN orders o ON u.id = o.user_id";
         assert_eq!(DynamicThresholds::detect_complexity(sql2), QueryComplexity::Medium);
     }
-    
+
     #[test]
     fn test_min_threshold_by_complexity() {
         let cluster_info = ClusterInfo::default();
-        
-        let simple = DynamicThresholds::new(cluster_info.clone(), QueryType::Select, QueryComplexity::Simple);
-        let medium = DynamicThresholds::new(cluster_info.clone(), QueryType::Select, QueryComplexity::Medium);
-        let complex = DynamicThresholds::new(cluster_info.clone(), QueryType::Select, QueryComplexity::Complex);
-        let very_complex = DynamicThresholds::new(cluster_info, QueryType::Select, QueryComplexity::VeryComplex);
-        
+
+        let simple = DynamicThresholds::new(
+            cluster_info.clone(),
+            QueryType::Select,
+            QueryComplexity::Simple,
+        );
+        let medium = DynamicThresholds::new(
+            cluster_info.clone(),
+            QueryType::Select,
+            QueryComplexity::Medium,
+        );
+        let complex = DynamicThresholds::new(
+            cluster_info.clone(),
+            QueryType::Select,
+            QueryComplexity::Complex,
+        );
+        let very_complex =
+            DynamicThresholds::new(cluster_info, QueryType::Select, QueryComplexity::VeryComplex);
+
         // Minimum thresholds
         assert!(simple.get_query_time_threshold_ms() >= 5_000.0);
         assert!(medium.get_query_time_threshold_ms() >= 10_000.0);
@@ -917,18 +891,12 @@ mod external_scan_type_tests {
     #[test]
     fn test_external_scan_type_detection() {
         // Data lake formats
-        assert_eq!(
-            ExternalScanType::from_operator_name("HIVE_SCAN"),
-            Some(ExternalScanType::Hive)
-        );
+        assert_eq!(ExternalScanType::from_operator_name("HIVE_SCAN"), Some(ExternalScanType::Hive));
         assert_eq!(
             ExternalScanType::from_operator_name("ICEBERG_SCAN"),
             Some(ExternalScanType::Iceberg)
         );
-        assert_eq!(
-            ExternalScanType::from_operator_name("HUDI_SCAN"),
-            Some(ExternalScanType::Hudi)
-        );
+        assert_eq!(ExternalScanType::from_operator_name("HUDI_SCAN"), Some(ExternalScanType::Hudi));
         assert_eq!(
             ExternalScanType::from_operator_name("DELTALAKE_SCAN"),
             Some(ExternalScanType::DeltaLake)
@@ -939,24 +907,12 @@ mod external_scan_type_tests {
         );
 
         // File systems
-        assert_eq!(
-            ExternalScanType::from_operator_name("HDFS_SCAN"),
-            Some(ExternalScanType::Hdfs)
-        );
-        assert_eq!(
-            ExternalScanType::from_operator_name("FILE_SCAN"),
-            Some(ExternalScanType::File)
-        );
-        assert_eq!(
-            ExternalScanType::from_operator_name("S3_SCAN"),
-            Some(ExternalScanType::S3)
-        );
+        assert_eq!(ExternalScanType::from_operator_name("HDFS_SCAN"), Some(ExternalScanType::Hdfs));
+        assert_eq!(ExternalScanType::from_operator_name("FILE_SCAN"), Some(ExternalScanType::File));
+        assert_eq!(ExternalScanType::from_operator_name("S3_SCAN"), Some(ExternalScanType::S3));
 
         // External databases
-        assert_eq!(
-            ExternalScanType::from_operator_name("JDBC_SCAN"),
-            Some(ExternalScanType::Jdbc)
-        );
+        assert_eq!(ExternalScanType::from_operator_name("JDBC_SCAN"), Some(ExternalScanType::Jdbc));
         assert_eq!(
             ExternalScanType::from_operator_name("MYSQL_SCAN"),
             Some(ExternalScanType::Mysql)
@@ -1008,15 +964,22 @@ mod external_scan_type_tests {
 
     #[test]
     fn test_generate_suggestions() {
-        let hive_suggestions = generate_small_file_suggestions(&ExternalScanType::Hive, "test_table");
+        let hive_suggestions =
+            generate_small_file_suggestions(&ExternalScanType::Hive, "test_table");
         assert!(!hive_suggestions.is_empty());
         assert!(hive_suggestions[0].contains("test_table"));
 
-        let iceberg_suggestions = generate_small_file_suggestions(&ExternalScanType::Iceberg, "iceberg_table");
-        assert!(iceberg_suggestions.iter().any(|s| s.contains("rewrite_data_files")));
+        let iceberg_suggestions =
+            generate_small_file_suggestions(&ExternalScanType::Iceberg, "iceberg_table");
+        assert!(
+            iceberg_suggestions
+                .iter()
+                .any(|s| s.contains("rewrite_data_files"))
+        );
 
         // Database types return empty suggestions
-        let jdbc_suggestions = generate_small_file_suggestions(&ExternalScanType::Jdbc, "jdbc_table");
+        let jdbc_suggestions =
+            generate_small_file_suggestions(&ExternalScanType::Jdbc, "jdbc_table");
         assert!(jdbc_suggestions.is_empty());
     }
 }

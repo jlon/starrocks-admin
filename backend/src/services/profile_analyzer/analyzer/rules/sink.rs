@@ -43,6 +43,7 @@ impl DiagnosticRule for I001ImportDataSkew {
                     "优化分桶键选择".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -94,6 +95,7 @@ impl DiagnosticRule for I002ImportRPCLatency {
                     "检查网络带宽和延迟".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -149,6 +151,7 @@ impl DiagnosticRule for I003ImportFilteredRows {
                     "查看 BE 日志获取详细过滤原因".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None

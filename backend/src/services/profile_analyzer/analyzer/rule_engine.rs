@@ -63,17 +63,36 @@ impl RuleEngine {
         profile: &Profile,
         cluster_variables: Option<&std::collections::HashMap<String, String>>,
     ) -> Vec<Diagnostic> {
+        // Default cluster_id = 0 for backward compatibility
+        self.analyze_with_baseline(profile, cluster_variables, None)
+    }
+
+    /// Analyze a profile with baseline support
+    /// cluster_id: used to fetch historical baseline from BaselineProvider
+    pub fn analyze_with_baseline(
+        &self,
+        profile: &Profile,
+        cluster_variables: Option<&std::collections::HashMap<String, String>>,
+        cluster_id: Option<i64>,
+    ) -> Vec<Diagnostic> {
         // Detect query type from SQL for dynamic thresholds
         let query_type = QueryType::from_sql(&profile.summary.sql_statement);
-        
+
         // Detect query complexity for adaptive thresholds
         let query_complexity = QueryComplexity::from_sql(&profile.summary.sql_statement);
-        
+
         // Get cluster info for smart recommendations
         let cluster_info = profile.get_cluster_info();
-        
-        // Create dynamic thresholds based on cluster info, query type, and complexity
-        let thresholds = DynamicThresholds::new(cluster_info.clone(), query_type, query_complexity);
+
+        // Get historical baseline from cache (if cluster_id provided)
+        let baseline = cluster_id.map(|cid| super::BaselineProvider::get(cid, query_complexity));
+
+        // Create dynamic thresholds based on cluster info, query type, complexity, and baseline
+        let thresholds = if let Some(bl) = baseline {
+            DynamicThresholds::with_baseline(cluster_info.clone(), query_type, query_complexity, bl)
+        } else {
+            DynamicThresholds::new(cluster_info.clone(), query_type, query_complexity)
+        };
 
         // P0.1: Skip diagnosis for fast queries
         // v2.0: Use dynamic threshold based on query type (ETL allows faster queries to be diagnosed)
@@ -88,9 +107,10 @@ impl RuleEngine {
         let mut diagnostics = Vec::new();
 
         // Evaluate query-level rules first
-        let query_ctx = super::rules::query::QueryRuleContext::with_cluster_variables(
+        let query_ctx = super::rules::query::QueryRuleContext::new(
             profile,
             cluster_variables,
+            thresholds.clone(),
         );
         for rule in get_query_rules() {
             if let Some(diag) = rule.evaluate(&query_ctx)
@@ -110,6 +130,8 @@ impl RuleEngine {
                     } else {
                         vec![]
                     },
+                    // Pass through threshold metadata from QueryDiagnostic
+                    threshold_metadata: diag.threshold_metadata,
                 });
             }
         }
@@ -118,10 +140,8 @@ impl RuleEngine {
         let query_time_ms = Self::parse_total_time(&profile.summary.total_time)
             .map(|s| s * 1000.0)
             .unwrap_or(0.0);
-        let planner_ctx = super::rules::planner::PlannerRuleContext {
-            planner: &profile.planner,
-            query_time_ms,
-        };
+        let planner_ctx =
+            super::rules::planner::PlannerRuleContext { planner: &profile.planner, query_time_ms };
         for rule in super::rules::planner::get_rules() {
             if let Some(mut diag) = rule.evaluate(&planner_ctx)
                 && diag.severity >= self.config.min_severity
@@ -155,7 +175,7 @@ impl RuleEngine {
                     if query_type.should_skip_rule(rule.id()) {
                         continue;
                     }
-                    
+
                     if rule.applicable_to(node)
                         && let Some(mut diag) = rule.evaluate(&context)
                         && diag.severity >= self.config.min_severity
@@ -167,6 +187,11 @@ impl RuleEngine {
                     }
                 }
             }
+        }
+
+        // P3: Performance regression detection using query history
+        if let Some(regression) = super::query_history::QUERY_HISTORY.record_and_detect(profile) {
+            diagnostics.push(regression);
         }
 
         // Sort by severity (highest first)

@@ -2,8 +2,8 @@
 //!
 //! This library contains all the core modules for the StarRocks Admin application.
 
-use std::sync::Arc;
 use sqlx::SqlitePool;
+use std::sync::Arc;
 
 pub mod config;
 pub mod db;
@@ -16,12 +16,12 @@ pub mod utils;
 
 // Re-export commonly used types
 pub use config::Config;
+pub use services::llm::{LLMError, LLMProviderInfo, LLMService, LLMServiceImpl};
 pub use services::{
     AuthService, CasbinService, ClusterService, DataStatisticsService, MetricsCollectorService,
     MySQLPoolManager, OrganizationService, OverviewService, PermissionService, RoleService,
     SystemFunctionService, UserRoleService, UserService,
 };
-pub use services::llm::{LLMService, LLMServiceImpl, LLMError, LLMProviderInfo};
 pub use utils::JwtUtil;
 
 /// Application shared state

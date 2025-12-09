@@ -58,6 +58,7 @@ impl DiagnosticRule for J001ResultExplosion {
                     "考虑添加更多过滤条件".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -106,6 +107,7 @@ impl DiagnosticRule for J002BuildLargerThanProbe {
                     "考虑使用 Hint 指定 Join 顺序".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -169,6 +171,7 @@ impl DiagnosticRule for J003HashTableTooLarge {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -225,6 +228,7 @@ impl DiagnosticRule for J004NoRuntimeFilter {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -274,6 +278,7 @@ impl DiagnosticRule for J009NonEquiJoin {
                     "考虑重构查询逻辑".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -328,6 +333,7 @@ impl DiagnosticRule for J010ProbeCacheUnfriendly {
                     "检查统计信息是否准确".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -353,14 +359,20 @@ impl DiagnosticRule for J005HashCollision {
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         let keys_per_bucket = context.get_metric("BuildKeysPerBucket%")?;
         if keys_per_bucket > 10.0 {
-            let join_pred = context.get_join_predicates().unwrap_or_else(|| "未知".to_string());
+            let join_pred = context
+                .get_join_predicates()
+                .unwrap_or_else(|| "未知".to_string());
             let build_rows = context.get_metric("BuildRows").unwrap_or(0.0);
-            
+
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
                 message: format!("Hash 表碰撞严重，平均每桶 {:.0} 个键", keys_per_bucket),
                 reason: format!(
@@ -373,6 +385,7 @@ impl DiagnosticRule for J005HashCollision {
                     "检查 Build 表的数据分布，必要时添加预过滤".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -403,19 +416,28 @@ impl DiagnosticRule for J006ShuffleSkew {
             return None;
         }
         let ratio = max_probe / ((max_probe + min_probe) / 2.0);
-        
+
         let skew_threshold = context.thresholds.get_skew_threshold() + 1.0;
-        
+
         if ratio > skew_threshold {
-            let join_pred = context.get_join_predicates().unwrap_or_else(|| "未知".to_string());
-            
+            let join_pred = context
+                .get_join_predicates()
+                .unwrap_or_else(|| "未知".to_string());
+
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
-                node_path: format!("{} (plan_node_id={})", context.node.operator_name, context.node.plan_node_id.unwrap_or(-1)),
+                node_path: format!(
+                    "{} (plan_node_id={})",
+                    context.node.operator_name,
+                    context.node.plan_node_id.unwrap_or(-1)
+                ),
                 plan_node_id: context.node.plan_node_id,
-                message: format!("Join 数据分布倾斜，max/avg 比率为 {:.2} (阈值: {:.1})", ratio, skew_threshold),
+                message: format!(
+                    "Join 数据分布倾斜，max/avg 比率为 {:.2} (阈值: {:.1})",
+                    ratio, skew_threshold
+                ),
                 reason: format!(
                     "Shuffle Join 按「{}」分发数据时分布不均匀，max 实例处理 {:.0} 行，min 实例仅 {:.0} 行。通常是 Join 键存在热点值导致。",
                     join_pred, max_probe, min_probe
@@ -426,6 +448,7 @@ impl DiagnosticRule for J006ShuffleSkew {
                     "对热点键值单独处理或添加盐值打散".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -474,6 +497,7 @@ impl DiagnosticRule for J007PartitionProbeOverhead {
                     "考虑增加内存限制避免过度分区".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -524,6 +548,7 @@ impl DiagnosticRule for J008RFMemoryHigh {
                     "67108864",
                     "SET runtime_filter_max_size = 67108864; -- 64MB",
                 )],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -563,9 +588,11 @@ impl DiagnosticRule for J011BroadcastNotRecommended {
         let memory_threshold = 100.0 * 1024.0 * 1024.0; // 100MB
 
         if build_rows > rows_threshold || hash_table_memory > memory_threshold {
-            let join_pred = context.get_join_predicates().unwrap_or_else(|| "未知".to_string());
+            let join_pred = context
+                .get_join_predicates()
+                .unwrap_or_else(|| "未知".to_string());
             let probe_rows = context.get_metric("ProbeRows").unwrap_or(0.0);
-            
+
             Some(Diagnostic {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -589,11 +616,15 @@ impl DiagnosticRule for J011BroadcastNotRecommended {
                     join_pred, build_rows, probe_rows
                 ),
                 suggestions: vec![
-                    format!("在 JOIN 关键字后添加 [shuffle] Hint: SELECT ... FROM a JOIN [shuffle] b ON {}", join_pred),
+                    format!(
+                        "在 JOIN 关键字后添加 [shuffle] Hint: SELECT ... FROM a JOIN [shuffle] b ON {}",
+                        join_pred
+                    ),
                     "执行 ANALYZE TABLE <build_table> 更新统计信息".to_string(),
                     "检查 Join 顺序，确保小表在 Build 端".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None

@@ -47,6 +47,7 @@ impl DiagnosticRule for P001ProjectExprHigh {
                     "检查是否有不必要的类型转换".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -59,8 +60,12 @@ impl DiagnosticRule for P001ProjectExprHigh {
 pub struct P002CommonSubExprHigh;
 
 impl DiagnosticRule for P002CommonSubExprHigh {
-    fn id(&self) -> &str { "P002" }
-    fn name(&self) -> &str { "公共子表达式计算耗时高" }
+    fn id(&self) -> &str {
+        "P002"
+    }
+    fn name(&self) -> &str {
+        "公共子表达式计算耗时高"
+    }
 
     fn applicable_to(&self, node: &ExecutionTreeNode) -> bool {
         node.operator_name.to_uppercase().contains("PROJECT")
@@ -68,32 +73,36 @@ impl DiagnosticRule for P002CommonSubExprHigh {
 
     fn evaluate(&self, context: &RuleContext) -> Option<Diagnostic> {
         // Check CommonSubExprComputeTime
-        let common_sub_expr_time = context.get_metric("CommonSubExprComputeTime")
+        let common_sub_expr_time = context
+            .get_metric("CommonSubExprComputeTime")
             .or_else(|| context.get_metric_duration("CommonSubExprComputeTime"))?;
-        
+
         // Convert to ms if needed (could be in ns)
         let time_ms = if common_sub_expr_time > 1_000_000.0 {
-            common_sub_expr_time / 1_000_000.0  // ns to ms
+            common_sub_expr_time / 1_000_000.0 // ns to ms
         } else {
             common_sub_expr_time
         };
-        
+
         // Threshold: 500ms is significant
         if time_ms < 500.0 {
             return None;
         }
-        
+
         // Also get ExprComputeTime to calculate ratio
-        let expr_time = context.get_metric("ExprComputeTime")
+        let expr_time = context
+            .get_metric("ExprComputeTime")
             .or_else(|| context.get_metric_duration("ExprComputeTime"))
             .unwrap_or(0.0);
-        let expr_time_ms = if expr_time > 1_000_000.0 { expr_time / 1_000_000.0 } else { expr_time };
-        
+        let expr_time_ms =
+            if expr_time > 1_000_000.0 { expr_time / 1_000_000.0 } else { expr_time };
+
         let total_expr_time = time_ms + expr_time_ms;
-        let common_ratio = if total_expr_time > 0.0 { time_ms / total_expr_time * 100.0 } else { 0.0 };
-        
+        let common_ratio =
+            if total_expr_time > 0.0 { time_ms / total_expr_time * 100.0 } else { 0.0 };
+
         let severity = if time_ms > 5000.0 { RuleSeverity::Error } else { RuleSeverity::Warning };
-        
+
         Some(Diagnostic {
             rule_id: self.id().to_string(),
             rule_name: self.name().to_string(),
@@ -116,6 +125,7 @@ impl DiagnosticRule for P002CommonSubExprHigh {
                 "考虑使用 IF() 替代简单的 CASE WHEN".to_string(),
             ],
             parameter_suggestions: vec![],
+                threshold_metadata: None,
         })
     }
 }
@@ -165,6 +175,7 @@ impl DiagnosticRule for L001LocalExchangeMemory {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None

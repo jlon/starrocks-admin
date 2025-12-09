@@ -43,6 +43,7 @@ impl DiagnosticRule for T001SortRowsTooLarge {
                     "考虑使用物化视图预排序".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -103,6 +104,7 @@ impl DiagnosticRule for T002SortSpill {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -158,6 +160,7 @@ impl DiagnosticRule for T003SortMemoryHigh {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -205,6 +208,7 @@ impl DiagnosticRule for W001WindowMemoryHigh {
                     "检查是否可以使用聚合函数替代".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -252,6 +256,7 @@ impl DiagnosticRule for T004SortMergingTimeLong {
                     "考虑减少分区数量".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -299,6 +304,7 @@ impl DiagnosticRule for T005MergeWaitingLong {
                     "扩大管道缓冲区".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None

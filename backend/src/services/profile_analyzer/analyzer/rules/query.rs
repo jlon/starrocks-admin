@@ -6,6 +6,7 @@ use super::{
     ParameterSuggestion, ParameterType, RuleSeverity, format_bytes, format_duration_ms,
     get_parameter_metadata, parse_duration_ms,
 };
+use crate::services::profile_analyzer::analyzer::thresholds::DynamicThresholds;
 use crate::services::profile_analyzer::models::*;
 
 /// Known default values for common StarRocks session parameters
@@ -37,19 +38,21 @@ pub struct QueryRuleContext<'a> {
     pub profile: &'a Profile,
     /// Live cluster variables (actual current values from cluster)
     pub cluster_variables: Option<&'a std::collections::HashMap<String, String>>,
+    /// Dynamic thresholds (with optional baseline)
+    pub thresholds: DynamicThresholds,
 }
 
 impl<'a> QueryRuleContext<'a> {
-    #[allow(dead_code)]
-    pub fn new(profile: &'a Profile) -> Self {
-        Self { profile, cluster_variables: None }
-    }
-
-    pub fn with_cluster_variables(
+    /// Create QueryRuleContext with explicit thresholds
+    /// 
+    /// This is the only public constructor - forces caller to provide thresholds
+    /// which ensures baseline/dynamic threshold support is properly integrated.
+    pub fn new(
         profile: &'a Profile,
         cluster_variables: Option<&'a std::collections::HashMap<String, String>>,
+        thresholds: DynamicThresholds,
     ) -> Self {
-        Self { profile, cluster_variables }
+        Self { profile, cluster_variables, thresholds }
     }
 
     /// Get current value of a parameter
@@ -179,6 +182,8 @@ pub struct QueryDiagnostic {
     pub reason: String,
     pub suggestions: Vec<String>,
     pub parameter_suggestions: Vec<ParameterSuggestion>,
+    /// Threshold metadata for traceability
+    pub threshold_metadata: Option<super::ThresholdMetadata>,
 }
 
 /// Q001: Query execution time too long
@@ -201,25 +206,29 @@ impl QueryRule for Q001LongRunning {
 
     fn evaluate(&self, ctx: &QueryRuleContext) -> Option<QueryDiagnostic> {
         use crate::services::profile_analyzer::analyzer::thresholds::QueryType;
-        
+
         let total_time_ms = ctx
             .profile
             .summary
             .total_time_ms
             .or_else(|| parse_duration_ms(&ctx.profile.summary.total_time))?;
 
-        // v2.0: Detect query type and use appropriate threshold
-        let query_type = QueryType::from_sql(&ctx.profile.summary.sql_statement);
-        let time_threshold_ms = query_type.get_time_threshold_ms();
-        
+        // v3.0: Use adaptive threshold from DynamicThresholds (includes baseline)
+        let time_threshold_ms = ctx.thresholds.get_query_time_threshold_ms();
+        let has_baseline = ctx.thresholds.baseline.is_some();
+
         // Format threshold for display
         let threshold_display = if time_threshold_ms >= 60_000.0 {
             format!("{:.0}分钟", time_threshold_ms / 60_000.0)
         } else {
             format!("{:.0}秒", time_threshold_ms / 1000.0)
         };
-        
+
+        // Threshold source for display
+        let threshold_source = if has_baseline { "自适应基线" } else { "默认" };
+
         // Get query type name for display
+        let query_type = QueryType::from_sql(&ctx.profile.summary.sql_statement);
         let query_type_name = match query_type {
             QueryType::Select => "OLAP 查询",
             QueryType::Insert => "INSERT 导入",
@@ -236,16 +245,21 @@ impl QueryRule for Q001LongRunning {
                 rule_name: self.name().to_string(),
                 severity: RuleSeverity::Warning,
                 message: format!(
-                    "{}执行时间 {}，超过{}阈值 ({})",
+                    "{}执行时间 {}，超过{}阈值 ({}, {})",
                     query_type_name,
                     format_duration_ms(total_time_ms),
                     query_type_name,
-                    threshold_display
+                    threshold_display,
+                    threshold_source
                 ),
-                reason: format!(
-                    "根据查询类型 ({}) 设置了不同的时间阈值。OLAP 查询期望快速响应 (10s)，而 ETL 任务允许更长时间 (5-30min)。",
-                    query_type_name
-                ),
+                reason: if has_baseline {
+                    format!("阈值基于历史基线 P95 + 2σ 计算。当前查询显著慢于同类查询的历史表现。",)
+                } else {
+                    format!(
+                        "根据查询类型 ({}) 使用默认阈值。OLAP 查询期望快速响应 (10s)，而 ETL 任务允许更长时间 (5-30min)。",
+                        query_type_name
+                    )
+                },
                 suggestions: vec![
                     "检查是否存在性能瓶颈算子".to_string(),
                     "考虑优化查询计划".to_string(),
@@ -261,6 +275,13 @@ impl QueryRule for Q001LongRunning {
                     }
                     suggestions
                 },
+                // Q001 uses adaptive threshold - include metadata for LLM
+                threshold_metadata: Some(if has_baseline {
+                    let bl = ctx.thresholds.baseline.as_ref().unwrap();
+                    super::ThresholdMetadata::from_baseline(time_threshold_ms, bl)
+                } else {
+                    super::ThresholdMetadata::from_default(time_threshold_ms)
+                }),
             })
         } else {
             None
@@ -306,6 +327,7 @@ impl QueryRule for Q002HighMemory {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -350,6 +372,7 @@ impl QueryRule for Q003QuerySpill {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -411,6 +434,7 @@ impl QueryRule for Q005ScanDominates {
                     .suggest_parameter("enable_scan_datacache")
                     .into_iter()
                     .collect(),
+                threshold_metadata: None,
             })
         } else {
             None
@@ -467,6 +491,7 @@ impl QueryRule for Q006NetworkDominates {
                     "减少跨节点数据传输".to_string(),
                 ],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -507,6 +532,7 @@ impl QueryRule for Q004LowCPU {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -549,6 +575,7 @@ impl QueryRule for Q007ProfileCollectSlow {
                     }
                     suggestions
                 },
+                threshold_metadata: None,
             })
         } else {
             None
@@ -583,6 +610,7 @@ impl QueryRule for Q008ScheduleTimeLong {
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["检查 Pipeline 调度瓶颈".to_string(), "增加并行度".to_string()],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None
@@ -623,6 +651,7 @@ impl QueryRule for Q009ResultDeliverySlow {
                 reason: "请参考 StarRocks 官方文档了解更多信息。".to_string(),
                 suggestions: vec!["检查网络带宽".to_string(), "减少结果集大小".to_string()],
                 parameter_suggestions: vec![],
+                threshold_metadata: None,
             })
         } else {
             None

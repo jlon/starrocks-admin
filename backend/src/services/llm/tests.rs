@@ -10,7 +10,7 @@ async fn setup_test_db() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
         .await
         .expect("Failed to create test database");
-    
+
     // Create LLM tables
     sqlx::query(
         r#"
@@ -30,12 +30,12 @@ async fn setup_test_db() -> SqlitePool {
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .expect("Failed to create llm_providers table");
-    
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS llm_analysis_sessions (
@@ -53,12 +53,12 @@ async fn setup_test_db() -> SqlitePool {
             error_message TEXT,
             retry_count INTEGER NOT NULL DEFAULT 0
         )
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .expect("Failed to create llm_analysis_sessions table");
-    
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS llm_analysis_requests (
@@ -69,12 +69,12 @@ async fn setup_test_db() -> SqlitePool {
             profile_hash TEXT NOT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .expect("Failed to create llm_analysis_requests table");
-    
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS llm_analysis_results (
@@ -90,12 +90,12 @@ async fn setup_test_db() -> SqlitePool {
             recommendation_count INTEGER,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .expect("Failed to create llm_analysis_results table");
-    
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS llm_cache (
@@ -109,12 +109,12 @@ async fn setup_test_db() -> SqlitePool {
             expires_at TIMESTAMP NOT NULL,
             last_accessed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .expect("Failed to create llm_cache table");
-    
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS llm_usage_stats (
@@ -132,12 +132,12 @@ async fn setup_test_db() -> SqlitePool {
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(date, provider_id)
         )
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .expect("Failed to create llm_usage_stats table");
-    
+
     pool
 }
 
@@ -162,65 +162,84 @@ fn create_test_provider_request(name: &str) -> CreateProviderRequest {
 
 mod repository_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_create_provider() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
+
         let req = create_test_provider_request("openai");
-        let provider = repo.create_provider(req).await.expect("Failed to create provider");
-        
+        let provider = repo
+            .create_provider(req)
+            .await
+            .expect("Failed to create provider");
+
         assert_eq!(provider.name, "openai");
         assert_eq!(provider.display_name, "openai Display");
         assert_eq!(provider.model_name, "gpt-4");
         assert!(!provider.is_active);
         assert!(provider.enabled);
     }
-    
+
     #[tokio::test]
     async fn test_list_providers() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
+
         // Create multiple providers
-        repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        repo.create_provider(create_test_provider_request("deepseek")).await.unwrap();
-        
-        let providers = repo.list_providers().await.expect("Failed to list providers");
+        repo.create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+        repo.create_provider(create_test_provider_request("deepseek"))
+            .await
+            .unwrap();
+
+        let providers = repo
+            .list_providers()
+            .await
+            .expect("Failed to list providers");
         assert_eq!(providers.len(), 2);
     }
-    
+
     #[tokio::test]
     async fn test_get_provider() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let created = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        let fetched = repo.get_provider(created.id).await.expect("Failed to get provider");
-        
+
+        let created = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+        let fetched = repo
+            .get_provider(created.id)
+            .await
+            .expect("Failed to get provider");
+
         assert!(fetched.is_some());
         let fetched = fetched.unwrap();
         assert_eq!(fetched.id, created.id);
         assert_eq!(fetched.name, "openai");
     }
-    
+
     #[tokio::test]
     async fn test_get_provider_not_found() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
+
         let result = repo.get_provider(9999).await.expect("Failed to query");
         assert!(result.is_none());
     }
-    
+
     #[tokio::test]
     async fn test_update_provider() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let created = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        
+
+        let created = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+
         let update_req = UpdateProviderRequest {
             display_name: Some("Updated OpenAI".to_string()),
             api_base: None,
@@ -232,120 +251,164 @@ mod repository_tests {
             priority: None,
             enabled: None,
         };
-        
-        let updated = repo.update_provider(created.id, update_req).await.expect("Failed to update");
-        
+
+        let updated = repo
+            .update_provider(created.id, update_req)
+            .await
+            .expect("Failed to update");
+
         assert_eq!(updated.display_name, "Updated OpenAI");
         assert_eq!(updated.model_name, "gpt-4o");
         assert_eq!(updated.max_tokens, 8192);
         // Unchanged fields
         assert_eq!(updated.api_base, "https://api.test.com/v1");
     }
-    
+
     #[tokio::test]
     async fn test_activate_provider() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let p1 = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        let p2 = repo.create_provider(create_test_provider_request("deepseek")).await.unwrap();
-        
+
+        let p1 = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+        let p2 = repo
+            .create_provider(create_test_provider_request("deepseek"))
+            .await
+            .unwrap();
+
         // Activate first provider
-        repo.activate_provider(p1.id).await.expect("Failed to activate");
-        
-        let active = repo.get_active_provider().await.expect("Failed to get active");
+        repo.activate_provider(p1.id)
+            .await
+            .expect("Failed to activate");
+
+        let active = repo
+            .get_active_provider()
+            .await
+            .expect("Failed to get active");
         assert!(active.is_some());
         assert_eq!(active.unwrap().id, p1.id);
-        
+
         // Activate second provider (should deactivate first)
-        repo.activate_provider(p2.id).await.expect("Failed to activate");
-        
-        let active = repo.get_active_provider().await.expect("Failed to get active");
+        repo.activate_provider(p2.id)
+            .await
+            .expect("Failed to activate");
+
+        let active = repo
+            .get_active_provider()
+            .await
+            .expect("Failed to get active");
         assert!(active.is_some());
         assert_eq!(active.unwrap().id, p2.id);
-        
+
         // Verify first is no longer active
         let p1_updated = repo.get_provider(p1.id).await.unwrap().unwrap();
         assert!(!p1_updated.is_active);
     }
-    
+
     #[tokio::test]
     async fn test_deactivate_provider() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
+
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
         repo.activate_provider(provider.id).await.unwrap();
-        
+
         // Verify active
         let active = repo.get_active_provider().await.unwrap();
         assert!(active.is_some());
-        
+
         // Deactivate
-        repo.deactivate_provider(provider.id).await.expect("Failed to deactivate");
-        
+        repo.deactivate_provider(provider.id)
+            .await
+            .expect("Failed to deactivate");
+
         // Verify no active provider
         let active = repo.get_active_provider().await.unwrap();
         assert!(active.is_none());
     }
-    
+
     #[tokio::test]
     async fn test_delete_provider() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        
-        repo.delete_provider(provider.id).await.expect("Failed to delete");
-        
+
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+
+        repo.delete_provider(provider.id)
+            .await
+            .expect("Failed to delete");
+
         let result = repo.get_provider(provider.id).await.unwrap();
         assert!(result.is_none());
     }
-    
+
     #[tokio::test]
     async fn test_delete_active_provider_fails() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
+
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
         repo.activate_provider(provider.id).await.unwrap();
-        
+
         let result = repo.delete_provider(provider.id).await;
         assert!(result.is_err());
     }
-    
+
     #[tokio::test]
     async fn test_set_provider_enabled() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
+
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
         assert!(provider.enabled);
-        
+
         // Disable
-        let updated = repo.set_provider_enabled(provider.id, false).await.expect("Failed to disable");
+        let updated = repo
+            .set_provider_enabled(provider.id, false)
+            .await
+            .expect("Failed to disable");
         assert!(!updated.enabled);
-        
+
         // Enable
-        let updated = repo.set_provider_enabled(provider.id, true).await.expect("Failed to enable");
+        let updated = repo
+            .set_provider_enabled(provider.id, true)
+            .await
+            .expect("Failed to enable");
         assert!(updated.enabled);
     }
-    
+
     #[tokio::test]
     async fn test_disable_active_provider_deactivates() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
+
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
         repo.activate_provider(provider.id).await.unwrap();
-        
+
         // Verify active
         let active = repo.get_active_provider().await.unwrap();
         assert!(active.is_some());
-        
+
         // Disable (should also deactivate)
         repo.set_provider_enabled(provider.id, false).await.unwrap();
-        
+
         // Verify no active provider
         let active = repo.get_active_provider().await.unwrap();
         assert!(active.is_none());
@@ -358,29 +421,38 @@ mod repository_tests {
 
 mod service_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_service_create_provider() {
         let pool = setup_test_db().await;
         let service = LLMServiceImpl::new(pool, true, 24);
-        
+
         let req = create_test_provider_request("openai");
-        let provider = service.create_provider(req).await.expect("Failed to create provider");
-        
+        let provider = service
+            .create_provider(req)
+            .await
+            .expect("Failed to create provider");
+
         assert_eq!(provider.name, "openai");
     }
-    
+
     #[tokio::test]
     async fn test_service_list_providers() {
         let pool = setup_test_db().await;
         let service = LLMServiceImpl::new(pool, true, 24);
-        
-        service.create_provider(create_test_provider_request("openai")).await.unwrap();
-        service.create_provider(create_test_provider_request("deepseek")).await.unwrap();
-        
+
+        service
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+        service
+            .create_provider(create_test_provider_request("deepseek"))
+            .await
+            .unwrap();
+
         let providers = service.list_providers().await.expect("Failed to list");
         assert_eq!(providers.len(), 2);
-        
+
         // Verify sensitive data is masked
         for p in &providers {
             if let Some(masked) = &p.api_key_masked {
@@ -388,26 +460,35 @@ mod service_tests {
             }
         }
     }
-    
+
     #[tokio::test]
     async fn test_service_get_provider() {
         let pool = setup_test_db().await;
         let service = LLMServiceImpl::new(pool, true, 24);
-        
-        let created = service.create_provider(create_test_provider_request("openai")).await.unwrap();
-        let fetched = service.get_provider(created.id).await.expect("Failed to get");
-        
+
+        let created = service
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+        let fetched = service
+            .get_provider(created.id)
+            .await
+            .expect("Failed to get");
+
         assert!(fetched.is_some());
         assert_eq!(fetched.unwrap().name, "openai");
     }
-    
+
     #[tokio::test]
     async fn test_service_update_provider() {
         let pool = setup_test_db().await;
         let service = LLMServiceImpl::new(pool, true, 24);
-        
-        let created = service.create_provider(create_test_provider_request("openai")).await.unwrap();
-        
+
+        let created = service
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+
         let update = UpdateProviderRequest {
             display_name: Some("New Name".to_string()),
             api_base: None,
@@ -419,47 +500,74 @@ mod service_tests {
             priority: None,
             enabled: None,
         };
-        
-        let updated = service.update_provider(created.id, update).await.expect("Failed to update");
+
+        let updated = service
+            .update_provider(created.id, update)
+            .await
+            .expect("Failed to update");
         assert_eq!(updated.display_name, "New Name");
     }
-    
+
     #[tokio::test]
     async fn test_service_activate_deactivate() {
         let pool = setup_test_db().await;
         let service = LLMServiceImpl::new(pool, true, 24);
-        
-        let provider = service.create_provider(create_test_provider_request("openai")).await.unwrap();
-        
-        service.activate_provider(provider.id).await.expect("Failed to activate");
-        let active = service.get_active_provider().await.expect("Failed to get active");
+
+        let provider = service
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+
+        service
+            .activate_provider(provider.id)
+            .await
+            .expect("Failed to activate");
+        let active = service
+            .get_active_provider()
+            .await
+            .expect("Failed to get active");
         assert!(active.is_some());
-        
-        service.deactivate_provider(provider.id).await.expect("Failed to deactivate");
-        let active = service.get_active_provider().await.expect("Failed to get active");
+
+        service
+            .deactivate_provider(provider.id)
+            .await
+            .expect("Failed to deactivate");
+        let active = service
+            .get_active_provider()
+            .await
+            .expect("Failed to get active");
         assert!(active.is_none());
     }
-    
+
     #[tokio::test]
     async fn test_service_delete_provider() {
         let pool = setup_test_db().await;
         let service = LLMServiceImpl::new(pool, true, 24);
-        
-        let provider = service.create_provider(create_test_provider_request("openai")).await.unwrap();
-        
-        service.delete_provider(provider.id).await.expect("Failed to delete");
-        
-        let result = service.get_provider(provider.id).await.expect("Failed to query");
+
+        let provider = service
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+
+        service
+            .delete_provider(provider.id)
+            .await
+            .expect("Failed to delete");
+
+        let result = service
+            .get_provider(provider.id)
+            .await
+            .expect("Failed to query");
         assert!(result.is_none());
     }
-    
+
     #[tokio::test]
     async fn test_service_is_available() {
         let pool = setup_test_db().await;
-        
+
         let enabled_service = LLMServiceImpl::new(pool.clone(), true, 24);
         assert!(enabled_service.is_available());
-        
+
         let disabled_service = LLMServiceImpl::new(pool, false, 24);
         assert!(!disabled_service.is_available());
     }
@@ -471,7 +579,7 @@ mod service_tests {
 
 mod model_tests {
     use super::*;
-    
+
     #[test]
     fn test_provider_info_masks_api_key() {
         let provider = LLMProvider {
@@ -490,15 +598,15 @@ mod model_tests {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
-        
+
         let info = LLMProviderInfo::from(&provider);
-        
+
         assert!(info.api_key_masked.is_some());
         let masked = info.api_key_masked.unwrap();
         assert!(masked.contains("..."));
         assert!(!masked.contains("1234567890"));
     }
-    
+
     #[test]
     fn test_provider_info_short_key_masked() {
         let provider = LLMProvider {
@@ -517,24 +625,24 @@ mod model_tests {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
-        
+
         let info = LLMProviderInfo::from(&provider);
         assert_eq!(info.api_key_masked, Some("****".to_string()));
     }
-    
+
     #[test]
     fn test_llm_scenario_as_str() {
         assert_eq!(LLMScenario::RootCauseAnalysis.as_str(), "root_cause_analysis");
         assert_eq!(LLMScenario::SqlOptimization.as_str(), "sql_optimization");
     }
-    
+
     #[test]
     fn test_session_status_conversion() {
         assert_eq!(SessionStatus::Pending.as_str(), "pending");
         assert_eq!(SessionStatus::from_str("completed"), SessionStatus::Completed);
         assert_eq!(SessionStatus::from_str("unknown"), SessionStatus::Failed);
     }
-    
+
     #[test]
     fn test_llm_error_is_retryable() {
         assert!(LLMError::Timeout(30).is_retryable());
@@ -551,51 +659,59 @@ mod model_tests {
 
 mod cache_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_cache_response() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
+
         let cache_key = "test_cache_key";
         let response_json = r#"{"result": "test"}"#;
-        
+
         repo.cache_response(
             cache_key,
             LLMScenario::RootCauseAnalysis,
             "sql_hash",
             response_json,
             24,
-        ).await.expect("Failed to cache");
-        
-        let cached = repo.get_cached_response(cache_key).await.expect("Failed to get cache");
+        )
+        .await
+        .expect("Failed to cache");
+
+        let cached = repo
+            .get_cached_response(cache_key)
+            .await
+            .expect("Failed to get cache");
         assert!(cached.is_some());
         assert_eq!(cached.unwrap(), response_json);
     }
-    
+
     #[tokio::test]
     async fn test_cache_miss() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let cached = repo.get_cached_response("nonexistent").await.expect("Failed to query");
+
+        let cached = repo
+            .get_cached_response("nonexistent")
+            .await
+            .expect("Failed to query");
         assert!(cached.is_none());
     }
-    
+
     #[tokio::test]
     async fn test_clean_expired_cache() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
+
         // Insert expired cache entry directly
         sqlx::query(
             r#"INSERT INTO llm_cache (cache_key, scenario, request_hash, response_json, expires_at)
-               VALUES ('expired', 'test', 'hash', '{}', datetime('now', '-1 hour'))"#
+               VALUES ('expired', 'test', 'hash', '{}', datetime('now', '-1 hour'))"#,
         )
         .execute(repo.pool())
         .await
         .unwrap();
-        
+
         let deleted = repo.clean_expired_cache().await.expect("Failed to clean");
         assert_eq!(deleted, 1);
     }
@@ -607,62 +723,75 @@ mod cache_tests {
 
 mod session_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_create_session() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
+
         // First create a provider
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        
-        let session_id = repo.create_session(
-            "query_123",
-            provider.id,
-            Some(1),
-            LLMScenario::RootCauseAnalysis,
-        ).await.expect("Failed to create session");
-        
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+
+        let session_id = repo
+            .create_session("query_123", provider.id, Some(1), LLMScenario::RootCauseAnalysis)
+            .await
+            .expect("Failed to create session");
+
         assert!(!session_id.is_empty());
-        
-        let session = repo.get_session(&session_id).await.expect("Failed to get session");
+
+        let session = repo
+            .get_session(&session_id)
+            .await
+            .expect("Failed to get session");
         assert!(session.is_some());
         let session = session.unwrap();
         assert_eq!(session.query_id, "query_123");
         assert_eq!(session.status, "pending");
     }
-    
+
     #[tokio::test]
     async fn test_update_session_status() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        let session_id = repo.create_session("query_123", provider.id, None, LLMScenario::RootCauseAnalysis).await.unwrap();
-        
-        repo.update_session_status(&session_id, SessionStatus::Processing).await.expect("Failed to update");
-        
+
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+        let session_id = repo
+            .create_session("query_123", provider.id, None, LLMScenario::RootCauseAnalysis)
+            .await
+            .unwrap();
+
+        repo.update_session_status(&session_id, SessionStatus::Processing)
+            .await
+            .expect("Failed to update");
+
         let session = repo.get_session(&session_id).await.unwrap().unwrap();
         assert_eq!(session.status, "processing");
     }
-    
+
     #[tokio::test]
     async fn test_complete_session() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        let session_id = repo.create_session("query_123", provider.id, None, LLMScenario::RootCauseAnalysis).await.unwrap();
-        
-        repo.complete_session(
-            &session_id,
-            SessionStatus::Completed,
-            100,
-            200,
-            1500,
-            None,
-        ).await.expect("Failed to complete session");
-        
+
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+        let session_id = repo
+            .create_session("query_123", provider.id, None, LLMScenario::RootCauseAnalysis)
+            .await
+            .unwrap();
+
+        repo.complete_session(&session_id, SessionStatus::Completed, 100, 200, 1500, None)
+            .await
+            .expect("Failed to complete session");
+
         let session = repo.get_session(&session_id).await.unwrap().unwrap();
         assert_eq!(session.status, "completed");
         assert_eq!(session.input_tokens, Some(100));
@@ -677,21 +806,33 @@ mod session_tests {
 
 mod usage_stats_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_record_usage() {
         let pool = setup_test_db().await;
         let repo = LLMRepository::new(pool);
-        
-        let provider = repo.create_provider(create_test_provider_request("openai")).await.unwrap();
-        
-        repo.record_usage(provider.id, 100, 50, true, 500, false).await.expect("Failed to record");
-        repo.record_usage(provider.id, 200, 100, true, 600, true).await.expect("Failed to record");
-        repo.record_usage(provider.id, 50, 0, false, 100, false).await.expect("Failed to record");
-        
+
+        let provider = repo
+            .create_provider(create_test_provider_request("openai"))
+            .await
+            .unwrap();
+
+        repo.record_usage(provider.id, 100, 50, true, 500, false)
+            .await
+            .expect("Failed to record");
+        repo.record_usage(provider.id, 200, 100, true, 600, true)
+            .await
+            .expect("Failed to record");
+        repo.record_usage(provider.id, 50, 0, false, 100, false)
+            .await
+            .expect("Failed to record");
+
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        let stats = repo.get_usage_stats(&today, &today).await.expect("Failed to get stats");
-        
+        let stats = repo
+            .get_usage_stats(&today, &today)
+            .await
+            .expect("Failed to get stats");
+
         assert_eq!(stats.len(), 1);
         let stat = &stats[0];
         assert_eq!(stat.total_requests, 3);
@@ -706,20 +847,20 @@ mod usage_stats_tests {
 // ============================================================================
 
 // Use the determine_table_type and determine_connector_type from root_cause module
-use super::scenarios::root_cause::{determine_table_type, determine_connector_type};
+use super::scenarios::root_cause::{determine_connector_type, determine_table_type};
 
 mod llm_integration_tests {
     use super::*;
     use crate::services::profile_analyzer::{
-        analyze_profile_with_context, AnalysisContext, ProfileAnalysisResponse,
-        AggregatedDiagnostic, LLMEnhancedAnalysis, MergedRootCause, MergedRecommendation,
-        LLMCausalChain, LLMHiddenIssue,
+        AggregatedDiagnostic, AnalysisContext, LLMCausalChain, LLMEnhancedAnalysis, LLMHiddenIssue,
+        MergedRecommendation, MergedRootCause, ProfileAnalysisResponse,
+        analyze_profile_with_context,
     };
     use std::collections::HashMap;
     use std::fs;
-    
+
     /// Test the complete LLM integration pipeline with profile12
-    /// 
+    ///
     /// Run with: cargo test llm_integration_tests::test_profile12_llm_integration --lib -- --nocapture --ignored
     #[tokio::test]
     #[ignore] // Run manually with --ignored flag
@@ -731,20 +872,20 @@ mod llm_integration_tests {
 
         // Step 1: Read profile file
         let profile_path = "tests/fixtures/profiles/prrofile12.txt";
-        let profile_content = fs::read_to_string(profile_path)
-            .expect("Failed to read profile file");
-        
+        let profile_content =
+            fs::read_to_string(profile_path).expect("Failed to read profile file");
+
         println!("📄 Profile loaded: {} bytes\n", profile_content.len());
-        
+
         // Step 2: Run rule engine analysis (骨架)
         println!("{}", sep);
         println!("🦴 Step 1: Rule Engine Analysis (骨架)");
         println!("{}\n", sep);
-        
-        let context = AnalysisContext { cluster_variables: None };
+
+        let context = AnalysisContext { cluster_variables: None, cluster_id: None };
         let response = analyze_profile_with_context(&profile_content, &context)
             .expect("Failed to analyze profile");
-        
+
         // Print summary
         println!("📊 Summary:");
         if let Some(summary) = &response.summary {
@@ -758,14 +899,15 @@ mod llm_integration_tests {
             };
             println!("   - SQL (truncated): {}", sql_preview);
         }
-        
+
         println!("\n📋 Aggregated Diagnostics ({} issues):", response.aggregated_diagnostics.len());
         for (i, diag) in response.aggregated_diagnostics.iter().enumerate() {
-            println!("   {}. [{}] {} - {} ({} nodes)", 
-                i + 1, 
-                diag.rule_id, 
-                diag.severity, 
-                diag.message, 
+            println!(
+                "   {}. [{}] {} - {} ({} nodes)",
+                i + 1,
+                diag.rule_id,
+                diag.severity,
+                diag.message,
                 diag.node_count
             );
             let reason_preview = truncate_str(&diag.reason, 150);
@@ -776,23 +918,23 @@ mod llm_integration_tests {
                 }
             }
         }
-        
+
         println!("\n🎯 Performance Score: {:.1}", response.performance_score);
-        
+
         // Step 3: Build LLM request
         println!("\n{}", sep);
         println!("📤 Step 2: Data Sent to LLM");
         println!("{}\n", sep);
-        
+
         let llm_request = build_llm_request_for_test(&response);
         let request_json = serde_json::to_string_pretty(&llm_request).unwrap();
         println!("{}", request_json);
-        
+
         // Step 4: Connect to real database and call LLM
         println!("\n{}", sep);
         println!("🤖 Step 3: LLM Response (Real OpenRouter API)");
         println!("{}\n", sep);
-        
+
         // Try multiple possible database paths
         let db_paths = [
             "data/starrocks-admin.db",
@@ -800,134 +942,169 @@ mod llm_integration_tests {
             "/home/oppo/Documents/starrocks-admin/backend/data/starrocks-admin.db",
             "/home/oppo/Documents/starrocks-admin/backend/starrocks_admin.db",
         ];
-        let db_path = db_paths.iter()
+        let db_path = db_paths
+            .iter()
             .find(|p| std::path::Path::new(p).exists())
             .expect("Database not found. Run backend first to initialize.");
         println!("📁 Using database: {}", db_path);
-        
+
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect(&format!("sqlite:{}", db_path))
             .await
             .expect("Failed to connect to database");
-        
+
         let llm_service = LLMServiceImpl::new(pool, true, 24);
-        
+
         if !llm_service.is_available() {
             println!("⚠️  No active LLM provider found.");
             println!("    Please activate a provider first via the API or UI.");
             return;
         }
-        
+
         println!("✅ LLM service available, calling OpenRouter API...\n");
-        
-        let query_id = response.summary.as_ref()
+
+        let query_id = response
+            .summary
+            .as_ref()
             .map(|s| s.query_id.clone())
             .unwrap_or_else(|| "test-query".to_string());
-        
+
         let start = std::time::Instant::now();
-        let llm_result: Result<RootCauseAnalysisResponse, _> = llm_service
-            .analyze(&llm_request, &query_id, None)
-            .await;
+        let llm_result: Result<RootCauseAnalysisResponse, _> =
+            llm_service.analyze(&llm_request, &query_id, None).await;
         let elapsed = start.elapsed();
-        
+
         match llm_result {
             Ok(llm_response) => {
                 println!("⏱️  LLM call took: {:?}\n", elapsed);
                 println!("📥 LLM Response:");
                 println!("{}", serde_json::to_string_pretty(&llm_response).unwrap());
-                
+
                 // Step 5: Merge results
                 println!("\n{}", sep);
                 println!("🔄 Step 4: Merged Result (骨架 + 血肉)");
                 println!("{}\n", sep);
-                
-                let merged = merge_results_for_test(&response.aggregated_diagnostics, &llm_response);
+
+                let merged =
+                    merge_results_for_test(&response.aggregated_diagnostics, &llm_response);
                 println!("{}", serde_json::to_string_pretty(&merged).unwrap());
-                
+
                 // Print summary
                 println!("\n{}", sep);
                 println!("📊 Final Summary");
                 println!("{}\n", sep);
-                println!("🦴 Rule Engine (骨架): {} diagnostics", response.aggregated_diagnostics.len());
-                println!("🩸 LLM (血肉): {} root causes, {} recommendations", 
+                println!(
+                    "🦴 Rule Engine (骨架): {} diagnostics",
+                    response.aggregated_diagnostics.len()
+                );
+                println!(
+                    "🩸 LLM (血肉): {} root causes, {} recommendations",
                     llm_response.root_causes.len(),
                     llm_response.recommendations.len()
                 );
-                println!("🔄 Merged: {} root causes, {} recommendations",
+                println!(
+                    "🔄 Merged: {} root causes, {} recommendations",
                     merged.root_causes.len(),
                     merged.merged_recommendations.len()
                 );
-            }
+            },
             Err(e) => {
                 println!("❌ LLM call failed after {:?}: {}", elapsed, e);
-            }
+            },
         }
     }
-    
+
     /// Build LLM request from profile analysis response - ENHANCED VERSION
     /// Now includes full SQL and raw profile data for deep analysis
     fn build_llm_request_for_test(response: &ProfileAnalysisResponse) -> RootCauseAnalysisRequest {
         use crate::services::llm::scenarios::root_cause::{
-            ProfileDataForLLM, OperatorDetailForLLM, ScanDetailForLLM,
-            JoinDetailForLLM, AggDetailForLLM, ExchangeDetailForLLM, TimeDistributionForLLM,
+            AggDetailForLLM, ExchangeDetailForLLM, JoinDetailForLLM, OperatorDetailForLLM,
+            ProfileDataForLLM, ScanDetailForLLM, TimeDistributionForLLM,
         };
-        
+
         let summary = response.summary.as_ref();
-        
+
         // CHANGE 1: Full SQL without truncation
         let sql = summary.map(|s| s.sql_statement.clone()).unwrap_or_default();
-        
+
         let query_summary = QuerySummaryForLLM {
-            sql_statement: sql,
-            query_type: summary.and_then(|s| s.query_type.clone()).unwrap_or_else(|| "SELECT".to_string()),
-            total_time_seconds: summary.map(|s| s.total_time_ms.unwrap_or(0.0) / 1000.0).unwrap_or(0.0),
+            sql_statement: sql.clone(),
+            query_type: summary
+                .and_then(|s| s.query_type.clone())
+                .unwrap_or_else(|| "SELECT".to_string()),
+            query_complexity: Some(format!("{:?}", crate::services::profile_analyzer::analyzer::QueryComplexity::from_sql(&sql))),
+            total_time_seconds: summary
+                .map(|s| s.total_time_ms.unwrap_or(0.0) / 1000.0)
+                .unwrap_or(0.0),
             scan_bytes: summary.and_then(|s| s.total_bytes_read).unwrap_or(0),
             output_rows: summary.and_then(|s| s.result_rows).unwrap_or(0),
-            be_count: summary.and_then(|s| s.total_instance_count.map(|c| c as u32)).unwrap_or(3),
-            has_spill: summary.and_then(|s| s.query_spill_bytes.as_ref().map(|b| !b.is_empty() && b != "0" && b != "0.000 B")).unwrap_or(false),
+            be_count: summary
+                .and_then(|s| s.total_instance_count.map(|c| c as u32))
+                .unwrap_or(3),
+            has_spill: summary
+                .and_then(|s| {
+                    s.query_spill_bytes
+                        .as_ref()
+                        .map(|b| !b.is_empty() && b != "0" && b != "0.000 B")
+                })
+                .unwrap_or(false),
             spill_bytes: summary.and_then(|s| s.query_spill_bytes.clone()),
             session_variables: HashMap::new(),
         };
-        
+
         // CHANGE 2: Build rich profile data from execution tree
         let profile_data = response.execution_tree.as_ref().map(|tree| {
             // All operators with full metrics
-            let operators: Vec<OperatorDetailForLLM> = tree.nodes.iter()
+            let operators: Vec<OperatorDetailForLLM> = tree
+                .nodes
+                .iter()
                 .map(|n| OperatorDetailForLLM {
                     operator: n.operator_name.clone(),
                     plan_node_id: n.plan_node_id.unwrap_or(-1),
                     time_pct: n.time_percentage.unwrap_or(0.0),
                     rows: n.rows.unwrap_or(0),
                     estimated_rows: None, // TODO: extract from plan
-                    memory_bytes: parse_bytes(&n.unique_metrics.get("PeakMemoryUsage").cloned().unwrap_or_default()),
-                    metrics: n.unique_metrics.iter()
+                    memory_bytes: parse_bytes(
+                        &n.unique_metrics
+                            .get("PeakMemoryUsage")
+                            .cloned()
+                            .unwrap_or_default(),
+                    ),
+                    metrics: n
+                        .unique_metrics
+                        .iter()
                         .filter(|(k, _)| is_important_metric(k))
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect(),
                 })
                 .collect();
-            
+
             // Scan details - determine table type from CATALOG, not scan operator!
             // Key insight:
             // - default_catalog.db.table or db.table → internal (StarRocks native table)
             // - hive_catalog.db.table, iceberg_catalog.db.table → external (foreign table)
             // SCAN operator type (OLAP_SCAN vs CONNECTOR_SCAN) indicates storage architecture,
             // NOT whether the table is internal or external!
-            let scan_details: Vec<ScanDetailForLLM> = tree.nodes.iter()
+            let scan_details: Vec<ScanDetailForLLM> = tree
+                .nodes
+                .iter()
                 .filter(|n| n.operator_name.contains("SCAN"))
                 .map(|n| {
                     let metrics = &n.unique_metrics;
                     let scan_type = n.operator_name.clone();
-                    
+
                     // Get full table name (may include catalog.database.table)
-                    let table_name = metrics.get("Table").cloned().unwrap_or_else(|| "unknown".to_string());
-                    
+                    let table_name = metrics
+                        .get("Table")
+                        .cloned()
+                        .unwrap_or_else(|| "unknown".to_string());
+
                     // Determine table type from CATALOG prefix, not scan operator!
                     // - "default_catalog.db.table" or "db.table" (no catalog) → internal
                     // - "hive_catalog.db.table", "iceberg_catalog.xxx" → external
                     let table_type = determine_table_type(&table_name);
-                    
+
                     // Determine connector type from profile metrics
                     // For external tables: hive, iceberg, hudi, deltalake, paimon, jdbc, es
                     // For internal tables: native
@@ -936,33 +1113,55 @@ mod llm_integration_tests {
                     } else {
                         Some("native".to_string())
                     };
-                    
+
                     ScanDetailForLLM {
                         plan_node_id: n.plan_node_id.unwrap_or(-1),
                         table_name: table_name.clone(),
                         scan_type,
                         table_type,
                         connector_type,
-                        rows_read: parse_number(metrics.get("RawRowsRead").or(metrics.get("RowsRead"))),
+                        rows_read: parse_number(
+                            metrics.get("RawRowsRead").or(metrics.get("RowsRead")),
+                        ),
                         rows_returned: n.rows.unwrap_or(0),
                         filter_ratio: {
-                            let read = parse_number(metrics.get("RawRowsRead").or(metrics.get("RowsRead")));
+                            let read = parse_number(
+                                metrics.get("RawRowsRead").or(metrics.get("RowsRead")),
+                            );
                             let ret = n.rows.unwrap_or(0);
                             if read > 0 { 1.0 - (ret as f64 / read as f64) } else { 0.0 }
                         },
                         scan_ranges: parse_number_opt(metrics.get("ScanRanges")),
-                        bytes_read: parse_bytes(metrics.get("BytesRead").or(metrics.get("CompressedBytesRead")).cloned().as_ref().unwrap_or(&String::new())),
-                        io_time_ms: parse_time_ms(metrics.get("IOTaskWaitTime").or(metrics.get("ScanTime"))),
+                        bytes_read: parse_bytes(
+                            metrics
+                                .get("BytesRead")
+                                .or(metrics.get("CompressedBytesRead"))
+                                .cloned()
+                                .as_ref()
+                                .unwrap_or(&String::new()),
+                        ),
+                        io_time_ms: parse_time_ms(
+                            metrics.get("IOTaskWaitTime").or(metrics.get("ScanTime")),
+                        ),
                         cache_hit_rate: parse_percentage(metrics.get("DataCacheHitRate")),
                         predicates: metrics.get("Predicates").cloned(),
-                        partitions_scanned: metrics.get("PartitionsScanned").or(metrics.get("TabletCount")).cloned(),
-                        full_table_path: if table_name.contains(".") { Some(table_name) } else { None },
+                        partitions_scanned: metrics
+                            .get("PartitionsScanned")
+                            .or(metrics.get("TabletCount"))
+                            .cloned(),
+                        full_table_path: if table_name.contains(".") {
+                            Some(table_name)
+                        } else {
+                            None
+                        },
                     }
                 })
                 .collect();
-            
+
             // Join details
-            let join_details: Vec<JoinDetailForLLM> = tree.nodes.iter()
+            let join_details: Vec<JoinDetailForLLM> = tree
+                .nodes
+                .iter()
                 .filter(|n| n.operator_name.contains("JOIN"))
                 .map(|n| {
                     let metrics = &n.unique_metrics;
@@ -972,50 +1171,93 @@ mod llm_integration_tests {
                         build_rows: parse_number(metrics.get("BuildRows")),
                         probe_rows: parse_number(metrics.get("ProbeRows")),
                         output_rows: n.rows.unwrap_or(0),
-                        hash_table_memory: parse_bytes(metrics.get("HashTableMemoryUsage").cloned().as_ref().unwrap_or(&String::new())),
-                        is_broadcast: metrics.get("JoinType").map(|t| t.contains("BROADCAST")).unwrap_or(false),
+                        hash_table_memory: parse_bytes(
+                            metrics
+                                .get("HashTableMemoryUsage")
+                                .cloned()
+                                .as_ref()
+                                .unwrap_or(&String::new()),
+                        ),
+                        is_broadcast: metrics
+                            .get("JoinType")
+                            .map(|t| t.contains("BROADCAST"))
+                            .unwrap_or(false),
                         runtime_filter: metrics.get("RuntimeFilterDescription").cloned(),
                     }
                 })
                 .collect();
-            
+
             // Aggregation details
-            let agg_details: Vec<AggDetailForLLM> = tree.nodes.iter()
+            let agg_details: Vec<AggDetailForLLM> = tree
+                .nodes
+                .iter()
                 .filter(|n| n.operator_name.contains("AGGREGAT"))
                 .map(|n| {
                     let metrics = &n.unique_metrics;
-                    let input = parse_number(metrics.get("InputRows").or(metrics.get("PushRowNum")));
+                    let input =
+                        parse_number(metrics.get("InputRows").or(metrics.get("PushRowNum")));
                     let output = n.rows.unwrap_or(0);
                     AggDetailForLLM {
                         plan_node_id: n.plan_node_id.unwrap_or(-1),
                         input_rows: input,
                         output_rows: output,
                         agg_ratio: if input > 0 { output as f64 / input as f64 } else { 1.0 },
-                        group_by_keys: metrics.get("GroupByKeys").or(metrics.get("GroupingKeys")).cloned(),
-                        hash_table_memory: parse_bytes(metrics.get("HashTableMemoryUsage").cloned().as_ref().unwrap_or(&String::new())),
-                        is_streaming: metrics.get("AggMode").map(|m| m.contains("STREAMING")).unwrap_or(false),
+                        group_by_keys: metrics
+                            .get("GroupByKeys")
+                            .or(metrics.get("GroupingKeys"))
+                            .cloned(),
+                        hash_table_memory: parse_bytes(
+                            metrics
+                                .get("HashTableMemoryUsage")
+                                .cloned()
+                                .as_ref()
+                                .unwrap_or(&String::new()),
+                        ),
+                        is_streaming: metrics
+                            .get("AggMode")
+                            .map(|m| m.contains("STREAMING"))
+                            .unwrap_or(false),
                     }
                 })
                 .collect();
-            
+
             // Exchange details
-            let exchange_details: Vec<ExchangeDetailForLLM> = tree.nodes.iter()
+            let exchange_details: Vec<ExchangeDetailForLLM> = tree
+                .nodes
+                .iter()
                 .filter(|n| n.operator_name.contains("EXCHANGE"))
                 .map(|n| {
                     let metrics = &n.unique_metrics;
                     ExchangeDetailForLLM {
                         plan_node_id: n.plan_node_id.unwrap_or(-1),
-                        exchange_type: metrics.get("PartType").cloned().unwrap_or_else(|| "SHUFFLE".to_string()),
-                        bytes_sent: parse_bytes(metrics.get("BytesSent").or(metrics.get("NetworkBytes")).cloned().as_ref().unwrap_or(&String::new())).unwrap_or(0),
+                        exchange_type: metrics
+                            .get("PartType")
+                            .cloned()
+                            .unwrap_or_else(|| "SHUFFLE".to_string()),
+                        bytes_sent: parse_bytes(
+                            metrics
+                                .get("BytesSent")
+                                .or(metrics.get("NetworkBytes"))
+                                .cloned()
+                                .as_ref()
+                                .unwrap_or(&String::new()),
+                        )
+                        .unwrap_or(0),
                         rows_sent: parse_number(metrics.get("RowsSent")),
-                        network_time_ms: parse_time_ms(metrics.get("NetworkTime").or(metrics.get("WaitForDataTime"))),
+                        network_time_ms: parse_time_ms(
+                            metrics
+                                .get("NetworkTime")
+                                .or(metrics.get("WaitForDataTime")),
+                        ),
                     }
                 })
                 .collect();
-            
+
             // Time distribution for skew detection
             let time_distribution = {
-                let times: Vec<f64> = tree.nodes.iter()
+                let times: Vec<f64> = tree
+                    .nodes
+                    .iter()
                     .filter_map(|n| n.time_percentage)
                     .filter(|&t| t > 0.0)
                     .collect();
@@ -1034,7 +1276,7 @@ mod llm_integration_tests {
                     })
                 }
             };
-            
+
             ProfileDataForLLM {
                 operators,
                 time_distribution,
@@ -1044,28 +1286,36 @@ mod llm_integration_tests {
                 exchange_details,
             }
         });
-        
+
         // Execution plan (simplified DAG)
-        let dag_description = response.execution_tree.as_ref()
+        let dag_description = response
+            .execution_tree
+            .as_ref()
             .map(|tree| {
-                tree.nodes.iter()
+                tree.nodes
+                    .iter()
                     .take(15)
                     .map(|n| format!("{}({})", n.operator_name, n.plan_node_id.unwrap_or(-1)))
                     .collect::<Vec<_>>()
                     .join(" -> ")
             })
             .unwrap_or_else(|| "Unknown DAG".to_string());
-        
-        let hotspot_nodes: Vec<HotspotNodeForLLM> = response.execution_tree.as_ref()
+
+        let hotspot_nodes: Vec<HotspotNodeForLLM> = response
+            .execution_tree
+            .as_ref()
             .map(|tree| {
-                tree.nodes.iter()
+                tree.nodes
+                    .iter()
                     .filter(|n| n.time_percentage.unwrap_or(0.0) > 5.0)
                     .take(10)
                     .map(|n| HotspotNodeForLLM {
                         operator: n.operator_name.clone(),
                         plan_node_id: n.plan_node_id.unwrap_or(-1),
                         time_percentage: n.time_percentage.unwrap_or(0.0),
-                        key_metrics: n.unique_metrics.iter()
+                        key_metrics: n
+                            .unique_metrics
+                            .iter()
                             .filter(|(k, _)| is_important_metric(k))
                             .take(15)
                             .map(|(k, v)| (k.clone(), v.clone()))
@@ -1075,18 +1325,19 @@ mod llm_integration_tests {
                     .collect()
             })
             .unwrap_or_default();
-        
-        let execution_plan = ExecutionPlanForLLM {
-            dag_description,
-            hotspot_nodes,
-        };
-        
+
+        let execution_plan = ExecutionPlanForLLM { dag_description, hotspot_nodes };
+
         // Rule diagnostics (as reference for LLM)
-        let diagnostics: Vec<DiagnosticForLLM> = response.aggregated_diagnostics.iter()
+        let diagnostics: Vec<DiagnosticForLLM> = response
+            .aggregated_diagnostics
+            .iter()
             .map(|d| DiagnosticForLLM {
                 rule_id: d.rule_id.clone(),
                 severity: d.severity.clone(),
-                operator: d.affected_nodes.first()
+                operator: d
+                    .affected_nodes
+                    .first()
                     .map(|s| s.split('/').last().unwrap_or("unknown"))
                     .unwrap_or("unknown")
                     .to_string(),
@@ -1098,9 +1349,10 @@ mod llm_integration_tests {
                     e.insert("affected_nodes".to_string(), d.affected_nodes.join(", "));
                     e
                 },
+                threshold_info: None,
             })
             .collect();
-        
+
         RootCauseAnalysisRequest {
             query_summary,
             profile_data,
@@ -1110,48 +1362,75 @@ mod llm_integration_tests {
             user_question: None,
         }
     }
-    
+
     /// Check if metric is important for LLM analysis
     fn is_important_metric(key: &str) -> bool {
         let important = [
-            "Table", "Predicates", "RowsRead", "RawRowsRead", "RowsReturned",
-            "BytesRead", "ScanRanges", "TabletCount", "PartitionsScanned",
-            "IOTaskWaitTime", "ScanTime", "DataCacheHitRate", "DataCacheReadBytes",
-            "BuildRows", "ProbeRows", "HashTableMemoryUsage", "JoinType",
-            "InputRows", "OutputRows", "GroupByKeys", "AggMode",
-            "BytesSent", "NetworkTime", "PartType",
-            "PeakMemoryUsage", "SpillBytes", "SpillTime",
-            "EstimatedRows", "ActualRows", "CardinalityError",
+            "Table",
+            "Predicates",
+            "RowsRead",
+            "RawRowsRead",
+            "RowsReturned",
+            "BytesRead",
+            "ScanRanges",
+            "TabletCount",
+            "PartitionsScanned",
+            "IOTaskWaitTime",
+            "ScanTime",
+            "DataCacheHitRate",
+            "DataCacheReadBytes",
+            "BuildRows",
+            "ProbeRows",
+            "HashTableMemoryUsage",
+            "JoinType",
+            "InputRows",
+            "OutputRows",
+            "GroupByKeys",
+            "AggMode",
+            "BytesSent",
+            "NetworkTime",
+            "PartType",
+            "PeakMemoryUsage",
+            "SpillBytes",
+            "SpillTime",
+            "EstimatedRows",
+            "ActualRows",
+            "CardinalityError",
         ];
         important.iter().any(|&i| key.contains(i))
     }
-    
+
     /// Parse number from metric string like "1.705B (1704962761)" or "1234"
     fn parse_number(s: Option<&String>) -> u64 {
         s.and_then(|v| {
             // Try to extract number in parentheses first: "1.705B (1704962761)"
             if let Some(start) = v.find('(') {
                 if let Some(end) = v.find(')') {
-                    return v[start+1..end].parse().ok();
+                    return v[start + 1..end].parse().ok();
                 }
             }
             // Otherwise try direct parse
             v.replace(",", "").parse().ok()
-        }).unwrap_or(0)
+        })
+        .unwrap_or(0)
     }
-    
+
     fn parse_number_opt(s: Option<&String>) -> Option<u64> {
         let n = parse_number(s);
         if n > 0 { Some(n) } else { None }
     }
-    
+
     /// Parse bytes from string like "68.750 MB" or "20.597 GB"
     fn parse_bytes(s: &str) -> Option<u64> {
-        if s.is_empty() { return None; }
+        if s.is_empty() {
+            return None;
+        }
         let s = s.trim();
         let parts: Vec<&str> = s.split_whitespace().collect();
-        if parts.is_empty() { return None; }
-        
+        if parts.is_empty() {
+            return None;
+        }
+
         let num: f64 = parts[0].replace(",", "").parse().ok()?;
         let multiplier = if parts.len() > 1 {
             match parts[1].to_uppercase().as_str() {
@@ -1162,10 +1441,12 @@ mod llm_integration_tests {
                 "TB" => 1024_u64 * 1024 * 1024 * 1024,
                 _ => 1,
             }
-        } else { 1 };
+        } else {
+            1
+        };
         Some((num * multiplier as f64) as u64)
     }
-    
+
     /// Parse time from string like "1m34s" or "717.077us"
     fn parse_time_ms(s: Option<&String>) -> Option<f64> {
         s.and_then(|v| {
@@ -1173,9 +1454,17 @@ mod llm_integration_tests {
             if v.contains("ms") {
                 v.replace("ms", "").trim().parse().ok()
             } else if v.contains("us") {
-                v.replace("us", "").trim().parse::<f64>().ok().map(|n| n / 1000.0)
+                v.replace("us", "")
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .map(|n| n / 1000.0)
             } else if v.contains("ns") {
-                v.replace("ns", "").trim().parse::<f64>().ok().map(|n| n / 1_000_000.0)
+                v.replace("ns", "")
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .map(|n| n / 1_000_000.0)
             } else if v.contains('m') && v.contains('s') {
                 // "1m34s" format
                 let parts: Vec<&str> = v.split('m').collect();
@@ -1183,42 +1472,50 @@ mod llm_integration_tests {
                     let mins: f64 = parts[0].parse().ok()?;
                     let secs: f64 = parts[1].replace("s", "").parse().ok()?;
                     Some((mins * 60.0 + secs) * 1000.0)
-                } else { None }
+                } else {
+                    None
+                }
             } else if v.ends_with('s') {
-                v.replace("s", "").trim().parse::<f64>().ok().map(|n| n * 1000.0)
+                v.replace("s", "")
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .map(|n| n * 1000.0)
             } else {
                 v.parse().ok()
             }
         })
     }
-    
+
     /// Parse percentage from string
     fn parse_percentage(s: Option<&String>) -> Option<f64> {
         s.and_then(|v| v.replace("%", "").trim().parse().ok())
     }
-    
+
     /// Merge rule diagnostics with LLM response
     fn merge_results_for_test(
         rule_diagnostics: &[AggregatedDiagnostic],
         llm_response: &RootCauseAnalysisResponse,
     ) -> LLMEnhancedAnalysis {
         use std::collections::HashSet;
-        
+
         let mut root_causes = Vec::new();
         let mut seen_ids: HashSet<String> = HashSet::new();
-        
+
         // Add LLM root causes first (higher priority)
         for llm_rc in &llm_response.root_causes {
             let id = llm_rc.root_cause_id.clone();
             seen_ids.insert(id.clone());
-            
-            let related_rules: Vec<String> = llm_rc.symptoms.iter()
+
+            let related_rules: Vec<String> = llm_rc
+                .symptoms
+                .iter()
                 .filter(|s| rule_diagnostics.iter().any(|d| &d.rule_id == *s))
                 .cloned()
                 .collect();
-            
+
             let source = if related_rules.is_empty() { "llm" } else { "both" };
-            
+
             root_causes.push(MergedRootCause {
                 id,
                 related_rule_ids: related_rules,
@@ -1230,12 +1527,14 @@ mod llm_integration_tests {
                 symptoms: llm_rc.symptoms.clone(),
             });
         }
-        
+
         // Add uncovered rule diagnostics
         for diag in rule_diagnostics {
-            let is_covered = llm_response.root_causes.iter()
+            let is_covered = llm_response
+                .root_causes
+                .iter()
                 .any(|rc| rc.symptoms.contains(&diag.rule_id));
-            
+
             if !is_covered {
                 let id = format!("rule_{}", diag.rule_id);
                 if !seen_ids.contains(&id) {
@@ -1253,15 +1552,24 @@ mod llm_integration_tests {
                 }
             }
         }
-        
-        root_causes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
-        
+
+        root_causes.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         // Merge recommendations
         let mut recommendations = Vec::new();
         let mut seen_actions: HashSet<String> = HashSet::new();
-        
+
         for rec in &llm_response.recommendations {
-            let action_key: String = rec.action.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+            let action_key: String = rec
+                .action
+                .to_lowercase()
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect();
             if !seen_actions.contains(&action_key) {
                 seen_actions.insert(action_key);
                 recommendations.push(MergedRecommendation {
@@ -1275,11 +1583,15 @@ mod llm_integration_tests {
                 });
             }
         }
-        
+
         let mut rule_priority = recommendations.len() as u32 + 1;
         for diag in rule_diagnostics {
             for suggestion in &diag.suggestions {
-                let action_key: String = suggestion.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+                let action_key: String = suggestion
+                    .to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .collect();
                 if !seen_actions.contains(&action_key) {
                     seen_actions.insert(action_key);
                     recommendations.push(MergedRecommendation {
@@ -1295,26 +1607,34 @@ mod llm_integration_tests {
                 }
             }
         }
-        
+
         recommendations.sort_by_key(|r| r.priority);
-        
+
         LLMEnhancedAnalysis {
             available: true,
             status: "completed".to_string(),
             root_causes,
-            causal_chains: llm_response.causal_chains.iter().map(|c| LLMCausalChain {
-                chain: c.chain.clone(),
-                explanation: c.explanation.clone(),
-            }).collect(),
+            causal_chains: llm_response
+                .causal_chains
+                .iter()
+                .map(|c| LLMCausalChain {
+                    chain: c.chain.clone(),
+                    explanation: c.explanation.clone(),
+                })
+                .collect(),
             merged_recommendations: recommendations,
             summary: llm_response.summary.clone(),
-            hidden_issues: llm_response.hidden_issues.iter().map(|h| LLMHiddenIssue {
-                issue: h.issue.clone(),
-                suggestion: h.suggestion.clone(),
-            }).collect(),
+            hidden_issues: llm_response
+                .hidden_issues
+                .iter()
+                .map(|h| LLMHiddenIssue {
+                    issue: h.issue.clone(),
+                    suggestion: h.suggestion.clone(),
+                })
+                .collect(),
         }
     }
-    
+
     /// Safely truncate a string at char boundary
     fn truncate_str(s: &str, max_chars: usize) -> String {
         if s.chars().count() <= max_chars {
@@ -1334,35 +1654,32 @@ mod prompt_generation_tests {
     #[allow(unused_imports)]
     use super::*;
     use crate::services::llm::scenarios::root_cause::{
-        RootCauseAnalysisRequest, QuerySummaryForLLM, ExecutionPlanForLLM,
-        DiagnosticForLLM, KeyMetricsForLLM, ProfileDataForLLM, ScanDetailForLLM,
-        build_system_prompt,
+        DiagnosticForLLM, ExecutionPlanForLLM, KeyMetricsForLLM, ProfileDataForLLM,
+        QuerySummaryForLLM, RootCauseAnalysisRequest, ScanDetailForLLM, build_system_prompt,
     };
     use std::collections::HashMap;
-    
+
     /// Test dynamic prompt generation with internal tables
     #[test]
     fn test_prompt_with_internal_tables() {
-        let scan_details = vec![
-            ScanDetailForLLM {
-                plan_node_id: 1,
-                table_name: "default_catalog.db.orders".to_string(),
-                scan_type: "OLAP_SCAN".to_string(),
-                table_type: "internal".to_string(),
-                connector_type: Some("native".to_string()),
-                rows_read: 1000000,
-                rows_returned: 50000,
-                filter_ratio: 0.95,
-                scan_ranges: Some(128),
-                bytes_read: Some(1024 * 1024 * 100),
-                io_time_ms: None,
-                cache_hit_rate: None,
-                predicates: Some("order_date > '2024-01-01'".to_string()),
-                partitions_scanned: Some("10/100".to_string()),
-                full_table_path: Some("default_catalog.db.orders".to_string()),
-            },
-        ];
-        
+        let scan_details = vec![ScanDetailForLLM {
+            plan_node_id: 1,
+            table_name: "default_catalog.db.orders".to_string(),
+            scan_type: "OLAP_SCAN".to_string(),
+            table_type: "internal".to_string(),
+            connector_type: Some("native".to_string()),
+            rows_read: 1000000,
+            rows_returned: 50000,
+            filter_ratio: 0.95,
+            scan_ranges: Some(128),
+            bytes_read: Some(1024 * 1024 * 100),
+            io_time_ms: None,
+            cache_hit_rate: None,
+            predicates: Some("order_date > '2024-01-01'".to_string()),
+            partitions_scanned: Some("10/100".to_string()),
+            full_table_path: Some("default_catalog.db.orders".to_string()),
+        }];
+
         let profile_data = ProfileDataForLLM {
             operators: vec![],
             time_distribution: None,
@@ -1371,11 +1688,12 @@ mod prompt_generation_tests {
             agg_details: vec![],
             exchange_details: vec![],
         };
-        
+
         let request = RootCauseAnalysisRequest {
             query_summary: QuerySummaryForLLM {
                 sql_statement: "SELECT * FROM orders".to_string(),
                 query_type: "SELECT".to_string(),
+                query_complexity: Some("Simple".to_string()),
                 total_time_seconds: 5.0,
                 scan_bytes: 100 * 1024 * 1024,
                 output_rows: 50000,
@@ -1393,49 +1711,47 @@ mod prompt_generation_tests {
             key_metrics: KeyMetricsForLLM::default(),
             user_question: None,
         };
-        
+
         let prompt = build_system_prompt(&request);
-        
+
         // Verify internal table guidance is included
         assert!(prompt.contains("StarRocks 内表"), "Should mention internal tables");
         assert!(prompt.contains("ANALYZE TABLE"), "Should suggest ANALYZE for internal tables");
         assert!(prompt.contains("分桶键"), "Should mention bucket key optimization");
-        
+
         // Verify critical thinking section
         assert!(prompt.contains("批判性思维"), "Should include critical thinking section");
         assert!(prompt.contains("自我批评"), "Should mention self-criticism");
-        
+
         // Verify parameter validation
         assert!(prompt.contains("禁止使用的参数"), "Should list forbidden parameters");
         assert!(prompt.contains("enable_short_key_index"), "Should blacklist fake params");
-        
+
         println!("✅ Internal table prompt test passed!");
         println!("Prompt length: {} chars", prompt.len());
     }
-    
+
     /// Test dynamic prompt generation with Iceberg external tables
     #[test]
     fn test_prompt_with_iceberg_tables() {
-        let scan_details = vec![
-            ScanDetailForLLM {
-                plan_node_id: 1,
-                table_name: "iceberg_catalog.db.events".to_string(),
-                scan_type: "CONNECTOR_SCAN".to_string(),
-                table_type: "external".to_string(),
-                connector_type: Some("iceberg".to_string()),
-                rows_read: 5000000,
-                rows_returned: 100000,
-                filter_ratio: 0.98,
-                scan_ranges: Some(500),
-                bytes_read: Some(1024 * 1024 * 1024),
-                io_time_ms: Some(5000.0),
-                cache_hit_rate: Some(30.0),
-                predicates: None,
-                partitions_scanned: None,
-                full_table_path: Some("iceberg_catalog.db.events".to_string()),
-            },
-        ];
-        
+        let scan_details = vec![ScanDetailForLLM {
+            plan_node_id: 1,
+            table_name: "iceberg_catalog.db.events".to_string(),
+            scan_type: "CONNECTOR_SCAN".to_string(),
+            table_type: "external".to_string(),
+            connector_type: Some("iceberg".to_string()),
+            rows_read: 5000000,
+            rows_returned: 100000,
+            filter_ratio: 0.98,
+            scan_ranges: Some(500),
+            bytes_read: Some(1024 * 1024 * 1024),
+            io_time_ms: Some(5000.0),
+            cache_hit_rate: Some(30.0),
+            predicates: None,
+            partitions_scanned: None,
+            full_table_path: Some("iceberg_catalog.db.events".to_string()),
+        }];
+
         let profile_data = ProfileDataForLLM {
             operators: vec![],
             time_distribution: None,
@@ -1444,11 +1760,12 @@ mod prompt_generation_tests {
             agg_details: vec![],
             exchange_details: vec![],
         };
-        
+
         let request = RootCauseAnalysisRequest {
             query_summary: QuerySummaryForLLM {
                 sql_statement: "SELECT * FROM events".to_string(),
                 query_type: "SELECT".to_string(),
+                query_complexity: Some("Simple".to_string()),
                 total_time_seconds: 30.0,
                 scan_bytes: 1024 * 1024 * 1024,
                 output_rows: 100000,
@@ -1466,18 +1783,21 @@ mod prompt_generation_tests {
             key_metrics: KeyMetricsForLLM::default(),
             user_question: None,
         };
-        
+
         let prompt = build_system_prompt(&request);
-        
+
         // Verify Iceberg-specific guidance
         assert!(prompt.contains("Iceberg 外表"), "Should mention Iceberg tables");
         assert!(prompt.contains("rewrite_data_files"), "Should suggest Iceberg file compaction");
         assert!(prompt.contains("DataCache"), "Should suggest DataCache for external tables");
-        assert!(prompt.contains("不能用 ALTER TABLE 改分桶"), "Should warn about external table limitations");
-        
+        assert!(
+            prompt.contains("不能用 ALTER TABLE 改分桶"),
+            "Should warn about external table limitations"
+        );
+
         println!("✅ Iceberg table prompt test passed!");
     }
-    
+
     /// Test prompt with session variables to avoid redundant suggestions
     #[test]
     fn test_prompt_with_existing_session_vars() {
@@ -1485,11 +1805,12 @@ mod prompt_generation_tests {
         session_vars.insert("enable_scan_datacache".to_string(), "true".to_string());
         session_vars.insert("enable_spill".to_string(), "true".to_string());
         session_vars.insert("parallel_fragment_exec_instance_num".to_string(), "16".to_string());
-        
+
         let request = RootCauseAnalysisRequest {
             query_summary: QuerySummaryForLLM {
                 sql_statement: "SELECT * FROM t".to_string(),
                 query_type: "SELECT".to_string(),
+                query_complexity: Some("Simple".to_string()),
                 total_time_seconds: 10.0,
                 scan_bytes: 0,
                 output_rows: 0,
@@ -1507,17 +1828,17 @@ mod prompt_generation_tests {
             key_metrics: KeyMetricsForLLM::default(),
             user_question: None,
         };
-        
+
         let prompt = build_system_prompt(&request);
-        
+
         // Verify session variables are included
         assert!(prompt.contains("enable_scan_datacache"), "Should show current datacache setting");
         assert!(prompt.contains("enable_spill"), "Should show current spill setting");
         assert!(prompt.contains("不要重复建议"), "Should warn about duplicate suggestions");
-        
+
         println!("✅ Session variables prompt test passed!");
     }
-    
+
     /// Test prompt with rule engine diagnostics
     #[test]
     fn test_prompt_with_diagnostics() {
@@ -1529,6 +1850,7 @@ mod prompt_generation_tests {
                 plan_node_id: Some(1),
                 message: "Filter ratio > 80%, consider adding partition".to_string(),
                 evidence: HashMap::new(),
+                threshold_info: None,
             },
             DiagnosticForLLM {
                 rule_id: "JOIN_SKEW".to_string(),
@@ -1537,13 +1859,15 @@ mod prompt_generation_tests {
                 plan_node_id: Some(5),
                 message: "Data skew detected in join".to_string(),
                 evidence: HashMap::new(),
+                threshold_info: None,
             },
         ];
-        
+
         let request = RootCauseAnalysisRequest {
             query_summary: QuerySummaryForLLM {
                 sql_statement: "SELECT * FROM t".to_string(),
                 query_type: "SELECT".to_string(),
+                query_complexity: Some("Simple".to_string()),
                 total_time_seconds: 10.0,
                 scan_bytes: 0,
                 output_rows: 0,
@@ -1561,18 +1885,18 @@ mod prompt_generation_tests {
             key_metrics: KeyMetricsForLLM::default(),
             user_question: None,
         };
-        
+
         let prompt = build_system_prompt(&request);
-        
+
         // Verify diagnostics are included
         assert!(prompt.contains("SCAN_HIGH_FILTER_RATIO"), "Should include rule IDs");
         assert!(prompt.contains("JOIN_SKEW"), "Should include all diagnostics");
         assert!(prompt.contains("规则引擎已识别的问题"), "Should have diagnostics section");
         assert!(prompt.contains("隐式问题"), "Should guide to find hidden issues");
-        
+
         println!("✅ Diagnostics prompt test passed!");
     }
-    
+
     /// Test prompt output includes JSON format specification
     #[test]
     fn test_prompt_includes_json_format() {
@@ -1580,6 +1904,7 @@ mod prompt_generation_tests {
             query_summary: QuerySummaryForLLM {
                 sql_statement: "SELECT 1".to_string(),
                 query_type: "SELECT".to_string(),
+                query_complexity: Some("Simple".to_string()),
                 total_time_seconds: 0.1,
                 scan_bytes: 0,
                 output_rows: 1,
@@ -1597,15 +1922,15 @@ mod prompt_generation_tests {
             key_metrics: KeyMetricsForLLM::default(),
             user_question: None,
         };
-        
+
         let prompt = build_system_prompt(&request);
-        
+
         // Verify JSON format is specified
         assert!(prompt.contains("root_causes"), "Should specify root_causes field");
         assert!(prompt.contains("recommendations"), "Should specify recommendations field");
         assert!(prompt.contains("sql_example"), "Should require sql_example");
         assert!(prompt.contains("JSON"), "Should mention JSON format");
-        
+
         println!("✅ JSON format prompt test passed!");
     }
 }
@@ -1615,47 +1940,47 @@ mod prompt_generation_tests {
 // ============================================================================
 
 mod table_type_tests {
-    use super::{determine_table_type, determine_connector_type};
+    use super::{determine_connector_type, determine_table_type};
     use std::collections::HashMap;
-    
+
     #[test]
     fn test_determine_table_type() {
         // Internal tables
         assert_eq!(determine_table_type("default_catalog.db.table"), "internal");
         assert_eq!(determine_table_type("db.table"), "internal");
         assert_eq!(determine_table_type("table"), "internal");
-        
+
         // External tables
         assert_eq!(determine_table_type("hive_catalog.db.table"), "external");
         assert_eq!(determine_table_type("iceberg_cat.db.table"), "external");
         assert_eq!(determine_table_type("my_lake.schema.table"), "external");
-        
+
         println!("✅ Table type detection tests passed!");
     }
-    
+
     #[test]
     fn test_determine_connector_type() {
         // Iceberg detection
         let mut metrics = HashMap::new();
         metrics.insert("IcebergV2FormatTimer".to_string(), "100ms".to_string());
         assert_eq!(determine_connector_type(&metrics), "iceberg");
-        
+
         // Hive/ORC detection
         let mut metrics = HashMap::new();
         metrics.insert("ORC".to_string(), "".to_string());
         metrics.insert("TotalStripeSize".to_string(), "1GB".to_string());
         assert_eq!(determine_connector_type(&metrics), "hive");
-        
+
         // Hudi detection
         let mut metrics = HashMap::new();
         metrics.insert("HudiScanTimer".to_string(), "50ms".to_string());
         assert_eq!(determine_connector_type(&metrics), "hudi");
-        
+
         // JDBC detection
         let mut metrics = HashMap::new();
         metrics.insert("JDBCReadRows".to_string(), "1000".to_string());
         assert_eq!(determine_connector_type(&metrics), "jdbc");
-        
+
         println!("✅ Connector type detection tests passed!");
     }
 }

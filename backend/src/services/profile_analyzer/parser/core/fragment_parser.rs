@@ -224,7 +224,7 @@ impl FragmentParser {
                 if let Some(colon_pos) = rest.find(": ") {
                     let key = rest[..colon_pos].trim().to_string();
                     let value = rest[colon_pos + 2..].trim().to_string();
-                    
+
                     // Skip empty values (these are section headers like "ORC: " with empty value)
                     if value.is_empty() {
                         continue;

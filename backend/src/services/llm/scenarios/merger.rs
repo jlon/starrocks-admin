@@ -2,7 +2,7 @@
 //!
 //! Combines the deterministic results from rule engine with LLM's
 //! open-domain reasoning to provide comprehensive root cause analysis.
-//! 
+//!
 //! Note: Some structs/methods are defined here for modularity but may be
 //! duplicated in models.rs for serialization. Allow dead_code for reserved APIs.
 
@@ -61,20 +61,12 @@ impl Default for LLMEnhancedAnalysis {
 impl LLMEnhancedAnalysis {
     /// Create a pending status
     pub fn pending() -> Self {
-        Self {
-            available: false,
-            status: "pending".to_string(),
-            ..Default::default()
-        }
+        Self { available: false, status: "pending".to_string(), ..Default::default() }
     }
-    
+
     /// Create a failed status
     pub fn failed(error: &str) -> Self {
-        Self {
-            available: false,
-            status: format!("failed: {}", error),
-            ..Default::default()
-        }
+        Self { available: false, status: format!("failed: {}", error), ..Default::default() }
     }
 }
 
@@ -138,8 +130,9 @@ impl ResultMerger {
         llm_response: &RootCauseAnalysisResponse,
     ) -> LLMEnhancedAnalysis {
         let root_causes = Self::merge_root_causes(rule_diagnostics, &llm_response.root_causes);
-        let recommendations = Self::merge_recommendations(rule_diagnostics, &llm_response.recommendations);
-        
+        let recommendations =
+            Self::merge_recommendations(rule_diagnostics, &llm_response.recommendations);
+
         LLMEnhancedAnalysis {
             available: true,
             status: "completed".to_string(),
@@ -150,7 +143,7 @@ impl ResultMerger {
             hidden_issues: llm_response.hidden_issues.clone(),
         }
     }
-    
+
     /// Merge root causes from rules and LLM
     fn merge_root_causes(
         rule_diagnostics: &[AggregatedDiagnostic],
@@ -158,24 +151,22 @@ impl ResultMerger {
     ) -> Vec<MergedRootCause> {
         let mut merged = Vec::new();
         let mut seen_ids: HashSet<String> = HashSet::new();
-        
+
         // First, add LLM root causes (higher priority)
         for llm_rc in llm_root_causes {
             let id = llm_rc.root_cause_id.clone();
             seen_ids.insert(id.clone());
-            
+
             // Find related rule diagnostics
-            let related_rules: Vec<String> = llm_rc.symptoms.iter()
+            let related_rules: Vec<String> = llm_rc
+                .symptoms
+                .iter()
                 .filter(|s| rule_diagnostics.iter().any(|d| &d.rule_id == *s))
                 .cloned()
                 .collect();
-            
-            let source = if related_rules.is_empty() {
-                "llm"
-            } else {
-                "both"
-            };
-            
+
+            let source = if related_rules.is_empty() { "llm" } else { "both" };
+
             merged.push(MergedRootCause {
                 id,
                 related_rule_ids: related_rules,
@@ -187,13 +178,14 @@ impl ResultMerger {
                 symptoms: llm_rc.symptoms.clone(),
             });
         }
-        
+
         // Then, add rule diagnostics that weren't identified as symptoms
         // These might be independent issues
         for diag in rule_diagnostics {
-            let is_covered = llm_root_causes.iter()
+            let is_covered = llm_root_causes
+                .iter()
                 .any(|rc| rc.symptoms.contains(&diag.rule_id));
-            
+
             if !is_covered {
                 let id = format!("rule_{}", diag.rule_id);
                 if !seen_ids.contains(&id) {
@@ -203,7 +195,7 @@ impl ResultMerger {
                         related_rule_ids: vec![diag.rule_id.clone()],
                         description: diag.message.clone(),
                         is_implicit: false,
-                        confidence: 1.0,  // Rule-based = 100% confidence
+                        confidence: 1.0, // Rule-based = 100% confidence
                         source: "rule".to_string(),
                         evidence: vec![diag.reason.clone()],
                         symptoms: vec![],
@@ -211,13 +203,17 @@ impl ResultMerger {
                 }
             }
         }
-        
+
         // Sort by confidence (descending)
-        merged.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
-        
+        merged.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         merged
     }
-    
+
     /// Merge recommendations from rules and LLM
     fn merge_recommendations(
         rule_diagnostics: &[AggregatedDiagnostic],
@@ -225,7 +221,7 @@ impl ResultMerger {
     ) -> Vec<MergedRecommendation> {
         let mut merged: Vec<MergedRecommendation> = Vec::new();
         let mut seen_actions: HashSet<String> = HashSet::new();
-        
+
         // First, add LLM recommendations (root cause fixes, higher priority)
         for rec in llm_recommendations {
             let action_key = Self::normalize_action(&rec.action);
@@ -242,7 +238,7 @@ impl ResultMerger {
                 });
             }
         }
-        
+
         // Then, add rule engine suggestions (symptom fixes)
         let mut rule_priority = merged.len() as u32 + 1;
         for diag in rule_diagnostics {
@@ -262,7 +258,8 @@ impl ResultMerger {
                     rule_priority += 1;
                 } else {
                     // Action exists, check if we should mark as "both"
-                    if let Some(existing) = merged.iter_mut()
+                    if let Some(existing) = merged
+                        .iter_mut()
                         .find(|r| Self::normalize_action(&r.action) == action_key)
                     {
                         if existing.source == "llm" {
@@ -273,13 +270,13 @@ impl ResultMerger {
                 }
             }
         }
-        
+
         // Sort by priority
         merged.sort_by_key(|r| r.priority);
-        
+
         merged
     }
-    
+
     /// Normalize action text for deduplication
     fn normalize_action(action: &str) -> String {
         action
@@ -297,34 +294,60 @@ impl ResultMerger {
 /// Convert DiagnosticResult to DiagnosticForLLM
 pub fn diagnostic_to_llm(diag: &DiagnosticResult) -> super::root_cause::DiagnosticForLLM {
     use std::collections::HashMap;
-    
+
     let mut evidence = HashMap::new();
     evidence.insert("reason".to_string(), diag.reason.clone());
-    
+
+    // Convert threshold metadata if present
+    let threshold_info =
+        diag.threshold_metadata
+            .as_ref()
+            .map(|tm| super::root_cause::ThresholdInfoForLLM {
+                threshold_value: tm.threshold_value,
+                source: tm.threshold_source.clone(),
+                baseline_p95_ms: tm.baseline_p95_ms,
+                sample_count: tm.baseline_sample_count,
+            });
+
     super::root_cause::DiagnosticForLLM {
         rule_id: diag.rule_id.clone(),
         severity: diag.severity.clone(),
-        operator: diag.node_path.split('/').last().unwrap_or("unknown").to_string(),
+        operator: diag
+            .node_path
+            .split('/')
+            .last()
+            .unwrap_or("unknown")
+            .to_string(),
         plan_node_id: diag.plan_node_id,
         message: diag.message.clone(),
         evidence,
+        threshold_info,
     }
 }
 
 /// Convert AggregatedDiagnostic to DiagnosticForLLM
-pub fn aggregated_diagnostic_to_llm(diag: &AggregatedDiagnostic) -> super::root_cause::DiagnosticForLLM {
+pub fn aggregated_diagnostic_to_llm(
+    diag: &AggregatedDiagnostic,
+) -> super::root_cause::DiagnosticForLLM {
     use std::collections::HashMap;
-    
+
     let mut evidence = HashMap::new();
     evidence.insert("reason".to_string(), diag.reason.clone());
     evidence.insert("affected_nodes".to_string(), format!("{} nodes", diag.node_count));
-    
+
     super::root_cause::DiagnosticForLLM {
         rule_id: diag.rule_id.clone(),
         severity: diag.severity.clone(),
-        operator: diag.affected_nodes.first().map(|s| s.split('/').last().unwrap_or("unknown")).unwrap_or("unknown").to_string(),
+        operator: diag
+            .affected_nodes
+            .first()
+            .map(|s| s.split('/').last().unwrap_or("unknown"))
+            .unwrap_or("unknown")
+            .to_string(),
         plan_node_id: None,
         message: diag.message.clone(),
         evidence,
+        // AggregatedDiagnostic doesn't have threshold_metadata, so we set None
+        threshold_info: None,
     }
 }

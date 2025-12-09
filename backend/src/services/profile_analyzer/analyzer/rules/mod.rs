@@ -15,10 +15,10 @@ pub mod scan;
 pub mod sink;
 pub mod sort;
 
-use crate::services::profile_analyzer::models::*;
 use super::thresholds::DynamicThresholds;
-use regex::Regex;
+use crate::services::profile_analyzer::models::*;
 use once_cell::sync::Lazy;
+use regex::Regex;
 
 /// Regex to clean slot IDs from column names (e.g., "46: dayno" -> "dayno")
 static SLOT_ID_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d+:\s*").unwrap());
@@ -225,6 +225,52 @@ impl ParameterSuggestion {
     }
 }
 
+/// Threshold metadata for diagnostic traceability
+/// Captures what threshold was used and its source (baseline vs default)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ThresholdMetadata {
+    /// Threshold value used for this diagnostic (e.g., 10000.0 for 10s)
+    pub threshold_value: f64,
+    /// Threshold source: "baseline" | "default" | "config"
+    pub threshold_source: String,
+    /// Baseline P95 value if baseline was used (ms)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline_p95_ms: Option<f64>,
+    /// Baseline sample count if baseline was used
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline_sample_count: Option<usize>,
+    /// Cluster ID where baseline was fetched from
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cluster_id: Option<i64>,
+}
+
+impl ThresholdMetadata {
+    /// Create metadata for default threshold
+    pub fn from_default(threshold_value: f64) -> Self {
+        Self {
+            threshold_value,
+            threshold_source: "default".to_string(),
+            baseline_p95_ms: None,
+            baseline_sample_count: None,
+            cluster_id: None,
+        }
+    }
+
+    /// Create metadata from baseline
+    pub fn from_baseline(
+        threshold_value: f64,
+        baseline: &super::baseline::PerformanceBaseline,
+    ) -> Self {
+        Self {
+            threshold_value,
+            threshold_source: "baseline".to_string(),
+            baseline_p95_ms: Some(baseline.stats.p95_ms),
+            baseline_sample_count: Some(baseline.sample_size),
+            cluster_id: None,
+        }
+    }
+}
+
 /// A diagnostic result from rule evaluation
 ///
 /// Structure follows Aliyun EMR StarRocks diagnostic standard:
@@ -246,6 +292,16 @@ pub struct Diagnostic {
     /// Recommended actions to fix the issue (建议措施)
     pub suggestions: Vec<String>,
     pub parameter_suggestions: Vec<ParameterSuggestion>,
+    /// Threshold metadata for traceability (what threshold triggered this diagnostic)
+    pub threshold_metadata: Option<ThresholdMetadata>,
+}
+
+impl Diagnostic {
+    /// Create a new diagnostic with threshold metadata
+    pub fn with_threshold(mut self, metadata: ThresholdMetadata) -> Self {
+        self.threshold_metadata = Some(metadata);
+        self
+    }
 }
 
 impl Diagnostic {
@@ -298,12 +354,18 @@ impl<'a> RuleContext<'a> {
 
     /// Get a metric value that represents bytes (e.g., "13.227 TB")
     pub fn get_metric_bytes(&self, name: &str) -> Option<f64> {
-        self.node.unique_metrics.get(name).and_then(|v| parse_bytes_value(v))
+        self.node
+            .unique_metrics
+            .get(name)
+            .and_then(|v| parse_bytes_value(v))
     }
 
     /// Get a metric value that represents duration (e.g., "2m4s", "1.5s", "100ms")
     pub fn get_metric_duration(&self, name: &str) -> Option<f64> {
-        self.node.unique_metrics.get(name).and_then(|v| parse_duration_to_ms(v))
+        self.node
+            .unique_metrics
+            .get(name)
+            .and_then(|v| parse_duration_to_ms(v))
     }
 
     /// Get operator total time in ms
@@ -323,15 +385,17 @@ impl<'a> RuleContext<'a> {
     pub fn get_memory_usage(&self) -> Option<u64> {
         self.node.metrics.memory_usage
     }
-    
+
     /// Get table name from unique_metrics (e.g., "Table" metric)
     pub fn get_table_name(&self) -> String {
-        self.node.unique_metrics.get("Table")
+        self.node
+            .unique_metrics
+            .get("Table")
             .map(|s| s.as_str())
             .unwrap_or("unknown")
             .to_string()
     }
-    
+
     /// Get full table name with database prefix
     pub fn get_full_table_name(&self) -> String {
         let table = self.get_table_name();
@@ -343,42 +407,105 @@ impl<'a> RuleContext<'a> {
             _ => table,
         }
     }
-    
+
     /// Get Join EQ predicate info if available
     pub fn get_join_predicates(&self) -> Option<String> {
-        self.node.unique_metrics.get("EQJoinConjuncts")
+        self.node
+            .unique_metrics
+            .get("EQJoinConjuncts")
             .or(self.node.unique_metrics.get("JoinPredicates"))
             .or(self.node.unique_metrics.get("JoinConjuncts"))
             .cloned()
     }
-    
+
     /// Get GROUP BY key info if available (with slot IDs cleaned)
     pub fn get_group_by_keys(&self) -> Option<String> {
-        self.node.unique_metrics.get("GroupingKeys")
+        self.node
+            .unique_metrics
+            .get("GroupingKeys")
             .or(self.node.unique_metrics.get("GroupByKeys"))
             .map(|s| clean_slot_ids(s))
     }
-    
+
     /// Check if this is an internal table (OLAP_SCAN)
     pub fn is_internal_table(&self) -> bool {
         let op = self.node.operator_name.to_uppercase();
         op.contains("OLAP_SCAN") || op.contains("OLAP_TABLE")
     }
-    
-    /// Check if this is an external table (CONNECTOR_SCAN, HDFS_SCAN, etc.)
+
+    /// Check if this is an external table (covers all external data sources)
+    /// Includes: HDFS, Hive, Iceberg, Hudi, Delta, Paimon, JDBC, MySQL, ES, File, etc.
     pub fn is_external_table(&self) -> bool {
         let op = self.node.operator_name.to_uppercase();
-        if op.contains("CONNECTOR") || op.contains("HDFS") || op.contains("HIVE") 
-            || op.contains("ICEBERG") || op.contains("HUDI") || op.contains("DELTA") 
-            || op.contains("PAIMON") || op.contains("FILE_SCAN") {
+        // Data lake connectors
+        if op.contains("CONNECTOR")
+            || op.contains("HDFS")
+            || op.contains("HIVE")
+            || op.contains("ICEBERG")
+            || op.contains("HUDI")
+            || op.contains("DELTA")
+            || op.contains("PAIMON")
+            || op.contains("FILE_SCAN")
+        {
             return true;
         }
+        // Database connectors (JDBC, MySQL, ES)
+        if op.contains("JDBC")
+            || op.contains("MYSQL")
+            || op.contains("ES_SCAN")
+            || op.contains("ELASTICSEARCH")
+        {
+            return true;
+        }
+        // Check DataSourceType metric as fallback
         if let Some(ds) = self.node.unique_metrics.get("DataSourceType") {
             let ds_up = ds.to_uppercase();
-            return ds_up.contains("HIVE") || ds_up.contains("ICEBERG") 
-                || ds_up.contains("HUDI") || ds_up.contains("DELTA");
+            return ds_up.contains("HIVE")
+                || ds_up.contains("ICEBERG")
+                || ds_up.contains("HUDI")
+                || ds_up.contains("DELTA")
+                || ds_up.contains("JDBC")
+                || ds_up.contains("MYSQL")
+                || ds_up.contains("ES")
+                || ds_up.contains("PAIMON");
         }
         false
+    }
+
+    /// Get detailed external table type for more specific suggestions
+    pub fn get_external_table_type(&self) -> Option<&'static str> {
+        let op = self.node.operator_name.to_uppercase();
+        if op.contains("HIVE") {
+            return Some("Hive");
+        }
+        if op.contains("ICEBERG") {
+            return Some("Iceberg");
+        }
+        if op.contains("HUDI") {
+            return Some("Hudi");
+        }
+        if op.contains("DELTA") {
+            return Some("Delta Lake");
+        }
+        if op.contains("PAIMON") {
+            return Some("Paimon");
+        }
+        if op.contains("HDFS") || op.contains("FILE_SCAN") {
+            return Some("HDFS/File");
+        }
+        if op.contains("JDBC") {
+            return Some("JDBC");
+        }
+        if op.contains("MYSQL") {
+            return Some("MySQL");
+        }
+        if op.contains("ES") || op.contains("ELASTICSEARCH") {
+            return Some("Elasticsearch");
+        }
+        if op.contains("CONNECTOR") {
+            return Some("Connector");
+        }
+        None
     }
 
     /// Check if a session variable is already set to the expected value
@@ -753,7 +880,8 @@ pub fn parse_metric_value(value: &str) -> Option<f64> {
 
     // Handle "1.056M" format (without parentheses) - K/M/B suffixes
     if let Some(multiplier) = get_suffix_multiplier(s) {
-        let numeric_part: String = s.chars()
+        let numeric_part: String = s
+            .chars()
             .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
             .collect();
         if let Ok(v) = numeric_part.parse::<f64>() {
@@ -773,10 +901,18 @@ pub fn parse_metric_value(value: &str) -> Option<f64> {
 /// Get multiplier for K/M/B suffixes in metric values
 fn get_suffix_multiplier(s: &str) -> Option<f64> {
     let s = s.trim().to_uppercase();
-    if s.ends_with('K') { return Some(1000.0); }
-    if s.ends_with('M') { return Some(1_000_000.0); }
-    if s.ends_with('B') || s.ends_with('G') { return Some(1_000_000_000.0); }
-    if s.ends_with('T') { return Some(1_000_000_000_000.0); }
+    if s.ends_with('K') {
+        return Some(1000.0);
+    }
+    if s.ends_with('M') {
+        return Some(1_000_000.0);
+    }
+    if s.ends_with('B') || s.ends_with('G') {
+        return Some(1_000_000_000.0);
+    }
+    if s.ends_with('T') {
+        return Some(1_000_000_000_000.0);
+    }
     None
 }
 
@@ -893,11 +1029,13 @@ pub fn format_duration_ms(ms: f64) -> String {
 pub fn parse_bytes_value(s: &str) -> Option<f64> {
     let s = s.trim();
     let parts: Vec<&str> = s.split_whitespace().collect();
-    if parts.len() < 2 { return None; }
-    
+    if parts.len() < 2 {
+        return None;
+    }
+
     let value: f64 = parts[0].parse().ok()?;
     let unit = parts[1].to_uppercase();
-    
+
     let multiplier: f64 = match unit.as_str() {
         "B" => 1.0,
         "KB" | "K" => 1024.0,
@@ -907,7 +1045,7 @@ pub fn parse_bytes_value(s: &str) -> Option<f64> {
         "PB" | "P" => 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0,
         _ => return None,
     };
-    
+
     Some(value * multiplier)
 }
 

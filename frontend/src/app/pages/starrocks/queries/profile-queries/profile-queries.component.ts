@@ -69,6 +69,8 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   // LLM Analysis state (loaded async after DAG)
   llmAnalysisLoading = false;
   llmAnalysisError: string = '';
+  llmAnalysisStartTime: number = 0;
+  llmAnalysisElapsedTime: number = 0;
   
   // Window control state
   isFullscreen = false; // Default to normal layout, toggle for full screen
@@ -801,25 +803,40 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
    * Load LLM analysis async (called after DAG is rendered)
    * Passes pre-analyzed data to avoid redundant profile parsing
    */
-  private loadLLMAnalysis(queryId: string): void {
+  private loadLLMAnalysis(queryId: string, forceRefresh: boolean = false): void {
     if (!this.clusterId || !this.analysisData) return;
     
     this.llmAnalysisLoading = true;
     this.llmAnalysisError = '';
+    this.llmAnalysisStartTime = Date.now();
+    this.llmAnalysisElapsedTime = 0;
     
     // Pass pre-analyzed data to backend to avoid re-fetching profile
-    this.nodeService.enhanceProfileWithLLM(this.clusterId, queryId, this.analysisData).subscribe({
+    // Add force_refresh flag to bypass cache
+    const payload = forceRefresh 
+      ? { ...this.analysisData, force_refresh: true }
+      : this.analysisData;
+    
+    this.nodeService.enhanceProfileWithLLM(this.clusterId, queryId, payload).subscribe({
       next: (llmData) => {
+        // Calculate elapsed time
+        this.llmAnalysisElapsedTime = Date.now() - this.llmAnalysisStartTime;
+        
         // Merge LLM analysis into existing data
         if (this.analysisData) {
           this.analysisData.llm_analysis = llmData;
+          // Store elapsed time in analysis data
+          if (this.analysisData.llm_analysis) {
+            this.analysisData.llm_analysis.elapsed_time_ms = this.llmAnalysisElapsedTime;
+          }
         }
         this.llmAnalysisLoading = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
         console.error('Failed to load LLM analysis', err);
-        this.llmAnalysisError = 'LLM 分析加载失败';
+        this.llmAnalysisElapsedTime = Date.now() - this.llmAnalysisStartTime;
+        this.llmAnalysisError = err.error?.message || 'LLM 分析加载失败';
         this.llmAnalysisLoading = false;
         // Update llm_analysis status
         if (this.analysisData?.llm_analysis) {
@@ -829,6 +846,38 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+  
+  /**
+   * Retry LLM analysis (force refresh)
+   */
+  retryLLMAnalysis(): void {
+    if (this.currentQueryId) {
+      this.loadLLMAnalysis(this.currentQueryId, true);
+    }
+  }
+  
+  /**
+   * Get LLM analysis elapsed time in formatted string
+   */
+  getLLMElapsedTime(): string {
+    const llmData = this.analysisData?.llm_analysis;
+    const elapsedMs = llmData?.elapsed_time_ms || this.llmAnalysisElapsedTime;
+    
+    if (!elapsedMs) return '';
+    
+    if (elapsedMs < 1000) {
+      return `${elapsedMs}ms`;
+    } else {
+      return `${(elapsedMs / 1000).toFixed(1)}s`;
+    }
+  }
+  
+  /**
+   * Check if LLM analysis was cached
+   */
+  isLLMAnalysisCached(): boolean {
+    return this.analysisData?.llm_analysis?.from_cache === true;
   }
   
   // Refresh analysis

@@ -770,20 +770,58 @@
                 </div>
 
                 <!-- Root Cause Analysis Section - Loading state for LLM -->
-                <div class="right-section root-cause-section" *ngIf="!selectedNode && (llmAnalysisLoading || getRootCauseAnalysis()?.root_causes?.length)">
+                <div class="right-section root-cause-section" *ngIf="!selectedNode && (llmAnalysisLoading || llmAnalysisError || getRootCauseAnalysis()?.root_causes?.length)">
                   <div class="section-header">
                     <span class="title">🔍 根因分析</span>
-                    <span class="warning-badge" *ngIf="!llmAnalysisLoading">{{ getRootCauseAnalysis()?.root_causes?.length || 0 }}</span>
+                    <span class="warning-badge" *ngIf="!llmAnalysisLoading && !llmAnalysisError">{{ getRootCauseAnalysis()?.root_causes?.length || 0 }}</span>
+                    
+                    <!-- Loading state -->
                     <span class="llm-loading-badge" *ngIf="llmAnalysisLoading">
                       <nb-icon icon="loader-outline" class="spin"></nb-icon>
                       <span>LLM 分析中...</span>
                     </span>
-                    <span class="llm-badge" *ngIf="!llmAnalysisLoading && hasLLMAnalysis()">🤖 LLM</span>
+                    
+                    <!-- Success state with time -->
+                    <span class="llm-badge" *ngIf="!llmAnalysisLoading && !llmAnalysisError && hasLLMAnalysis()">
+                      🤖 LLM
+                      <span class="llm-time" *ngIf="getLLMElapsedTime()">{{ getLLMElapsedTime() }}</span>
+                      <span class="llm-cached" *ngIf="isLLMAnalysisCached()" nbTooltip="从缓存加载，点击刷新重新分析">📦</span>
+                    </span>
+                    
+                    <!-- Error state -->
+                    <span class="llm-error-badge" *ngIf="llmAnalysisError">
+                      <nb-icon icon="alert-circle-outline"></nb-icon>
+                      <span>分析失败</span>
+                    </span>
+                    
+                    <!-- Refresh/Retry button -->
+                    <button nbButton 
+                            ghost 
+                            size="tiny" 
+                            status="info"
+                            *ngIf="!llmAnalysisLoading && (llmAnalysisError || isLLMAnalysisCached())"
+                            (click)="retryLLMAnalysis()"
+                            [nbTooltip]="llmAnalysisError ? '重试 LLM 分析' : '刷新 LLM 分析（绕过缓存）'"
+                            class="llm-refresh-btn">
+                      <nb-icon [icon]="llmAnalysisError ? 'refresh-outline' : 'sync-outline'"></nb-icon>
+                      {{ llmAnalysisError ? '重试' : '刷新' }}
+                    </button>
+                    
                     <span class="collapse-toggle" (click)="isRootCauseCollapsed = !isRootCauseCollapsed">{{ isRootCauseCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isRootCauseCollapsed && !isRightPanelCollapsed">
+                    <!-- Error message -->
+                    <div class="llm-error-message" *ngIf="llmAnalysisError">
+                      <nb-icon icon="alert-triangle-outline" status="danger"></nb-icon>
+                      <span>{{ llmAnalysisError }}</span>
+                      <button nbButton size="tiny" status="primary" (click)="retryLLMAnalysis()">
+                        <nb-icon icon="refresh-outline"></nb-icon>
+                        重试
+                      </button>
+                    </div>
+                    
                     <!-- Summary (LLM provides richer summary) -->
-                    <div class="root-cause-summary" *ngIf="getRootCauseAnalysis().summary">
+                    <div class="root-cause-summary" *ngIf="!llmAnalysisError && getRootCauseAnalysis().summary">
                       <nb-icon icon="bulb-outline" class="text-warning"></nb-icon>
                       <span>{{ getRootCauseAnalysis().summary }}</span>
                     </div>

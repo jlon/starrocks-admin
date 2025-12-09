@@ -971,13 +971,13 @@ mod llm_integration_tests {
             .unwrap_or_else(|| "test-query".to_string());
         
         let start = std::time::Instant::now();
-        let llm_result: Result<RootCauseAnalysisResponse, _> =
-            llm_service.analyze(&llm_request, &query_id, None).await;
+        let llm_result = llm_service.analyze(&llm_request, &query_id, None, false).await;
         let elapsed = start.elapsed();
         
         match llm_result {
-            Ok(llm_response) => {
-                println!("⏱️  LLM call took: {:?}\n", elapsed);
+            Ok(result) => {
+                let llm_response = result.response;
+                println!("⏱️  LLM call took: {:?} (from_cache: {})\n", elapsed, result.from_cache);
                 println!("📥 LLM Response:");
                 println!("{}", serde_json::to_string_pretty(&llm_response).unwrap());
                 
@@ -1632,6 +1632,8 @@ mod llm_integration_tests {
                 suggestion: h.suggestion.clone(),
                 })
                 .collect(),
+            from_cache: false,
+            elapsed_time_ms: None,
         }
     }
     

@@ -272,6 +272,8 @@ export interface LLMEnhancedAnalysis {
   recommendations?: any[];
   hidden_issues?: any[];
   summary?: string;
+  from_cache?: boolean;  // Whether this result was from cache
+  elapsed_time_ms?: number;  // LLM analysis elapsed time in milliseconds
 }
 
 export interface ProfileAnalysisResult {

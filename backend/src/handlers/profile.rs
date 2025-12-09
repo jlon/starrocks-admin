@@ -271,6 +271,9 @@ pub async fn analyze_profile_handler(
 pub struct EnhanceProfileRequest {
     /// Pre-analyzed profile data from rule engine (avoids re-parsing)
     pub analysis_data: ProfileAnalysisResponse,
+    /// Force refresh - bypass cache and call LLM API
+    #[serde(default)]
+    pub force_refresh: bool,
 }
 
 /// POST /api/clusters/:cluster_id/profiles/:query_id/enhance
@@ -315,6 +318,7 @@ pub async fn enhance_profile_handler(
         &safe_query_id,
         Some(cluster_id),
         cluster_variables.as_ref(),
+        req.force_refresh,
     )
     .await
     {
@@ -337,6 +341,7 @@ async fn enhance_with_llm(
     query_id: &str,
     cluster_id: Option<i64>,
     cluster_variables: Option<&ClusterVariables>,
+    force_refresh: bool,
 ) -> Result<LLMEnhancedAnalysis, String> {
     #[allow(unused_imports)]
     use crate::services::profile_analyzer::{
@@ -544,11 +549,16 @@ async fn enhance_with_llm(
         .build()
         .map_err(|e| e.to_string())?;
     
-    // Call LLM service
-    let llm_response: RootCauseAnalysisResponse = llm_service
-        .analyze(&llm_request, query_id, cluster_id)
+    // Call LLM service with timing
+    let start_time = std::time::Instant::now();
+    let llm_result = llm_service
+        .analyze(&llm_request, query_id, cluster_id, force_refresh)
         .await
         .map_err(|e| e.to_string())?;
+    let elapsed_time_ms = start_time.elapsed().as_millis() as u64;
+    
+    let llm_response = llm_result.response;
+    let from_cache = llm_result.from_cache;
     
     // Merge LLM response with rule diagnostics
     let root_causes = merge_root_causes(&response.aggregated_diagnostics, &llm_response);
@@ -570,6 +580,8 @@ async fn enhance_with_llm(
             .into_iter()
             .map(|h| LLMHiddenIssue { issue: h.issue, suggestion: h.suggestion })
             .collect(),
+        from_cache,
+        elapsed_time_ms: Some(elapsed_time_ms),
     })
 }
 

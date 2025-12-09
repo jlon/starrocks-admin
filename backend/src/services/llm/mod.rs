@@ -31,7 +31,7 @@ mod service;
 
 // Re-exports for external use
 pub use models::*;
-pub use service::{LLMService, LLMServiceImpl};
+pub use service::{LLMAnalysisResult, LLMService, LLMServiceImpl};
 
 // Internal use - exported for specific scenarios
 pub use scenarios::root_cause::*;

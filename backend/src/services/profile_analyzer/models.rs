@@ -654,6 +654,12 @@ pub struct LLMEnhancedAnalysis {
     /// Hidden issues detected by LLM only
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_issues: Vec<LLMHiddenIssue>,
+    /// Whether this result was loaded from cache
+    #[serde(default)]
+    pub from_cache: bool,
+    /// LLM analysis elapsed time in milliseconds
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_time_ms: Option<u64>,
 }
 
 /// Merged root cause (from rule engine and/or LLM)

@@ -45,6 +45,15 @@ pub trait LLMAnalysisResponseTrait: DeserializeOwned + Serialize + Send + Sync {
 // LLM Service Trait
 // ============================================================================
 
+/// LLM Analysis result with metadata
+#[derive(Debug, Clone)]
+pub struct LLMAnalysisResult<T> {
+    /// The actual response
+    pub response: T,
+    /// Whether this result was from cache
+    pub from_cache: bool,
+}
+
 /// LLM Service - the core abstraction for all LLM operations
 #[async_trait]
 pub trait LLMService: Send + Sync {
@@ -54,13 +63,17 @@ pub trait LLMService: Send + Sync {
     /// Get the currently active provider info
     fn active_provider(&self) -> Option<LLMProviderInfo>;
 
-    /// Analyze with LLM, returns structured response
+    /// Analyze with LLM, returns structured response with cache metadata
+    /// 
+    /// # Parameters
+    /// - `force_refresh`: If true, bypass cache and force LLM API call
     async fn analyze<Req, Resp>(
         &self,
         request: &Req,
         query_id: &str,
         cluster_id: Option<i64>,
-    ) -> Result<Resp, LLMError>
+        force_refresh: bool,
+    ) -> Result<LLMAnalysisResult<Resp>, LLMError>
     where
         Req: LLMAnalysisRequestTrait,
         Resp: LLMAnalysisResponseTrait;
@@ -148,7 +161,8 @@ impl LLMService for LLMServiceImpl {
         request: &Req,
         query_id: &str,
         cluster_id: Option<i64>,
-    ) -> Result<Resp, LLMError>
+        force_refresh: bool,
+    ) -> Result<LLMAnalysisResult<Resp>, LLMError>
     where
         Req: LLMAnalysisRequestTrait,
         Resp: LLMAnalysisResponseTrait,
@@ -164,20 +178,26 @@ impl LLMService for LLMServiceImpl {
             .await?
             .ok_or(LLMError::NoProviderConfigured)?;
 
-        // 2. Check cache
+        // 2. Check cache (skip if force_refresh is true)
         let cache_key = request.cache_key();
         let sql_hash = request.sql_hash();
         let profile_hash = request.profile_hash();
         tracing::info!(
-            "LLM request - cache_key: {}, sql_hash: {}, profile_hash: {}",
+            "LLM request - cache_key: {}, sql_hash: {}, profile_hash: {}, force_refresh: {}",
             cache_key,
             sql_hash,
-            profile_hash
+            profile_hash,
+            force_refresh
         );
 
-        if let Some(cached) = self.repository.get_cached_response(&cache_key).await? {
-            tracing::info!("✅ LLM cache HIT for key: {}", cache_key);
-            return serde_json::from_str(&cached).map_err(LLMError::from);
+        if !force_refresh {
+            if let Some(cached) = self.repository.get_cached_response(&cache_key).await? {
+                tracing::info!("✅ LLM cache HIT for key: {}", cache_key);
+                let response: Resp = serde_json::from_str(&cached).map_err(LLMError::from)?;
+                return Ok(LLMAnalysisResult { response, from_cache: true });
+            }
+        } else {
+            tracing::info!("🔄 Force refresh requested, bypassing cache for key: {}", cache_key);
         }
 
         tracing::info!("❌ LLM cache MISS for key: {}, calling API...", cache_key);
@@ -238,7 +258,7 @@ impl LLMService for LLMServiceImpl {
                     )
                     .await?;
 
-                Ok(response)
+                Ok(LLMAnalysisResult { response, from_cache: false })
             },
             Err(e) => {
                 // Update session to failed

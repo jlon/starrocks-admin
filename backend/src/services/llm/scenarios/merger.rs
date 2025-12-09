@@ -42,6 +42,17 @@ pub struct LLMEnhancedAnalysis {
     /// Hidden issues detected by LLM only
     #[serde(default)]
     pub hidden_issues: Vec<LLMHiddenIssue>,
+    /// Whether this result was loaded from cache
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub from_cache: bool,
+    /// LLM analysis elapsed time in milliseconds
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_time_ms: Option<u64>,
+}
+
+/// Helper for serde skip_serializing_if
+fn is_false(b: &bool) -> bool {
+    !b
 }
 
 impl Default for LLMEnhancedAnalysis {
@@ -54,6 +65,8 @@ impl Default for LLMEnhancedAnalysis {
             merged_recommendations: vec![],
             summary: String::new(),
             hidden_issues: vec![],
+            from_cache: false,
+            elapsed_time_ms: None,
         }
     }
 }
@@ -141,6 +154,8 @@ impl ResultMerger {
             merged_recommendations: recommendations,
             summary: llm_response.summary.clone(),
             hidden_issues: llm_response.hidden_issues.clone(),
+            from_cache: false,  // Will be set by caller if needed
+            elapsed_time_ms: None,  // Will be set by caller
         }
     }
 

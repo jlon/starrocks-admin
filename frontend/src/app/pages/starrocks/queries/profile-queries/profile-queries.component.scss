@@ -1514,6 +1514,9 @@
     
     // LLM Badge - Nebular info color (#0095ff)
     .llm-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-size: 10px;
       padding: 2px 6px;
       background: #0095ff;
@@ -1521,6 +1524,18 @@
       border-radius: 4px;
       font-weight: 500;
       margin-left: 4px;
+      
+      .llm-time {
+        opacity: 0.8;
+        font-size: 9px;
+        margin-left: 2px;
+      }
+      
+      .llm-cached {
+        font-size: 11px;
+        margin-left: 2px;
+        cursor: help;
+      }
     }
     
     // LLM Loading badge
@@ -1542,6 +1557,63 @@
       
       .spin {
         animation: spin 1s linear infinite;
+      }
+    }
+    
+    // LLM Error badge
+    .llm-error-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      padding: 2px 8px;
+      background: #ff3d71;
+      color: white;
+      border-radius: 4px;
+      font-weight: 500;
+      margin-left: 4px;
+      
+      nb-icon {
+        font-size: 12px;
+      }
+    }
+    
+    // LLM Refresh button
+    .llm-refresh-btn {
+      margin-left: 8px;
+      height: 20px;
+      padding: 0 8px;
+      font-size: 10px;
+      
+      nb-icon {
+        font-size: 12px;
+      }
+    }
+    
+    // LLM Error message
+    .llm-error-message {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      background: rgba(255, 61, 113, 0.1);
+      border-left: 3px solid #ff3d71;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      
+      nb-icon {
+        font-size: 20px;
+        color: #ff3d71;
+      }
+      
+      span {
+        flex: 1;
+        color: #ff3d71;
+        font-size: 12px;
+      }
+      
+      button {
+        flex-shrink: 0;
       }
     }
     

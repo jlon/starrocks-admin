@@ -191,13 +191,13 @@ pub async fn analyze_root_cause(
         .build()
         .map_err(|e| LLMError::ApiError(e.to_string()))?;
 
-    // Call LLM service
-    let response: RootCauseAnalysisResponse = state
+    // Call LLM service (no force_refresh for direct API calls)
+    let llm_result: crate::services::llm::LLMAnalysisResult<RootCauseAnalysisResponse> = state
         .llm_service
-        .analyze(&llm_request, &req.query_id, req.cluster_id)
+        .analyze(&llm_request, &req.query_id, req.cluster_id, false)
         .await?;
 
-    Ok(Json(response))
+    Ok(Json(llm_result.response))
 }
 
 #[derive(Debug, Deserialize)]

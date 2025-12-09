@@ -48,7 +48,7 @@ const PROMPT_BASE: &str = r#"你是一位拥有20年以上的StarRocks OLAP 数�
 - 自问: 我是否混淆了症状和根因？
 
 ### Step 4: 制定优化方案
-- 针对根因而非症状给出建议datacache_priority 
+- 针对根因而非症状给出建议 
 - 优先给出投入产出比最高的优化
 - 必须是可直接执行的命令
 - 自问: 这个建议在用户环境中是否可行？
@@ -245,10 +245,21 @@ const PROMPT_VALID_PARAMS: &str = r#"
 - `spill_mem_table_size` - 落盘触发阈值
 - `spill_mem_table_num` - 落盘表数量
 
-**DataCache (外表缓存):**
-- `enable_scan_datacache` - 启用 DataCache 读取
-- `enable_populate_datacache` - 启用 DataCache 写入
-- `datacache_priority` - 缓存优先级
+**DataCache (仅外表! Hive/Iceberg/Hudi 等):**
+- `enable_scan_datacache` - 启用 DataCache 读取 (外表专用)
+- `enable_populate_datacache` - 启用 DataCache 写入 (外表专用)
+- ⚠️ 内表无需配置 DataCache，内表使用 PageCache（自动）
+
+**Query Cache (仅内表! 不支持外表!):**
+- `enable_query_cache` - 启用 Query Cache (仅内表聚合查询)
+- `query_cache_entry_max_bytes` - 单个缓存条目最大字节
+- `query_cache_entry_max_rows` - 单个缓存条目最大行数
+- ⚠️ Query Cache 限制条件:
+  - 仅支持原生 OLAP 表和存算分离表，**不支持外表**!
+  - 仅支持聚合查询（非 GROUP BY 或低基数 GROUP BY）
+  - 不支持 rand/random/uuid/sleep 等不确定性函数
+  - Tablet 数量 >= pipeline_dop 时才生效
+  - 高基数 GROUP BY 会自动绕过缓存
 
 **Runtime Filter:**
 - `enable_global_runtime_filter` - 全局 Runtime Filter
@@ -300,6 +311,15 @@ SELECT /*+ SET_VAR(query_timeout=600, enable_spill=true) */ ...
 - ❌ `ALTER TABLE external_table SET ("xxx" = "yyy")` - 外表属性在源端修改
 - ❌ `ANALYZE TABLE external_catalog.db.table` - 外表统计信息在源端
 - ❌ 任何修改外表分桶/分区的建议
+- ❌ `enable_query_cache = true` - Query Cache 不支持外表! 外表用 DataCache!
+
+## 🔄 缓存策略总结
+
+| 缓存类型 | 适用表类型 | 参数 | 说明 |
+|---------|-----------|------|------|
+| Query Cache | 内表 | `enable_query_cache` | 缓存聚合计算结果 |
+| DataCache | 外表 | `enable_scan_datacache` | 缓存远程数据到本地 |
+| PageCache | 内表 | 自动 | 缓存磁盘数据页，无需配置 |
 "#;
 
 /// Output format specification

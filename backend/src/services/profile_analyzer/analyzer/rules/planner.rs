@@ -82,9 +82,17 @@ impl PlannerDiagnosticRule for PL001HMSMetadataSlow {
             return None;
         }
 
-        // Calculate HMS ratio of planner time
-        let hms_ratio = if context.planner.total_time_ms > 0.0 {
-            hms.total_hms_time_ms / context.planner.total_time_ms * 100.0
+        // Calculate HMS ratio - prefer planner time, fallback to query time
+        let (ratio_base, ratio_label) = if context.planner.total_time_ms > 0.0 {
+            (context.planner.total_time_ms, "Planner")
+        } else if context.query_time_ms > 0.0 {
+            (context.query_time_ms, "查询总")
+        } else {
+            (0.0, "")
+        };
+
+        let hms_ratio = if ratio_base > 0.0 {
+            hms.total_hms_time_ms / ratio_base * 100.0
         } else {
             0.0
         };
@@ -95,17 +103,24 @@ impl PlannerDiagnosticRule for PL001HMSMetadataSlow {
             RuleSeverity::Warning
         };
 
+        // Build message with ratio info
+        let ratio_info = if ratio_base > 0.0 {
+            format!("（占{}时间 {:.1}%）", ratio_label, hms_ratio)
+        } else {
+            String::new()  // No ratio info if we can't calculate it
+        };
+
         let message = if slow_calls.is_empty() {
             format!(
-                "HMS 元数据获取总耗时 {}（占 Planner 时间 {:.1}%）",
+                "HMS 元数据获取总耗时 {}{}",
                 format_duration_ms(hms.total_hms_time_ms),
-                hms_ratio
+                ratio_info
             )
         } else {
             format!(
-                "HMS 元数据获取总耗时 {}（占 Planner 时间 {:.1}%），慢调用: {}",
+                "HMS 元数据获取总耗时 {}{}，慢调用: {}",
                 format_duration_ms(hms.total_hms_time_ms),
-                hms_ratio,
+                ratio_info,
                 slow_calls.join(", ")
             )
         };

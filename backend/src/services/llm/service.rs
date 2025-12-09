@@ -170,10 +170,19 @@ impl LLMService for LLMServiceImpl {
         
         // 2. Check cache
         let cache_key = request.cache_key();
+        let sql_hash = request.sql_hash();
+        let profile_hash = request.profile_hash();
+        tracing::info!(
+            "LLM request - cache_key: {}, sql_hash: {}, profile_hash: {}", 
+            cache_key, sql_hash, profile_hash
+        );
+        
         if let Some(cached) = self.repository.get_cached_response(&cache_key).await? {
-            tracing::debug!("LLM cache hit for key: {}", cache_key);
+            tracing::info!("✅ LLM cache HIT for key: {}", cache_key);
             return serde_json::from_str(&cached).map_err(LLMError::from);
         }
+        
+        tracing::info!("❌ LLM cache MISS for key: {}, calling API...", cache_key);
         
         // 3. Create session
         let session_id = self.repository

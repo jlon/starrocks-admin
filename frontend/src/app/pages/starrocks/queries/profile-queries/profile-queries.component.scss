@@ -1223,66 +1223,68 @@
     }
     
     .causal-chains {
-      margin-top: 12px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(143, 150, 170, 0.1);
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(143, 150, 170, 0.15);
       
       .chain-header {
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 11px;
+        gap: 8px;
+        font-size: 14px;
         font-weight: 600;
         color: #222b45;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
         
         nb-icon {
-          font-size: 14px;
+          font-size: 16px;
+          color: #0095ff;
         }
         
         .chain-count {
           font-weight: 400;
           color: #8f96aa;
-          font-size: 10px;
+          font-size: 12px;
         }
       }
       
       .chain-list {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 12px;
       }
       
       .chain-item {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 2px;
-        font-size: 11px;
-        padding: 8px 10px;
-        background: linear-gradient(135deg, rgba(0, 149, 255, 0.03) 0%, rgba(143, 150, 170, 0.03) 100%);
-        border-radius: 6px;
-        border-left: 3px solid #0095ff;
+        gap: 4px;
+        font-size: 13px;
+        padding: 12px 14px;
+        background: linear-gradient(135deg, rgba(0, 149, 255, 0.06) 0%, rgba(143, 150, 170, 0.04) 100%);
+        border-radius: 8px;
+        border-left: 4px solid #0095ff;
         
         .chain-node {
           display: inline-flex;
           align-items: center;
-          gap: 3px;
-          padding: 3px 8px;
-          border-radius: 12px;
+          gap: 4px;
+          padding: 5px 10px;
+          border-radius: 14px;
           color: #222b45;
-          background: rgba(143, 150, 170, 0.08);
-          font-size: 10px;
+          background: rgba(143, 150, 170, 0.12);
+          font-size: 13px;
+          font-weight: 500;
           white-space: nowrap;
           
           .node-icon {
-            font-size: 11px;
+            font-size: 14px;
           }
           
           &.root-cause {
-            background: rgba(255, 61, 113, 0.1);
+            background: rgba(255, 61, 113, 0.15);
             color: #ff3d71;
-            font-weight: 500;
+            font-weight: 600;
             
             .node-icon {
               color: #ff3d71;
@@ -1290,8 +1292,9 @@
           }
           
           &.symptom {
-            background: rgba(0, 149, 255, 0.1);
+            background: rgba(0, 149, 255, 0.15);
             color: #0095ff;
+            font-weight: 500;
             
             .node-icon {
               color: #0095ff;
@@ -1303,20 +1306,22 @@
           display: inline-flex;
           align-items: center;
           color: #8f96aa;
-          margin: 0 2px;
+          margin: 0 4px;
+          font-size: 14px;
           
           nb-icon {
-            font-size: 12px;
+            font-size: 16px;
           }
         }
         
         .chain-explanation {
           width: 100%;
-          margin-top: 4px;
-          padding-top: 4px;
-          font-size: 10px;
-          color: #8f96aa;
-          border-top: 1px dashed rgba(143, 150, 170, 0.15);
+          margin-top: 8px;
+          padding-top: 8px;
+          font-size: 13px;
+          line-height: 1.5;
+          color: #606a80;
+          border-top: 1px dashed rgba(143, 150, 170, 0.2);
         }
       }
     }
@@ -2238,6 +2243,74 @@
             }
           }
         }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Dark Theme Support
+// ============================================================================
+:host-context(.nb-theme-dark),
+:host-context(.nb-theme-cosmic) {
+  .root-cause-section {
+    .causal-chains {
+      border-top-color: rgba(255, 255, 255, 0.1);
+      
+      .chain-header {
+        color: #ffffff;
+        
+        .chain-count {
+          color: #a4abb6;
+        }
+      }
+      
+      .chain-item {
+        background: linear-gradient(135deg, rgba(0, 149, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%);
+        border-left-color: #0095ff;
+        
+        .chain-node {
+          color: #e4e9f2;
+          background: rgba(255, 255, 255, 0.1);
+          
+          &.root-cause {
+            background: rgba(255, 61, 113, 0.2);
+            color: #ff6b8a;
+          }
+          
+          &.symptom {
+            background: rgba(0, 149, 255, 0.2);
+            color: #42aaff;
+          }
+        }
+        
+        .chain-arrow {
+          color: #a4abb6;
+        }
+        
+        .chain-explanation {
+          color: #a4abb6;
+          border-top-color: rgba(255, 255, 255, 0.1);
+        }
+      }
+    }
+    
+    // Also fix other text elements for dark theme
+    .diagnosis-list {
+      .issue-desc,
+      .issue-suggestion {
+        color: #c5cee0;
+      }
+    }
+    
+    .llm-recommendations-merged {
+      .rec-action,
+      .rec-improvement {
+        color: #e4e9f2;
+      }
+      
+      .rec-sql pre code {
+        color: #c5cee0;
       }
     }
   }

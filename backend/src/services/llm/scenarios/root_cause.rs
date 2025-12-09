@@ -380,10 +380,14 @@ impl LLMAnalysisRequestTrait for RootCauseAnalysisRequest {
     fn profile_hash(&self) -> String {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        // Hash key metrics
-        self.query_summary.total_time_seconds.to_bits().hash(&mut hasher);
+        // Hash key metrics - use stable values only
+        // Don't hash total_time_seconds because it varies per execution!
+        // Instead, focus on data volume and structure which are stable
         self.query_summary.scan_bytes.hash(&mut hasher);
+        self.query_summary.output_rows.hash(&mut hasher);
         self.rule_diagnostics.len().hash(&mut hasher);
+        // Hash query type for better uniqueness
+        self.query_summary.query_type.hash(&mut hasher);
         format!("{:x}", hasher.finish())
     }
 }

@@ -1331,11 +1331,12 @@ mod llm_integration_tests {
 // ============================================================================
 
 mod prompt_generation_tests {
+    #[allow(unused_imports)]
     use super::*;
     use crate::services::llm::scenarios::root_cause::{
         RootCauseAnalysisRequest, QuerySummaryForLLM, ExecutionPlanForLLM,
         DiagnosticForLLM, KeyMetricsForLLM, ProfileDataForLLM, ScanDetailForLLM,
-        OperatorDetailForLLM, build_system_prompt,
+        build_system_prompt,
     };
     use std::collections::HashMap;
     
@@ -1614,7 +1615,8 @@ mod prompt_generation_tests {
 // ============================================================================
 
 mod table_type_tests {
-    use super::*;
+    use super::{determine_table_type, determine_connector_type};
+    use std::collections::HashMap;
     
     #[test]
     fn test_determine_table_type() {

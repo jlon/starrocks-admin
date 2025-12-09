@@ -88,6 +88,9 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   // Graph direction: 'BT' (bottom-to-top) or 'LR' (left-to-right)
   graphDirection: 'BT' | 'LR' = 'BT';
   
+  // Data flow animation (enabled by default)
+  isFlowAnimationEnabled = true;
+  
   // Node detail view state (when a node is selected)
   selectedNodeTab: 'core' | 'detail' | 'pipeline' = 'core';
   
@@ -1964,6 +1967,11 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     if (this.analysisData?.execution_tree) {
       this.buildGraph(this.analysisData.execution_tree);
     }
+  }
+
+  // Toggle data flow animation
+  toggleFlowAnimation(): void {
+    this.isFlowAnimationEnabled = !this.isFlowAnimationEnabled;
   }
 
   // Export DAG as PNG image

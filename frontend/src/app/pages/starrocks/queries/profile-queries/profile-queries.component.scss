@@ -404,6 +404,29 @@
     stroke-linejoin: round;
     stroke-linecap: round;
   }
+  
+  // Base edge path (static, semi-transparent)
+  .edge-base {
+    opacity: 0.4;
+  }
+  
+  // Animated flow overlay - data flowing along edges
+  .edge-flow {
+    stroke: rgba(255, 255, 255, 0.9);
+    stroke-dasharray: 6, 10;
+    animation: dataFlow 1.2s linear infinite;
+    filter: drop-shadow(0 0 2px rgba(24, 144, 255, 0.6));
+  }
+}
+
+// Data flow animation - particles moving along path direction
+@keyframes dataFlow {
+  0% {
+    stroke-dashoffset: 16;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
 }
 
 // ============================================

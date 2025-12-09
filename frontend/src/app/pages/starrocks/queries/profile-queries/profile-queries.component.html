@@ -108,6 +108,9 @@
                   <button nbButton size="tiny" status="basic" ghost (click)="toggleGraphDirection()" [nbTooltip]="graphDirection === 'BT' ? '切换为横向' : '切换为纵向'">
                     <nb-icon [icon]="graphDirection === 'BT' ? 'swap-outline' : 'flip-2-outline'"></nb-icon>
                   </button>
+                  <button nbButton size="tiny" [status]="isFlowAnimationEnabled ? 'primary' : 'basic'" ghost (click)="toggleFlowAnimation()" [nbTooltip]="isFlowAnimationEnabled ? '关闭流动效果' : '开启流动效果'">
+                    <nb-icon icon="activity-outline"></nb-icon>
+                  </button>
                   <button nbButton size="tiny" status="basic" ghost (click)="exportDagAsPng()" nbTooltip="导出图片">
                     <nb-icon icon="download-outline"></nb-icon>
                   </button>
@@ -137,12 +140,19 @@
                         </marker>
                       </defs>
                       <g *ngFor="let edge of graphEdges">
+                        <!-- Base path (static) -->
                         <path [attr.d]="getEdgePath(edge.points)" 
-                              class="edge-path" 
+                              class="edge-path edge-base" 
                               [attr.stroke]="edge.strokeColor"
                               [attr.stroke-width]="edge.strokeWidth"
                               stroke-linejoin="round"
                               [attr.marker-end]="'url(#' + edge.markerId + ')'" />
+                        <!-- Animated flow overlay -->
+                        <path *ngIf="isFlowAnimationEnabled"
+                              [attr.d]="getEdgePath(edge.points)" 
+                              class="edge-path edge-flow" 
+                              [attr.stroke-width]="edge.strokeWidth"
+                              stroke-linejoin="round" />
                       </g>
                     </svg>
                     

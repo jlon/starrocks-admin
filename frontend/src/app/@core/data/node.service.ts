@@ -439,9 +439,9 @@ export class NodeService {
    * Enhance profile analysis with LLM (called async after DAG is rendered)
    * @param clusterId Cluster ID
    * @param queryId Query ID
-   * @param analysisData Pre-analyzed profile data to avoid redundant parsing
+   * @param payload Request payload containing analysis_data and force_refresh flag
    */
-  enhanceProfileWithLLM(clusterId: number, queryId: string, analysisData: any): Observable<any> {
-    return this.api.post<any>(`/clusters/${clusterId}/profiles/${queryId}/enhance`, { analysis_data: analysisData });
+  enhanceProfileWithLLM(clusterId: number, queryId: string, payload: { analysis_data: any, force_refresh?: boolean }): Observable<any> {
+    return this.api.post<any>(`/clusters/${clusterId}/profiles/${queryId}/enhance`, payload);
   }
 }

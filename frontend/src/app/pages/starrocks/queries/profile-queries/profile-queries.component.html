@@ -120,8 +120,8 @@
                   <div class="graph-content" 
                        [style.width.px]="graphWidth" 
                        [style.height.px]="graphHeight"
-                       [style.transform]="'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + zoomLevel + ')'"
-                       [style.transformOrigin]="'center center'">
+                       [style.transform]="'translate3d(' + translateX + 'px, ' + translateY + 'px, 0) scale(' + zoomLevel + ')'"
+                       [style.transformOrigin]="'0 0'">
                     
                     <!-- Edges - Lines with dynamic width based on rows -->
                     <svg class="edges-svg" [attr.width]="graphWidth" [attr.height]="graphHeight">
@@ -794,32 +794,21 @@
                       <span>分析失败</span>
                     </span>
                     
-                    <!-- Refresh/Retry button -->
+                    <!-- Refresh button (always visible when not loading) -->
                     <button nbButton 
                             ghost 
                             size="tiny" 
                             status="info"
-                            *ngIf="!llmAnalysisLoading && (llmAnalysisError || isLLMAnalysisCached())"
+                            *ngIf="!llmAnalysisLoading"
                             (click)="retryLLMAnalysis()"
-                            [nbTooltip]="llmAnalysisError ? '重试 LLM 分析' : '刷新 LLM 分析（绕过缓存）'"
+                            [nbTooltip]="llmAnalysisError ? '重试 LLM 分析' : '刷新 LLM 分析'"
                             class="llm-refresh-btn">
-                      <nb-icon [icon]="llmAnalysisError ? 'refresh-outline' : 'sync-outline'"></nb-icon>
-                      {{ llmAnalysisError ? '重试' : '刷新' }}
+                      <nb-icon icon="sync-outline"></nb-icon>
                     </button>
                     
                     <span class="collapse-toggle" (click)="isRootCauseCollapsed = !isRootCauseCollapsed">{{ isRootCauseCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isRootCauseCollapsed && !isRightPanelCollapsed">
-                    <!-- Error message -->
-                    <div class="llm-error-message" *ngIf="llmAnalysisError">
-                      <nb-icon icon="alert-triangle-outline" status="danger"></nb-icon>
-                      <span>{{ llmAnalysisError }}</span>
-                      <button nbButton size="tiny" status="primary" (click)="retryLLMAnalysis()">
-                        <nb-icon icon="refresh-outline"></nb-icon>
-                        重试
-                      </button>
-                    </div>
-                    
                     <!-- Summary (LLM provides richer summary) -->
                     <div class="root-cause-summary" *ngIf="!llmAnalysisError && getRootCauseAnalysis().summary">
                       <nb-icon icon="bulb-outline" class="text-warning"></nb-icon>

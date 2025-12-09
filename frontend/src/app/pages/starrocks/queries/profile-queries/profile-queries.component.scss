@@ -212,8 +212,15 @@
   
   .graph-content {
     position: relative;
-    // Ensure it takes up space but allows centering
-    transition: transform 0.1s ease-out;
+    // Force GPU acceleration with crisp rendering
+    will-change: transform;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+    // Ensure text is crisp
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    // Prevent blur on fractional pixels
+    image-rendering: -webkit-optimize-contrast;
   }
 }
 
@@ -222,7 +229,7 @@
 // ============================================
 .dag-node {
   position: absolute;
-  background: linear-gradient(180deg, #ffffff 0%, #fdfdfd 100%);
+  background: #ffffff;
   border: 1px solid #d8dee7;
   border-radius: 6px;
   cursor: pointer;
@@ -230,9 +237,14 @@
   z-index: 10;
   min-width: 200px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
-  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  // Only transition box-shadow, not all properties - prevents blur
+  transition: box-shadow 0.2s ease;
   overflow: hidden;
+  // Force GPU layer for crisp rendering
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   
   &::after {
     content: '';
@@ -243,36 +255,15 @@
     pointer-events: none;
   }
   
-  // Entrance animation
-  animation: nodeEntrance 0.4s ease-out backwards;
-  
-  @for $i from 1 through 20 {
-    &:nth-child(#{$i}) {
-      animation-delay: #{$i * 0.05}s;
-    }
-  }
-  
   &:hover {
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
     z-index: 20;
   }
   
   &.selected {
     border: 2px solid #1890ff;
-    box-shadow: 0 12px 24px rgba(24, 144, 255, 0.25),
-                0 0 0 4px rgba(24, 144, 255, 0.1);
-  }
-  
-  // Node entrance animation
-  @keyframes nodeEntrance {
-    from {
-      opacity: 0;
-      transform: translateY(20px) scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
+    box-shadow: 0 8px 20px rgba(24, 144, 255, 0.2),
+                0 0 0 3px rgba(24, 144, 255, 0.1);
   }
 
   // Node Header - Dynamic colors
@@ -1590,32 +1581,6 @@
       }
     }
     
-    // LLM Error message
-    .llm-error-message {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px;
-      background: rgba(255, 61, 113, 0.1);
-      border-left: 3px solid #ff3d71;
-      border-radius: 4px;
-      margin-bottom: 12px;
-      
-      nb-icon {
-        font-size: 20px;
-        color: #ff3d71;
-      }
-      
-      span {
-        flex: 1;
-        color: #ff3d71;
-        font-size: 12px;
-      }
-      
-      button {
-        flex-shrink: 0;
-      }
-    }
     
     @keyframes spin {
       from { transform: rotate(0deg); }

@@ -812,15 +812,19 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     this.llmAnalysisElapsedTime = 0;
     
     // Pass pre-analyzed data to backend to avoid re-fetching profile
-    // Add force_refresh flag to bypass cache
-    const payload = forceRefresh 
-      ? { ...this.analysisData, force_refresh: true }
-      : this.analysisData;
+    // Build payload with analysis_data and force_refresh flag
+    const payload = {
+      analysis_data: this.analysisData,
+      force_refresh: forceRefresh || false,
+    };
     
     this.nodeService.enhanceProfileWithLLM(this.clusterId, queryId, payload).subscribe({
       next: (llmData) => {
         // Calculate elapsed time
         this.llmAnalysisElapsedTime = Date.now() - this.llmAnalysisStartTime;
+        
+        // Clear previous error
+        this.llmAnalysisError = null;
         
         // Merge LLM analysis into existing data
         if (this.analysisData) {
@@ -1986,13 +1990,13 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     return `translate(${pos.x}, ${pos.y})`;
   }
 
-  // Zoom controls
+  // Zoom controls - use 0.25 steps for crisper rendering (avoid fractional pixels)
   zoomIn(): void {
-    this.zoomLevel = Math.min(this.zoomLevel + 0.1, 3);
+    this.zoomLevel = Math.min(Math.round((this.zoomLevel + 0.25) * 4) / 4, 3);
   }
 
   zoomOut(): void {
-    this.zoomLevel = Math.max(this.zoomLevel - 0.1, 0.2);
+    this.zoomLevel = Math.max(Math.round((this.zoomLevel - 0.25) * 4) / 4, 0.25);
   }
 
   resetZoom(): void {

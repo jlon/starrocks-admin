@@ -202,7 +202,11 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    background: linear-gradient(180deg, #fafbfd 0%, #f1f3f8 100%);
+    // Tech-style gradient background with subtle dot grid
+    background: 
+      radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.03) 1px, transparent 0),
+      linear-gradient(180deg, #f8fafd 0%, #eef2f8 100%);
+    background-size: 24px 24px, 100% 100%;
     @include themed-scrollbar;
   }
   
@@ -239,13 +243,36 @@
     pointer-events: none;
   }
   
+  // Entrance animation
+  animation: nodeEntrance 0.4s ease-out backwards;
+  
+  @for $i from 1 through 20 {
+    &:nth-child(#{$i}) {
+      animation-delay: #{$i * 0.05}s;
+    }
+  }
+  
   &:hover {
-    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+    z-index: 20;
   }
   
   &.selected {
     border: 2px solid #1890ff;
-    box-shadow: 0 12px 24px rgba(24, 144, 255, 0.25);
+    box-shadow: 0 12px 24px rgba(24, 144, 255, 0.25),
+                0 0 0 4px rgba(24, 144, 255, 0.1);
+  }
+  
+  // Node entrance animation
+  @keyframes nodeEntrance {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 
   // Node Header - Dynamic colors
@@ -331,19 +358,56 @@
     height: 3px;
     background: #edf0f5;
     border-radius: 0 0 6px 6px;
+    overflow: hidden;
     
     .progress-bar {
       height: 100%;
       border-radius: 0 0 6px 6px;
+      animation: progressGrow 0.8s ease-out backwards;
+      animation-delay: 0.5s;
+      position: relative;
+      
+      // Animated shine effect on progress bar
+      &::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          rgba(255, 255, 255, 0.3) 50%,
+          transparent 100%
+        );
+        animation: progressShine 2s ease-in-out infinite;
+      }
     }
   }
+  
+  @keyframes progressGrow {
+    from {
+      transform: scaleX(0);
+      transform-origin: left;
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  
+  @keyframes progressShine {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
 
-  // Top 1 Node (RED) - Most time consuming
+  // Top 1 Node (RED) - Most time consuming with pulse glow effect
   &.is-top-1 {
     border-color: #cf1322;
+    animation: pulseGlow 2s ease-in-out infinite;
     
     .node-header.header-red {
-      background: #cf1322;
+      background: linear-gradient(135deg, #ff4d4f 0%, #cf1322 100%);
     }
     
     .node-body {
@@ -352,12 +416,25 @@
       .pct-value {
         color: #cf1322;
         font-size: 16px;
+        font-weight: 700;
       }
     }
     
     // Top 1 also shows progress bar (red color)
     .node-bottom-progress .progress-bar {
-      background: #cf1322 !important;
+      background: linear-gradient(90deg, #ff7875 0%, #cf1322 100%) !important;
+    }
+  }
+  
+  // Pulse glow animation for Top 1 node
+  @keyframes pulseGlow {
+    0%, 100% {
+      box-shadow: 0 6px 14px rgba(207, 19, 34, 0.25),
+                  0 0 0 0 rgba(207, 19, 34, 0.4);
+    }
+    50% {
+      box-shadow: 0 8px 20px rgba(207, 19, 34, 0.35),
+                  0 0 0 8px rgba(207, 19, 34, 0);
     }
   }
 
@@ -429,6 +506,18 @@
   }
 }
 
+// Edge label entrance animation
+@keyframes labelFloat {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
 // ============================================
 // Arrows Layer (DOM) - Dynamic size via JS
 // ============================================
@@ -476,11 +565,38 @@
   font-weight: 500;
   white-space: nowrap;
   pointer-events: none;
-  background: #ffffff;
-  padding: 3px 12px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  padding: 4px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(175, 183, 198, 0.8);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+  border: 1px solid rgba(175, 183, 198, 0.6);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12),
+              0 1px 3px rgba(15, 23, 42, 0.08);
+  animation: labelFloat 0.5s ease-out backwards;
+  animation-delay: 0.3s;
+  
+  // Subtle shimmer on data labels
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.4),
+      transparent
+    );
+    animation: shimmer 3s ease-in-out infinite;
+    animation-delay: 1s;
+    border-radius: inherit;
+  }
+}
+
+@keyframes shimmer {
+  0%, 100% { left: -100%; }
+  50% { left: 100%; }
 }
 
 // ============================================

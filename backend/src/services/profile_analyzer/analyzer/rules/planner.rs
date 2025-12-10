@@ -91,11 +91,8 @@ impl PlannerDiagnosticRule for PL001HMSMetadataSlow {
             (0.0, "")
         };
 
-        let hms_ratio = if ratio_base > 0.0 {
-            hms.total_hms_time_ms / ratio_base * 100.0
-        } else {
-            0.0
-        };
+        let hms_ratio =
+            if ratio_base > 0.0 { hms.total_hms_time_ms / ratio_base * 100.0 } else { 0.0 };
 
         let severity = if hms.total_hms_time_ms > 5000.0 {
             RuleSeverity::Error
@@ -107,7 +104,7 @@ impl PlannerDiagnosticRule for PL001HMSMetadataSlow {
         let ratio_info = if ratio_base > 0.0 {
             format!("（占{}时间 {:.1}%）", ratio_label, hms_ratio)
         } else {
-            String::new()  // No ratio info if we can't calculate it
+            String::new() // No ratio info if we can't calculate it
         };
 
         let message = if slow_calls.is_empty() {

@@ -12,6 +12,7 @@ pub mod query;
 pub mod query_history;
 pub mod role;
 pub mod sessions;
+pub mod sql_diag;
 pub mod system;
 pub mod system_function;
 pub mod system_management;

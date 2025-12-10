@@ -82,21 +82,30 @@ pub enum DriftDirection {
 impl BaselineDriftResult {
     /// Check if any drift indicates performance degradation
     pub fn has_degradation(&self) -> bool {
-        self.drifts.iter().any(|d| d.direction == DriftDirection::Slower)
+        self.drifts
+            .iter()
+            .any(|d| d.direction == DriftDirection::Slower)
     }
-    
+
     /// Get summary message
     pub fn summary(&self) -> String {
-        let degraded: Vec<_> = self.drifts.iter()
+        let degraded: Vec<_> = self
+            .drifts
+            .iter()
             .filter(|d| d.direction == DriftDirection::Slower)
             .collect();
-        
+
         if degraded.is_empty() {
             "基线检测到性能改善".to_string()
         } else {
-            let details: Vec<String> = degraded.iter()
-                .map(|d| format!("{:?}: P95 从 {:.0}ms 变为 {:.0}ms ({:.1}x)", 
-                    d.complexity, d.old_p95_ms, d.new_p95_ms, d.ratio))
+            let details: Vec<String> = degraded
+                .iter()
+                .map(|d| {
+                    format!(
+                        "{:?}: P95 从 {:.0}ms 变为 {:.0}ms ({:.1}x)",
+                        d.complexity, d.old_p95_ms, d.new_p95_ms, d.ratio
+                    )
+                })
                 .collect();
             format!("⚠️ 基线漂移检测到性能下降: {}", details.join(", "))
         }
@@ -218,13 +227,13 @@ impl BaselineCacheManager {
         source: BaselineSource,
     ) -> Option<BaselineDriftResult> {
         let drift_result = if let Ok(cache_guard) = self.cache.read() {
-            cache_guard.get(&cluster_id).and_then(|old| {
-                Self::detect_drift(&old.baselines, &baselines)
-            })
+            cache_guard
+                .get(&cluster_id)
+                .and_then(|old| Self::detect_drift(&old.baselines, &baselines))
         } else {
             None
         };
-        
+
         if let Ok(mut cache_guard) = self.cache.write() {
             cache_guard.insert(
                 cluster_id,
@@ -237,10 +246,10 @@ impl BaselineCacheManager {
                 },
             );
         }
-        
+
         drift_result
     }
-    
+
     /// Detect baseline drift between old and new baselines
     /// Returns None if no significant drift detected
     fn detect_drift(
@@ -248,7 +257,7 @@ impl BaselineCacheManager {
         new: &HashMap<QueryComplexity, PerformanceBaseline>,
     ) -> Option<BaselineDriftResult> {
         let mut drifts = Vec::new();
-        
+
         for (complexity, new_bl) in new {
             if let Some(old_bl) = old.get(complexity) {
                 let ratio = new_bl.stats.p95_ms / old_bl.stats.p95_ms;
@@ -259,19 +268,20 @@ impl BaselineCacheManager {
                         old_p95_ms: old_bl.stats.p95_ms,
                         new_p95_ms: new_bl.stats.p95_ms,
                         ratio,
-                        direction: if ratio > 1.0 { DriftDirection::Slower } else { DriftDirection::Faster },
+                        direction: if ratio > 1.0 {
+                            DriftDirection::Slower
+                        } else {
+                            DriftDirection::Faster
+                        },
                     });
                 }
             }
         }
-        
+
         if drifts.is_empty() {
             None
         } else {
-            Some(BaselineDriftResult {
-                drifts,
-                detected_at: Instant::now(),
-            })
+            Some(BaselineDriftResult { drifts, detected_at: Instant::now() })
         }
     }
 
@@ -413,9 +423,9 @@ impl BaselineProvider {
         baselines: HashMap<QueryComplexity, PerformanceBaseline>,
         source: BaselineSource,
     ) -> Option<BaselineDriftResult> {
-        GLOBAL_CACHE.get().and_then(|manager| {
-            manager.update(cluster_id, baselines, source)
-        })
+        GLOBAL_CACHE
+            .get()
+            .and_then(|manager| manager.update(cluster_id, baselines, source))
     }
 
     /// Update cache for default cluster (backward compatibility)

@@ -35,6 +35,7 @@ pub use service::{LLMAnalysisResult, LLMService, LLMServiceImpl};
 
 // Internal use - exported for specific scenarios
 pub use scenarios::root_cause::*;
+pub use scenarios::sql_diag::{ExplainAnalysis, PerfIssue, SqlDiagReq, SqlDiagResp};
 
 // Allow unused for internal modules (used in tests or future features)
 #[allow(unused_imports)]

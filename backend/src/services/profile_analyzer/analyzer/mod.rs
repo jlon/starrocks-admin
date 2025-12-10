@@ -12,8 +12,8 @@ pub mod thresholds;
 
 pub use baseline::{AuditLogRecord, BaselineCalculator, PerformanceBaseline, QueryComplexity};
 pub use baseline_cache::{
-    BaselineCacheManager, BaselineProvider, BaselineRefreshConfig, BaselineSource,
-    BaselineDriftResult, DriftDetail, DriftDirection,
+    BaselineCacheManager, BaselineDriftResult, BaselineProvider, BaselineRefreshConfig,
+    BaselineSource, DriftDetail, DriftDirection,
 };
 pub use query_history::{QUERY_HISTORY, QueryFingerprint, QueryHistoryService};
 pub use root_cause::{RootCauseAnalysis, RootCauseAnalyzer};

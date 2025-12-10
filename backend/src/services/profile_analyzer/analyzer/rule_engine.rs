@@ -77,13 +77,13 @@ impl RuleEngine {
     ) -> Vec<Diagnostic> {
         // Detect query type from SQL for dynamic thresholds
         let query_type = QueryType::from_sql(&profile.summary.sql_statement);
-        
+
         // Detect query complexity for adaptive thresholds
         let query_complexity = QueryComplexity::from_sql(&profile.summary.sql_statement);
-        
+
         // Get cluster info for smart recommendations
         let cluster_info = profile.get_cluster_info();
-        
+
         // Get historical baseline from cache (if cluster_id provided)
         let baseline = cluster_id.map(|cid| super::BaselineProvider::get(cid, query_complexity));
 
@@ -175,7 +175,7 @@ impl RuleEngine {
                     if query_type.should_skip_rule(rule.id()) {
                         continue;
                     }
-                    
+
                     if rule.applicable_to(node)
                         && let Some(mut diag) = rule.evaluate(&context)
                         && diag.severity >= self.config.min_severity

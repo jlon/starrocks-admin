@@ -4,7 +4,7 @@ import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrServic
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject, Observable, forkJoin, of, fromEvent } from 'rxjs';
 import { map, catchError, takeUntil, debounceTime, finalize } from 'rxjs/operators';
-import { NodeService, Query, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType } from '../../../../@core/data/node.service';
+import { NodeService, Query, QueryExecuteResult, SingleQueryResult, TableInfo, TableObjectType, SqlDiagResponse, SqlDiagResult, PerfIssue } from '../../../../@core/data/node.service';
 import { ClusterContextService } from '../../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
@@ -469,6 +469,15 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   currentQueryDetail: Query | null = null;
   @ViewChild('queryDetailDialog', { static: false }) queryDetailDialogTemplate!: TemplateRef<any>;
   private queryDetailDialogRef: NbDialogRef<any> | null = null;
+
+  // SQL Diagnosis state
+  @ViewChild('sqlDiagDialog', { static: false }) sqlDiagDialogTemplate!: TemplateRef<any>;
+  private sqlDiagDialogRef: NbDialogRef<any> | null = null;
+  diagnosing = false;
+  diagResult: SqlDiagResult | null = null;
+  diagError: string | null = null;
+  diagElapsedMs = 0;
+  diagCached = false;
 
   constructor(
     private nodeService: NodeService,
@@ -5424,5 +5433,88 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       return '"' + stringValue.replace(/"/g, '""') + '"';
     }
     return stringValue;
+  }
+
+  // ============================================================================
+  // SQL Diagnosis Methods
+  // ============================================================================
+
+  diagnoseSQL(): void {
+    if (!this.sqlInput?.trim()) {
+      this.toastrService.warning('请输入SQL语句', '提示');
+      return;
+    }
+    if (!this.clusterId) {
+      this.toastrService.warning('请先选择集群', '提示');
+      return;
+    }
+
+    this.diagnosing = true;
+    this.diagResult = null;
+    this.diagError = null;
+    this.diagElapsedMs = 0;
+    this.diagCached = false;
+
+    // Open dialog immediately with loading state
+    this.sqlDiagDialogRef = this.dialogService.open(this.sqlDiagDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: false,
+      closeOnEsc: true,
+      dialogClass: 'sql-diag-dialog',
+    });
+
+    this.nodeService.diagnoseSQL(
+      this.clusterId,
+      this.sqlInput.trim(),
+      this.selectedDatabase || undefined,
+      this.selectedCatalog || undefined,
+    ).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (resp) => {
+        this.diagnosing = false;
+        this.diagElapsedMs = resp.ms;
+        this.diagCached = resp.cached;
+        if (resp.ok && resp.data) {
+          this.diagResult = resp.data;
+        } else {
+          this.diagError = resp.err || '诊断失败';
+        }
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        this.diagnosing = false;
+        this.diagError = ErrorHandler.extractErrorMessage(err);
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  acceptDiagSQL(): void {
+    if (this.diagResult?.sql && this.diagResult.changed) {
+      this.sqlInput = this.diagResult.sql;
+      this.editorView?.dispatch({ changes: { from: 0, to: this.editorView.state.doc.length, insert: this.diagResult.sql } });
+      this.toastrService.success('已应用优化后的SQL', '成功');
+    }
+    this.closeDiagDialog();
+  }
+
+  closeDiagDialog(): void {
+    this.sqlDiagDialogRef?.close();
+    this.sqlDiagDialogRef = null;
+  }
+
+  getSeverityStatus(severity: string): string {
+    switch (severity?.toLowerCase()) {
+      case 'high': return 'danger';
+      case 'medium': return 'warning';
+      default: return 'info';
+    }
+  }
+
+  getSeverityLabel(severity: string): string {
+    switch (severity?.toLowerCase()) {
+      case 'high': return '高';
+      case 'medium': return '中';
+      default: return '低';
+    }
   }
 }

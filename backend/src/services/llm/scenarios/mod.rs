@@ -4,3 +4,4 @@
 
 pub mod merger;
 pub mod root_cause;
+pub mod sql_diag;

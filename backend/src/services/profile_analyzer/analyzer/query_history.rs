@@ -43,19 +43,16 @@ use crate::services::profile_analyzer::models::Profile;
 // ============================================================================
 
 /// Global query history service instance
-/// 
+///
 /// Controlled by environment variable `QUERY_HISTORY_ENABLED`:
 /// - `QUERY_HISTORY_ENABLED=true` (default): Enable REG001 regression detection
 /// - `QUERY_HISTORY_ENABLED=false`: Disable regression detection
 pub static QUERY_HISTORY: Lazy<QueryHistoryService> = Lazy::new(|| {
     let enabled = std::env::var("QUERY_HISTORY_ENABLED")
         .map(|v| v.to_lowercase() != "false" && v != "0")
-        .unwrap_or(true);  // Default: enabled
-    
-    QueryHistoryService::with_config(HistoryConfig {
-        enabled,
-        ..Default::default()
-    })
+        .unwrap_or(true); // Default: enabled
+
+    QueryHistoryService::with_config(HistoryConfig { enabled, ..Default::default() })
 });
 
 // ============================================================================
@@ -84,7 +81,7 @@ pub struct HistoryConfig {
 impl Default for HistoryConfig {
     fn default() -> Self {
         Self {
-            enabled: true,                    // Enabled by default for real-time detection
+            enabled: true, // Enabled by default for real-time detection
             memory_cache_size: 10000,
             min_record_time_ms: 100.0,       // Skip queries < 100ms
             min_samples_for_regression: 5,   // Need at least 5 samples
@@ -317,7 +314,7 @@ impl QueryHistoryService {
         if !self.config.enabled {
             return None;
         }
-        
+
         let time_ms = profile.summary.total_time_ms?;
 
         // Skip fast queries
@@ -335,7 +332,7 @@ impl QueryHistoryService {
 
         regression
     }
-    
+
     /// Check if query history tracking is enabled
     pub fn is_enabled(&self) -> bool {
         self.config.enabled

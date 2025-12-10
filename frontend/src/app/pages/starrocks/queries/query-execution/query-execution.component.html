@@ -129,6 +129,18 @@
                           <nb-icon icon="code-outline"></nb-icon>
                           格式化
                         </button>
+                        <button 
+                          nbButton 
+                          status="warning" 
+                          size="small"
+                          [nbSpinner]="diagnosing"
+                          nbSpinnerStatus="control"
+                          nbSpinnerSize="small"
+                          (click)="diagnoseSQL()" 
+                          [disabled]="executing || diagnosing || !sqlInput || !clusterId">
+                          <nb-icon *ngIf="!diagnosing" icon="bulb-outline"></nb-icon>
+                          {{ diagnosing ? '诊断中...' : '诊断' }}
+                        </button>
                       </div>
                     </div>
 
@@ -709,6 +721,121 @@
           <nb-icon icon="trash-2-outline"></nb-icon>
           查杀查询
         </button>
+      </div>
+    </nb-card-footer>
+  </nb-card>
+</ng-template>
+
+<!-- SQL Diagnosis Dialog Template -->
+<ng-template #sqlDiagDialog let-ref="dialogRef">
+  <nb-card class="sql-diag-dialog-card">
+    <nb-card-header>
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+          <nb-icon icon="bulb-outline" status="warning"></nb-icon>
+          <h5 class="mb-0">SQL 诊断</h5>
+          <span *ngIf="diagCached" class="badge badge-info ml-2">缓存</span>
+        </div>
+        <button nbButton ghost status="basic" size="tiny" (click)="closeDiagDialog()">
+          <nb-icon icon="close-outline"></nb-icon>
+        </button>
+      </div>
+    </nb-card-header>
+    <nb-card-body>
+      <!-- Loading state -->
+      <div *ngIf="diagnosing" class="diag-loading text-center py-5">
+        <nb-spinner status="primary" size="large"></nb-spinner>
+        <p class="mt-3 text-hint">正在分析 SQL 性能问题...</p>
+      </div>
+
+      <!-- Error state -->
+      <nb-alert *ngIf="diagError && !diagnosing" status="danger" closable="false">
+        <strong>诊断失败：</strong>{{ diagError }}
+      </nb-alert>
+
+      <!-- Result state -->
+      <div *ngIf="diagResult && !diagnosing" class="diag-result">
+        <!-- Summary -->
+        <div class="diag-summary mb-3">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <nb-icon icon="checkmark-circle-2-outline" [status]="diagResult.changed ? 'success' : 'info'"></nb-icon>
+            <strong>{{ diagResult.changed ? '发现可优化项' : '未发现明显问题' }}</strong>
+            <span class="text-hint ml-auto">置信度: {{ (diagResult.confidence * 100).toFixed(0) }}%</span>
+          </div>
+          <p class="text-hint mb-0">{{ diagResult.summary }}</p>
+        </div>
+
+        <!-- Performance Issues -->
+        <div *ngIf="diagResult.perf_issues?.length > 0" class="diag-issues mb-3">
+          <h6 class="mb-2">
+            <nb-icon icon="alert-triangle-outline" status="warning"></nb-icon>
+            性能问题 ({{ diagResult.perf_issues.length }})
+          </h6>
+          <div *ngFor="let issue of diagResult.perf_issues" class="issue-item mb-2 p-2 border rounded">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge" [ngClass]="'badge-' + getSeverityStatus(issue.severity)">
+                {{ getSeverityLabel(issue.severity) }}
+              </span>
+              <strong>{{ issue.type }}</strong>
+            </div>
+            <p class="mb-1 text-hint">{{ issue.desc }}</p>
+            <p *ngIf="issue.fix" class="mb-0 text-success">
+              <nb-icon icon="checkmark-outline"></nb-icon>
+              {{ issue.fix }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Explain Analysis -->
+        <div *ngIf="diagResult.explain_analysis" class="diag-explain mb-3">
+          <h6 class="mb-2">
+            <nb-icon icon="activity-outline" status="info"></nb-icon>
+            执行计划分析
+          </h6>
+          <div class="explain-grid">
+            <div *ngIf="diagResult.explain_analysis.scan_type" class="explain-item">
+              <span class="explain-label">扫描类型:</span>
+              <span class="explain-value">{{ diagResult.explain_analysis.scan_type }}</span>
+            </div>
+            <div *ngIf="diagResult.explain_analysis.join_strategy" class="explain-item">
+              <span class="explain-label">Join策略:</span>
+              <span class="explain-value">{{ diagResult.explain_analysis.join_strategy }}</span>
+            </div>
+            <div *ngIf="diagResult.explain_analysis.estimated_rows" class="explain-item">
+              <span class="explain-label">预估行数:</span>
+              <span class="explain-value">{{ diagResult.explain_analysis.estimated_rows | number }}</span>
+            </div>
+            <div *ngIf="diagResult.explain_analysis.estimated_cost" class="explain-item">
+              <span class="explain-label">预估代价:</span>
+              <span class="explain-value">{{ diagResult.explain_analysis.estimated_cost }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Optimized SQL -->
+        <div *ngIf="diagResult.changed && diagResult.sql" class="diag-sql">
+          <h6 class="mb-2">
+            <nb-icon icon="code-outline" status="success"></nb-icon>
+            优化后的 SQL
+          </h6>
+          <pre class="optimized-sql p-2 border rounded">{{ diagResult.sql }}</pre>
+        </div>
+      </div>
+    </nb-card-body>
+    <nb-card-footer>
+      <div class="d-flex justify-content-between align-items-center">
+        <span *ngIf="diagElapsedMs > 0" class="text-hint">耗时: {{ diagElapsedMs }}ms</span>
+        <div class="d-flex gap-2">
+          <button nbButton status="basic" (click)="closeDiagDialog()">关闭</button>
+          <button 
+            *ngIf="diagResult?.changed && diagResult?.sql"
+            nbButton 
+            status="success" 
+            (click)="acceptDiagSQL()">
+            <nb-icon icon="checkmark-outline"></nb-icon>
+            应用优化
+          </button>
+        </div>
       </div>
     </nb-card-footer>
   </nb-card>

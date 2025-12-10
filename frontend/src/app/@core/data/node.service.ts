@@ -444,4 +444,47 @@ export class NodeService {
   enhanceProfileWithLLM(clusterId: number, queryId: string, payload: { analysis_data: any, force_refresh?: boolean }): Observable<any> {
     return this.api.post<any>(`/clusters/${clusterId}/profiles/${queryId}/enhance`, payload);
   }
+
+  /**
+   * SQL Diagnosis with LLM - analyze SQL performance issues
+   * @param clusterId Cluster ID
+   * @param sql SQL statement to diagnose
+   * @param database Optional database name
+   * @param catalog Optional catalog name
+   */
+  diagnoseSQL(clusterId: number, sql: string, database?: string, catalog?: string): Observable<SqlDiagResponse> {
+    return this.api.post<SqlDiagResponse>(`/clusters/${clusterId}/sql/diagnose`, { sql, database, catalog });
+  }
+}
+
+// SQL Diagnosis Response types
+export interface SqlDiagResponse {
+  ok: boolean;
+  data?: SqlDiagResult;
+  err?: string;
+  cached: boolean;
+  ms: number;
+}
+
+export interface SqlDiagResult {
+  sql: string;
+  changed: boolean;
+  perf_issues: PerfIssue[];
+  explain_analysis?: ExplainAnalysis;
+  summary: string;
+  confidence: number;
+}
+
+export interface PerfIssue {
+  type: string;
+  severity: string;
+  desc: string;
+  fix?: string;
+}
+
+export interface ExplainAnalysis {
+  scan_type?: string;
+  join_strategy?: string;
+  estimated_rows?: number;
+  estimated_cost?: string;
 }

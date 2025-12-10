@@ -154,8 +154,8 @@ impl ResultMerger {
             merged_recommendations: recommendations,
             summary: llm_response.summary.clone(),
             hidden_issues: llm_response.hidden_issues.clone(),
-            from_cache: false,  // Will be set by caller if needed
-            elapsed_time_ms: None,  // Will be set by caller
+            from_cache: false,     // Will be set by caller if needed
+            elapsed_time_ms: None, // Will be set by caller
         }
     }
 

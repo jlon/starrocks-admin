@@ -168,7 +168,9 @@ impl BaselineService {
 
         // Step 5: Update cluster-specific cache (with drift detection)
         let sample_count = records.len();
-        if let Some(drift) = BaselineProvider::update(cluster_id, final_baselines, BaselineSource::AuditLog) {
+        if let Some(drift) =
+            BaselineProvider::update(cluster_id, final_baselines, BaselineSource::AuditLog)
+        {
             if drift.has_degradation() {
                 warn!("Cluster {}: {}", cluster_id, drift.summary());
             } else {

@@ -64,7 +64,7 @@ pub trait LLMService: Send + Sync {
     fn active_provider(&self) -> Option<LLMProviderInfo>;
 
     /// Analyze with LLM, returns structured response with cache metadata
-    /// 
+    ///
     /// # Parameters
     /// - `force_refresh`: If true, bypass cache and force LLM API call
     async fn analyze<Req, Resp>(

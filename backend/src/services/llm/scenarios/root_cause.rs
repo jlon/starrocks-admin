@@ -70,7 +70,7 @@ const PROMPT_BASE: &str = r#"你是一位拥有20年以上的StarRocks OLAP 数�
 fn build_table_type_prompt(scan_details: &[ScanDetailForLLM]) -> String {
     let mut internal_tables = Vec::new();
     let mut external_tables: HashMap<String, Vec<String>> = HashMap::new();
-    
+
     for scan in scan_details {
         let table_name = &scan.table_name;
         if scan.table_type == "internal" {
@@ -86,9 +86,9 @@ fn build_table_type_prompt(scan_details: &[ScanDetailForLLM]) -> String {
                 .push(table_name.clone());
         }
     }
-    
+
     let mut prompt = String::from("\n\n## 📊 本次查询涉及的表\n");
-    
+
     if !internal_tables.is_empty() {
         prompt.push_str(&format!(
             "\n### StarRocks 内表 ({} 张)\n表名: {}\n\n**内表优化方向:**\n- ANALYZE TABLE 更新统计信息\n- 检查分桶键是否合理\n- 考虑物化视图加速\n- 可使用 ALTER TABLE 调整属性\n",
@@ -96,7 +96,7 @@ fn build_table_type_prompt(scan_details: &[ScanDetailForLLM]) -> String {
             internal_tables.join(", ")
         ));
     }
-    
+
     for (connector, tables) in &external_tables {
         let connector_prompt = match connector.as_str() {
             "hive" => format!(
@@ -133,7 +133,7 @@ fn build_table_type_prompt(scan_details: &[ScanDetailForLLM]) -> String {
         };
         prompt.push_str(&connector_prompt);
     }
-    
+
     prompt
 }
 
@@ -144,27 +144,27 @@ fn build_issue_focused_prompt(diagnostics: &[DiagnosticForLLM]) -> String {
             "\n\n## 规则引擎未发现明显问题\n请深入分析原始 Profile 数据，寻找隐式性能问题。\n",
         );
     }
-    
+
     let mut prompt = String::from("\n\n## 规则引擎已识别的问题 (作为参考)\n");
     for d in diagnostics.iter().take(5) {
         prompt.push_str(&format!("- **{}** [{}]: {}\n", d.rule_id, d.severity, d.message));
     }
     prompt.push_str("\n**你的任务**: 不要简单重复这些问题，而是:\n1. 分析这些症状背后的根因\n2. 找出规则引擎未发现的隐式问题\n3. 建立因果链条\n");
-    
+
     prompt
 }
 
 /// Dynamic prompt section for current session variables
-/// 
+///
 /// Uses ALL passed session_vars (already filtered by CLUSTER_VARIABLE_NAMES at fetch time).
 /// Dynamically detects `enable_*` prefix for boolean feature flags.
 fn build_session_vars_prompt(session_vars: &HashMap<String, String>) -> String {
     if session_vars.is_empty() {
         return String::new();
     }
-    
+
     let mut prompt = String::from("\n\n## ⚠️ 当前集群配置 (严格禁止重复建议!)\n");
-    
+
     // Dynamically separate: enable_* flags vs other settings
     let mut enabled_features = Vec::new();
     let mut disabled_features = Vec::new();
@@ -173,7 +173,7 @@ fn build_session_vars_prompt(session_vars: &HashMap<String, String>) -> String {
     for (var, value) in session_vars {
         let is_bool_flag = var.starts_with("enable_");
         let is_true = value == "true" || value == "1";
-        
+
         if is_bool_flag {
             if is_true {
                 enabled_features.push(var.as_str());
@@ -193,14 +193,22 @@ fn build_session_vars_prompt(session_vars: &HashMap<String, String>) -> String {
     if !enabled_features.is_empty() {
         prompt.push_str(&format!(
             "\n### 🟢 已启用的功能 (禁止再建议开启!)\n{}\n",
-            enabled_features.iter().map(|v| format!("`{}`", v)).collect::<Vec<_>>().join(", ")
+            enabled_features
+                .iter()
+                .map(|v| format!("`{}`", v))
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
 
     if !disabled_features.is_empty() {
         prompt.push_str(&format!(
             "\n### 🔴 已禁用的功能 (可建议开启)\n{}\n",
-            disabled_features.iter().map(|v| format!("`{}`", v)).collect::<Vec<_>>().join(", ")
+            disabled_features
+                .iter()
+                .map(|v| format!("`{}`", v))
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
 
@@ -210,14 +218,16 @@ fn build_session_vars_prompt(session_vars: &HashMap<String, String>) -> String {
             prompt.push_str(&format!("- `{}` = `{}`\n", var, value));
         }
     }
-    
-    prompt.push_str(r#"
+
+    prompt.push_str(
+        r#"
 ### 🚫 严格规则
 1. **禁止建议** `SET enable_xxx = true` 如果该参数在"已启用的功能"列表中
 2. 只能建议开启"已禁用的功能"列表中的参数
 3. 违反以上规则将被视为严重错误!
-"#);
-    
+"#,
+    );
+
     prompt
 }
 
@@ -330,27 +340,27 @@ const PROMPT_OUTPUT_FORMAT: &str = r#"
 /// Build the complete dynamic system prompt
 pub fn build_system_prompt(request: &RootCauseAnalysisRequest) -> String {
     let mut prompt = String::from(PROMPT_BASE);
-    
+
     // Add table-type specific guidance
     if let Some(ref profile_data) = request.profile_data {
         prompt.push_str(&build_table_type_prompt(&profile_data.scan_details));
     }
-    
+
     // Add issue-focused guidance
     prompt.push_str(&build_issue_focused_prompt(&request.rule_diagnostics));
-    
+
     // Add current session variables
     prompt.push_str(&build_session_vars_prompt(&request.query_summary.session_variables));
-    
+
     // Add valid parameters reference
     prompt.push_str(PROMPT_VALID_PARAMS);
-    
+
     // Add output format specification
     prompt.push_str(PROMPT_OUTPUT_FORMAT);
-    
+
     // Add JSON schema
     prompt.push_str(PROMPT_JSON_FORMAT);
-    
+
     prompt
 }
 
@@ -433,12 +443,12 @@ impl LLMAnalysisRequestTrait for RootCauseAnalysisRequest {
     fn scenario(&self) -> LLMScenario {
         LLMScenario::RootCauseAnalysis
     }
-    
+
     /// Generate dynamic system prompt based on request context
     fn system_prompt(&self) -> String {
         build_system_prompt(self)
     }
-    
+
     fn cache_key(&self) -> String {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -446,14 +456,14 @@ impl LLMAnalysisRequestTrait for RootCauseAnalysisRequest {
         self.profile_hash().hash(&mut hasher);
         format!("rca:{:x}", hasher.finish())
     }
-    
+
     fn sql_hash(&self) -> String {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.query_summary.sql_statement.hash(&mut hasher);
         format!("{:x}", hasher.finish())
     }
-    
+
     fn profile_hash(&self) -> String {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -812,7 +822,7 @@ impl LLMAnalysisResponseTrait for RootCauseAnalysisResponse {
     fn summary(&self) -> &str {
         &self.summary
     }
-    
+
     fn confidence(&self) -> Option<f64> {
         if self.root_causes.is_empty() {
             None
@@ -904,37 +914,37 @@ impl RootCauseAnalysisRequestBuilder {
         self.query_summary = Some(summary);
         self
     }
-    
+
     pub fn profile_data(mut self, data: ProfileDataForLLM) -> Self {
         self.profile_data = Some(data);
         self
     }
-    
+
     pub fn execution_plan(mut self, plan: ExecutionPlanForLLM) -> Self {
         self.execution_plan = Some(plan);
         self
     }
-    
+
     pub fn add_diagnostic(mut self, diag: DiagnosticForLLM) -> Self {
         self.rule_diagnostics.push(diag);
         self
     }
-    
+
     pub fn diagnostics(mut self, diags: Vec<DiagnosticForLLM>) -> Self {
         self.rule_diagnostics = diags;
         self
     }
-    
+
     pub fn key_metrics(mut self, metrics: KeyMetricsForLLM) -> Self {
         self.key_metrics = metrics;
         self
     }
-    
+
     pub fn user_question(mut self, question: impl Into<String>) -> Self {
         self.user_question = Some(question.into());
         self
     }
-    
+
     pub fn build(self) -> Result<RootCauseAnalysisRequest, &'static str> {
         Ok(RootCauseAnalysisRequest {
             query_summary: self.query_summary.ok_or("query_summary is required")?,
@@ -952,26 +962,26 @@ impl RootCauseAnalysisRequestBuilder {
 // ============================================================================
 
 /// Determine table type based on CATALOG prefix, not scan operator type!
-/// 
+///
 /// StarRocks has two deployment modes:
 /// 1. Shared-Nothing (存算一体): internal tables use OLAP_SCAN
 /// 2. Shared-Data (存算分离): internal tables use CONNECTOR_SCAN
-/// 
+///
 /// Both modes can access external tables (Hive/Iceberg/ES etc.) via catalogs.
-/// 
+///
 /// ## The ONLY reliable rule:
 /// - `default_catalog` → internal (StarRocks native table)
 /// - Any other catalog name → external (foreign table)
-/// 
+///
 /// # Arguments
 /// * `table_name` - Full table name, may be "catalog.database.table" or "database.table" or just "table"
-/// 
+///
 /// # Returns
 /// * "internal" - StarRocks native table (in default_catalog)
 /// * "external" - External table (any non-default catalog)
 pub fn determine_table_type(table_name: &str) -> String {
     let parts: Vec<&str> = table_name.split('.').collect();
-    
+
     // If table name has 3+ parts: catalog.database.table
     if parts.len() >= 3 {
         let catalog = parts[0].to_lowercase();
@@ -982,19 +992,19 @@ pub fn determine_table_type(table_name: &str) -> String {
         // Any other catalog → external
         return "external".to_string();
     }
-    
+
     // If table name has 2 parts: database.table (no catalog prefix)
     // This is default_catalog implicitly, so internal
     if parts.len() == 2 {
         return "internal".to_string();
     }
-    
+
     // Single part (just table name) → internal (default_catalog)
     "internal".to_string()
 }
 
 /// Determine external table connector type from Profile metrics
-/// 
+///
 /// StarRocks Profile 中各类外表的标识 (from be/src/exec/hdfs_scanner):
 /// - **Iceberg**: Has "IcebergV2FormatTimer" section under ORC/Parquet
 /// - **Hive**: Has "ORC" or "Parquet" section, but NO Iceberg indicators
@@ -1003,47 +1013,47 @@ pub fn determine_table_type(table_name: &str) -> String {
 /// - **Paimon**: Has Paimon-specific metrics (uses deletion vector too)
 /// - **JDBC**: Has JDBC-related metrics
 /// - **ES/Elasticsearch**: Has ES-specific metrics
-/// 
+///
 /// # Arguments
 /// * `metrics` - The unique_metrics map from SCAN node
-/// 
+///
 /// # Returns
 /// * "iceberg", "hive", "hudi", "paimon", "deltalake", "jdbc", "es", or "unknown"
 pub fn determine_connector_type(metrics: &std::collections::HashMap<String, String>) -> String {
     let keys: Vec<String> = metrics.keys().map(|k| k.to_lowercase()).collect();
     let keys_str = keys.join(" ");
-    
+
     // Check for Iceberg: IcebergV2FormatTimer is the key indicator
     // It appears under ORC/Parquet section for Iceberg tables
     if keys_str.contains("iceberg") || keys_str.contains("deletefilebuild") {
         return "iceberg".to_string();
     }
-    
+
     // Check for Delta Lake: DeletionVector is the key indicator
     if keys_str.contains("deletionvector") {
         return "deltalake".to_string();
     }
-    
+
     // Check for Hudi: Hudi-specific metrics
     if keys_str.contains("hudi") {
         return "hudi".to_string();
     }
-    
+
     // Check for Paimon: Paimon-specific metrics
     if keys_str.contains("paimon") {
         return "paimon".to_string();
     }
-    
+
     // Check for JDBC
     if keys_str.contains("jdbc") {
         return "jdbc".to_string();
     }
-    
+
     // Check for Elasticsearch
     if keys_str.contains("elasticsearch") || keys_str.contains("_es_") {
         return "es".to_string();
     }
-    
+
     // ORC or Parquet without Iceberg indicators → Hive table
     if keys_str.contains("orc")
         || keys_str.contains("parquet")
@@ -1052,7 +1062,7 @@ pub fn determine_connector_type(metrics: &std::collections::HashMap<String, Stri
     {
         return "hive".to_string();
     }
-    
+
     // Default: unknown external table type
     "unknown".to_string()
 }

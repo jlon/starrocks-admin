@@ -429,6 +429,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/clusters/queries/execute", post(handlers::query::execute_sql))
         .route("/api/clusters/queries/:query_id", delete(handlers::query::kill_query))
         .route("/api/clusters/queries/history", get(handlers::query_history::list_query_history))
+        // SQL Diagnosis (LLM-enhanced)
+        .route("/api/clusters/:cluster_id/sql/diagnose", post(handlers::sql_diag::diagnose))
         // Cluster detail routes (placed after specific query routes to avoid path conflicts)
         .route("/api/clusters/:id", get(handlers::cluster::get_cluster))
         .route("/api/clusters/:id", put(handlers::cluster::update_cluster))

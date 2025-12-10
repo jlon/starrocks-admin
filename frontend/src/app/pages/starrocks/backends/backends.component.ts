@@ -58,16 +58,22 @@ export class BackendsComponent implements OnInit, OnDestroy {
       IP: {
         title: '主机',
         type: 'string',
+        width: '12%',
       },
       HeartbeatPort: {
         title: '心跳端口',
         type: 'string',
-        width: '10%',
+        width: '8%',
       },
       BePort: {
         title: '服务端口',
         type: 'string',
-        width: '10%',
+        width: '8%',
+      },
+      HttpPort: {
+        title: 'HTTP端口',
+        type: 'string',
+        width: '8%',
       },
       Alive: {
         title: '状态',
@@ -79,18 +85,25 @@ export class BackendsComponent implements OnInit, OnDestroy {
           return `<span class="badge badge-${status}">${text}</span>`;
         },
       },
+      Version: {
+        title: '版本',
+        type: 'string',
+        width: '10%',
+      },
       TabletNum: {
         title: 'Tablet 数',
         type: 'string',
-        width: '10%',
+        width: '8%',
       },
       DataUsedCapacity: {
         title: '已用存储',
         type: 'string',
+        width: '10%',
       },
       TotalCapacity: {
         title: '总存储',
         type: 'string',
+        width: '10%',
       },
       UsedPct: {
         title: '磁盘使用率',
@@ -98,11 +111,21 @@ export class BackendsComponent implements OnInit, OnDestroy {
         width: '10%',
         valuePrepareFunction: (value: string) => renderMetricBadge(value, this.diskThresholds),
       },
+      CpuCores: {
+        title: 'CPU核数',
+        type: 'string',
+        width: '8%',
+      },
       CpuUsedPct: {
         title: 'CPU 使用率',
         type: 'html',
-        width: '12%',
+        width: '10%',
         valuePrepareFunction: (value: string) => renderMetricBadge(value, this.cpuThresholds),
+      },
+      MemLimit: {
+        title: '内存限制',
+        type: 'string',
+        width: '10%',
       },
       MemUsedPct: {
         title: '内存使用率',
@@ -113,7 +136,12 @@ export class BackendsComponent implements OnInit, OnDestroy {
       NumRunningQueries: {
         title: '运行查询数',
         type: 'string',
-        width: '10%',
+        width: '8%',
+      },
+      LastHeartbeat: {
+        title: '最后心跳',
+        type: 'string',
+        width: '12%',
       },
     },
   };

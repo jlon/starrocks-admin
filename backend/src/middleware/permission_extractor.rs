@@ -97,8 +97,12 @@ fn extract_clusters_id_action(segments: &[&str], method: &str) -> Option<String>
         },
         _ if segments.len() >= 3 => {
             let action = segments.get(2)?;
+            // POST /api/clusters/:id/health -> health:post
             if method == "POST" && *action == "health" {
                 Some("health:post".to_string())
+            // POST /api/clusters/:id/sql/diagnose -> sql:diagnose
+            } else if method == "POST" && *action == "sql" && segments.get(3) == Some(&"diagnose") {
+                Some("sql:diagnose".to_string())
             } else {
                 Some(action.to_string())
             }

@@ -86,11 +86,27 @@ pub async fn diagnose(
     let cat = req.catalog.as_deref().unwrap_or("default_catalog");
     let tables = extract_tables(&req.sql);
 
+    tracing::info!("SQL Diagnosis: catalog={}, db={}, tables={:?}", cat, db, tables);
+
     let (explain, schema, vars) = tokio::join!(
         exec_explain(&client, cat, db, &req.sql),
         fetch_schema(&client, cat, db, &tables),
         fetch_vars(&client)
     );
+
+    // Log results for debugging
+    match &explain {
+        Ok(e) => tracing::info!("EXPLAIN success: {} chars", e.len()),
+        Err(e) => tracing::warn!("EXPLAIN failed: {}", e),
+    }
+    match &schema {
+        Ok(s) => tracing::info!("Schema fetched: {}", s),
+        Err(e) => tracing::warn!("Schema fetch failed: {}", e),
+    }
+    match &vars {
+        Ok(v) => tracing::info!("Vars fetched: {}", v),
+        Err(e) => tracing::warn!("Vars fetch failed: {}", e),
+    }
 
     // 5. Build LLM request
     let llm_req = SqlDiagReq {

@@ -478,6 +478,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   diagError: string | null = null;
   diagElapsedMs = 0;
   diagCached = false;
+  explainSectionExpanded = false;
 
   constructor(
     private nodeService: NodeService,
@@ -5455,14 +5456,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     this.diagElapsedMs = 0;
     this.diagCached = false;
 
-    // Open dialog immediately with loading state
-    this.sqlDiagDialogRef = this.dialogService.open(this.sqlDiagDialogTemplate, {
-      hasBackdrop: true,
-      closeOnBackdropClick: false,
-      closeOnEsc: true,
-      dialogClass: 'sql-diag-dialog',
-    });
-
+    // 不再打开弹窗，直接在SQL区域显示加载状态
     this.nodeService.diagnoseSQL(
       this.clusterId,
       this.sqlInput.trim(),
@@ -5475,16 +5469,31 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         this.diagCached = resp.cached;
         if (resp.ok && resp.data) {
           this.diagResult = resp.data;
+          // 诊断完成后打开结果弹窗
+          this.openDiagResultDialog();
         } else {
           this.diagError = resp.err || '诊断失败';
+          this.toastrService.danger(this.diagError, '诊断失败');
         }
         this.cdr.markForCheck();
       },
       error: (err) => {
         this.diagnosing = false;
         this.diagError = ErrorHandler.extractErrorMessage(err);
+        this.toastrService.danger(this.diagError, '诊断失败');
         this.cdr.markForCheck();
       },
+    });
+  }
+
+
+
+  openDiagResultDialog(): void {
+    this.sqlDiagDialogRef = this.dialogService.open(this.sqlDiagDialogTemplate, {
+      hasBackdrop: true,
+      closeOnBackdropClick: true,
+      closeOnEsc: true,
+      dialogClass: 'sql-diag-dialog',
     });
   }
 
@@ -5516,5 +5525,9 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       case 'medium': return '中';
       default: return '低';
     }
+  }
+
+  toggleExplainSection(): void {
+    this.explainSectionExpanded = !this.explainSectionExpanded;
   }
 }

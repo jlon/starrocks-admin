@@ -1991,3 +1991,443 @@ mod table_type_tests {
         println!("✅ Connector type detection tests passed!");
     }
 }
+
+// ============================================================================
+// SQL Diagnosis Tests
+// ============================================================================
+
+mod sql_diag_tests {
+    use super::*;
+    use crate::services::llm::scenarios::sql_diag::{SqlDiagReq, SqlDiagResp};
+
+    /// Test SQL diagnosis with real LLM
+    /// Run with: cargo test sql_diag_tests::test_sql_diagnosis_llm --lib -- --nocapture --ignored
+    #[tokio::test]
+    #[ignore]
+    async fn test_sql_diagnosis_llm() {
+        let sep = "=".repeat(80);
+        println!("\n{}", sep);
+        println!("🧪 SQL Diagnosis LLM Integration Test");
+        println!("{}\n", sep);
+
+        // Connect to real database
+        let db_paths = vec![
+            "data/starrocks-admin.db",
+            "starrocks_admin.db",
+            "/home/oppo/Documents/starrocks-admin/backend/data/starrocks-admin.db",
+            "/home/oppo/Documents/starrocks-admin/backend/starrocks_admin.db",
+        ];
+        let db_path = db_paths
+            .iter()
+            .find(|p| std::path::Path::new(p).exists())
+            .expect("Database not found. Run backend first to initialize.");
+        println!("📁 Using database: {}", db_path);
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!("sqlite:{}", db_path))
+            .await
+            .expect("Failed to connect to database");
+
+        let llm_service = LLMServiceImpl::new(pool, true, 24);
+
+        if !llm_service.is_available() {
+            println!("⚠️  No active LLM provider found.");
+            return;
+        }
+
+        // Build test request with EXPLAIN
+        let sql = r#"SELECT o.order_id, o.customer_id, c.name, o.amount
+FROM orders o
+JOIN customers c ON o.customer_id = c.id
+WHERE o.order_date >= '2024-01-01'
+ORDER BY o.amount DESC
+LIMIT 100"#;
+
+        let explain = r#"PLAN FRAGMENT 0
+  OUTPUT EXPRS: 1: order_id | 2: customer_id | 5: name | 4: amount
+  PARTITION: UNPARTITIONED
+  RESULT SINK
+    EXCHANGE ID: 04
+    
+PLAN FRAGMENT 1
+  OUTPUT EXPRS:
+  PARTITION: HASH_PARTITIONED: 2: customer_id
+  STREAM DATA SINK
+    EXCHANGE ID: 04
+    UNPARTITIONED
+    
+  3:HASH JOIN
+     |  join op: INNER JOIN (BROADCAST)
+     |  colocate: false
+     |  equal join conjunct: 2: customer_id = 6: id
+     |  cardinality=1000000
+     |
+     |----2:EXCHANGE
+     |       distribution type: BROADCAST
+     |
+     1:OlapScanNode
+        TABLE: orders
+        PREAGGREGATION: ON
+        partitions=30/30
+        rollup: orders
+        tabletRatio=480/480
+        cardinality=10000000
+        avgRowSize=32.0
+        
+PLAN FRAGMENT 2
+  OUTPUT EXPRS:
+  PARTITION: RANDOM
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    BROADCAST
+    
+  0:OlapScanNode
+     TABLE: customers
+     PREAGGREGATION: ON
+     partitions=1/1
+     rollup: customers
+     tabletRatio=16/16
+     cardinality=50000"#;
+
+        let schema = serde_json::json!({
+            "orders": {
+                "rows": 10000000,
+                "partition": {"type": "RANGE", "key": "order_date"},
+                "dist": {"key": "order_id", "buckets": 16}
+            },
+            "customers": {
+                "rows": 50000,
+                "dist": {"key": "id", "buckets": 16}
+            }
+        });
+
+        let req = SqlDiagReq {
+            sql: sql.to_string(),
+            explain: Some(explain.to_string()),
+            schema: Some(schema),
+            vars: Some(serde_json::json!({"pipeline_dop": "0", "enable_spill": "true"})),
+        };
+
+        println!("📤 Request:");
+        println!("{}", serde_json::to_string_pretty(&req).unwrap());
+
+        println!("\n🤖 Calling LLM...\n");
+        let start = std::time::Instant::now();
+        let result = llm_service.analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_diag", None, false).await;
+        let elapsed = start.elapsed();
+
+        match result {
+            Ok(r) => {
+                println!("⏱️  LLM call took: {:?} (from_cache: {})\n", elapsed, r.from_cache);
+                println!("📥 Response:");
+                println!("{}", serde_json::to_string_pretty(&r.response).unwrap());
+
+                // Validate response
+                println!("\n📊 Validation:");
+                println!("   - SQL changed: {}", r.response.changed);
+                println!("   - Perf issues: {}", r.response.perf_issues.len());
+                println!("   - Confidence: {:.0}%", r.response.confidence * 100.0);
+                println!("   - Summary: {}", r.response.summary);
+
+                assert!(r.response.confidence > 0.0, "Confidence should be > 0");
+                assert!(!r.response.summary.is_empty(), "Summary should not be empty");
+            }
+            Err(e) => {
+                println!("❌ LLM call failed: {}", e);
+                panic!("LLM call failed: {}", e);
+            }
+        }
+    }
+
+    /// Test complex SQL diagnosis (user retention analysis)
+    /// Run with: cargo test sql_diag_tests::test_complex_sql_diagnosis --lib -- --nocapture --ignored
+    #[tokio::test]
+    #[ignore]
+    async fn test_complex_sql_diagnosis() {
+        let sep = "=".repeat(80);
+        println!("\n{}", sep);
+        println!("🧪 Complex SQL Diagnosis - User Retention Analysis");
+        println!("{}\n", sep);
+
+        // Connect to real database
+        let db_paths = vec![
+            "data/starrocks-admin.db",
+            "starrocks_admin.db",
+            "/home/oppo/Documents/starrocks-admin/backend/data/starrocks-admin.db",
+            "/home/oppo/Documents/starrocks-admin/backend/starrocks_admin.db",
+        ];
+        let db_path = db_paths
+            .iter()
+            .find(|p| std::path::Path::new(p).exists())
+            .expect("Database not found.");
+        println!("📁 Using database: {}", db_path);
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!("sqlite:{}", db_path))
+            .await
+            .expect("Failed to connect to database");
+
+        let llm_service = LLMServiceImpl::new(pool, true, 24);
+
+        if !llm_service.is_available() {
+            println!("⚠️  No active LLM provider found.");
+            return;
+        }
+
+        // Complex user retention analysis SQL
+        let sql = r#"WITH app_usage_with_name AS (
+    SELECT 
+        l.statis_id,
+        SUM(l.start_duration) / 60.0 AS start_dr_min,
+        COALESCE(d.app_name, '未知APP') AS app_name
+    FROM cpc_dw_common.dws_s01_commom_os_app_launched_inc_d l
+    INNER JOIN cpc_tmp.ads_user_retention_label_202510 urf ON l.statis_id = urf.statis_id
+    LEFT JOIN cpc_dw_common.dim_s06_common_pack_name_category_all_d d ON l.pack_name = d.pack_name
+        AND d.dayno = '20251130'
+    WHERE l.dayno BETWEEN '20251101' AND '20251130'
+        AND l.start_duration > 0
+        AND l.statis_id IS NOT NULL
+    GROUP BY l.statis_id, d.app_name
+),
+app_ranking AS (
+    SELECT 
+        app_name,
+        SUM(CASE WHEN urf.is_retained = 1 THEN start_dr_min ELSE 0 END) AS retained_total_dr
+    FROM app_usage_with_name a
+    INNER JOIN cpc_tmp.ads_user_retention_label_202510 urf ON a.statis_id = urf.statis_id
+    GROUP BY app_name
+),
+app_mapping AS (
+    SELECT 
+        app_name,
+        CASE WHEN ROW_NUMBER() OVER (ORDER BY retained_total_dr DESC) <= 30 THEN app_name
+             ELSE '其他'
+        END AS adj_app_name
+    FROM app_ranking
+)
+SELECT 
+    user_type_cn,
+    app_name,
+    retained_total_dr_min,
+    retained_total_uv,
+    churned_total_dr_min,
+    churned_total_uv
+FROM retention_comparison
+WHERE (retained_total_dr_min > 0 OR churned_total_dr_min > 0)
+ORDER BY (retained_total_dr_min + churned_total_dr_min) DESC
+LIMIT 50000"#;
+
+        let req = SqlDiagReq {
+            sql: sql.to_string(),
+            explain: None,  // No EXPLAIN for complex analysis
+            schema: None,   
+            vars: None,     
+        };
+
+        println!("📤 Complex SQL (truncated):");
+        let sql_preview = if sql.len() > 500 { 
+            format!("{}...", &sql[..500]) 
+        } else { 
+            sql.to_string() 
+        };
+        println!("{}", sql_preview);
+
+        println!("\n🤖 Calling LLM for complex SQL analysis...\n");
+        let start = std::time::Instant::now();
+        let result = llm_service.analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_complex", None, true).await;
+        let elapsed = start.elapsed();
+
+        match result {
+            Ok(r) => {
+                println!("⏱️  LLM call took: {:?}\n", elapsed);
+                println!("📥 Response:");
+                println!("{}", serde_json::to_string_pretty(&r.response).unwrap());
+
+                println!("\n📊 Analysis Results:");
+                println!("   - SQL changed: {}", r.response.changed);
+                println!("   - Confidence: {:.0}%", r.response.confidence * 100.0);
+                println!("   - Performance issues found: {}", r.response.perf_issues.len());
+                
+                for (i, issue) in r.response.perf_issues.iter().enumerate() {
+                    println!("   {}. [{}] {} - {}", i+1, issue.severity, issue.r#type, issue.desc);
+                    if let Some(fix) = &issue.fix {
+                        println!("      💡 Fix: {}", fix);
+                    }
+                }
+                
+                println!("   - Summary: {}", r.response.summary);
+
+                // Complex SQL should get meaningful analysis
+                assert!(r.response.confidence > 0.0, "Complex SQL should get some confidence");
+                assert!(!r.response.summary.is_empty(), "Summary should not be empty");
+            }
+            Err(e) => {
+                println!("❌ LLM call failed: {}", e);
+                panic!("LLM call failed: {}", e);
+            }
+        }
+    }
+
+    /// Test SQL diagnosis without EXPLAIN (static analysis only)
+    /// Run with: cargo test sql_diag_tests::test_sql_diagnosis_no_explain --lib -- --nocapture --ignored
+    #[tokio::test]
+    #[ignore]
+    async fn test_sql_diagnosis_no_explain() {
+        let sep = "=".repeat(80);
+        println!("\n{}", sep);
+        println!("🧪 SQL Diagnosis WITHOUT EXPLAIN (Static Analysis)");
+        println!("{}\n", sep);
+
+        // Connect to real database
+        let db_paths = vec![
+            "data/starrocks-admin.db",
+            "starrocks_admin.db",
+            "/home/oppo/Documents/starrocks-admin/backend/data/starrocks-admin.db",
+            "/home/oppo/Documents/starrocks-admin/backend/starrocks_admin.db",
+        ];
+        let db_path = db_paths
+            .iter()
+            .find(|p| std::path::Path::new(p).exists())
+            .expect("Database not found.");
+        println!("📁 Using database: {}", db_path);
+
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&format!("sqlite:{}", db_path))
+            .await
+            .expect("Failed to connect to database");
+
+        let llm_service = LLMServiceImpl::new(pool, true, 24);
+
+        if !llm_service.is_available() {
+            println!("⚠️  No active LLM provider found.");
+            return;
+        }
+
+        // Build test request WITHOUT EXPLAIN (simulating frontend scenario)
+        let sql = r#"SELECT * FROM orders o
+JOIN customers c ON o.customer_id = c.id
+ORDER BY o.created_at DESC"#;
+
+        let req = SqlDiagReq {
+            sql: sql.to_string(),
+            explain: None,  // No EXPLAIN!
+            schema: None,   // No schema!
+            vars: None,     // No vars!
+        };
+
+        println!("📤 Request (NO EXPLAIN):");
+        println!("{}", serde_json::to_string_pretty(&req).unwrap());
+
+        println!("\n🤖 Calling LLM for static analysis...\n");
+        let start = std::time::Instant::now();
+        let result = llm_service.analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_no_explain", None, true).await;
+        let elapsed = start.elapsed();
+
+        match result {
+            Ok(r) => {
+                println!("⏱️  LLM call took: {:?}\n", elapsed);
+                println!("📥 Response:");
+                println!("{}", serde_json::to_string_pretty(&r.response).unwrap());
+
+                println!("\n📊 Validation:");
+                println!("   - Confidence: {:.0}%", r.response.confidence * 100.0);
+                println!("   - Perf issues: {}", r.response.perf_issues.len());
+                println!("   - Summary: {}", r.response.summary);
+
+                // Even without EXPLAIN, we should get some analysis
+                assert!(r.response.confidence > 0.0, "Confidence should be > 0 even without EXPLAIN");
+                assert!(!r.response.summary.is_empty(), "Summary should not be empty");
+            }
+            Err(e) => {
+                println!("❌ LLM call failed: {}", e);
+                panic!("LLM call failed: {}", e);
+            }
+        }
+    }
+
+    /// Test SqlDiagResp deserialization with various JSON formats
+    #[test]
+    fn test_sql_diag_resp_deserialization() {
+        // Test 1: Full response
+        let json = r#"{
+            "sql": "SELECT * FROM orders WHERE order_date >= '2024-01-01'",
+            "changed": true,
+            "perf_issues": [
+                {"type": "full_scan", "severity": "high", "desc": "Full table scan", "fix": "Add partition filter"}
+            ],
+            "explain_analysis": {
+                "scan_type": "full_scan",
+                "join_strategy": "broadcast",
+                "estimated_rows": 10000000,
+                "estimated_cost": "high"
+            },
+            "summary": "Found 1 high severity issue",
+            "confidence": 0.85
+        }"#;
+        let resp: SqlDiagResp = serde_json::from_str(json).expect("Failed to parse full response");
+        assert!(resp.changed);
+        assert_eq!(resp.perf_issues.len(), 1);
+        assert_eq!(resp.confidence, 0.85);
+        println!("✅ Full response parsed correctly");
+
+        // Test 2: Minimal response (all defaults)
+        let json = r#"{}"#;
+        let resp: SqlDiagResp = serde_json::from_str(json).expect("Failed to parse empty response");
+        assert!(!resp.changed);
+        assert!(resp.perf_issues.is_empty());
+        assert_eq!(resp.confidence, 0.0);
+        println!("✅ Empty response parsed with defaults");
+
+        // Test 3: Response with missing optional fields
+        let json = r#"{
+            "sql": "SELECT 1",
+            "changed": false,
+            "summary": "No issues found",
+            "confidence": 0.9
+        }"#;
+        let resp: SqlDiagResp = serde_json::from_str(json).expect("Failed to parse partial response");
+        assert!(!resp.changed);
+        assert!(resp.perf_issues.is_empty());
+        assert!(resp.explain_analysis.is_none());
+        assert_eq!(resp.confidence, 0.9);
+        println!("✅ Partial response parsed correctly");
+
+        // Test 4: Response with perf_issues but no fix
+        let json = r#"{
+            "sql": "SELECT * FROM t",
+            "changed": false,
+            "perf_issues": [
+                {"type": "select_star", "severity": "low", "desc": "Using SELECT *"}
+            ],
+            "summary": "Minor issue found",
+            "confidence": 0.7
+        }"#;
+        let resp: SqlDiagResp = serde_json::from_str(json).expect("Failed to parse response without fix");
+        assert_eq!(resp.perf_issues.len(), 1);
+        assert!(resp.perf_issues[0].fix.is_none());
+        println!("✅ Response without fix parsed correctly");
+
+        // Test 5: Response with "unknown" estimated_rows (string instead of number)
+        let json = r#"{
+            "sql": "SELECT * FROM t",
+            "changed": false,
+            "explain_analysis": {
+                "scan_type": "unknown",
+                "join_strategy": "unknown", 
+                "estimated_rows": "unknown",
+                "estimated_cost": "unknown"
+            },
+            "summary": "Analysis with unknown values",
+            "confidence": 0.5
+        }"#;
+        let resp: SqlDiagResp = serde_json::from_str(json).expect("Failed to parse response with unknown values");
+        assert!(resp.explain_analysis.is_some());
+        let analysis = resp.explain_analysis.unwrap();
+        assert_eq!(analysis.scan_type, Some("unknown".to_string()));
+        assert!(analysis.estimated_rows.is_none()); // "unknown" string becomes None
+        println!("✅ Response with 'unknown' string values parsed correctly");
+    }
+}

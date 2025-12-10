@@ -120,12 +120,13 @@
                   <div class="graph-content" 
                        [style.width.px]="graphWidth" 
                        [style.height.px]="graphHeight"
-                       [style.transform]="'translate3d(' + translateX + 'px, ' + translateY + 'px, 0) scale(' + zoomLevel + ')'"
+                       [style.transform]="'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + zoomLevel + ')'"
                        [style.transformOrigin]="'0 0'">
                     
-                    <!-- Edges - Lines with dynamic width based on rows -->
-                    <svg class="edges-svg" [attr.width]="graphWidth" [attr.height]="graphHeight">
-                      <!-- Arrow marker definitions - dynamic size based on stroke width -->
+                    <!-- Edges SVG -->
+                    <svg class="edges-svg" 
+                         [attr.width]="graphWidth" 
+                         [attr.height]="graphHeight">
                       <defs>
                         <marker *ngFor="let edge of graphEdges"
                                 [attr.id]="edge.markerId"
@@ -135,19 +136,16 @@
                                 [attr.refY]="edge.arrowRefY"
                                 orient="auto"
                                 markerUnits="userSpaceOnUse">
-                          <!-- Dynamic triangle arrow head: scales with stroke width -->
                           <polygon [attr.points]="edge.arrowPoints" [attr.fill]="edge.strokeColor"/>
                         </marker>
                       </defs>
                       <g *ngFor="let edge of graphEdges">
-                        <!-- Base path (static) -->
                         <path [attr.d]="getEdgePath(edge.points)" 
                               class="edge-path edge-base" 
                               [attr.stroke]="edge.strokeColor"
                               [attr.stroke-width]="edge.strokeWidth"
                               stroke-linejoin="round"
                               [attr.marker-end]="'url(#' + edge.markerId + ')'" />
-                        <!-- Animated flow overlay -->
                         <path *ngIf="isFlowAnimationEnabled"
                               [attr.d]="getEdgePath(edge.points)" 
                               class="edge-path edge-flow" 
@@ -168,8 +166,7 @@
                       </ng-container>
                     </div>
                     
-                    <!-- Nodes - 复刻图1样式 -->
-                    <!-- Use integer pixel positions to prevent subpixel blur -->
+                    <!-- Nodes -->
                     <div *ngFor="let node of graphNodes" 
                          class="dag-node" [attr.data-node-id]="node.id"
                          [ngClass]="{
@@ -182,8 +179,8 @@
                            'node-exchange': isExchangeNode(node),
                            'node-agg': isAggregationNode(node)
                          }"
-                         [style.left.px]="roundPixel(node.x - node.width/2)"
-                         [style.top.px]="roundPixel(node.y - node.height/2)"
+                         [style.left.px]="node.x - node.width/2"
+                         [style.top.px]="node.y - node.height/2"
                          [style.width.px]="node.width"
                          (click)="selectNode(node, $event)">
                       

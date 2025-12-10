@@ -109,9 +109,6 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   
   private nodeRankMap: Map<string, number> = new Map(); // Node rank by time percentage
   objectKeys = Object.keys; // Helper for template
-  
-  // Helper to round pixel values - prevents subpixel blur in DAG rendering
-  roundPixel = (val: number): number => Math.round(val);
 
   // Metric descriptions for tooltips
   // Reference: https://docs.starrocks.io/zh/docs/best_practices/query_tuning/query_profile_operator_metrics/
@@ -1177,6 +1174,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     if (!nodeElements.length) return;
     
     // Build a map of actual DOM heights
+    // getBoundingClientRect returns scaled size, so divide by zoomLevel to get original
     const actualHeights: Map<string, number> = new Map();
     nodeElements.forEach((el: Element) => {
       const nodeId = el.getAttribute('data-node-id');
@@ -1254,10 +1252,13 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     if (viewport && this.graphWidth > 0 && this.graphHeight > 0) {
       const vw = viewport.clientWidth;
       const vh = viewport.clientHeight;
-      // Calculate center
-      this.translateX = (vw - this.graphWidth * this.zoomLevel) / 2;
-      this.translateY = (vh - this.graphHeight * this.zoomLevel) / 2;
-      // Ensure some padding top if it's too high
+      // Calculate scaled dimensions
+      const scaledWidth = this.graphWidth * this.zoomLevel;
+      const scaledHeight = this.graphHeight * this.zoomLevel;
+      // Center the graph
+      this.translateX = Math.round((vw - scaledWidth) / 2);
+      this.translateY = Math.round((vh - scaledHeight) / 2);
+      // Ensure some padding if content is larger than viewport
       if (this.translateY < 20) this.translateY = 20;
       if (this.translateX < 20) this.translateX = 20;
     }

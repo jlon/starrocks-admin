@@ -212,15 +212,15 @@
   
   .graph-content {
     position: relative;
-    // Force GPU acceleration with crisp rendering
-    will-change: transform;
-    transform-style: preserve-3d;
-    backface-visibility: hidden;
-    // Ensure text is crisp
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    // Prevent blur on fractional pixels
+    // Prevent blur when using transform: scale()
+    // These properties force the browser to render at higher quality
     image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    // Force GPU compositing layer
+    will-change: transform;
+    // Ensure pixel-perfect rendering
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
   }
 }
 
@@ -241,14 +241,15 @@
   // Only transition box-shadow, not all properties - prevents blur
   transition: box-shadow 0.2s ease;
   overflow: hidden;
-  // Force independent GPU compositing layer for crisp rendering at any zoom level
-  // translateZ(0) triggers hardware acceleration and prevents subpixel blur
+  // Critical for crisp rendering when parent has transform: scale()
+  // Force browser to create separate compositing layer for each node
   transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+  // Ensure text remains sharp
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  // Prevent fractional pixel blur
-  will-change: transform;
+  text-rendering: geometricPrecision;
   
   &::after {
     content: '';

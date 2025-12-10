@@ -1340,134 +1340,143 @@
 
 
 // ============================================
-// SQL Diagnosis Dialog - ngx-admin Native Style
+// SQL Diagnosis Dialog - Pure ngx-admin Style
 // ============================================
 
+// 对于ng-template中的对话框，样式直接应用在nb-card类上
 .sql-diag-dialog {
-  width: 800px;
-  max-width: 90vw;
-  max-height: 85vh;
+  width: min(90vw, 700px);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  
+  nb-card-header {
+    flex-shrink: 0;
+    padding: 1rem;
+    
+    h5 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    
+    // 关闭按钮缩小
+    .diag-close-btn {
+      padding: 0.25rem;
+      min-width: auto;
+      
+      nb-icon {
+        font-size: 1rem;
+      }
+    }
+  }
   
   nb-card-body {
-    padding: 1.25rem !important;
+    flex: 1;
     overflow-y: auto;
-    max-height: 70vh;
+    padding: 1rem !important;
+    min-height: 0;
+    
+    // 内部卡片去除多余边距，保持对称
+    > .mb-3:last-child {
+      margin-bottom: 0 !important;
+    }
+    
+    nb-card {
+      margin: 0;
+      
+      nb-card-header {
+        padding: 0.75rem 1rem;
+      }
+      
+      nb-card-body {
+        padding: 1rem !important;
+      }
+    }
   }
   
   nb-card-footer {
-    padding: 1rem 1.25rem;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
     border-top: 1px solid nb-theme(border-basic-color-3);
   }
 }
 
-// SQL Optimization Card (Most Important)
-.sql-optimization-card {
-  .sql-code-container {
-    position: relative;
-    
-    .sql-code {
-      background: nb-theme(background-basic-color-2);
-      border: 1px solid nb-theme(border-basic-color-3);
-      border-radius: nb-theme(border-radius);
-      padding: 1rem;
-      font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
-      font-size: 0.875rem;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 250px;
-      overflow-y: auto;
-      margin: 0;
-      color: nb-theme(text-basic-color);
-    }
-  }
-}
-
-// Summary Icon
-.summary-icon {
-  font-size: 2rem !important;
-  flex-shrink: 0;
-}
-
-// Confidence Badge
-.confidence-badge {
-  text-align: center;
-  min-width: 60px;
-  
-  .confidence-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: nb-theme(color-primary-600);
-    line-height: 1;
-  }
-  
-  .confidence-label {
-    font-size: 0.75rem;
-    color: nb-theme(text-hint-color);
-    margin-top: 0.25rem;
-  }
-}
-
-// Issues List
-.issues-list {
-  .issue-item {
-    background: nb-theme(background-basic-color-1);
-    
-    .badge {
-      font-size: 0.7rem;
-      padding: 0.25rem 0.5rem;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-    
-    .badge-danger { 
-      background: nb-theme(color-danger-500); 
-      color: #fff; 
-    }
-    
-    .badge-warning { 
-      background: nb-theme(color-warning-500); 
-      color: #222; 
-    }
-    
-    .badge-info { 
-      background: nb-theme(color-info-500); 
-      color: #fff; 
-    }
-    
-    .solution-box {
-      border: 1px solid nb-theme(color-success-200);
-    }
-  }
-}
-
-// Explain Metrics
-.explain-metric {
-  label {
-    display: block;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    margin-bottom: 0.5rem;
-  }
-  
-  .metric-value {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: nb-theme(text-basic-color);
-    padding: 0.5rem 0.75rem;
-    background: nb-theme(background-basic-color-2);
-    border-radius: nb-theme(border-radius);
-    border: 1px solid nb-theme(border-basic-color-3);
-  }
-}
-
-// Cursor pointer for collapsible sections
+// 通用样式
 .cursor-pointer {
   cursor: pointer;
+  user-select: none;
+}
+
+// 确保代码区域有合适的字体和换行
+pre {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', Consolas, monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+// 问题项样式
+.issue-item {
+  padding: 1rem;
+  background: nb-theme(background-basic-color-2);
+  border-radius: nb-theme(border-radius);
+  border-left: 3px solid nb-theme(border-basic-color-4);
   
-  &:hover {
-    background: nb-theme(background-basic-color-2);
+  .fix-box {
+    padding: 0.5rem 1rem;
+    background: nb-theme(background-basic-color-1);
+    border-radius: nb-theme(border-radius);
+    border: 1px solid nb-theme(color-success-200);
+    color: nb-theme(color-success-600);
+    font-size: 0.875rem;
+  }
+}
+
+// SQL代码框样式
+.sql-code-box {
+  max-height: 260px;
+  overflow: auto;
+  background: nb-theme(background-basic-color-2);
+  border: 1px solid nb-theme(border-basic-color-3);
+  border-radius: nb-theme(border-radius);
+  
+  // 统一滚动条样式
+  &::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(143, 150, 170, 0.3);
+    border-radius: 2px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(143, 150, 170, 0.45);
+  }
+  
+  pre {
+    margin: 0;
+    padding: 1rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', Consolas, monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: nb-theme(text-basic-color);
+    overflow: visible;
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  :host ::ng-deep .sql-diag-dialog {
+    width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
   }
 }

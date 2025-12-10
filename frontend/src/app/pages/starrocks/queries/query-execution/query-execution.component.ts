@@ -5493,7 +5493,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       hasBackdrop: true,
       closeOnBackdropClick: true,
       closeOnEsc: true,
-      dialogClass: 'sql-diag-dialog',
     });
   }
 
@@ -5529,5 +5528,18 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   toggleExplainSection(): void {
     this.explainSectionExpanded = !this.explainSectionExpanded;
+  }
+
+  hasIssues(): boolean {
+    return this.diagResult?.perf_issues?.length > 0 || this.diagResult?.changed === true;
+  }
+
+  formatDiagSQL(sql: string): string {
+    if (!sql) return '';
+    try {
+      return format(sql, { language: 'mysql', tabWidth: 2, keywordCase: 'upper' });
+    } catch {
+      return sql;
+    }
   }
 }

@@ -109,6 +109,9 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
   
   private nodeRankMap: Map<string, number> = new Map(); // Node rank by time percentage
   objectKeys = Object.keys; // Helper for template
+  
+  // Helper to round pixel values - prevents subpixel blur in DAG rendering
+  roundPixel = (val: number): number => Math.round(val);
 
   // Metric descriptions for tooltips
   // Reference: https://docs.starrocks.io/zh/docs/best_practices/query_tuning/query_profile_operator_metrics/
@@ -962,15 +965,16 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
       edges: g.edges().length
     });
 
-    // Extract coordinates
+    // Extract coordinates - round to integer pixels to prevent subpixel blur
     this.graphNodes = nodeList.map((node: any) => {
       const layoutNode = g.node(node.id);
       
       // Calculate coordinates for sanitized output
-      const x = (layoutNode && isFinite(layoutNode.x)) ? layoutNode.x : 0;
-      const y = (layoutNode && isFinite(layoutNode.y)) ? layoutNode.y : 0;
-      const width = (layoutNode && isFinite(layoutNode.width)) ? layoutNode.width : 220;
-      const height = (layoutNode && isFinite(layoutNode.height)) ? layoutNode.height : 95;
+      // Round to integers to avoid subpixel rendering blur
+      const x = (layoutNode && isFinite(layoutNode.x)) ? Math.round(layoutNode.x) : 0;
+      const y = (layoutNode && isFinite(layoutNode.y)) ? Math.round(layoutNode.y) : 0;
+      const width = (layoutNode && isFinite(layoutNode.width)) ? Math.round(layoutNode.width) : 220;
+      const height = (layoutNode && isFinite(layoutNode.height)) ? Math.round(layoutNode.height) : 95;
 
       return {
         ...node,

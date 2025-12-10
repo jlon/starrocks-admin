@@ -241,10 +241,14 @@
   // Only transition box-shadow, not all properties - prevents blur
   transition: box-shadow 0.2s ease;
   overflow: hidden;
-  // Force GPU layer for crisp rendering
+  // Force independent GPU compositing layer for crisp rendering at any zoom level
+  // translateZ(0) triggers hardware acceleration and prevents subpixel blur
+  transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  // Prevent fractional pixel blur
+  will-change: transform;
   
   &::after {
     content: '';

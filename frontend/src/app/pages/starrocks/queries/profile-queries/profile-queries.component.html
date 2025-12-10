@@ -169,6 +169,7 @@
                     </div>
                     
                     <!-- Nodes - 复刻图1样式 -->
+                    <!-- Use integer pixel positions to prevent subpixel blur -->
                     <div *ngFor="let node of graphNodes" 
                          class="dag-node" [attr.data-node-id]="node.id"
                          [ngClass]="{
@@ -181,8 +182,8 @@
                            'node-exchange': isExchangeNode(node),
                            'node-agg': isAggregationNode(node)
                          }"
-                         [style.left.px]="node.x - (node.width/2)"
-                         [style.top.px]="node.y - (node.height/2)"
+                         [style.left.px]="roundPixel(node.x - node.width/2)"
+                         [style.top.px]="roundPixel(node.y - node.height/2)"
                          [style.width.px]="node.width"
                          (click)="selectNode(node, $event)">
                       

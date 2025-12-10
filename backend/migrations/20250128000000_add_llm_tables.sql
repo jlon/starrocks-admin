@@ -1,11 +1,16 @@
 -- ============================================================================
--- LLM Service Tables
+-- LLM Service Tables and Permissions
 -- Provides LLM-enhanced analysis capabilities for StarRocks Admin
 -- Created: 2025-01-28
+-- Updated: 2025-01-29 (merged with permissions)
 -- ============================================================================
 
 -- ============================================================================
--- LLM Provider Configuration
+-- SECTION 1: LLM TABLES
+-- ============================================================================
+
+-- ============================================================================
+-- 1.1 LLM Provider Configuration
 -- Stores API configuration for different LLM providers (OpenAI, Azure, DeepSeek, etc.)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS llm_providers (
@@ -31,7 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_providers_active ON llm_providers(is_active) 
 CREATE INDEX IF NOT EXISTS idx_llm_providers_enabled ON llm_providers(enabled, priority);
 
 -- ============================================================================
--- LLM Analysis Sessions
+-- 1.2 LLM Analysis Sessions
 -- Tracks each LLM analysis request for monitoring and debugging
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS llm_analysis_sessions (
@@ -57,7 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_sessions_cluster ON llm_analysis_sessions(clu
 CREATE INDEX IF NOT EXISTS idx_llm_sessions_scenario ON llm_analysis_sessions(scenario);
 
 -- ============================================================================
--- LLM Analysis Requests
+-- 1.3 LLM Analysis Requests
 -- Stores the input data sent to LLM (for debugging and replay)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS llm_analysis_requests (
@@ -74,7 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_requests_session ON llm_analysis_requests(ses
 CREATE INDEX IF NOT EXISTS idx_llm_requests_hash ON llm_analysis_requests(sql_hash, profile_hash);
 
 -- ============================================================================
--- LLM Analysis Results
+-- 1.4 LLM Analysis Results
 -- Stores the parsed LLM response
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS llm_analysis_results (
@@ -96,7 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_results_session ON llm_analysis_results(sessi
 CREATE INDEX IF NOT EXISTS idx_llm_results_confidence ON llm_analysis_results(confidence_avg);
 
 -- ============================================================================
--- LLM Response Cache
+-- 1.5 LLM Response Cache
 -- Caches LLM responses to avoid redundant API calls for similar queries
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS llm_cache (
@@ -117,7 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_cache_expires ON llm_cache(expires_at);
 CREATE INDEX IF NOT EXISTS idx_llm_cache_scenario ON llm_cache(scenario);
 
 -- ============================================================================
--- LLM Usage Statistics (Aggregated)
+-- 1.6 LLM Usage Statistics (Aggregated)
 -- Daily aggregated statistics for monitoring and cost tracking
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS llm_usage_stats (
@@ -140,7 +145,7 @@ CREATE TABLE IF NOT EXISTS llm_usage_stats (
 CREATE INDEX IF NOT EXISTS idx_llm_usage_date ON llm_usage_stats(date, provider_id);
 
 -- ============================================================================
--- Triggers for automatic timestamp updates
+-- 1.7 Triggers for automatic timestamp updates
 -- ============================================================================
 CREATE TRIGGER IF NOT EXISTS update_llm_providers_timestamp
 AFTER UPDATE ON llm_providers
@@ -149,7 +154,76 @@ BEGIN
 END;
 
 -- ============================================================================
--- Insert default DeepSeek provider (inactive by default)
+-- SECTION 2: DEFAULT DATA
+-- ============================================================================
+
+-- ============================================================================
+-- 2.1 Insert default DeepSeek provider (inactive by default)
 -- ============================================================================
 INSERT OR IGNORE INTO llm_providers (name, display_name, api_base, model_name, is_active, enabled, priority)
 VALUES ('deepseek', 'DeepSeek Chat', 'https://api.deepseek.com/v1', 'deepseek-chat', FALSE, TRUE, 1);
+
+-- ============================================================================
+-- SECTION 3: LLM PERMISSIONS
+-- ============================================================================
+
+-- ============================================================================
+-- 3.1 Add LLM Menu Permission
+-- ============================================================================
+INSERT OR IGNORE INTO permissions (code, name, type, resource, action, description) VALUES
+('menu:system:llm', 'LLM管理', 'menu', 'system:llm', 'view', '查看LLM管理');
+
+-- ============================================================================
+-- 3.2 Add LLM API Permissions
+-- ============================================================================
+INSERT OR IGNORE INTO permissions (code, name, type, resource, action, description) VALUES
+-- LLM Status
+('api:llm:status', 'LLM服务状态', 'api', 'llm', 'status', 'GET /api/llm/status'),
+-- LLM Providers CRUD
+('api:llm:providers:list', 'LLM提供商列表', 'api', 'llm', 'providers:list', 'GET /api/llm/providers'),
+('api:llm:providers:get', '查看LLM提供商', 'api', 'llm', 'providers:get', 'GET /api/llm/providers/:id'),
+('api:llm:providers:active', '获取活跃LLM提供商', 'api', 'llm', 'providers:active', 'GET /api/llm/providers/active'),
+('api:llm:providers:create', '创建LLM提供商', 'api', 'llm', 'providers:create', 'POST /api/llm/providers'),
+('api:llm:providers:update', '更新LLM提供商', 'api', 'llm', 'providers:update', 'PUT /api/llm/providers/:id'),
+('api:llm:providers:delete', '删除LLM提供商', 'api', 'llm', 'providers:delete', 'DELETE /api/llm/providers/:id'),
+('api:llm:providers:activate', '激活LLM提供商', 'api', 'llm', 'providers:activate', 'POST /api/llm/providers/:id/activate'),
+('api:llm:providers:deactivate', '停用LLM提供商', 'api', 'llm', 'providers:deactivate', 'POST /api/llm/providers/:id/deactivate'),
+('api:llm:providers:test', '测试LLM连接', 'api', 'llm', 'providers:test', 'POST /api/llm/providers/:id/test'),
+-- LLM Analysis
+('api:llm:analyze:root-cause', 'LLM根因分析', 'api', 'llm', 'analyze:root-cause', 'POST /api/llm/analyze/root-cause');
+
+-- ============================================================================
+-- 3.3 Set Parent ID for LLM API Permissions
+-- ============================================================================
+-- Associate LLM API permissions with menu:system:llm
+UPDATE permissions 
+SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system:llm')
+WHERE code LIKE 'api:llm:%';
+
+-- ============================================================================
+-- 3.4 Grant LLM Permissions to Admin Role
+-- ============================================================================
+-- Ensure admin role has all LLM permissions
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+SELECT (SELECT id FROM roles WHERE code='admin'), id 
+FROM permissions 
+WHERE code LIKE 'menu:system:llm' OR code LIKE 'api:llm:%';
+
+-- ============================================================================
+-- MIGRATION COMPLETE
+-- ============================================================================
+-- Tables Created (6):
+--   1. llm_providers          - LLM provider configuration
+--   2. llm_analysis_sessions  - Analysis session tracking
+--   3. llm_analysis_requests  - Request data storage
+--   4. llm_analysis_results   - Analysis results
+--   5. llm_cache              - Response cache
+--   6. llm_usage_stats        - Usage statistics
+--
+-- Default Data:
+--   - DeepSeek provider (inactive by default)
+--
+-- Permissions Added:
+--   - 1 menu permission: menu:system:llm
+--   - 11 API permissions for LLM management
+--   - All permissions assigned to admin role

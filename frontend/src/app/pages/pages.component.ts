@@ -190,31 +190,33 @@ export class PagesComponent implements OnInit {
         const functionName = params.get('function');
         if (functionName) {
           // 映射功能名称到中文标题（确保与 system-management.component.ts 中的定义一致）
+          // 基于 StarRocks 官方支持的 PROC 路径
           const functionTitleMap: { [key: string]: string } = {
             'backends': 'Backend节点信息',
+            'compute_nodes': '计算节点信息(CN)',
             'frontends': 'Frontend节点信息',
             'brokers': 'Broker节点信息',
             'statistic': '统计信息',
+            'monitor': '监控信息',
+            'cluster_balance': '集群均衡',
+            'historical_nodes': '历史节点',
             'dbs': '数据库信息',
-            'tables': '表信息',
-            'tablet_schema': 'Tablet Schema',
-            'partitions': '分区信息',
+            'catalog': 'Catalog信息',
             'transactions': '事务信息',
             'routine_loads': 'Routine Load任务',
             'stream_loads': 'Stream Load任务',
-            'loads': 'Load任务',
             'load_error_hub': 'Load错误信息',
-            'catalog': 'Catalog信息',
+            'tasks': '任务列表',
+            'replications': '复制任务',
+            'current_queries': '当前查询',
+            'global_current_queries': '全局当前查询',
+            'current_backend_instances': '当前后端实例',
             'resources': '资源信息',
-            'workload_groups': '工作负载组',
-            'workload_sched_policy': '工作负载调度策略',
+            'warehouses': '仓库信息',
             'compactions': '压缩任务',
-            'colocate_group': 'Colocate Group',
-            'bdbje': 'BDBJE信息',
-            'small_files': '小文件信息',
-            'trash': '回收站',
+            'colocation_group': 'Colocation Group',
             'jobs': '作业信息',
-            'repositories': '仓库信息'
+            'meta_recovery': '元数据恢复'
           };
           return functionTitleMap[functionName] || `功能卡片: ${functionName}`;
         }

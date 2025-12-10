@@ -219,16 +219,11 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 ('api:clusters:system:current_backend_instances', '查询当前Backend实例', 'api', 'clusters', 'system:current_backend_instances', 'GET /api/clusters/system/current_backend_instances'),
 ('api:clusters:system:historical_nodes', '查询历史节点', 'api', 'clusters', 'system:historical_nodes', 'GET /api/clusters/system/historical_nodes'),
 ('api:clusters:system:compactions', '查询压缩任务', 'api', 'clusters', 'system:compactions', 'GET /api/clusters/system/compactions'),
--- Additional system functions that may be called directly via PROC paths
-('api:clusters:system:tables', '查询表信息', 'api', 'clusters', 'system:tables', 'GET /api/clusters/system/tables'),
-('api:clusters:system:tablet_schema', '查询Tablet Schema', 'api', 'clusters', 'system:tablet_schema', 'GET /api/clusters/system/tablet_schema'),
-('api:clusters:system:partitions', '查询分区信息', 'api', 'clusters', 'system:partitions', 'GET /api/clusters/system/partitions'),
-('api:clusters:system:loads', '查询加载任务', 'api', 'clusters', 'system:loads', 'GET /api/clusters/system/loads'),
-('api:clusters:system:workgroups', '查询工作组', 'api', 'clusters', 'system:workgroups', 'GET /api/clusters/system/workgroups'),
-('api:clusters:system:tablets', '查询Tablet信息', 'api', 'clusters', 'system:tablets', 'GET /api/clusters/system/tablets'),
-('api:clusters:system:colocate_group', '查询Colocate Group', 'api', 'clusters', 'system:colocate_group', 'GET /api/clusters/system/colocate_group'),
-('api:clusters:system:routine_load_jobs', '查询Routine Load Jobs', 'api', 'clusters', 'system:routine_load_jobs', 'GET /api/clusters/system/routine_load_jobs'),
-('api:clusters:system:stream_load_jobs', '查询Stream Load Jobs', 'api', 'clusters', 'system:stream_load_jobs', 'GET /api/clusters/system/stream_load_jobs'),
+-- Additional supported PROC paths
+('api:clusters:system:monitor', '查询监控信息', 'api', 'clusters', 'system:monitor', 'GET /api/clusters/system/monitor'),
+('api:clusters:system:cluster_balance', '查询集群均衡', 'api', 'clusters', 'system:cluster_balance', 'GET /api/clusters/system/cluster_balance'),
+('api:clusters:system:meta_recovery', '查询元数据恢复', 'api', 'clusters', 'system:meta_recovery', 'GET /api/clusters/system/meta_recovery'),
+('api:clusters:system:colocation_group', '查询Colocation Group', 'api', 'clusters', 'system:colocation_group', 'GET /api/clusters/system/colocation_group'),
 -- System Functions
 ('api:clusters:system:functions', '查询系统函数列表', 'api', 'clusters', 'system:functions', 'GET /api/clusters/system-functions'),
 ('api:clusters:system:functions:create', '创建系统函数', 'api', 'clusters', 'system:functions:create', 'POST /api/clusters/system-functions'),
@@ -661,18 +656,18 @@ UPDATE permissions
 SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:queries:profiles')
 WHERE code = 'api:clusters:profiles';
 
--- 19.7.7 System Menu - All System APIs (including 25 system function details)
+-- 19.7.7 System Menu - All System APIs (based on official PROC paths)
 UPDATE permissions 
 SET parent_id = (SELECT id FROM permissions WHERE code = 'menu:system')
 WHERE code IN (
     'api:clusters:system',                    -- System info list
     'api:clusters:system:runtime_info',       -- Runtime info
-    -- 25 System Function Details
+    -- Official PROC Paths (25 supported)
     'api:clusters:system:brokers',
     'api:clusters:system:frontends',
     'api:clusters:system:routine_loads',
     'api:clusters:system:catalog',
-    'api:clusters:system:colocation_group',
+    'api:clusters:system:colocation_group',   -- Note: correct spelling (not colocate_group)
     'api:clusters:system:cluster_balance',
     'api:clusters:system:load_error_hub',
     'api:clusters:system:meta_recovery',
@@ -683,6 +678,7 @@ WHERE code IN (
     'api:clusters:system:jobs',
     'api:clusters:system:warehouses',
     'api:clusters:system:resources',
+    'api:clusters:system:monitor',
     'api:clusters:system:transactions',
     'api:clusters:system:backends',
     'api:clusters:system:current_queries',
@@ -692,16 +688,6 @@ WHERE code IN (
     'api:clusters:system:current_backend_instances',
     'api:clusters:system:historical_nodes',
     'api:clusters:system:compactions',
-    -- Additional system functions called via PROC paths
-    'api:clusters:system:tables',
-    'api:clusters:system:tablet_schema',
-    'api:clusters:system:partitions',
-    'api:clusters:system:loads',
-    'api:clusters:system:workgroups',
-    'api:clusters:system:tablets',
-    'api:clusters:system:colocate_group',
-    'api:clusters:system:routine_load_jobs',
-    'api:clusters:system:stream_load_jobs',
     -- System Functions Management
     'api:clusters:system:functions',
     'api:clusters:system:functions:create',

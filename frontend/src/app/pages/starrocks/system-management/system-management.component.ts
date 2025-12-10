@@ -53,32 +53,46 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
   clusterId: number;
   activeCluster: Cluster | null = null;
   
-  // 系统默认功能（硬编码）
+  // 系统默认功能（基于 StarRocks 官方支持的 PROC 路径）
+  // 官方支持: brokers, frontends, routine_loads, catalog, colocation_group, cluster_balance,
+  // load_error_hub, meta_recovery, global_current_queries, tasks, compute_nodes, statistic,
+  // jobs, warehouses, resources, monitor, transactions, backends, current_queries, stream_loads,
+  // replications, dbs, current_backend_instances, historical_nodes, compactions
   systemFunctions: SystemFunctionOld[] = [
-    { name: 'backends', description: '计算节点信息(BE/CN)', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
+    // 集群信息
+    { name: 'backends', description: '计算节点信息(BE)', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
+    { name: 'compute_nodes', description: '计算节点信息(CN)', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
     { name: 'frontends', description: 'Frontend节点信息', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
     { name: 'brokers', description: 'Broker节点信息', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
     { name: 'statistic', description: '统计信息', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
+    { name: 'monitor', description: '监控信息', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
+    { name: 'cluster_balance', description: '集群均衡', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
+    { name: 'historical_nodes', description: '历史节点', category: '集群信息', status: 'active', last_updated: '2024-01-01' },
+    // 数据库管理
     { name: 'dbs', description: '数据库信息', category: '数据库管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'tables', description: '表信息', category: '数据库管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'tablet_schema', description: 'Tablet Schema', category: '数据库管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'partitions', description: '分区信息', category: '数据库管理', status: 'active', last_updated: '2024-01-01' },
+    { name: 'catalog', description: 'Catalog信息', category: '数据库管理', status: 'active', last_updated: '2024-01-01' },
+    // 事务管理
     { name: 'transactions', description: '事务信息', category: '事务管理', status: 'active', last_updated: '2024-01-01' },
+    // 任务管理
     { name: 'routine_loads', description: 'Routine Load任务', category: '任务管理', status: 'active', last_updated: '2024-01-01' },
     { name: 'stream_loads', description: 'Stream Load任务', category: '任务管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'loads', description: 'Load任务', category: '任务管理', status: 'active', last_updated: '2024-01-01' },
     { name: 'load_error_hub', description: 'Load错误信息', category: '任务管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'catalog', description: 'Catalog信息', category: '元数据管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'resources', description: '资源信息', category: '元数据管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'workload_groups', description: '工作负载组', category: '元数据管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'workload_sched_policy', description: '工作负载调度策略', category: '元数据管理', status: 'active', last_updated: '2024-01-01' },
+    { name: 'tasks', description: '任务列表', category: '任务管理', status: 'active', last_updated: '2024-01-01' },
+    { name: 'replications', description: '复制任务', category: '任务管理', status: 'active', last_updated: '2024-01-01' },
+    // 查询管理
+    { name: 'current_queries', description: '当前查询', category: '查询管理', status: 'active', last_updated: '2024-01-01' },
+    { name: 'global_current_queries', description: '全局当前查询', category: '查询管理', status: 'active', last_updated: '2024-01-01' },
+    { name: 'current_backend_instances', description: '当前后端实例', category: '查询管理', status: 'active', last_updated: '2024-01-01' },
+    // 资源管理
+    { name: 'resources', description: '资源信息', category: '资源管理', status: 'active', last_updated: '2024-01-01' },
+    { name: 'warehouses', description: '仓库信息', category: '资源管理', status: 'active', last_updated: '2024-01-01' },
+    // 存储管理
     { name: 'compactions', description: '压缩任务', category: '存储管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'colocate_group', description: 'Colocate Group', category: '存储管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'bdbje', description: 'BDBJE信息', category: '存储管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'small_files', description: '小文件信息', category: '存储管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'trash', description: '回收站', category: '存储管理', status: 'active', last_updated: '2024-01-01' },
+    { name: 'colocation_group', description: 'Colocation Group', category: '存储管理', status: 'active', last_updated: '2024-01-01' },
+    // 作业管理
     { name: 'jobs', description: '作业信息', category: '作业管理', status: 'active', last_updated: '2024-01-01' },
-    { name: 'repositories', description: '仓库信息', category: '作业管理', status: 'active', last_updated: '2024-01-01' }
+    // 元数据恢复
+    { name: 'meta_recovery', description: '元数据恢复', category: '系统维护', status: 'active', last_updated: '2024-01-01' }
   ];
 
   // 自定义功能

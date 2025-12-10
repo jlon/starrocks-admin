@@ -980,27 +980,14 @@ impl RootCauseAnalysisRequestBuilder {
 /// * "internal" - StarRocks native table (in default_catalog)
 /// * "external" - External table (any non-default catalog)
 pub fn determine_table_type(table_name: &str) -> String {
-    let parts: Vec<&str> = table_name.split('.').collect();
-
-    // If table name has 3+ parts: catalog.database.table
-    if parts.len() >= 3 {
-        let catalog = parts[0].to_lowercase();
-        // ONLY default_catalog is internal, everything else is external!
-        if catalog == "default_catalog" {
-            return "internal".to_string();
-        }
-        // Any other catalog → external
-        return "external".to_string();
+    match table_name.split('.').collect::<Vec<_>>() {
+        parts if parts.len() >= 3 => parts[0]
+            .eq_ignore_ascii_case("default_catalog")
+            .then(|| "internal".to_string())
+            .unwrap_or_else(|| "external".to_string()),
+        parts if parts.len() == 2 => "internal".to_string(),
+        _ => "internal".to_string(),
     }
-
-    // If table name has 2 parts: database.table (no catalog prefix)
-    // This is default_catalog implicitly, so internal
-    if parts.len() == 2 {
-        return "internal".to_string();
-    }
-
-    // Single part (just table name) → internal (default_catalog)
-    "internal".to_string()
 }
 
 /// Determine external table connector type from Profile metrics
@@ -1020,49 +1007,26 @@ pub fn determine_table_type(table_name: &str) -> String {
 /// # Returns
 /// * "iceberg", "hive", "hudi", "paimon", "deltalake", "jdbc", "es", or "unknown"
 pub fn determine_connector_type(metrics: &std::collections::HashMap<String, String>) -> String {
-    let keys: Vec<String> = metrics.keys().map(|k| k.to_lowercase()).collect();
-    let keys_str = keys.join(" ");
-
-    // Check for Iceberg: IcebergV2FormatTimer is the key indicator
-    // It appears under ORC/Parquet section for Iceberg tables
-    if keys_str.contains("iceberg") || keys_str.contains("deletefilebuild") {
-        return "iceberg".to_string();
+    let keys_str = metrics
+        .keys()
+        .map(|k| k.to_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let has = |p: &str| keys_str.contains(p);
+    match () {
+        _ if has("iceberg") || has("deletefilebuild") => "iceberg",
+        _ if has("deletionvector") => "deltalake",
+        _ if has("hudi") => "hudi",
+        _ if has("paimon") => "paimon",
+        _ if has("jdbc") => "jdbc",
+        _ if has("elasticsearch") || has("_es_") => "es",
+        _ if ["orc", "parquet", "stripe", "rowgroup"]
+            .iter()
+            .any(|p| has(p)) =>
+        {
+            "hive"
+        },
+        _ => "unknown",
     }
-
-    // Check for Delta Lake: DeletionVector is the key indicator
-    if keys_str.contains("deletionvector") {
-        return "deltalake".to_string();
-    }
-
-    // Check for Hudi: Hudi-specific metrics
-    if keys_str.contains("hudi") {
-        return "hudi".to_string();
-    }
-
-    // Check for Paimon: Paimon-specific metrics
-    if keys_str.contains("paimon") {
-        return "paimon".to_string();
-    }
-
-    // Check for JDBC
-    if keys_str.contains("jdbc") {
-        return "jdbc".to_string();
-    }
-
-    // Check for Elasticsearch
-    if keys_str.contains("elasticsearch") || keys_str.contains("_es_") {
-        return "es".to_string();
-    }
-
-    // ORC or Parquet without Iceberg indicators → Hive table
-    if keys_str.contains("orc")
-        || keys_str.contains("parquet")
-        || keys_str.contains("stripe")
-        || keys_str.contains("rowgroup")
-    {
-        return "hive".to_string();
-    }
-
-    // Default: unknown external table type
-    "unknown".to_string()
+    .to_string()
 }

@@ -2114,7 +2114,9 @@ PLAN FRAGMENT 2
 
         println!("\n🤖 Calling LLM...\n");
         let start = std::time::Instant::now();
-        let result = llm_service.analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_diag", None, false).await;
+        let result = llm_service
+            .analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_diag", None, false)
+            .await;
         let elapsed = start.elapsed();
 
         match result {
@@ -2132,11 +2134,11 @@ PLAN FRAGMENT 2
 
                 assert!(r.response.confidence > 0.0, "Confidence should be > 0");
                 assert!(!r.response.summary.is_empty(), "Summary should not be empty");
-            }
+            },
             Err(e) => {
                 println!("❌ LLM call failed: {}", e);
                 panic!("LLM call failed: {}", e);
-            }
+            },
         }
     }
 
@@ -2221,22 +2223,21 @@ LIMIT 50000"#;
 
         let req = SqlDiagReq {
             sql: sql.to_string(),
-            explain: None,  // No EXPLAIN for complex analysis
-            schema: None,   
-            vars: None,     
+            explain: None, // No EXPLAIN for complex analysis
+            schema: None,
+            vars: None,
         };
 
         println!("📤 Complex SQL (truncated):");
-        let sql_preview = if sql.len() > 500 { 
-            format!("{}...", &sql[..500]) 
-        } else { 
-            sql.to_string() 
-        };
+        let sql_preview =
+            if sql.len() > 500 { format!("{}...", &sql[..500]) } else { sql.to_string() };
         println!("{}", sql_preview);
 
         println!("\n🤖 Calling LLM for complex SQL analysis...\n");
         let start = std::time::Instant::now();
-        let result = llm_service.analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_complex", None, true).await;
+        let result = llm_service
+            .analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_complex", None, true)
+            .await;
         let elapsed = start.elapsed();
 
         match result {
@@ -2249,24 +2250,30 @@ LIMIT 50000"#;
                 println!("   - SQL changed: {}", r.response.changed);
                 println!("   - Confidence: {:.0}%", r.response.confidence * 100.0);
                 println!("   - Performance issues found: {}", r.response.perf_issues.len());
-                
+
                 for (i, issue) in r.response.perf_issues.iter().enumerate() {
-                    println!("   {}. [{}] {} - {}", i+1, issue.severity, issue.r#type, issue.desc);
+                    println!(
+                        "   {}. [{}] {} - {}",
+                        i + 1,
+                        issue.severity,
+                        issue.r#type,
+                        issue.desc
+                    );
                     if let Some(fix) = &issue.fix {
                         println!("      💡 Fix: {}", fix);
                     }
                 }
-                
+
                 println!("   - Summary: {}", r.response.summary);
 
                 // Complex SQL should get meaningful analysis
                 assert!(r.response.confidence > 0.0, "Complex SQL should get some confidence");
                 assert!(!r.response.summary.is_empty(), "Summary should not be empty");
-            }
+            },
             Err(e) => {
                 println!("❌ LLM call failed: {}", e);
                 panic!("LLM call failed: {}", e);
-            }
+            },
         }
     }
 
@@ -2313,9 +2320,9 @@ ORDER BY o.created_at DESC"#;
 
         let req = SqlDiagReq {
             sql: sql.to_string(),
-            explain: None,  // No EXPLAIN!
-            schema: None,   // No schema!
-            vars: None,     // No vars!
+            explain: None, // No EXPLAIN!
+            schema: None,  // No schema!
+            vars: None,    // No vars!
         };
 
         println!("📤 Request (NO EXPLAIN):");
@@ -2323,7 +2330,9 @@ ORDER BY o.created_at DESC"#;
 
         println!("\n🤖 Calling LLM for static analysis...\n");
         let start = std::time::Instant::now();
-        let result = llm_service.analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_no_explain", None, true).await;
+        let result = llm_service
+            .analyze::<SqlDiagReq, SqlDiagResp>(&req, "test_no_explain", None, true)
+            .await;
         let elapsed = start.elapsed();
 
         match result {
@@ -2338,13 +2347,16 @@ ORDER BY o.created_at DESC"#;
                 println!("   - Summary: {}", r.response.summary);
 
                 // Even without EXPLAIN, we should get some analysis
-                assert!(r.response.confidence > 0.0, "Confidence should be > 0 even without EXPLAIN");
+                assert!(
+                    r.response.confidence > 0.0,
+                    "Confidence should be > 0 even without EXPLAIN"
+                );
                 assert!(!r.response.summary.is_empty(), "Summary should not be empty");
-            }
+            },
             Err(e) => {
                 println!("❌ LLM call failed: {}", e);
                 panic!("LLM call failed: {}", e);
-            }
+            },
         }
     }
 
@@ -2388,7 +2400,8 @@ ORDER BY o.created_at DESC"#;
             "summary": "No issues found",
             "confidence": 0.9
         }"#;
-        let resp: SqlDiagResp = serde_json::from_str(json).expect("Failed to parse partial response");
+        let resp: SqlDiagResp =
+            serde_json::from_str(json).expect("Failed to parse partial response");
         assert!(!resp.changed);
         assert!(resp.perf_issues.is_empty());
         assert!(resp.explain_analysis.is_none());
@@ -2405,7 +2418,8 @@ ORDER BY o.created_at DESC"#;
             "summary": "Minor issue found",
             "confidence": 0.7
         }"#;
-        let resp: SqlDiagResp = serde_json::from_str(json).expect("Failed to parse response without fix");
+        let resp: SqlDiagResp =
+            serde_json::from_str(json).expect("Failed to parse response without fix");
         assert_eq!(resp.perf_issues.len(), 1);
         assert!(resp.perf_issues[0].fix.is_none());
         println!("✅ Response without fix parsed correctly");
@@ -2423,7 +2437,8 @@ ORDER BY o.created_at DESC"#;
             "summary": "Analysis with unknown values",
             "confidence": 0.5
         }"#;
-        let resp: SqlDiagResp = serde_json::from_str(json).expect("Failed to parse response with unknown values");
+        let resp: SqlDiagResp =
+            serde_json::from_str(json).expect("Failed to parse response with unknown values");
         assert!(resp.explain_analysis.is_some());
         let analysis = resp.explain_analysis.unwrap();
         assert_eq!(analysis.scan_type, Some("unknown".to_string()));

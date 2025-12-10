@@ -1,6 +1,6 @@
 //! LLM Repository - Database operations for LLM service
 
-use sqlx::SqlitePool;
+use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 use uuid::Uuid;
 
 use super::UpdateProviderRequest;
@@ -125,71 +125,53 @@ impl LLMRepository {
         id: i64,
         req: UpdateProviderRequest,
     ) -> Result<LLMProvider, LLMError> {
-        // Build dynamic update query
-        let mut updates = vec!["updated_at = CURRENT_TIMESTAMP".to_string()];
+        // Build dynamic update query with deterministic clause order
+        let mut qb = QueryBuilder::<Sqlite>::new("UPDATE llm_providers SET ");
+        {
+            // Keep updated_at always present to mirror previous behavior
+            let mut set = qb.separated(", ");
+            set.push("updated_at = CURRENT_TIMESTAMP");
+            if let Some(v) = &req.display_name {
+                set.push("display_name = ");
+                set.push_bind(v);
+            }
+            if let Some(v) = &req.api_base {
+                set.push("api_base = ");
+                set.push_bind(v);
+            }
+            if let Some(v) = &req.model_name {
+                set.push("model_name = ");
+                set.push_bind(v);
+            }
+            if let Some(v) = &req.api_key {
+                set.push("api_key_encrypted = ");
+                set.push_bind(v);
+            }
+            if let Some(v) = &req.max_tokens {
+                set.push("max_tokens = ");
+                set.push_bind(v);
+            }
+            if let Some(v) = &req.temperature {
+                set.push("temperature = ");
+                set.push_bind(v);
+            }
+            if let Some(v) = &req.timeout_seconds {
+                set.push("timeout_seconds = ");
+                set.push_bind(v);
+            }
+            if let Some(v) = &req.priority {
+                set.push("priority = ");
+                set.push_bind(v);
+            }
+            if let Some(v) = &req.enabled {
+                set.push("enabled = ");
+                set.push_bind(v);
+            }
+        }
+        qb.push(" WHERE id = ");
+        qb.push_bind(id);
 
-        if req.display_name.is_some() {
-            updates.push("display_name = ?".to_string());
-        }
-        if req.api_base.is_some() {
-            updates.push("api_base = ?".to_string());
-        }
-        if req.model_name.is_some() {
-            updates.push("model_name = ?".to_string());
-        }
-        if req.api_key.is_some() {
-            updates.push("api_key_encrypted = ?".to_string());
-        }
-        if req.max_tokens.is_some() {
-            updates.push("max_tokens = ?".to_string());
-        }
-        if req.temperature.is_some() {
-            updates.push("temperature = ?".to_string());
-        }
-        if req.timeout_seconds.is_some() {
-            updates.push("timeout_seconds = ?".to_string());
-        }
-        if req.priority.is_some() {
-            updates.push("priority = ?".to_string());
-        }
-        if req.enabled.is_some() {
-            updates.push("enabled = ?".to_string());
-        }
-
-        let query = format!("UPDATE llm_providers SET {} WHERE id = ?", updates.join(", "));
-        let mut q = sqlx::query(&query);
-
-        // Bind values in order
-        if let Some(v) = &req.display_name {
-            q = q.bind(v);
-        }
-        if let Some(v) = &req.api_base {
-            q = q.bind(v);
-        }
-        if let Some(v) = &req.model_name {
-            q = q.bind(v);
-        }
-        if let Some(v) = &req.api_key {
-            q = q.bind(v);
-        }
-        if let Some(v) = &req.max_tokens {
-            q = q.bind(v);
-        }
-        if let Some(v) = &req.temperature {
-            q = q.bind(v);
-        }
-        if let Some(v) = &req.timeout_seconds {
-            q = q.bind(v);
-        }
-        if let Some(v) = &req.priority {
-            q = q.bind(v);
-        }
-        if let Some(v) = &req.enabled {
-            q = q.bind(v);
-        }
-        q = q.bind(id);
-
-        let result = q.execute(&self.pool).await?;
+        let result = qb.build().execute(&self.pool).await?;
 
         if result.rows_affected() == 0 {
             return Err(LLMError::ProviderNotFound(id.to_string()));
@@ -204,20 +186,40 @@ impl LLMRepository {
 
     /// Delete provider
     pub async fn delete_provider(&self, id: i64) -> Result<(), LLMError> {
-        // Check if provider is active
+        // Check if provider exists and is not active
         let provider = self.get_provider(id).await?;
-        if let Some(p) = provider {
-            if p.is_active {
+        match provider {
+            None => return Err(LLMError::ProviderNotFound(id.to_string())),
+            Some(p) if p.is_active => {
                 return Err(LLMError::ApiError(
                     "Cannot delete active provider. Deactivate it first.".to_string(),
                 ));
-            }
+            },
+            _ => {},
         }
 
-        sqlx::query("DELETE FROM llm_providers WHERE id = ?")
+        // Delete related records first (foreign key constraints)
+        // 1. Delete usage statistics
+        sqlx::query("DELETE FROM llm_usage_stats WHERE provider_id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
+
+        // 2. Set provider_id to NULL in analysis sessions (preserve history)
+        sqlx::query("UPDATE llm_analysis_sessions SET provider_id = NULL WHERE provider_id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        // 3. Delete the provider
+        let result = sqlx::query("DELETE FROM llm_providers WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(LLMError::ProviderNotFound(id.to_string()));
+        }
         Ok(())
     }
 

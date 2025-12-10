@@ -46,14 +46,14 @@ impl LLMAnalysisRequestTrait for SqlDiagReq {
     }
 
     fn profile_hash(&self) -> String {
-        self.explain
-            .as_ref()
-            .map(|e| {
+        self.explain.as_ref().map_or_else(
+            || "none".into(),
+            |e| {
                 let mut h = DefaultHasher::new();
                 e.hash(&mut h);
                 format!("{:x}", h.finish())
-            })
-            .unwrap_or_else(|| "none".into())
+            },
+        )
     }
 }
 
@@ -95,7 +95,11 @@ pub struct ExplainAnalysis {
     pub scan_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub join_strategy: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_estimated_rows")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_estimated_rows"
+    )]
     pub estimated_rows: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub estimated_cost: Option<String>,
@@ -129,11 +133,7 @@ where
         where
             E: de::Error,
         {
-            if value >= 0 {
-                Ok(Some(value as u64))
-            } else {
-                Ok(None)
-            }
+            if value >= 0 { Ok(Some(value as u64)) } else { Ok(None) }
         }
 
         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>

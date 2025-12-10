@@ -49,6 +49,25 @@
         color: nb-theme(text-hint-color);
     font-size: 0.75rem;
   }
+
+      .required {
+        color: nb-theme(color-danger-default);
+        margin-left: 0.125rem;
+      }
+    }
+
+    .hint-text {
+      display: block;
+      margin-top: 0.25rem;
+      font-size: 0.75rem;
+      color: nb-theme(text-hint-color);
+    }
+
+    .error-text {
+      display: block;
+      margin-top: 0.25rem;
+      font-size: 0.75rem;
+      color: nb-theme(color-danger-default);
     }
   }
 

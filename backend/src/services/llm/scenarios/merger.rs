@@ -164,48 +164,43 @@ impl ResultMerger {
         rule_diagnostics: &[AggregatedDiagnostic],
         llm_root_causes: &[LLMRootCause],
     ) -> Vec<MergedRootCause> {
-        let mut merged = Vec::new();
         let mut seen_ids: HashSet<String> = HashSet::new();
+        let mut merged: Vec<MergedRootCause> = llm_root_causes
+            .iter()
+            .map(|llm_rc| {
+                seen_ids.insert(llm_rc.root_cause_id.clone());
+                let related_rules: Vec<String> = llm_rc
+                    .symptoms
+                    .iter()
+                    .filter(|s| rule_diagnostics.iter().any(|d| &d.rule_id == *s))
+                    .cloned()
+                    .collect();
+                let source = if related_rules.is_empty() { "llm" } else { "both" };
+                MergedRootCause {
+                    id: llm_rc.root_cause_id.clone(),
+                    related_rule_ids: related_rules,
+                    description: llm_rc.description.clone(),
+                    is_implicit: llm_rc.is_implicit,
+                    confidence: llm_rc.confidence,
+                    source: source.to_string(),
+                    evidence: llm_rc.evidence.clone(),
+                    symptoms: llm_rc.symptoms.clone(),
+                }
+            })
+            .collect();
 
-        // First, add LLM root causes (higher priority)
-        for llm_rc in llm_root_causes {
-            let id = llm_rc.root_cause_id.clone();
-            seen_ids.insert(id.clone());
-
-            // Find related rule diagnostics
-            let related_rules: Vec<String> = llm_rc
-                .symptoms
+        // Add uncovered rule diagnostics as independent issues
+        merged.extend(
+            rule_diagnostics
                 .iter()
-                .filter(|s| rule_diagnostics.iter().any(|d| &d.rule_id == *s))
-                .cloned()
-                .collect();
-
-            let source = if related_rules.is_empty() { "llm" } else { "both" };
-
-            merged.push(MergedRootCause {
-                id,
-                related_rule_ids: related_rules,
-                description: llm_rc.description.clone(),
-                is_implicit: llm_rc.is_implicit,
-                confidence: llm_rc.confidence,
-                source: source.to_string(),
-                evidence: llm_rc.evidence.clone(),
-                symptoms: llm_rc.symptoms.clone(),
-            });
-        }
-
-        // Then, add rule diagnostics that weren't identified as symptoms
-        // These might be independent issues
-        for diag in rule_diagnostics {
-            let is_covered = llm_root_causes
-                .iter()
-                .any(|rc| rc.symptoms.contains(&diag.rule_id));
-
-            if !is_covered {
-                let id = format!("rule_{}", diag.rule_id);
-                if !seen_ids.contains(&id) {
-                    seen_ids.insert(id.clone());
-                    merged.push(MergedRootCause {
+                .filter(|diag| {
+                    !llm_root_causes
+                        .iter()
+                        .any(|rc| rc.symptoms.contains(&diag.rule_id))
+                })
+                .filter_map(|diag| {
+                    let id = format!("rule_{}", diag.rule_id);
+                    seen_ids.insert(id.clone()).then_some(MergedRootCause {
                         id,
                         related_rule_ids: vec![diag.rule_id.clone()],
                         description: diag.message.clone(),
@@ -214,12 +209,10 @@ impl ResultMerger {
                         source: "rule".to_string(),
                         evidence: vec![diag.reason.clone()],
                         symptoms: vec![],
-                    });
-                }
-            }
-        }
+                    })
+                }),
+        );
 
-        // Sort by confidence (descending)
         merged.sort_by(|a, b| {
             b.confidence
                 .partial_cmp(&a.confidence)
@@ -234,33 +227,32 @@ impl ResultMerger {
         rule_diagnostics: &[AggregatedDiagnostic],
         llm_recommendations: &[LLMRecommendation],
     ) -> Vec<MergedRecommendation> {
-        let mut merged: Vec<MergedRecommendation> = Vec::new();
         let mut seen_actions: HashSet<String> = HashSet::new();
+        let mut merged: Vec<MergedRecommendation> = llm_recommendations
+            .iter()
+            .filter_map(|rec| {
+                let action_key = Self::normalize_action(&rec.action);
+                seen_actions
+                    .insert(action_key)
+                    .then_some(MergedRecommendation {
+                        priority: rec.priority,
+                        action: rec.action.clone(),
+                        expected_improvement: rec.expected_improvement.clone(),
+                        sql_example: rec.sql_example.clone(),
+                        source: "llm".to_string(),
+                        related_root_causes: vec![],
+                        is_root_cause_fix: true,
+                    })
+            })
+            .collect();
 
-        // First, add LLM recommendations (root cause fixes, higher priority)
-        for rec in llm_recommendations {
-            let action_key = Self::normalize_action(&rec.action);
-            if !seen_actions.contains(&action_key) {
-                seen_actions.insert(action_key);
-                merged.push(MergedRecommendation {
-                    priority: rec.priority,
-                    action: rec.action.clone(),
-                    expected_improvement: rec.expected_improvement.clone(),
-                    sql_example: rec.sql_example.clone(),
-                    source: "llm".to_string(),
-                    related_root_causes: vec![],
-                    is_root_cause_fix: true,
-                });
-            }
-        }
-
-        // Then, add rule engine suggestions (symptom fixes)
         let mut rule_priority = merged.len() as u32 + 1;
-        for diag in rule_diagnostics {
-            for suggestion in &diag.suggestions {
+        rule_diagnostics
+            .iter()
+            .flat_map(|diag| std::iter::repeat(diag).zip(&diag.suggestions))
+            .for_each(|(diag, suggestion)| {
                 let action_key = Self::normalize_action(suggestion);
-                if !seen_actions.contains(&action_key) {
-                    seen_actions.insert(action_key.clone());
+                if seen_actions.insert(action_key.clone()) {
                     merged.push(MergedRecommendation {
                         priority: rule_priority,
                         action: suggestion.clone(),
@@ -271,22 +263,17 @@ impl ResultMerger {
                         is_root_cause_fix: false,
                     });
                     rule_priority += 1;
-                } else {
-                    // Action exists, check if we should mark as "both"
-                    if let Some(existing) = merged
-                        .iter_mut()
-                        .find(|r| Self::normalize_action(&r.action) == action_key)
-                    {
-                        if existing.source == "llm" {
-                            existing.source = "both".to_string();
-                        }
-                        existing.related_root_causes.push(diag.rule_id.clone());
+                } else if let Some(existing) = merged
+                    .iter_mut()
+                    .find(|r| Self::normalize_action(&r.action) == action_key)
+                {
+                    if existing.source == "llm" {
+                        existing.source = "both".to_string();
                     }
+                    existing.related_root_causes.push(diag.rule_id.clone());
                 }
-            }
-        }
+            });
 
-        // Sort by priority
         merged.sort_by_key(|r| r.priority);
 
         merged

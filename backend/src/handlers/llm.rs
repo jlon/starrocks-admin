@@ -262,11 +262,13 @@ impl IntoResponse for LLMApiError {
             LLMError::Timeout(_) => (StatusCode::GATEWAY_TIMEOUT, self.0.to_string()),
             LLMError::ApiError(_) => (StatusCode::BAD_GATEWAY, self.0.to_string()),
             LLMError::ParseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string()),
-            LLMError::DatabaseError(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
+            LLMError::DatabaseError(e) => {
+                tracing::error!("LLM database error: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e))
             },
-            LLMError::SerializationError(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Serialization error".to_string())
+            LLMError::SerializationError(e) => {
+                tracing::error!("LLM serialization error: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Serialization error: {}", e))
             },
         };
 

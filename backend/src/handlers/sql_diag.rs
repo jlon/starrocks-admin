@@ -140,21 +140,28 @@ async fn exec_explain(
     sql: &str,
 ) -> Result<String, String> {
     let mut sess = client.create_session().await.map_err(|e| e.to_string())?;
-    
+
     // Set catalog if not default
     if !cat.is_empty() && cat != "default_catalog" {
-        sess.use_catalog(cat).await.map_err(|e| format!("Failed to use catalog {}: {}", cat, e))?;
+        sess.use_catalog(cat)
+            .await
+            .map_err(|e| format!("Failed to use catalog {}: {}", cat, e))?;
     }
-    
+
     // Set database if provided
     if !db.is_empty() {
-        sess.use_database(db).await.map_err(|e| format!("Failed to use database {}: {}", db, e))?;
+        sess.use_database(db)
+            .await
+            .map_err(|e| format!("Failed to use database {}: {}", db, e))?;
     }
-    
+
     // Execute EXPLAIN VERBOSE
     let explain_sql = format!("EXPLAIN VERBOSE {}", sql.trim().trim_end_matches(';'));
-    let (_, rows, _) = sess.execute(&explain_sql).await.map_err(|e| e.to_string())?;
-    
+    let (_, rows, _) = sess
+        .execute(&explain_sql)
+        .await
+        .map_err(|e| e.to_string())?;
+
     // Collect results, limit to 1000 lines to avoid token overflow but keep enough context
     let result: String = rows
         .into_iter()
@@ -162,12 +169,24 @@ async fn exec_explain(
         .take(1000)
         .collect::<Vec<_>>()
         .join("\n");
-    
+
     // If result is too long, truncate but keep header and footer
     if result.len() > 8000 {
         let lines: Vec<&str> = result.lines().collect();
-        let header = lines.iter().take(100).cloned().collect::<Vec<_>>().join("\n");
-        let footer = lines.iter().rev().take(50).rev().cloned().collect::<Vec<_>>().join("\n");
+        let header = lines
+            .iter()
+            .take(100)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        let footer = lines
+            .iter()
+            .rev()
+            .take(50)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
         Ok(format!("{}\n... [truncated {} lines] ...\n{}", header, lines.len() - 150, footer))
     } else {
         Ok(result)
@@ -182,7 +201,7 @@ async fn fetch_schema(
     tables: &[String],
 ) -> Result<serde_json::Value, String> {
     let mut schema = serde_json::Map::new();
-    
+
     // Build table prefix based on catalog and database
     let prefix = match (cat, db) {
         ("", "") | ("default_catalog", "") => return Ok(serde_json::Value::Object(schema)),
@@ -197,7 +216,7 @@ async fn fetch_schema(
     for t in tables.iter().take(5) {
         let show_sql = format!("SHOW CREATE TABLE {}.`{}`", prefix, t);
         tracing::debug!("Fetching schema: {}", show_sql);
-        
+
         if let Ok((_, rows)) = client.query_raw(&show_sql).await {
             if let Some(ddl) = rows.first().and_then(|r| r.get(1)) {
                 let mut info = parse_ddl(ddl);
@@ -205,7 +224,10 @@ async fn fetch_schema(
                 if let serde_json::Value::Object(ref mut m) = info {
                     let table_type = detect_table_type(ddl, is_external_catalog);
                     m.insert("table_type".into(), table_type.into());
-                    m.insert("ddl_preview".into(), ddl.chars().take(500).collect::<String>().into());
+                    m.insert(
+                        "ddl_preview".into(),
+                        ddl.chars().take(500).collect::<String>().into(),
+                    );
                 }
                 schema.insert(t.clone(), info);
             }
@@ -220,12 +242,28 @@ fn detect_table_type(ddl: &str, is_external_catalog: bool) -> &'static str {
     if is_external_catalog {
         return "external";
     }
-    
+
     // Normalize DDL: remove extra spaces around '='
-    let ddl_norm = ddl.to_uppercase().replace(" = ", "=").replace("= ", "=").replace(" =", "=");
-    
+    let ddl_norm = ddl
+        .to_uppercase()
+        .replace(" = ", "=")
+        .replace("= ", "=")
+        .replace(" =", "=");
+
     // External table patterns (ENGINE=XXX without spaces)
-    let external_engines = ["HIVE", "ICEBERG", "HUDI", "DELTALAKE", "PAIMON", "JDBC", "ELASTICSEARCH", "FILE", "BROKER", "MYSQL", "KAFKA"];
+    let external_engines = [
+        "HIVE",
+        "ICEBERG",
+        "HUDI",
+        "DELTALAKE",
+        "PAIMON",
+        "JDBC",
+        "ELASTICSEARCH",
+        "FILE",
+        "BROKER",
+        "MYSQL",
+        "KAFKA",
+    ];
     for eng in external_engines {
         if ddl_norm.contains(&format!("ENGINE={}", eng)) {
             return "external";
@@ -234,7 +272,7 @@ fn detect_table_type(ddl: &str, is_external_catalog: bool) -> &'static str {
     if ddl_norm.contains("EXTERNAL TABLE") || ddl_norm.contains("CREATE EXTERNAL") {
         return "external";
     }
-    
+
     // Internal table patterns
     if ddl_norm.contains("ENGINE=OLAP")
         || ddl_norm.contains("PRIMARY KEY")
@@ -246,7 +284,7 @@ fn detect_table_type(ddl: &str, is_external_catalog: bool) -> &'static str {
     {
         return "internal";
     }
-    
+
     // Default to internal for default_catalog
     "internal"
 }
@@ -254,47 +292,67 @@ fn detect_table_type(ddl: &str, is_external_catalog: bool) -> &'static str {
 /// Parse DDL to extract key info (partition, distribution, keys, engine)
 fn parse_ddl(ddl: &str) -> serde_json::Value {
     let mut m = serde_json::Map::new();
-    
+
     // Helper to capture regex
     let cap = |pat: &str| Regex::new(pat).ok().and_then(|re| re.captures(ddl));
 
     // Extract partition info
     if let Some(c) = cap(r"(?i)PARTITION\s+BY\s+(\w+)\s*\(([^)]+)\)") {
-        m.insert("partition".into(), serde_json::json!({
-            "type": c.get(1).map(|x| x.as_str()),
-            "key": c.get(2).map(|x| x.as_str().trim())
-        }));
+        m.insert(
+            "partition".into(),
+            serde_json::json!({
+                "type": c.get(1).map(|x| x.as_str()),
+                "key": c.get(2).map(|x| x.as_str().trim())
+            }),
+        );
     }
-    
+
     // Extract distribution info (HASH or RANDOM)
     if let Some(c) = cap(r"(?i)DISTRIBUTED\s+BY\s+HASH\s*\(([^)]+)\)(?:\s+BUCKETS\s+(\d+))?") {
-        m.insert("dist".into(), serde_json::json!({
-            "type": "HASH",
-            "key": c.get(1).map(|x| x.as_str().trim()),
-            "buckets": c.get(2).and_then(|x| x.as_str().parse::<u32>().ok())
-        }));
+        m.insert(
+            "dist".into(),
+            serde_json::json!({
+                "type": "HASH",
+                "key": c.get(1).map(|x| x.as_str().trim()),
+                "buckets": c.get(2).and_then(|x| x.as_str().parse::<u32>().ok())
+            }),
+        );
     } else if ddl.to_uppercase().contains("DISTRIBUTED BY RANDOM") {
         if let Some(c) = cap(r"(?i)DISTRIBUTED\s+BY\s+RANDOM(?:\s+BUCKETS\s+(\d+))?") {
-            m.insert("dist".into(), serde_json::json!({
-                "type": "RANDOM",
-                "buckets": c.get(1).and_then(|x| x.as_str().parse::<u32>().ok())
-            }));
+            m.insert(
+                "dist".into(),
+                serde_json::json!({
+                    "type": "RANDOM",
+                    "buckets": c.get(1).and_then(|x| x.as_str().parse::<u32>().ok())
+                }),
+            );
         }
     }
-    
+
     // Extract key type (PRIMARY KEY, DUPLICATE KEY, etc.)
-    if let Some(c) = cap(r"(?i)(PRIMARY\s+KEY|DUPLICATE\s+KEY|AGGREGATE\s+KEY|UNIQUE\s+KEY)\s*\(([^)]+)\)") {
-        m.insert("key".into(), serde_json::json!({
-            "type": c.get(1).map(|x| x.as_str().to_uppercase().replace(" ", "_")),
-            "columns": c.get(2).map(|x| x.as_str().trim())
-        }));
+    if let Some(c) =
+        cap(r"(?i)(PRIMARY\s+KEY|DUPLICATE\s+KEY|AGGREGATE\s+KEY|UNIQUE\s+KEY)\s*\(([^)]+)\)")
+    {
+        m.insert(
+            "key".into(),
+            serde_json::json!({
+                "type": c.get(1).map(|x| x.as_str().to_uppercase().replace(" ", "_")),
+                "columns": c.get(2).map(|x| x.as_str().trim())
+            }),
+        );
     }
-    
+
     // Extract ENGINE type
     if let Some(c) = cap(r"(?i)ENGINE\s*=\s*(\w+)") {
-        m.insert("engine".into(), c.get(1).map(|x| x.as_str().to_uppercase()).unwrap_or_default().into());
+        m.insert(
+            "engine".into(),
+            c.get(1)
+                .map(|x| x.as_str().to_uppercase())
+                .unwrap_or_default()
+                .into(),
+        );
     }
-    
+
     // Extract PROPERTIES for colocate_with (useful for colocate join detection)
     if let Some(c) = cap(r#"(?i)"colocate_with"\s*=\s*"([^"]+)""#) {
         m.insert("colocate_with".into(), c.get(1).map(|x| x.as_str()).unwrap_or_default().into());
@@ -338,7 +396,7 @@ fn extract_tables(sql: &str) -> Vec<String> {
     let re = Regex::new(
         r"(?i)\b(?:FROM|JOIN)\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?(?:\.`?([a-zA-Z_][a-zA-Z0-9_]*)`?(?:\.`?([a-zA-Z_][a-zA-Z0-9_]*)`?)?)?\s*(?:AS\s+\w+|\s+[a-zA-Z_]\w*)?(?:\s|,|ON|WHERE|LEFT|RIGHT|INNER|OUTER|CROSS|$)"
     ).ok();
-    
+
     re.map(|re| {
         let mut tables: Vec<String> = re
             .captures_iter(sql)
@@ -346,18 +404,35 @@ fn extract_tables(sql: &str) -> Vec<String> {
                 // Get the table name (last non-None group)
                 let table = c.get(3).or(c.get(2)).or(c.get(1)).map(|m| m.as_str());
                 // Filter out SQL keywords that might be captured
-                table.filter(|t| {
-                    let upper = t.to_uppercase();
-                    !matches!(upper.as_str(), "SELECT" | "WHERE" | "AND" | "OR" | "ON" | "AS" | "LEFT" | "RIGHT" | "INNER" | "OUTER" | "CROSS" | "JOIN" | "FROM")
-                }).map(|s| s.to_string())
+                table
+                    .filter(|t| {
+                        let upper = t.to_uppercase();
+                        !matches!(
+                            upper.as_str(),
+                            "SELECT"
+                                | "WHERE"
+                                | "AND"
+                                | "OR"
+                                | "ON"
+                                | "AS"
+                                | "LEFT"
+                                | "RIGHT"
+                                | "INNER"
+                                | "OUTER"
+                                | "CROSS"
+                                | "JOIN"
+                                | "FROM"
+                        )
+                    })
+                    .map(|s| s.to_string())
             })
             .collect();
         tables.sort();
         tables.dedup();
         tables
-    }).unwrap_or_default()
+    })
+    .unwrap_or_default()
 }
-
 
 // ============================================================================
 // Unit Tests
@@ -382,7 +457,7 @@ mod tests {
             confidence: 0.8,
         };
         let resp = DiagResp::ok(data.clone(), true, 100);
-        
+
         assert!(resp.ok);
         assert!(resp.data.is_some());
         assert!(resp.err.is_none());
@@ -395,7 +470,7 @@ mod tests {
     fn test_diag_resp_ok_not_cached() {
         let data = SqlDiagResp::default();
         let resp = DiagResp::ok(data, false, 50);
-        
+
         assert!(resp.ok);
         assert!(!resp.cached);
         assert_eq!(resp.ms, 50);
@@ -404,7 +479,7 @@ mod tests {
     #[test]
     fn test_diag_resp_fail() {
         let resp = DiagResp::fail("Connection error", 200);
-        
+
         assert!(!resp.ok);
         assert!(resp.data.is_none());
         assert_eq!(resp.err, Some("Connection error".into()));
@@ -415,7 +490,7 @@ mod tests {
     #[test]
     fn test_diag_resp_fail_string() {
         let resp = DiagResp::fail(String::from("Timeout"), 300);
-        
+
         assert!(!resp.ok);
         assert_eq!(resp.err, Some("Timeout".into()));
     }
@@ -568,7 +643,7 @@ mod tests {
     fn test_detect_table_type_case_insensitive() {
         let ddl = "create table t (id int) engine = olap distributed by hash(id)";
         assert_eq!(detect_table_type(ddl, false), "internal");
-        
+
         let ddl2 = "CREATE TABLE t (id INT) engine=hive";
         assert_eq!(detect_table_type(ddl2, false), "external");
     }
@@ -589,7 +664,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT, dt DATE) PARTITION BY RANGE(dt) ()";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         assert!(obj.contains_key("partition"));
         let partition = &obj["partition"];
         assert_eq!(partition["type"], "RANGE");
@@ -601,7 +676,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT, city STRING) PARTITION BY LIST(city) ()";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         let partition = &obj["partition"];
         assert_eq!(partition["type"], "LIST");
         assert_eq!(partition["key"], "city");
@@ -612,7 +687,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT) DISTRIBUTED BY HASH(id) BUCKETS 16";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         assert!(obj.contains_key("dist"));
         let dist = &obj["dist"];
         assert_eq!(dist["type"], "HASH");
@@ -625,7 +700,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT, name STRING) DISTRIBUTED BY HASH(id, name) BUCKETS 32";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         let dist = &obj["dist"];
         assert_eq!(dist["type"], "HASH");
         assert_eq!(dist["key"], "id, name");
@@ -637,7 +712,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT) DISTRIBUTED BY RANDOM BUCKETS 8";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         let dist = &obj["dist"];
         assert_eq!(dist["type"], "RANDOM");
         assert_eq!(dist["buckets"], 8);
@@ -648,7 +723,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT, name STRING, PRIMARY KEY (id))";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         assert!(obj.contains_key("key"));
         let key = &obj["key"];
         assert_eq!(key["type"], "PRIMARY_KEY");
@@ -660,7 +735,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT, name STRING, DUPLICATE KEY (id, name))";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         let key = &obj["key"];
         assert_eq!(key["type"], "DUPLICATE_KEY");
         assert_eq!(key["columns"], "id, name");
@@ -671,7 +746,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT, cnt BIGINT SUM, AGGREGATE KEY (id))";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         let key = &obj["key"];
         assert_eq!(key["type"], "AGGREGATE_KEY");
     }
@@ -681,7 +756,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT, UNIQUE KEY (id))";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         let key = &obj["key"];
         assert_eq!(key["type"], "UNIQUE_KEY");
     }
@@ -691,7 +766,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT) ENGINE = OLAP";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         assert_eq!(obj["engine"], "OLAP");
     }
 
@@ -700,7 +775,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT) ENGINE=HIVE";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         assert_eq!(obj["engine"], "HIVE");
     }
 
@@ -709,7 +784,7 @@ mod tests {
         let ddl = r#"CREATE TABLE t (id INT) PROPERTIES ("colocate_with" = "group1")"#;
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         assert_eq!(obj["colocate_with"], "group1");
     }
 
@@ -730,7 +805,7 @@ mod tests {
         "#;
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         assert_eq!(obj["engine"], "OLAP");
         assert_eq!(obj["partition"]["type"], "RANGE");
         assert_eq!(obj["partition"]["key"], "order_date");
@@ -917,7 +992,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT) DISTRIBUTED BY HASH(id)";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         let dist = &obj["dist"];
         assert_eq!(dist["type"], "HASH");
         assert_eq!(dist["key"], "id");
@@ -929,7 +1004,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT) DISTRIBUTED BY RANDOM";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         let dist = &obj["dist"];
         assert_eq!(dist["type"], "RANDOM");
         assert!(dist["buckets"].is_null());
@@ -952,7 +1027,7 @@ mod tests {
         let ddl = "CREATE TABLE t (id INT, dt DATE) partition by range(dt) ()";
         let result = parse_ddl(ddl);
         let obj = result.as_object().unwrap();
-        
+
         assert!(obj.contains_key("partition"));
     }
 

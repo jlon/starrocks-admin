@@ -37,6 +37,7 @@ pub struct AppState {
     // Managers
     pub mysql_pool_manager: Arc<MySQLPoolManager>,
     pub jwt_util: Arc<JwtUtil>,
+    pub audit_config: config::AuditLogConfig,
 
     // Services (grouped by domain)
     pub auth_service: Arc<AuthService>,

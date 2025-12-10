@@ -261,7 +261,7 @@ impl LLMService for LLMServiceImpl {
                 Ok(LLMAnalysisResult { response, from_cache: false })
             },
             Err(e) => {
-                // Update session to failed
+                let err_msg = e.to_string();
                 self.repository
                     .complete_session(
                         &session_id,
@@ -269,10 +269,9 @@ impl LLMService for LLMServiceImpl {
                         0,
                         0,
                         latency_ms,
-                        Some(&e.to_string()),
+                        Some(err_msg.as_str()),
                     )
                     .await?;
-
                 Err(e)
             },
         }

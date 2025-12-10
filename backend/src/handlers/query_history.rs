@@ -85,14 +85,17 @@ pub async fn list_query_history(
 
     let where_clause = where_conditions.join(" AND ");
 
+    // Get audit table name from config
+    let audit_table = state.audit_config.full_table_name();
+
     // First, get the total count (required for ng2-smart-table pagination)
     let count_sql = format!(
         r#"
         SELECT COUNT(*) as total
-        FROM starrocks_audit_db__.starrocks_audit_tbl__
+        FROM {}
         WHERE {}
     "#,
-        where_clause
+        audit_table, where_clause
     );
 
     tracing::info!("Fetching total count for cluster {}", cluster.id);
@@ -129,12 +132,12 @@ pub async fn list_query_history(
             `queryTime` AS total_ms,
             `state`,
             COALESCE(`resourceGroup`, '') AS warehouse
-        FROM starrocks_audit_db__.starrocks_audit_tbl__
+        FROM {}
         WHERE {}
         ORDER BY `timestamp` DESC
         LIMIT {} OFFSET {}
     "#,
-        where_clause, limit, offset
+        audit_table, where_clause, limit, offset
     );
 
     tracing::info!(

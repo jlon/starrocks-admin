@@ -48,6 +48,9 @@ pub struct AppState {
     pub mysql_pool_manager: Arc<MySQLPoolManager>,
     pub jwt_util: Arc<JwtUtil>,
 
+    // Config
+    pub audit_config: config::AuditLogConfig,
+
     // Services (grouped by domain)
     pub auth_service: Arc<AuthService>,
     pub cluster_service: Arc<ClusterService>,
@@ -324,6 +327,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool.clone(),
         Arc::clone(&cluster_service),
         Arc::clone(&mysql_pool_manager),
+        config.audit.clone(),
     ));
 
     let overview_service = Arc::new(
@@ -368,6 +372,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db: pool.clone(),
         mysql_pool_manager: Arc::clone(&mysql_pool_manager),
         jwt_util: Arc::clone(&jwt_util),
+        audit_config: config.audit.clone(),
         auth_service: Arc::clone(&auth_service),
         cluster_service: Arc::clone(&cluster_service),
         organization_service: Arc::clone(&organization_service),

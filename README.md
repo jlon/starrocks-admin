@@ -195,7 +195,14 @@ web_root = "web"
 interval_secs = "30s"   
 retention_days = "7d"  
 enabled = true          
+
+# Audit log configuration
+[audit]
+database = "starrocks_audit_db__"
+table = "starrocks_audit_tbl__"
 ```
+
+For detailed audit log configuration options, see [Audit Log Configuration Guide](docs/AUDIT_LOG_CONFIG.md).
 
 ## Release Notes
 
@@ -424,6 +431,11 @@ web_root = "web"
 interval_secs = "30s"    # 采集间隔，默认30秒
 retention_days = "7d"    # 数据保留时长，默认7天
 enabled = true            # 是否启用采集
+
+# Audit log configuration
+[audit]
+database = "starrocks_audit_db__"
+table = "starrocks_audit_tbl__"
 ```
 
 - 环境变量覆盖示例：

@@ -73,6 +73,11 @@ file = "logs/starrocks-admin.log"
 interval_secs = "30s"    
 retention_days = "7d"    
 enabled = true
+
+# Audit log configuration
+[audit]
+database = "starrocks_audit_db__"
+table = "starrocks_audit_tbl__"
 EOF
 echo "Created production config.toml"
 

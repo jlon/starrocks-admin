@@ -216,6 +216,10 @@ configuration: |-
     retention_days = "7d"
     enabled = true
 
+    [audit]
+    database = "starrocks_audit_db__"
+    table = "starrocks_audit_tbl__"
+
 # Custom JWT secret for authentication
 # If not set, a random secret will be generated
 # For production, use a strong secret generated with: openssl rand -base64 32

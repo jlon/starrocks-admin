@@ -12,6 +12,33 @@ pub struct Config {
     pub logging: LoggingConfig,
     pub static_config: StaticConfig,
     pub metrics: MetricsCollectorConfig,
+    pub audit: AuditLogConfig,
+}
+
+/// Audit log configuration for StarRocks audit table
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct AuditLogConfig {
+    /// Audit log database name (default: starrocks_audit_db__)
+    pub database: String,
+    /// Audit log table name (default: starrocks_audit_tbl__)
+    pub table: String,
+}
+
+impl Default for AuditLogConfig {
+    fn default() -> Self {
+        Self {
+            database: "starrocks_audit_db__".to_string(),
+            table: "starrocks_audit_tbl__".to_string(),
+        }
+    }
+}
+
+impl AuditLogConfig {
+    /// Get the fully qualified table name (database.table)
+    pub fn full_table_name(&self) -> String {
+        format!("{}.{}", self.database, self.table)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -106,6 +133,14 @@ pub struct CommandLineArgs {
     /// Enable/disable metrics collector (overrides config file)
     #[arg(long, value_name = "BOOL")]
     pub metrics_enabled: Option<bool>,
+
+    /// Audit log database name (overrides config file, default: starrocks_audit_db__)
+    #[arg(long, value_name = "DATABASE")]
+    pub audit_database: Option<String>,
+
+    /// Audit log table name (overrides config file, default: starrocks_audit_tbl__)
+    #[arg(long, value_name = "TABLE")]
+    pub audit_table: Option<String>,
 }
 
 impl Config {
@@ -153,6 +188,8 @@ impl Config {
     /// - APP_METRICS_INTERVAL_SECS: Metrics collection interval in seconds (accepts "30s", "5m", "1h")
     /// - APP_METRICS_RETENTION_DAYS: Retention days for metrics (accepts "7d")
     /// - APP_METRICS_ENABLED: Enable/disable metrics collector (true/false)
+    /// - APP_AUDIT_DATABASE: Audit log database name (default: starrocks_audit_db__)
+    /// - APP_AUDIT_TABLE: Audit log table name (default: starrocks_audit_tbl__)
     fn apply_env_overrides(&mut self) {
         if let Ok(host) = std::env::var("APP_SERVER_HOST") {
             self.server.host = host;
@@ -229,6 +266,17 @@ impl Config {
             self.metrics.enabled = val;
             tracing::info!("Override metrics.enabled from env: {}", self.metrics.enabled);
         }
+
+        // Audit log overrides
+        if let Ok(database) = std::env::var("APP_AUDIT_DATABASE") {
+            self.audit.database = database;
+            tracing::info!("Override audit.database from env: {}", self.audit.database);
+        }
+
+        if let Ok(table) = std::env::var("APP_AUDIT_TABLE") {
+            self.audit.table = table;
+            tracing::info!("Override audit.table from env: {}", self.audit.table);
+        }
     }
 
     /// Apply command line argument overrides (highest priority)
@@ -302,6 +350,16 @@ impl Config {
         if let Some(enabled) = args.metrics_enabled {
             self.metrics.enabled = enabled;
             tracing::info!("Override metrics.enabled from CLI: {}", self.metrics.enabled);
+        }
+
+        if let Some(database) = &args.audit_database {
+            self.audit.database = database.clone();
+            tracing::info!("Override audit.database from CLI: {}", self.audit.database);
+        }
+
+        if let Some(table) = &args.audit_table {
+            self.audit.table = table.clone();
+            tracing::info!("Override audit.table from CLI: {}", self.audit.table);
         }
     }
 

@@ -2,6 +2,7 @@
 // Purpose: Collect and cache expensive data statistics (database/table counts, top tables, etc.)
 // Design Ref: CLUSTER_OVERVIEW_PLAN.md
 
+use crate::config::AuditLogConfig;
 use crate::models::Cluster;
 use crate::services::{ClusterService, MaterializedViewService, MySQLClient, MySQLPoolManager};
 use crate::utils::ApiResult;
@@ -68,6 +69,7 @@ pub struct DataStatisticsService {
     db: SqlitePool,
     cluster_service: Arc<ClusterService>,
     mysql_pool_manager: Arc<MySQLPoolManager>,
+    audit_config: AuditLogConfig,
 }
 
 impl DataStatisticsService {
@@ -76,8 +78,9 @@ impl DataStatisticsService {
         db: SqlitePool,
         cluster_service: Arc<ClusterService>,
         mysql_pool_manager: Arc<MySQLPoolManager>,
+        audit_config: AuditLogConfig,
     ) -> Self {
-        Self { db, cluster_service, mysql_pool_manager }
+        Self { db, cluster_service, mysql_pool_manager, audit_config }
     }
 
     /// Collect and update data statistics for a cluster
@@ -369,12 +372,12 @@ impl DataStatisticsService {
                     1
                 ) as full_table_ref,
                 COUNT(*) as access_count
-            FROM starrocks_audit_db__.starrocks_audit_tbl__
+            FROM {}
             WHERE timestamp >= '{}'
                 AND `catalog` != ''
-                AND (`db` NOT IN ('information_schema', '_statistics_', 'sys', 'starrocks_audit_db__', 'recycle_dw') OR `db` IS NULL OR `db` = '')
+                AND (`db` NOT IN ('information_schema', '_statistics_', 'sys', '{}', 'recycle_dw') OR `db` IS NULL OR `db` = '')
                 AND UPPER(stmt) LIKE '%FROM %'
-                AND LOWER(stmt) NOT LIKE '%starrocks_audit_tbl__%'
+                AND LOWER(stmt) NOT LIKE '%{}%'
             GROUP BY `catalog`, database_name, table_name, full_table_ref
             HAVING table_name NOT LIKE '%select%'
                 AND table_name NOT LIKE '%(%'
@@ -385,7 +388,11 @@ impl DataStatisticsService {
             ORDER BY access_count DESC
             LIMIT {}
             "#,
-            start_time_str, limit
+            self.audit_config.full_table_name(),
+            start_time_str,
+            self.audit_config.database,
+            self.audit_config.table,
+            limit
         );
 
         tracing::debug!("Querying top tables by access with table name extraction");
@@ -472,8 +479,8 @@ impl DataStatisticsService {
                         if final_db.contains("information_schema")
                             || final_db.contains("_statistics_")
                             || final_db.contains("sys")
-                            || final_db.contains("starrocks_audit_db__")
-                            || final_table == "starrocks_audit_tbl__"
+                            || final_db.contains(&self.audit_config.database)
+                            || final_table == self.audit_config.table
                         {
                             tracing::debug!(
                                 "Filtering out system table: {}.{}",
@@ -507,14 +514,17 @@ impl DataStatisticsService {
                     SELECT 
                         db as database_name,
                         COUNT(*) as access_count
-                    FROM starrocks_audit_db__.starrocks_audit_tbl__
+                    FROM {}
                     WHERE timestamp >= '{}'
-                        AND db NOT IN ('information_schema', '_statistics_', '', 'sys', 'starrocks_audit_db__', 'recycle_dw')
+                        AND db NOT IN ('information_schema', '_statistics_', '', 'sys', '{}', 'recycle_dw')
                     GROUP BY db
                     ORDER BY access_count DESC
                     LIMIT {}
                     "#,
-                    start_time_str, limit
+                    self.audit_config.full_table_name(),
+                    start_time_str,
+                    self.audit_config.database,
+                    limit
                 );
 
                 match mysql_client.query(&query_db_only).await {
@@ -750,7 +760,7 @@ impl DataStatisticsService {
 
     /// List user databases excluding system schemas
     async fn list_user_databases(&self, mysql_client: &MySQLClient) -> ApiResult<Vec<String>> {
-        let system_dbs = ["information_schema", "_statistics_", "starrocks_audit_db__", "sys"];
+        let system_dbs = ["information_schema", "_statistics_", &self.audit_config.database, "sys"];
 
         let mut databases = Vec::new();
         let (columns, rows) = mysql_client.query_raw("SHOW DATABASES").await?;

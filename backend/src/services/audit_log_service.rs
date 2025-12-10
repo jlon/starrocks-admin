@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 
+use crate::config::AuditLogConfig;
 use crate::models::Cluster;
 use crate::services::{MySQLClient, MySQLPoolManager};
 use crate::utils::ApiResult;
@@ -40,12 +41,14 @@ pub struct SlowQuery {
 
 pub struct AuditLogService {
     mysql_pool_manager: Arc<MySQLPoolManager>,
+    audit_config: AuditLogConfig,
 }
 
 impl AuditLogService {
-    pub fn new(mysql_pool_manager: Arc<MySQLPoolManager>) -> Self {
+    pub fn new(mysql_pool_manager: Arc<MySQLPoolManager>, audit_config: AuditLogConfig) -> Self {
         Self {
             mysql_pool_manager,
+            audit_config,
         }
     }
 
@@ -65,6 +68,8 @@ impl AuditLogService {
     ) -> ApiResult<Vec<TopTableByAccess>> {
         let pool = self.mysql_pool_manager.get_pool(cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
+        let audit_table = self.audit_config.full_table_name();
+        let audit_table_filter = &self.audit_config.table;
         let query = format!(
             r#"
             SELECT 
@@ -84,15 +89,15 @@ impl AuditLogService {
                 COUNT(*) as access_count,
                 MAX(`timestamp`) as last_access,
                 COUNT(DISTINCT `user`) as unique_users
-            FROM starrocks_audit_db__.starrocks_audit_tbl__
-            WHERE `timestamp` >= DATE_SUB(NOW(), INTERVAL {} HOUR)
+            FROM {audit_table}
+            WHERE `timestamp` >= DATE_SUB(NOW(), INTERVAL {hours} HOUR)
                 AND isQuery = 1
                 AND `state` = 'EOF'
                 AND `queryType` IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
                 AND `catalog` != ''
                 AND (`db` != 'information_schema' OR `db` IS NULL)
                 AND (`db` != '_statistics_' OR `db` IS NULL)
-                AND LOWER(`stmt`) NOT LIKE '%starrocks_audit_tbl__%'
+                AND LOWER(`stmt`) NOT LIKE '%{audit_table_filter}%'
             GROUP BY catalog, database, full_table_name
             HAVING full_table_name != ''
                 AND full_table_name NOT LIKE '%(%'
@@ -100,10 +105,8 @@ impl AuditLogService {
                 AND full_table_name NOT LIKE '%WHERE%'
                 AND full_table_name NOT LIKE '%GROUP%'
             ORDER BY access_count DESC
-            LIMIT {}
+            LIMIT {limit}
             "#,
-            hours,
-            limit
         );
         
         tracing::debug!("Querying top tables by access: hours={}, limit={}", hours, limit);
@@ -205,6 +208,7 @@ impl AuditLogService {
     ) -> ApiResult<Vec<SlowQuery>> {
         let pool = self.mysql_pool_manager.get_pool(cluster).await?;
         let mysql_client = MySQLClient::from_pool(pool);
+        let audit_table = self.audit_config.full_table_name();
         
         // Query audit logs for slow queries
         let query = format!(
@@ -222,17 +226,14 @@ impl AuditLogService {
                 `timestamp`,
                 `state`,
                 LEFT(`stmt`, 200) as query_preview
-            FROM starrocks_audit_db__.starrocks_audit_tbl__
-            WHERE `timestamp` >= DATE_SUB(NOW(), INTERVAL {} HOUR)
-                AND `queryTime` >= {}
+            FROM {audit_table}
+            WHERE `timestamp` >= DATE_SUB(NOW(), INTERVAL {hours} HOUR)
+                AND `queryTime` >= {min_duration_ms}
                 AND isQuery = 1
                 AND `state` = 'EOF'
             ORDER BY `queryTime` DESC
-            LIMIT {}
+            LIMIT {limit}
             "#,
-            hours,
-            min_duration_ms,
-            limit
         );
         
         tracing::debug!(

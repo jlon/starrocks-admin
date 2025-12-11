@@ -1,5 +1,5 @@
 # Multi-stage build for StarRocks Admin
-FROM rust:1.85.0 as builder
+FROM rust:1.85.0 AS builder
 
 # Install Node.js for frontend build
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \

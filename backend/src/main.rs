@@ -492,6 +492,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/clusters/sessions/:session_id", delete(handlers::sessions::kill_session))
         // Variables
         .route("/api/clusters/variables", get(handlers::variables::get_variables))
+        .route(
+            "/api/clusters/configs",
+            get(handlers::variables::get_configure_info),
+        )
         .route("/api/clusters/variables/:variable_name", put(handlers::variables::update_variable))
         // System
         .route("/api/clusters/system/runtime_info", get(handlers::system::get_runtime_info))

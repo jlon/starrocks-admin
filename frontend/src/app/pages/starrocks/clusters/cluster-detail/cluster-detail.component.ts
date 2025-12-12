@@ -1,8 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, TemplateRef } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { NbToastrService } from '@nebular/theme';
+import { NbDialogService, NbToastrService } from '@nebular/theme';
 import { ClusterService, Cluster, ClusterHealth } from '../../../../@core/data/cluster.service';
 import { ConfirmDialogService } from '../../../../@core/services/confirm-dialog.service';
+import { NodeService, Variable } from '../../../../@core/data/node.service';
 
 @Component({
   selector: 'ngx-cluster-detail',
@@ -14,6 +15,10 @@ export class ClusterDetailComponent implements OnInit {
   health: ClusterHealth | null = null;
   loading = true;
   clusterId: number;
+  configLoading = false;
+  configureInfo: Variable[] = [];
+  filteredConfigureInfo: Variable[] = [];
+  configSearchText = '';
 
   constructor(
     private clusterService: ClusterService,
@@ -21,6 +26,8 @@ export class ClusterDetailComponent implements OnInit {
     private router: Router,
     private toastrService: NbToastrService,
     private confirmDialogService: ConfirmDialogService,
+    private nodeService: NodeService,
+    private dialogService: NbDialogService,
   ) {
     this.clusterId = parseInt(this.route.snapshot.paramMap.get('id') || '0', 10);
   }
@@ -105,5 +112,29 @@ export class ClusterDetailComponent implements OnInit {
           },
         });
       });
+  }
+
+  openConfigureDialog(dialog: TemplateRef<any>): void {
+    this.configLoading = true;
+    this.configSearchText = '';
+    this.dialogService.open(dialog, { closeOnBackdropClick: true });
+    this.nodeService.getConfigureInfo().subscribe({
+      next: (data) => {
+        this.configureInfo = data;
+        this.filteredConfigureInfo = data;
+        this.configLoading = false;
+      },
+      error: (error) => {
+        this.toastrService.danger(error.error?.message || '获取配置失败', '错误');
+        this.configLoading = false;
+      },
+    });
+  }
+
+  filterConfig(): void {
+    const search = this.configSearchText.toLowerCase().trim();
+    this.filteredConfigureInfo = search
+      ? this.configureInfo.filter(c => c.name.toLowerCase().includes(search) || (c.value && c.value.toLowerCase().includes(search)))
+      : this.configureInfo;
   }
 }

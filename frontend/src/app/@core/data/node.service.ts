@@ -362,6 +362,10 @@ export class NodeService {
     return this.api.get<Variable[]>(`/clusters/variables`, params);
   }
 
+  getConfigureInfo(): Observable<Variable[]> {
+    return this.api.get<Variable[]>(`/clusters/configs`);
+  }
+
   updateVariable(variableName: string, request: VariableUpdateRequest): Observable<any> {
     return this.api.put(`/clusters/variables/${variableName}`, request);
   }

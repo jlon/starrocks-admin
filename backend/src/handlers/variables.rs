@@ -21,6 +21,12 @@ pub struct VariableQueryParams {
     pub filter: Option<String>,
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct ConfigEntry {
+    pub name: String,
+    pub value: String,
+}
+
 fn default_type() -> String {
     "global".to_string()
 }
@@ -86,6 +92,100 @@ pub async fn get_variables(
         .collect();
 
     Ok(Json(variables))
+}
+
+/// Get FE configure info (SHOW FRONTEND CONFIG) and return as JSON
+#[utoipa::path(
+    get,
+    path = "/api/clusters/configs",
+    responses(
+        (status = 200, description = "Frontend configure list", body = Vec<ConfigEntry>),
+        (status = 404, description = "No active cluster found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer" = [])
+    )
+)]
+pub async fn get_configure_info(
+    State(state): State<Arc<crate::AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+) -> ApiResult<impl IntoResponse> {
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state
+            .cluster_service
+            .get_active_cluster_by_org(org_ctx.organization_id)
+            .await?
+    };
+
+    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
+    let mysql_client = MySQLClient::from_pool(pool);
+
+    // Prefer SHOW FRONTEND CONFIG; fallback to SHOW CONFIG for compatibility
+    let mut configs: Vec<ConfigEntry> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+
+    // Try admin + non-admin variants to maximize compatibility across versions/parsers
+    for stmt in [
+        "ADMIN SHOW FRONTEND CONFIG",
+        "SHOW FRONTEND CONFIG",
+        "ADMIN SHOW CONFIG",
+        "SHOW CONFIG",
+    ] {
+        match mysql_client.query_raw(stmt).await {
+            Ok((columns, rows)) => {
+                // Log column names for debugging
+                tracing::info!("Config query '{}' returned columns: {:?}", stmt, columns);
+                
+                // Find column indices for name and value
+                let name_idx = columns.iter().position(|c| {
+                    let lc = c.to_lowercase();
+                    lc == "key" || lc == "name" || lc == "config_name" || lc == "configname"
+                });
+                let value_idx = columns.iter().position(|c| {
+                    let lc = c.to_lowercase();
+                    lc == "value" || lc == "config_value" || lc == "configvalue"
+                });
+                
+                tracing::info!("name_idx: {:?}, value_idx: {:?}", name_idx, value_idx);
+                
+                if let Some(n_idx) = name_idx {
+                    configs = rows
+                        .into_iter()
+                        .filter_map(|row| {
+                            let name = row.get(n_idx).cloned().unwrap_or_default();
+                            let value = value_idx
+                                .and_then(|v_idx| row.get(v_idx).cloned())
+                                .unwrap_or_default();
+                            if name.is_empty() {
+                                None
+                            } else {
+                                Some(ConfigEntry { name, value })
+                            }
+                        })
+                        .collect();
+                    
+                    if !configs.is_empty() {
+                        break;
+                    }
+                }
+            },
+            Err(e) => {
+                errors.push(format!("{}: {}", stmt, e));
+            },
+        }
+    }
+
+    if configs.is_empty() && !errors.is_empty() {
+        return Err(ApiError::internal_error(format!(
+            "Failed to fetch FE config: {}",
+            errors.join("; ")
+        )));
+    }
+
+    Ok(Json(configs))
 }
 
 /// Update a variable

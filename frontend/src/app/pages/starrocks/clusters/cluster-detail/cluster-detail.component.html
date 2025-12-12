@@ -22,6 +22,9 @@
             <button nbButton ghost status="danger" (click)="deleteCluster()" nbTooltip="删除集群">
               <nb-icon icon="trash-2-outline"></nb-icon>
             </button>
+            <button nbButton ghost status="primary" nbTooltip="查看 Configure Info" (click)="openConfigureDialog(configDialog)">
+              <nb-icon icon="file-text-outline"></nb-icon>
+            </button>
           </div>
         </div>
       </nb-card-header>
@@ -128,6 +131,49 @@
     </nb-card>
   </div>
 </div>
+
+<ng-template #configDialog let-dialogRef="dialogRef">
+  <nb-card class="config-dialog">
+    <nb-card-header class="d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <nb-icon icon="settings-2-outline" status="primary"></nb-icon>
+        <span>FE Configure Info</span>
+        <span class="text-hint caption" *ngIf="!configLoading">({{ filteredConfigureInfo.length }} 项)</span>
+      </div>
+      <button nbButton ghost size="tiny" status="basic" (click)="dialogRef.close()">
+        <nb-icon icon="close-outline"></nb-icon>
+      </button>
+    </nb-card-header>
+    <nb-card-body>
+      <div class="config-search mb-3">
+        <input nbInput fullWidth placeholder="搜索配置项..." [(ngModel)]="configSearchText" (input)="filterConfig()" />
+      </div>
+      <div *ngIf="configLoading" class="text-center py-4">
+        <nb-spinner size="medium" status="primary"></nb-spinner>
+        <div class="caption text-hint mt-2">加载配置中...</div>
+      </div>
+      <div *ngIf="!configLoading" class="config-table-wrapper">
+        <table class="config-table">
+          <thead>
+            <tr>
+              <th class="col-key">配置项</th>
+              <th class="col-value">值</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of filteredConfigureInfo">
+              <td class="col-key">{{ item.name }}</td>
+              <td class="col-value">{{ item.value || '-' }}</td>
+            </tr>
+            <tr *ngIf="filteredConfigureInfo.length === 0">
+              <td colspan="2" class="text-center text-hint py-3">无匹配的配置项</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </nb-card-body>
+  </nb-card>
+</ng-template>
 
 <div *ngIf="loading" class="text-center py-5">
   <nb-spinner status="primary" size="large"></nb-spinner>

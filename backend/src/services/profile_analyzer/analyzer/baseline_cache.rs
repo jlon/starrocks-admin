@@ -173,14 +173,11 @@ impl BaselineCacheManager {
         complexity: QueryComplexity,
     ) -> PerformanceBaseline {
         // Fast path: read from cache
-        if let Ok(cache_guard) = self.cache.read() {
-            if let Some(cached) = cache_guard.get(&cluster_id) {
-                if cached.is_valid() {
-                    if let Some(baseline) = cached.get(complexity) {
-                        return baseline.clone();
-                    }
-                }
-            }
+        if let Ok(cache_guard) = self.cache.read()
+            && let Some(cached) = cache_guard.get(&cluster_id)
+            && cached.is_valid()
+            && let Some(baseline) = cached.get(complexity) {
+                return baseline.clone();
         }
 
         // Fallback: return default baseline
@@ -262,7 +259,7 @@ impl BaselineCacheManager {
             if let Some(old_bl) = old.get(complexity) {
                 let ratio = new_bl.stats.p95_ms / old_bl.stats.p95_ms;
                 // P95 变化超过 2 倍视为漂移
-                if ratio > 2.0 || ratio < 0.5 {
+                if !(0.5..=2.0).contains(&ratio) {
                     drifts.push(DriftDetail {
                         complexity: *complexity,
                         old_p95_ms: old_bl.stats.p95_ms,

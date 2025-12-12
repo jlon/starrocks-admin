@@ -412,7 +412,7 @@ impl ProfileComposer {
                 "PAIMON_SCAN",
                 "FILE_SCAN",
             ];
-            if scan_types.contains(&topology_name.as_ref()) {
+            if scan_types.contains(&topology_name) {
                 for &op in operators {
                     let op_name = Self::extract_operator_name(&op.name);
                     let op_canonical = OperatorParser::canonical_topology_name(&op_name);

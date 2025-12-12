@@ -1931,8 +1931,8 @@ Query:
             let profile_text = load_profile("profile1.txt");
             let result = analyze_profile(&profile_text).expect("Failed to analyze profile");
 
-            if let Some(rca) = &result.root_cause_analysis {
-                if rca.root_causes.len() >= 2 {
+            if let Some(rca) = &result.root_cause_analysis
+                && rca.root_causes.len() >= 2 {
                     // Verify sorted by impact (descending)
                     let impacts: Vec<f64> = rca
                         .root_causes
@@ -1950,7 +1950,6 @@ Query:
                     }
 
                     println!("Root cause impacts (sorted): {:?}", impacts);
-                }
             }
         }
 

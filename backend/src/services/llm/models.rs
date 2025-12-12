@@ -190,7 +190,7 @@ impl SessionStatus {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_status(s: &str) -> Self {
         match s {
             "pending" => Self::Pending,
             "processing" => Self::Processing,
@@ -221,7 +221,7 @@ pub struct LLMAnalysisSession {
 
 impl LLMAnalysisSession {
     pub fn status_enum(&self) -> SessionStatus {
-        SessionStatus::from_str(&self.status)
+        SessionStatus::parse_status(&self.status)
     }
 }
 

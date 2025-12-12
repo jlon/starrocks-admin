@@ -202,7 +202,7 @@ impl QueryComplexity {
                 },
                 // Double-quoted identifier
                 '"' => {
-                    while let Some(c2) = chars.next() {
+                    for c2 in chars.by_ref() {
                         if c2 == '"' {
                             break;
                         }
@@ -212,7 +212,7 @@ impl QueryComplexity {
                 // Line comment --
                 '-' if chars.peek() == Some(&'-') => {
                     chars.next();
-                    while let Some(c2) = chars.next() {
+                    for c2 in chars.by_ref() {
                         if c2 == '\n' {
                             break;
                         }
@@ -342,7 +342,7 @@ impl BaselineCalculator {
             let complexity = QueryComplexity::from_sql(&record.stmt);
             grouped
                 .entry(complexity)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(record.clone());
         }
 

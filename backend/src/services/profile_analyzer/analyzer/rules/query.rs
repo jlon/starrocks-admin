@@ -253,7 +253,7 @@ impl QueryRule for Q001LongRunning {
                     threshold_source
                 ),
                 reason: if has_baseline {
-                    format!("阈值基于历史基线 P95 + 2σ 计算。当前查询显著慢于同类查询的历史表现。",)
+                    "阈值基于历史基线 P95 + 2σ 计算。当前查询显著慢于同类查询的历史表现。".to_string()
                 } else {
                     format!(
                         "根据查询类型 ({}) 使用默认阈值。OLAP 查询期望快速响应 (10s)，而 ETL 任务允许更长时间 (5-30min)。",

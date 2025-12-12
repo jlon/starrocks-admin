@@ -97,11 +97,10 @@ impl RuleEngine {
         // P0.1: Skip diagnosis for fast queries
         // v2.0: Use dynamic threshold based on query type (ETL allows faster queries to be diagnosed)
         let min_diagnosis_time = thresholds.get_min_diagnosis_time_seconds();
-        if let Ok(total_time_seconds) = Self::parse_total_time(&profile.summary.total_time) {
-            if total_time_seconds < min_diagnosis_time {
+        if let Ok(total_time_seconds) = Self::parse_total_time(&profile.summary.total_time)
+            && total_time_seconds < min_diagnosis_time {
                 // Fast query - return empty diagnostics
                 return vec![];
-            }
         }
 
         let mut diagnostics = Vec::new();

@@ -51,7 +51,7 @@ impl LLMClient {
 
         // Build user prompt from request
         let user_prompt =
-            serde_json::to_string_pretty(request).map_err(|e| LLMError::SerializationError(e))?;
+            serde_json::to_string_pretty(request).map_err(LLMError::SerializationError)?;
 
         // Build chat completion request
         let chat_request = ChatCompletionRequest {

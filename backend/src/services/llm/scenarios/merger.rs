@@ -317,7 +317,7 @@ pub fn diagnostic_to_llm(diag: &DiagnosticResult) -> super::root_cause::Diagnost
         operator: diag
             .node_path
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or("unknown")
             .to_string(),
         plan_node_id: diag.plan_node_id,
@@ -343,7 +343,7 @@ pub fn aggregated_diagnostic_to_llm(
         operator: diag
             .affected_nodes
             .first()
-            .map(|s| s.split('/').last().unwrap_or("unknown"))
+            .map(|s| s.split('/').next_back().unwrap_or("unknown"))
             .unwrap_or("unknown")
             .to_string(),
         plan_node_id: None,

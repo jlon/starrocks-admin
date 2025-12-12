@@ -757,7 +757,7 @@ impl RootCauseAnalyzer {
         // Step 3: Build causal graph
         let all_edges: Vec<(String, String, String)> = intra_edges
             .into_iter()
-            .chain(inter_edges.into_iter())
+            .chain(inter_edges)
             .collect();
 
         // Step 4: Find root causes (nodes with no incoming edges)

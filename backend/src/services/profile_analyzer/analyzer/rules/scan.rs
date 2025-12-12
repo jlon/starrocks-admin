@@ -284,7 +284,7 @@ impl DiagnosticRule for S007ColdStorage {
 /// Condition:
 /// - PageCache: CachedPagesNum/ReadPagesNum < threshold
 /// - DataCache (disaggregated): CompressedBytesReadLocalDisk/(Local+Remote) < threshold
-/// v2.0: Uses dynamic cache hit threshold based on storage type
+///   v2.0: Uses dynamic cache hit threshold based on storage type
 pub struct S009LowCacheHit;
 
 impl DiagnosticRule for S009LowCacheHit {

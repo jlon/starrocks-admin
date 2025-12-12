@@ -275,7 +275,7 @@ impl DynamicThresholds {
 
             // If historical data shows high variance, allow slightly more skew
             // Increase base by 20% of (historical_ratio - 2.0), capped at 1.0
-            let adjustment = ((historical_ratio - 2.0) * 0.2).min(1.0).max(0.0);
+            let adjustment = ((historical_ratio - 2.0) * 0.2).clamp(0.0, 1.0);
             base + adjustment
         } else {
             base
@@ -804,7 +804,7 @@ mod dynamic_thresholds_tests {
         assert!(medium_skew < large_skew);
 
         // Verify ranges
-        assert!(small_skew >= 2.0 && small_skew <= 2.5);
+        assert!((2.0..=2.5).contains(&small_skew));
         assert!(large_skew >= 3.5);
     }
 

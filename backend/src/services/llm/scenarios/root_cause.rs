@@ -981,10 +981,8 @@ impl RootCauseAnalysisRequestBuilder {
 /// * "external" - External table (any non-default catalog)
 pub fn determine_table_type(table_name: &str) -> String {
     match table_name.split('.').collect::<Vec<_>>() {
-        parts if parts.len() >= 3 => parts[0]
-            .eq_ignore_ascii_case("default_catalog")
-            .then(|| "internal".to_string())
-            .unwrap_or_else(|| "external".to_string()),
+        parts if parts.len() >= 3 => if parts[0]
+            .eq_ignore_ascii_case("default_catalog") { "internal".to_string() } else { "external".to_string() },
         parts if parts.len() == 2 => "internal".to_string(),
         _ => "internal".to_string(),
     }

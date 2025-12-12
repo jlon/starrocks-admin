@@ -231,7 +231,6 @@ async fn fetch_schema(
                 }
                 schema.insert(t.clone(), info);
             }
-        }
     }
     Ok(serde_json::Value::Object(schema))
 }
@@ -327,7 +326,6 @@ fn parse_ddl(ddl: &str) -> serde_json::Value {
                 }),
             );
         }
-    }
 
     // Extract key type (PRIMARY KEY, DUPLICATE KEY, etc.)
     if let Some(c) =

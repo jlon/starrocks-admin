@@ -854,13 +854,12 @@ pub fn parse_metric_value(value: &str) -> Option<f64> {
     let s = value.trim();
 
     // Handle "1.056M (1056421)" format - extract value from parentheses
-    if let Some(start) = s.find('(') {
-        if let Some(end) = s.find(')') {
+    if let Some(start) = s.find('(')
+        && let Some(end) = s.find(')') {
             let inner = &s[start + 1..end].trim();
             if let Ok(v) = inner.parse::<f64>() {
                 return Some(v);
             }
-        }
     }
 
     // Handle percentage

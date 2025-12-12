@@ -310,8 +310,10 @@ mod tests {
 
         // Create a node with 99.84% time percentage and sufficient absolute time (1 second)
         // P0.2: G001 now requires both percentage > 30% AND operator_time > 500ms
-        let mut metrics = OperatorMetrics::default();
-        metrics.operator_total_time = Some(1_000_000_000); // 1 second in nanoseconds
+        let metrics = OperatorMetrics { 
+            operator_total_time: Some(1_000_000_000), // 1 second in nanoseconds
+            ..Default::default() 
+        };
 
         let node = ExecutionTreeNode {
             id: "test_node".to_string(),
@@ -361,8 +363,10 @@ mod tests {
 
         // Create a node with high percentage but low absolute time (100ms < 500ms threshold)
         // P0.2: G001 should NOT trigger because operator_time < 500ms
-        let mut metrics = OperatorMetrics::default();
-        metrics.operator_total_time = Some(100_000_000); // 100ms in nanoseconds
+        let metrics = OperatorMetrics { 
+            operator_total_time: Some(100_000_000), // 100ms in nanoseconds
+            ..Default::default() 
+        };
 
         let node = ExecutionTreeNode {
             id: "test_node".to_string(),

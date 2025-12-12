@@ -639,8 +639,8 @@ mod model_tests {
     #[test]
     fn test_session_status_conversion() {
         assert_eq!(SessionStatus::Pending.as_str(), "pending");
-        assert_eq!(SessionStatus::from_str("completed"), SessionStatus::Completed);
-        assert_eq!(SessionStatus::from_str("unknown"), SessionStatus::Failed);
+        assert_eq!(SessionStatus::parse_status("completed"), SessionStatus::Completed);
+        assert_eq!(SessionStatus::parse_status("unknown"), SessionStatus::Failed);
     }
 
     #[test]
@@ -1114,7 +1114,7 @@ mod llm_integration_tests {
                     // For external tables: hive, iceberg, hudi, deltalake, paimon, jdbc, es
                     // For internal tables: native
                     let connector_type = if table_type == "external" {
-                        Some(determine_connector_type(&metrics))
+                        Some(determine_connector_type(metrics))
                     } else {
                         Some("native".to_string())
                     };
@@ -1343,7 +1343,7 @@ mod llm_integration_tests {
                 operator: d
                     .affected_nodes
                     .first()
-                    .map(|s| s.split('/').last().unwrap_or("unknown"))
+                    .map(|s| s.split('/').next_back().unwrap_or("unknown"))
                     .unwrap_or("unknown")
                     .to_string(),
                 plan_node_id: None,
@@ -1409,10 +1409,9 @@ mod llm_integration_tests {
     fn parse_number(s: Option<&String>) -> u64 {
         s.and_then(|v| {
             // Try to extract number in parentheses first: "1.705B (1704962761)"
-            if let Some(start) = v.find('(') {
-                if let Some(end) = v.find(')') {
+            if let Some(start) = v.find('(')
+                && let Some(end) = v.find(')') {
                     return v[start + 1..end].parse().ok();
-                }
             }
             // Otherwise try direct parse
             v.replace(",", "").parse().ok()
@@ -2011,7 +2010,7 @@ mod sql_diag_tests {
         println!("{}\n", sep);
 
         // Connect to real database
-        let db_paths = vec![
+        let db_paths = [
             "data/starrocks-admin.db",
             "starrocks_admin.db",
             "/home/oppo/Documents/starrocks-admin/backend/data/starrocks-admin.db",
@@ -2153,7 +2152,7 @@ PLAN FRAGMENT 2
         println!("{}\n", sep);
 
         // Connect to real database
-        let db_paths = vec![
+        let db_paths = [
             "data/starrocks-admin.db",
             "starrocks_admin.db",
             "/home/oppo/Documents/starrocks-admin/backend/data/starrocks-admin.db",
@@ -2288,7 +2287,7 @@ LIMIT 50000"#;
         println!("{}\n", sep);
 
         // Connect to real database
-        let db_paths = vec![
+        let db_paths = [
             "data/starrocks-admin.db",
             "starrocks_admin.db",
             "/home/oppo/Documents/starrocks-admin/backend/data/starrocks-admin.db",

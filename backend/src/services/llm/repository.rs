@@ -1,6 +1,7 @@
 //! LLM Repository - Database operations for LLM service
 
-use sqlx::{QueryBuilder, Sqlite, SqlitePool};
+use sqlx::sqlite::SqliteArguments;
+use sqlx::{Arguments, SqlitePool};
 use uuid::Uuid;
 
 use super::UpdateProviderRequest;
@@ -125,53 +126,51 @@ impl LLMRepository {
         id: i64,
         req: UpdateProviderRequest,
     ) -> Result<LLMProvider, LLMError> {
-        // Build dynamic update query with deterministic clause order
-        let mut qb = QueryBuilder::<Sqlite>::new("UPDATE llm_providers SET ");
-        {
-            // Keep updated_at always present to mirror previous behavior
-            let mut set = qb.separated(", ");
-            set.push("updated_at = CURRENT_TIMESTAMP");
-            if let Some(v) = &req.display_name {
-                set.push("display_name = ");
-                set.push_bind(v);
-            }
-            if let Some(v) = &req.api_base {
-                set.push("api_base = ");
-                set.push_bind(v);
-            }
-            if let Some(v) = &req.model_name {
-                set.push("model_name = ");
-                set.push_bind(v);
-            }
-            if let Some(v) = &req.api_key {
-                set.push("api_key_encrypted = ");
-                set.push_bind(v);
-            }
-            if let Some(v) = &req.max_tokens {
-                set.push("max_tokens = ");
-                set.push_bind(v);
-            }
-            if let Some(v) = &req.temperature {
-                set.push("temperature = ");
-                set.push_bind(v);
-            }
-            if let Some(v) = &req.timeout_seconds {
-                set.push("timeout_seconds = ");
-                set.push_bind(v);
-            }
-            if let Some(v) = &req.priority {
-                set.push("priority = ");
-                set.push_bind(v);
-            }
-            if let Some(v) = &req.enabled {
-                set.push("enabled = ");
-                set.push_bind(v);
-            }
-        }
-        qb.push(" WHERE id = ");
-        qb.push_bind(id);
+        // Build a deterministic, valid UPDATE statement without extra separators
+        let mut sql = String::from("UPDATE llm_providers SET updated_at = CURRENT_TIMESTAMP");
+        let mut args = SqliteArguments::default();
 
-        let result = qb.build().execute(&self.pool).await?;
+        if let Some(v) = &req.display_name {
+            sql.push_str(", display_name = ?");
+            args.add(v);
+        }
+        if let Some(v) = &req.api_base {
+            sql.push_str(", api_base = ?");
+            args.add(v);
+        }
+        if let Some(v) = &req.model_name {
+            sql.push_str(", model_name = ?");
+            args.add(v);
+        }
+        if let Some(v) = &req.api_key {
+            sql.push_str(", api_key_encrypted = ?");
+            args.add(v);
+        }
+        if let Some(v) = &req.max_tokens {
+            sql.push_str(", max_tokens = ?");
+            args.add(v);
+        }
+        if let Some(v) = &req.temperature {
+            sql.push_str(", temperature = ?");
+            args.add(v);
+        }
+        if let Some(v) = &req.timeout_seconds {
+            sql.push_str(", timeout_seconds = ?");
+            args.add(v);
+        }
+        if let Some(v) = &req.priority {
+            sql.push_str(", priority = ?");
+            args.add(v);
+        }
+        if let Some(v) = &req.enabled {
+            sql.push_str(", enabled = ?");
+            args.add(v);
+        }
+
+        sql.push_str(" WHERE id = ?");
+        args.add(id);
+
+        let result = sqlx::query_with(&sql, args).execute(&self.pool).await?;
 
         if result.rows_affected() == 0 {
             return Err(LLMError::ProviderNotFound(id.to_string()));

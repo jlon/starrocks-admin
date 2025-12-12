@@ -156,6 +156,7 @@ INSERT OR IGNORE INTO permissions (code, name, type, resource, action, descripti
 ('api:clusters:queries', '查询管理', 'api', 'clusters', 'queries', 'GET /api/clusters/queries'),
 ('api:clusters:queries:execute', '执行查询', 'api', 'clusters', 'queries:execute', 'POST /api/clusters/queries/execute'),
 ('api:clusters:queries:kill', '终止查询', 'api', 'clusters', 'queries:kill', 'DELETE /api/clusters/queries/:id'),
+('api:clusters:sql:diagnose', 'SQL诊断', 'api', 'clusters', 'sql:diagnose', 'POST /api/clusters/:cluster_id/sql/diagnose'),
 ('api:clusters:queries:history', '查询历史记录', 'api', 'clusters', 'queries:history', 'GET /api/clusters/queries/history'),
 ('api:clusters:queries:profile', '查询Profile详情', 'api', 'clusters', 'queries:profile', 'GET /api/clusters/queries/:query_id/profile'),
 -- Profile Operations
@@ -303,7 +304,7 @@ LIMIT 1;
 -- Default Data:
 --   - 1 system role (admin)
 --   - 14 menu permissions
---   - 79 API permissions (76 + 3 new: health:post, health:test, auth:permissions)
+--   - 80 API permissions (76 + 4 new: health:post, health:test, auth:permissions, sql:diagnose)
 --   - Admin role gets ALL permissions
 --   - Default admin user assigned admin role
 --
@@ -368,7 +369,8 @@ LIMIT 1;
 --   ├─ api:clusters:catalogs:databases (GET /api/clusters/catalogs-databases)
 --   ├─ api:clusters:queries           (GET /api/clusters/queries)
 --   ├─ api:clusters:queries:execute   (POST /api/clusters/queries/execute)
---   └─ api:clusters:queries:kill      (DELETE /api/clusters/queries/:id)
+--   ├─ api:clusters:queries:kill      (DELETE /api/clusters/queries/:id)
+--   └─ api:clusters:sql:diagnose      (POST /api/clusters/:cluster_id/sql/diagnose)
 --
 -- 【Profiles】menu:queries:profiles
 --   ├─ api:clusters:profiles          (GET /api/clusters/profiles)
@@ -530,7 +532,8 @@ WHERE code IN (
     'api:clusters:catalogs',
     'api:clusters:databases',
     'api:clusters:tables',
-    'api:clusters:catalogs:databases'
+    'api:clusters:catalogs:databases',
+    'api:clusters:sql:diagnose'
 );
 
 -- 19.3 Audit Logs Menu - Query History API

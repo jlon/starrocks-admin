@@ -145,7 +145,7 @@ fn build_issue_focused_prompt(diagnostics: &[DiagnosticForLLM]) -> String {
         );
     }
 
-    let mut prompt = String::from("\n\n## 规则引擎已识别的问题 (作为参考)\n");
+    let mut prompt = String::from("\n\n## 规则引擎已识别的问题 (仅作为参考)\n");
     for d in diagnostics.iter().take(5) {
         prompt.push_str(&format!("- **{}** [{}]: {}\n", d.rule_id, d.severity, d.message));
     }

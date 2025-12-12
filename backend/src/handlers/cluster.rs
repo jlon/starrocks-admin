@@ -335,13 +335,24 @@ pub async fn get_cluster_health(
 ) -> ApiResult<Json<ClusterHealth>> {
     use crate::models::Cluster;
 
-    // Mode 1: If body provided with connection details, use them (new cluster mode)
     if let Some(Json(health_req)) = body
         && health_req.fe_host.is_some()
     {
+        let fe_host = health_req
+            .fe_host
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let username = health_req
+            .username
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let password = health_req.password.as_ref().map(|s| s.to_string());
+
         tracing::info!(
             "Health check with provided credentials: host={}",
-            health_req.fe_host.as_ref().unwrap()
+            fe_host.as_deref().unwrap_or("unknown")
         );
         tracing::debug!(
             "Health check details: port={}, ssl={}, catalog={}",
@@ -350,15 +361,21 @@ pub async fn get_cluster_health(
             health_req.catalog.as_deref().unwrap_or("default_catalog")
         );
 
+        if fe_host.is_none() {
+            return Err(crate::utils::ApiError::validation_error(
+                "Missing required field: fe_host",
+            ));
+        }
+
         let temp_cluster = Cluster {
             id: 0,
             name: "test".to_string(),
             description: None,
-            fe_host: health_req.fe_host.unwrap(),
+            fe_host: fe_host.unwrap(),
             fe_http_port: health_req.fe_http_port.unwrap_or(8030),
             fe_query_port: health_req.fe_query_port.unwrap_or(9030),
-            username: health_req.username.unwrap_or_else(|| "root".to_string()),
-            password_encrypted: health_req.password.unwrap_or_default(),
+            username: username.unwrap_or_else(|| "root".to_string()),
+            password_encrypted: password.unwrap_or_default(),
             enable_ssl: health_req.enable_ssl,
             connection_timeout: 10,
             catalog: health_req
@@ -409,16 +426,26 @@ pub async fn test_cluster_connection(
 ) -> ApiResult<Json<ClusterHealth>> {
     use crate::models::Cluster;
 
+    // Normalize inputs to avoid trailing/leading spaces causing DNS failures
+    let fe_host = health_req
+        .fe_host
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let username = health_req
+        .username
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let password = health_req.password.as_ref().map(|s| s.to_string());
+
     tracing::info!(
         "Testing connection with provided credentials: host={}",
-        health_req
-            .fe_host
-            .as_ref()
-            .unwrap_or(&"unknown".to_string())
+        fe_host.as_deref().unwrap_or("unknown")
     );
 
     // Validate required fields
-    if health_req.fe_host.is_none() {
+    if fe_host.is_none() {
         return Err(crate::utils::ApiError::validation_error("Missing required field: fe_host"));
     }
 
@@ -426,11 +453,11 @@ pub async fn test_cluster_connection(
         id: 0,
         name: "test".to_string(),
         description: None,
-        fe_host: health_req.fe_host.unwrap(),
+        fe_host: fe_host.unwrap(),
         fe_http_port: health_req.fe_http_port.unwrap_or(8030),
         fe_query_port: health_req.fe_query_port.unwrap_or(9030),
-        username: health_req.username.unwrap_or_else(|| "root".to_string()),
-        password_encrypted: health_req.password.unwrap_or_default(),
+        username: username.unwrap_or_else(|| "root".to_string()),
+        password_encrypted: password.unwrap_or_default(),
         enable_ssl: health_req.enable_ssl,
         connection_timeout: 10,
         catalog: health_req

@@ -15,7 +15,7 @@ use crate::models::{
 };
 use crate::services::StarRocksClient;
 use crate::services::mysql_client::MySQLClient;
-use crate::utils::ApiResult;
+use crate::utils::{ApiError, ApiResult};
 
 // Get list of catalogs using MySQL client
 #[utoipa::path(
@@ -460,10 +460,16 @@ pub async fn kill_query(
             .await?
     };
 
+    // Validate query_id format (UUID or StarRocks query ID format: hex-hex-hex-hex-hex)
+    let valid_query_id = query_id.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+    if !valid_query_id || query_id.is_empty() || query_id.len() > 64 {
+        return Err(ApiError::validation_error("Invalid query ID format"));
+    }
+
     let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
     let mysql_client = MySQLClient::from_pool(pool);
 
-    // Execute KILL QUERY
+    // Execute KILL QUERY (query_id is validated above)
     let sql = format!("KILL QUERY '{}'", query_id);
     mysql_client.execute(&sql).await?;
 

@@ -710,6 +710,22 @@
           <label class="detail-label">CPU时间:</label>
           <span class="detail-value" [innerHTML]="formatTime(currentQueryDetail.CPUTime)"></span>
         </div>
+        <div class="detail-row" *ngIf="currentQueryDetail.StartTime">
+          <label class="detail-label">开始时间:</label>
+          <span class="detail-value">{{ currentQueryDetail.StartTime }}</span>
+        </div>
+        <div class="detail-row" *ngIf="currentQueryDetail.MemoryUsage">
+          <label class="detail-label">内存使用:</label>
+          <span class="detail-value">{{ currentQueryDetail.MemoryUsage }}</span>
+        </div>
+        <div class="detail-row" *ngIf="currentQueryDetail.ResourceGroup">
+          <label class="detail-label">资源组:</label>
+          <span class="detail-value">{{ currentQueryDetail.ResourceGroup }}</span>
+        </div>
+        <div class="detail-row" *ngIf="currentQueryDetail.feIp">
+          <label class="detail-label">FE节点:</label>
+          <span class="detail-value">{{ currentQueryDetail.feIp }}</span>
+        </div>
         <div class="detail-row detail-row-full">
           <label class="detail-label">SQL语句:</label>
           <div class="sql-content">

@@ -79,6 +79,14 @@ export interface Query {
   CPUTime: string;
   ExecTime: string;
   Sql: string;
+  StartTime?: string;
+  feIp?: string;
+  MemoryUsage?: string;
+  DiskSpillSize?: string;
+  ExecProgress?: string;
+  Warehouse?: string;
+  CustomQueryId?: string;
+  ResourceGroup?: string;
 }
 
 export interface SystemFunction {

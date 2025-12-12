@@ -4869,35 +4869,26 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
   }
 
-  // Parse bytes from string
+  // Parse bytes from string (supports: "1.5 GB", "500MB", "1G", "1024", etc.)
   parseBytes(value: string | number): number {
-    if (typeof value === 'number') {
-      return value;
-    }
+    if (typeof value === 'number') return value;
     const str = value.toString().trim();
     if (!str || str === '0' || str === '0 B') return 0;
     
-    // Try to parse as number first
-    const num = parseFloat(str.replace(/[^0-9.-]/g, ''));
-    if (!isNaN(num) && !str.match(/[A-Za-z]/)) {
-      return num;
+    // Try pure number first
+    if (!str.match(/[A-Za-z]/)) {
+      const num = parseFloat(str.replace(/[^0-9.-]/g, ''));
+      return isNaN(num) ? 0 : num;
     }
     
-    // Parse with unit (e.g., "1.5 GB", "500 MB")
-    const match = str.match(/^([0-9.]+)\s*([KMGT]?B?)$/i);
+    // Parse with unit (e.g., "1.5 GB", "500MB", "1G", "1024K")
+    const match = str.match(/^([0-9.]+)\s*([KMGT])?B?$/i);
     if (match) {
       const size = parseFloat(match[1]);
-      const unit = match[2].toUpperCase();
-      const multipliers: { [key: string]: number } = {
-        'B': 1,
-        'KB': 1024,
-        'MB': 1024 * 1024,
-        'GB': 1024 * 1024 * 1024,
-        'TB': 1024 * 1024 * 1024 * 1024,
-      };
+      const unit = (match[2] || '').toUpperCase();
+      const multipliers: { [key: string]: number } = { '': 1, 'K': 1024, 'M': 1024 ** 2, 'G': 1024 ** 3, 'T': 1024 ** 4 };
       return size * (multipliers[unit] || 1);
     }
-    
     return 0;
   }
 
@@ -5052,11 +5043,8 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         '查杀',
         '取消',
         'danger'
-      ).subscribe(confirmed => {
-        if (!confirmed) {
-          return;
-        }
-        this.batchKillQueries(queryIds);
+      ).pipe(takeUntil(this.destroy$)).subscribe(confirmed => {
+        if (confirmed) this.batchKillQueries(queryIds);
       });
     });
   }
@@ -5080,42 +5068,27 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   // Kill query from detail dialog
   killQueryFromDetail(): void {
-    if (!this.currentQueryDetail) {
-      return;
-    }
+    if (!this.currentQueryDetail) return;
+    const queryId = this.currentQueryDetail.QueryId;
 
-    this.confirmDialogService.confirm(
-      '确认查杀查询',
-      `确定要查杀查询 ${this.currentQueryDetail.QueryId} 吗？`,
-      '查杀',
-      '取消',
-      'danger'
-    ).subscribe(confirmed => {
-      if (!confirmed) {
-        return;
-      }
-
-      this.loading = true;
-      this.nodeService.killQuery(this.currentQueryDetail!.QueryId).subscribe({
-        next: () => {
-          this.toastrService.success(`查询 ${this.currentQueryDetail!.QueryId} 已成功查杀`, '成功');
-          // Reset loading state immediately, then refresh after delay
-          this.loading = false;
-          this.cdr.markForCheck();
-          // Add delay to allow StarRocks to clean up the query state
-          setTimeout(() => {
-            this.loadRunningQueries();
-          }, 1000);
-        },
-        error: (error) => {
-          this.toastrService.danger(
-            ErrorHandler.extractErrorMessage(error),
-            '查杀失败'
-          );
-          this.loading = false;
-        },
+    this.confirmDialogService.confirm('确认查杀查询', `确定要查杀查询 ${queryId} 吗？`, '查杀', '取消', 'danger')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(confirmed => {
+        if (!confirmed) return;
+        this.loading = true;
+        this.nodeService.killQuery(queryId).pipe(takeUntil(this.destroy$)).subscribe({
+          next: () => {
+            this.toastrService.success(`查询 ${queryId} 已成功查杀`, '成功');
+            this.loading = false;
+            this.cdr.markForCheck();
+            setTimeout(() => this.loadRunningQueries(), 1000);
+          },
+          error: (error) => {
+            this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '查杀失败');
+            this.loading = false;
+          },
+        });
       });
-    });
   }
 
   // Toggle SQL editor collapse state

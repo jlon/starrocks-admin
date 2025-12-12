@@ -126,6 +126,11 @@ export interface VariableUpdateRequest {
   scope: string; // 'GLOBAL' or 'SESSION'
 }
 
+export interface SqlBlacklistItem {
+  Id: string;
+  Pattern: string;
+}
+
 export interface QueryHistoryItem {
   query_id: string;
   user: string;
@@ -339,6 +344,19 @@ export class NodeService {
 
   killQuery(queryId: string): Observable<any> {
     return this.api.delete(`/clusters/queries/${queryId}`);
+  }
+
+  // SQL Blacklist API
+  listSqlBlacklist(): Observable<SqlBlacklistItem[]> {
+    return this.api.get<SqlBlacklistItem[]>(`/clusters/sql-blacklist`);
+  }
+
+  addSqlBlacklist(pattern: string): Observable<any> {
+    return this.api.post(`/clusters/sql-blacklist`, { pattern });
+  }
+
+  deleteSqlBlacklist(id: string): Observable<any> {
+    return this.api.delete(`/clusters/sql-blacklist/${id}`);
   }
 
   getSystemFunctions(): Observable<SystemFunction[]> {

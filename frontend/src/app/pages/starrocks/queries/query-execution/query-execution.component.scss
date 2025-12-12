@@ -1220,7 +1220,8 @@
 }
 
 // Running query filters bar - ngx-admin style
-.running-query-filters {
+.running-query-filters,
+.blacklist-header {
   padding: 0.75rem 1rem;
   background-color: nb-theme(background-basic-color-2);
   border-radius: nb-theme(border-radius);
@@ -1478,5 +1479,31 @@ pre {
   :host ::ng-deep .sql-diag-dialog {
     width: calc(100vw - 1rem);
     max-height: calc(100vh - 1rem);
+  }
+}
+
+// SQL Blacklist dialog
+.blacklist-dialog {
+  width: 500px;
+  max-width: 90vw;
+
+  .form-group {
+    .label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+
+    textarea {
+      font-family: var(--font-family-mono);
+      font-size: 0.875rem;
+    }
+
+    .hint-text {
+      display: block;
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: nb-theme(text-hint-color);
+    }
   }
 }

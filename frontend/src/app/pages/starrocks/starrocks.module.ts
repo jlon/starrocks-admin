@@ -37,6 +37,7 @@ import { MaterializedViewsComponent } from './materialized-views/materialized-vi
 import { QueryExecutionComponent } from './queries/query-execution/query-execution.component';
 import { ProfileQueriesComponent } from './queries/profile-queries/profile-queries.component';
 import { AuditLogsComponent } from './queries/audit-logs/audit-logs.component';
+import { SqlBlacklistComponent } from './queries/sql-blacklist/sql-blacklist.component';
 import { SessionsComponent } from './sessions/sessions.component';
 import { VariablesComponent } from './variables/variables.component';
 import { SystemManagementComponent } from './system-management/system-management.component';
@@ -61,6 +62,7 @@ import { ActiveToggleRenderComponent } from './materialized-views/active-toggle-
     QueryExecutionComponent,
     ProfileQueriesComponent,
     AuditLogsComponent,
+    SqlBlacklistComponent,
     SessionsComponent,
     VariablesComponent,
     SystemManagementComponent,

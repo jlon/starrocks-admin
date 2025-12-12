@@ -467,3 +467,18 @@ pub struct CatalogWithDatabases {
 pub struct CatalogsWithDatabasesResponse {
     pub catalogs: Vec<CatalogWithDatabases>,
 }
+
+// SQL Blacklist item (mapped from SHOW SQLBLACKLIST output)
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SqlBlacklistItem {
+    #[serde(rename = "Id")]
+    pub id: String,
+    #[serde(rename = "Pattern")]
+    pub pattern: String,
+}
+
+// Request to add SQL blacklist
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AddSqlBlacklistRequest {
+    pub pattern: String,
+}

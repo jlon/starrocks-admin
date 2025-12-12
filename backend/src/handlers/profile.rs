@@ -353,7 +353,7 @@ async fn enhance_with_llm(
 
     // Include cluster session variables so LLM knows current settings
     let session_vars: HashMap<String, String> = cluster_variables
-        .map(|vars| vars.clone())
+        .cloned()
         .unwrap_or_default();
 
     // Calculate query complexity for LLM context
@@ -436,7 +436,7 @@ async fn enhance_with_llm(
             operator: d
                 .affected_nodes
                 .first()
-                .map(|s| s.split('/').last().unwrap_or("unknown"))
+                .map(|s| s.split('/').next_back().unwrap_or("unknown"))
                 .unwrap_or("unknown")
                 .to_string(),
             plan_node_id: None,
@@ -704,11 +704,9 @@ fn merge_recommendations(
             } else if let Some(existing) = merged
                 .iter_mut()
                 .find(|r| normalize_action(&r.action) == action_key)
-            {
-                if existing.source == "llm" {
+                && existing.source == "llm" {
                     existing.source = "both".to_string();
                 }
-            }
         }
     }
 

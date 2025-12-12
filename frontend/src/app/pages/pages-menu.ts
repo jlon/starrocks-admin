@@ -51,6 +51,11 @@ export const MENU_ITEMS: NbMenuItem[] = [
         link: '/pages/starrocks/queries/audit-logs',
         data: { permission: 'menu:queries:audit-logs' },
       } as NbMenuItem & { data?: { permission: string } },
+      {
+        title: 'SQL黑名单',
+        link: '/pages/starrocks/queries/blacklist',
+        data: { permission: 'menu:queries:blacklist' },
+      } as NbMenuItem & { data?: { permission: string } },
     ],
   } as NbMenuItem & { data?: { permission: string } },
   {

@@ -852,3 +852,34 @@
     </nb-card-footer>
   </nb-card>
 </ng-template>
+
+<!-- SQL Blacklist Add Dialog -->
+<ng-template #blacklistDialog let-ref="dialogRef">
+  <nb-card class="blacklist-dialog">
+    <nb-card-header>
+      <div class="d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">添加 SQL 黑名单规则</h5>
+        <button nbButton ghost status="basic" size="small" (click)="cancelBlacklistDialog()">
+          <nb-icon icon="close-outline"></nb-icon>
+        </button>
+      </div>
+    </nb-card-header>
+    <nb-card-body>
+      <div class="form-group">
+        <label class="label">正则表达式</label>
+        <textarea nbInput fullWidth rows="4" [(ngModel)]="newBlacklistPattern" 
+          placeholder="例如: SELECT.*FROM.*sensitive_table.*"></textarea>
+        <span class="hint-text">匹配此正则表达式的 SQL 语句将被拒绝执行</span>
+      </div>
+    </nb-card-body>
+    <nb-card-footer>
+      <div class="d-flex justify-content-end gap-2">
+        <button nbButton status="basic" size="small" (click)="cancelBlacklistDialog()">取消</button>
+        <button nbButton status="primary" size="small" (click)="submitBlacklistPattern()" [disabled]="blacklistLoading">
+          <nb-spinner *ngIf="blacklistLoading" size="tiny" status="control"></nb-spinner>
+          添加
+        </button>
+      </div>
+    </nb-card-footer>
+  </nb-card>
+</ng-template>

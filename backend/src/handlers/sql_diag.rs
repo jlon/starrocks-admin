@@ -217,8 +217,8 @@ async fn fetch_schema(
         let show_sql = format!("SHOW CREATE TABLE {}.`{}`", prefix, t);
         tracing::debug!("Fetching schema: {}", show_sql);
 
-        if let Ok((_, rows)) = client.query_raw(&show_sql).await {
-            if let Some(ddl) = rows.first().and_then(|r| r.get(1)) {
+        if let Ok((_, rows)) = client.query_raw(&show_sql).await
+            && let Some(ddl) = rows.first().and_then(|r| r.get(1)) {
                 let mut info = parse_ddl(ddl);
                 // Add table type info
                 if let serde_json::Value::Object(ref mut m) = info {
@@ -317,8 +317,8 @@ fn parse_ddl(ddl: &str) -> serde_json::Value {
                 "buckets": c.get(2).and_then(|x| x.as_str().parse::<u32>().ok())
             }),
         );
-    } else if ddl.to_uppercase().contains("DISTRIBUTED BY RANDOM") {
-        if let Some(c) = cap(r"(?i)DISTRIBUTED\s+BY\s+RANDOM(?:\s+BUCKETS\s+(\d+))?") {
+    } else if ddl.to_uppercase().contains("DISTRIBUTED BY RANDOM")
+        && let Some(c) = cap(r"(?i)DISTRIBUTED\s+BY\s+RANDOM(?:\s+BUCKETS\s+(\d+))?") {
             m.insert(
                 "dist".into(),
                 serde_json::json!({

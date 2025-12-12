@@ -464,7 +464,6 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     highCostOnly?: boolean;
   } = {};
 
-
   // Query detail dialog state
   currentQueryDetail: Query | null = null;
   @ViewChild('queryDetailDialog', { static: false }) queryDetailDialogTemplate!: TemplateRef<any>;
@@ -4637,15 +4636,13 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
       .subscribe(cluster => {
         this.activeCluster = cluster;
         if (cluster) {
-          // Always use the active cluster (override route parameter)
           const newClusterId = cluster.id;
           if (this.clusterId !== newClusterId) {
             this.clusterId = newClusterId;
-            // Load catalogs when cluster changes (this will auto-select and load databases)
             this.resetNavigationState();
             this.loadCatalogs();
-            // Only load if not on realtime tab
-            if (this.selectedTab !== 'realtime') {
+            // Only load running tab on cluster change
+            if (this.selectedTab === 'running') {
               this.loadCurrentTab();
             } else {
               this.loading = false;
@@ -4655,14 +4652,11 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
         }
       });
 
-    // Load queries if clusterId is already set from route
-    if (this.clusterId && this.clusterId > 0) {
-      // Only load if not on realtime tab
-      if (this.selectedTab !== 'realtime') {
-        this.loadCurrentTab();
-      } else {
-        this.loading = false;
-      }
+    // Initial load only for running tab
+    if (this.clusterId && this.clusterId > 0 && this.selectedTab === 'running') {
+      this.loadCurrentTab();
+    } else {
+      this.loading = false;
     }
   }
 
@@ -4682,6 +4676,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
 
   // Tab switching
   selectTab(tab: string): void {
+    if (this.selectedTab === tab) return; // Prevent duplicate loading
     this.selectedTab = tab;
     this.loadCurrentTab();
     this.cdr.markForCheck();

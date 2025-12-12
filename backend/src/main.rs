@@ -65,6 +65,9 @@ use starrocks_admin::{AppState, handlers, middleware, services};
         handlers::query::list_queries,
         handlers::query::kill_query,
         handlers::query::execute_sql,
+        handlers::query::list_sql_blacklist,
+        handlers::query::add_sql_blacklist,
+        handlers::query::delete_sql_blacklist,
         handlers::query_history::list_query_history,
         // Session
         handlers::sessions::get_sessions,
@@ -429,6 +432,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/clusters/queries/execute", post(handlers::query::execute_sql))
         .route("/api/clusters/queries/:query_id", delete(handlers::query::kill_query))
         .route("/api/clusters/queries/history", get(handlers::query_history::list_query_history))
+        // SQL Blacklist
+        .route("/api/clusters/sql-blacklist", get(handlers::query::list_sql_blacklist).post(handlers::query::add_sql_blacklist))
+        .route("/api/clusters/sql-blacklist/:id", delete(handlers::query::delete_sql_blacklist))
         // SQL Diagnosis (LLM-enhanced)
         .route("/api/clusters/:cluster_id/sql/diagnose", post(handlers::sql_diag::diagnose))
         // Cluster detail routes (placed after specific query routes to avoid path conflicts)

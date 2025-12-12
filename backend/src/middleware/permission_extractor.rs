@@ -200,6 +200,7 @@ fn extract_clusters_special_paths(segments: &[&str], method: &str) -> Option<Str
         Box::new(extract_materialized_views_action),
         Box::new(extract_variables_action),
         Box::new(extract_system_functions_action),
+        Box::new(extract_sql_blacklist_action),
     ];
 
     for handler in handlers {
@@ -274,6 +275,27 @@ fn extract_system_functions_action(segments: &[&str], method: &str) -> Option<St
             }
         },
         _ => None,
+    }
+}
+
+/// Extract action for sql-blacklist paths
+fn extract_sql_blacklist_action(segments: &[&str], method: &str) -> Option<String> {
+    // Handle /api/clusters/sql-blacklist and /api/clusters/sql-blacklist/:id
+    if segments.len() >= 2 && segments.get(1) == Some(&"sql-blacklist") {
+        match segments.len() {
+            2 => match method {
+                "GET" => Some("sql:blacklist".to_string()),
+                "POST" => Some("sql:blacklist:add".to_string()),
+                _ => None,
+            },
+            3 => match method {
+                "DELETE" => Some("sql:blacklist:delete".to_string()),
+                _ => None,
+            },
+            _ => None,
+        }
+    } else {
+        None
     }
 }
 

@@ -10,8 +10,9 @@ use std::time::Instant;
 
 use crate::AppState;
 use crate::models::{
-    CatalogWithDatabases, CatalogsWithDatabasesResponse, Query, QueryExecuteRequest,
-    QueryExecuteResponse, SingleQueryResult, TableMetadata, TableObjectType,
+    AddSqlBlacklistRequest, CatalogWithDatabases, CatalogsWithDatabasesResponse, Query,
+    QueryExecuteRequest, QueryExecuteResponse, SingleQueryResult, SqlBlacklistItem, TableMetadata,
+    TableObjectType,
 };
 use crate::services::StarRocksClient;
 use crate::services::mysql_client::MySQLClient;
@@ -650,4 +651,126 @@ fn apply_query_limit(sql: &str, limit: i32) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+// ==================== SQL Blacklist APIs ====================
+
+// List SQL blacklist
+#[utoipa::path(
+    get,
+    path = "/api/clusters/sql-blacklist",
+    responses(
+        (status = 200, description = "List of SQL blacklist items", body = Vec<SqlBlacklistItem>),
+        (status = 404, description = "No active cluster found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "SQL Blacklist"
+)]
+pub async fn list_sql_blacklist(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+) -> ApiResult<Json<Vec<SqlBlacklistItem>>> {
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
+
+    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
+    let mysql_client = MySQLClient::from_pool(pool);
+    let rows = mysql_client.query("SHOW SQLBLACKLIST").await?;
+
+    let items: Vec<SqlBlacklistItem> = rows
+        .into_iter()
+        .filter_map(|row| {
+            let obj = row.as_object()?;
+            Some(SqlBlacklistItem {
+                id: obj.get("Id")?.as_str()?.to_string(),
+                pattern: obj.get("Forbidden SQL")?.as_str()?.to_string(),
+            })
+        })
+        .collect();
+
+    Ok(Json(items))
+}
+
+// Add SQL blacklist
+#[utoipa::path(
+    post,
+    path = "/api/clusters/sql-blacklist",
+    request_body = AddSqlBlacklistRequest,
+    responses(
+        (status = 200, description = "SQL blacklist added successfully"),
+        (status = 400, description = "Invalid pattern"),
+        (status = 404, description = "No active cluster found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "SQL Blacklist"
+)]
+pub async fn add_sql_blacklist(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+    Json(request): Json<AddSqlBlacklistRequest>,
+) -> ApiResult<impl IntoResponse> {
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
+
+    // Validate pattern
+    let pattern = request.pattern.trim();
+    if pattern.is_empty() {
+        return Err(ApiError::validation_error("Pattern cannot be empty"));
+    }
+
+    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
+    let mysql_client = MySQLClient::from_pool(pool);
+
+    // Escape double quotes in pattern
+    let escaped_pattern = pattern.replace('"', "\\\"");
+    let sql = format!("ADD SQLBLACKLIST \"{}\"", escaped_pattern);
+    mysql_client.execute(&sql).await?;
+
+    Ok((StatusCode::OK, Json(json!({ "message": "SQL blacklist added successfully" }))))
+}
+
+// Delete SQL blacklist
+#[utoipa::path(
+    delete,
+    path = "/api/clusters/sql-blacklist/{id}",
+    params(("id" = String, Path, description = "Blacklist ID")),
+    responses(
+        (status = 200, description = "SQL blacklist deleted successfully"),
+        (status = 404, description = "No active cluster found"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "SQL Blacklist"
+)]
+pub async fn delete_sql_blacklist(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Extension(org_ctx): axum::extract::Extension<crate::middleware::OrgContext>,
+    Path(id): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let cluster = if org_ctx.is_super_admin {
+        state.cluster_service.get_active_cluster().await?
+    } else {
+        state.cluster_service.get_active_cluster_by_org(org_ctx.organization_id).await?
+    };
+
+    // Validate ID format (should be numeric)
+    if !id.chars().all(|c| c.is_ascii_digit()) || id.is_empty() {
+        return Err(ApiError::validation_error("Invalid blacklist ID format"));
+    }
+
+    let pool = state.mysql_pool_manager.get_pool(&cluster).await?;
+    let mysql_client = MySQLClient::from_pool(pool);
+
+    let sql = format!("DELETE SQLBLACKLIST {}", id);
+    mysql_client.execute(&sql).await?;
+
+    Ok((StatusCode::OK, Json(json!({ "message": "SQL blacklist deleted successfully" }))))
 }

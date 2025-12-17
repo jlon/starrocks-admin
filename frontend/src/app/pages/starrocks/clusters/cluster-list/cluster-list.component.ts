@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { NbDialogService, NbToastrService } from '@nebular/theme';
 import { TranslateService } from '@ngx-translate/core';
 import { LocalDataSource } from 'ng2-smart-table';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { ClusterService, Cluster } from '../../../../@core/data/cluster.service';
 import { ErrorHandler } from '../../../../@core/utils/error-handler';
 import { ConfirmDialogService } from '../../../../@core/services/confirm-dialog.service';
@@ -12,9 +14,10 @@ import { ConfirmDialogService } from '../../../../@core/services/confirm-dialog.
   templateUrl: './cluster-list.component.html',
   styleUrls: ['./cluster-list.component.scss'],
 })
-export class ClusterListComponent implements OnInit {
+export class ClusterListComponent implements OnInit, OnDestroy {
   source: LocalDataSource = new LocalDataSource();
   loading = true;
+  private destroy$ = new Subject<void>();
 
   settings = {
     mode: 'external',
@@ -88,10 +91,22 @@ export class ClusterListComponent implements OnInit {
     private toastrService: NbToastrService,
     private confirmDialogService: ConfirmDialogService,
     private translate: TranslateService,
-  ) {}
+  ) {
+    // Update table settings when language changes
+    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      this.updateTableSettings();
+    });
+  }
 
   ngOnInit(): void {
+    // Initialize table settings with translations
+    this.updateTableSettings();
     this.loadClusters();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   loadClusters(): void {
@@ -104,7 +119,7 @@ export class ClusterListComponent implements OnInit {
       error: (error) => {
         this.toastrService.danger(
           ErrorHandler.extractErrorMessage(error),
-          '错误',
+          this.translate.instant('common.error'),
         );
         this.loading = false;
       },
@@ -139,7 +154,7 @@ export class ClusterListComponent implements OnInit {
           error: (error) => {
             this.toastrService.danger(
               ErrorHandler.extractErrorMessage(error),
-              '错误',
+              this.translate.instant('common.error'),
             );
           },
         });
@@ -161,19 +176,86 @@ export class ClusterListComponent implements OnInit {
           );
         } else if (health.status === 'warning') {
           const details = health.checks.map(c => `${c.name}: ${c.message}`).join('\n');
-          this.toastrService.warning(details, '健康检查警告');
+          this.toastrService.warning(details, this.translate.instant('cluster.health_check_warning'));
         } else {
           const details = health.checks.map(c => `${c.name}: ${c.message}`).join('\n');
-          this.toastrService.danger(details, '健康检查失败');
+          this.toastrService.danger(details, this.translate.instant('cluster.health_check_failed'));
         }
       },
       error: (error) => {
         this.toastrService.danger(
           ErrorHandler.extractErrorMessage(error),
-          '错误',
+          this.translate.instant('common.error'),
         );
       },
     });
+  }
+
+  private updateTableSettings(): void {
+    this.settings = {
+      ...this.settings,
+      noDataMessage: this.translate.instant('cluster.no_clusters_hint'),
+      actions: {
+        columnTitle: this.translate.instant('common.action'),
+        add: false,
+        edit: true,
+        delete: true,
+        position: 'right',
+      },
+      edit: {
+        editButtonContent: '<i class="nb-edit"></i>',
+      },
+      delete: {
+        deleteButtonContent: '<i class="nb-trash"></i>',
+        confirmDelete: false,
+      },
+      pager: {
+        display: true,
+        perPage: 10,
+      },
+      columns: {
+        id: {
+          title: 'ID',
+          type: 'number',
+          width: '5%',
+        },
+        name: {
+          title: this.translate.instant('cluster.form.name_label'),
+          type: 'string',
+        },
+        fe_host: {
+          title: this.translate.instant('cluster.form.fe_host_label'),
+          type: 'string',
+        },
+        fe_http_port: {
+          title: this.translate.instant('cluster.form.http_port_label'),
+          type: 'number',
+          width: '10%',
+        },
+        fe_query_port: {
+          title: this.translate.instant('cluster.form.query_port_label'),
+          type: 'number',
+          width: '10%',
+        },
+        username: {
+          title: this.translate.instant('cluster.form.username_label'),
+          type: 'string',
+          width: '10%',
+        },
+        description: {
+          title: this.translate.instant('cluster.form.description_label'),
+          type: 'string',
+        },
+        created_at: {
+          title: this.translate.instant('cluster.created_at'),
+          type: 'string',
+          valuePrepareFunction: (date: string) => {
+            return new Date(date).toLocaleString('zh-CN');
+          },
+        },
+      },
+    };
+    this.source.refresh();
   }
 }
 

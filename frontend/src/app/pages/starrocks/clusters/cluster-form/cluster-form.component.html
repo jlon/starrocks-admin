@@ -2,18 +2,18 @@
   <div class="col-lg-8 offset-lg-2">
     <nb-card>
       <nb-card-header>
-        <h5>{{ isEditMode ? '编辑集群' : '添加集群' }}</h5>
+        <h5>{{ isEditMode ? ('cluster.edit_cluster' | translate) : ('cluster.add_cluster' | translate) }}</h5>
       </nb-card-header>
       <nb-card-body>
         <form [formGroup]="clusterForm" (ngSubmit)="onSubmit()">
           <!-- Organization Selection (Super Admin Only) -->
           <div class="form-group" *ngIf="isSuperAdmin">
-            <label for="organization" class="label">所属组织 *</label>
+            <label for="organization" class="label">{{ 'cluster.form.organization_label' | translate }} *</label>
             <nb-form-field>
               <nb-select
                 formControlName="organization_id"
                 id="organization"
-                placeholder="请选择组织"
+                [placeholder]="'cluster.form.organization_placeholder' | translate"
                 [status]="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched ? 'danger' : 'basic'"
                 fullWidth
               >
@@ -25,14 +25,14 @@
             </nb-form-field>
             <ng-container *ngIf="clusterForm.get('organization_id')?.invalid && clusterForm.get('organization_id')?.touched">
               <small class="form-text text-danger">
-                请选择组织
+                {{ 'cluster.form.organization_required' | translate }}
               </small>
             </ng-container>
           </div>
 
           <!-- Organization Display (Org Admin) -->
           <div class="form-group" *ngIf="!isSuperAdmin && currentOrganization">
-            <label class="label">所属组织</label>
+            <label class="label">{{ 'cluster.form.organization_label' | translate }}</label>
             <div class="alert alert-info d-flex align-items-center">
               <nb-icon icon="info-outline" class="me-2"></nb-icon>
               <span>{{ currentOrganization.name }} <span class="text-hint">({{ currentOrganization.code }})</span></span>
@@ -42,18 +42,18 @@
           <div class="row">
             <div class="col-md-6">
               <div class="form-group">
-                <label for="name" class="label">集群名称 *</label>
+                <label for="name" class="label">{{ 'cluster.form.name_label' | translate }} *</label>
                 <input
                   nbInput
                   fullWidth
                   type="text"
                   id="name"
                   formControlName="name"
-                  placeholder="输入集群名称"
+                  [placeholder]="'cluster.form.name_placeholder' | translate"
                   [status]="clusterForm.get('name')?.invalid && clusterForm.get('name')?.touched ? 'danger' : 'basic'"
                 />
                 <small class="form-text text-danger" *ngIf="clusterForm.get('name')?.invalid && clusterForm.get('name')?.touched">
-                  请输入集群名称
+                  {{ 'cluster.form.name_required' | translate }}
                 </small>
               </div>
             </div>
@@ -76,22 +76,22 @@
           <div class="row">
             <div class="col-md-12">
               <div class="form-group">
-                <label for="deployment_mode" class="label">部署模式 *</label>
+                <label for="deployment_mode" class="label">{{ 'cluster.form.deployment_mode_label' | translate }} *</label>
                 <nb-form-field>
                   <nb-select
                     formControlName="deployment_mode"
                     id="deployment_mode"
-                    placeholder="请选择部署模式"
+                    [placeholder]="'cluster.form.deployment_mode_placeholder' | translate"
                     [status]="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched ? 'danger' : 'basic'"
                     fullWidth
                   >
-                    <nb-option value="shared_nothing">存算一体 (Shared-Nothing)</nb-option>
-                    <nb-option value="shared_data">存算分离 (Shared-Data)</nb-option>
+                    <nb-option value="shared_nothing">{{ 'cluster.form.shared_nothing' | translate }}</nb-option>
+                    <nb-option value="shared_data">{{ 'cluster.form.shared_data' | translate }}</nb-option>
                   </nb-select>
                 </nb-form-field>
                 <ng-container *ngIf="clusterForm.get('deployment_mode')?.invalid && clusterForm.get('deployment_mode')?.touched">
                   <small class="form-text text-danger">
-                    请选择部署模式
+                    {{ 'cluster.form.deployment_mode_required' | translate }}
                   </small>
                 </ng-container>
               </div>
@@ -99,24 +99,24 @@
           </div>
 
           <div class="form-group">
-            <label for="description" class="label">描述</label>
+            <label for="description" class="label">{{ 'cluster.form.description_label' | translate }}</label>
             <textarea
               nbInput
               fullWidth
               id="description"
               formControlName="description"
-              placeholder="输入集群描述（可选）"
+              [placeholder]="'cluster.form.description_placeholder' | translate"
               rows="3"
             ></textarea>
           </div>
 
-          <h6 class="mt-4">连接信息</h6>
+          <h6 class="mt-4">{{ 'cluster.form.connection_info' | translate }}</h6>
           <hr />
 
           <div class="row">
             <div class="col-md-6">
               <div class="form-group">
-                <label for="fe_host" class="label">FE 地址 *</label>
+                <label for="fe_host" class="label">{{ 'cluster.form.fe_host_label' | translate }} *</label>
                 <input
                   nbInput
                   fullWidth
@@ -131,7 +131,7 @@
 
             <div class="col-md-3">
               <div class="form-group">
-                <label for="fe_http_port" class="label">HTTP 端口 *</label>
+                <label for="fe_http_port" class="label">{{ 'cluster.form.http_port_label' | translate }} *</label>
                 <input
                   nbInput
                   fullWidth
@@ -145,7 +145,7 @@
 
             <div class="col-md-3">
               <div class="form-group">
-                <label for="fe_query_port" class="label">查询端口 *</label>
+                <label for="fe_query_port" class="label">{{ 'cluster.form.query_port_label' | translate }} *</label>
                 <input
                   nbInput
                   fullWidth
@@ -158,13 +158,13 @@
             </div>
           </div>
 
-          <h6 class="mt-4">认证信息</h6>
+          <h6 class="mt-4">{{ 'cluster.form.auth_info' | translate }}</h6>
           <hr />
 
           <div class="row">
             <div class="col-md-6">
               <div class="form-group">
-                <label for="username" class="label">用户名 *</label>
+                <label for="username" class="label">{{ 'cluster.form.username_label' | translate }} *</label>
                 <input
                   nbInput
                   fullWidth
@@ -179,27 +179,27 @@
 
             <div class="col-md-6">
               <div class="form-group">
-                <label for="password" class="label">密码 {{ isEditMode ? '(留空表示不修改)' : '*' }}</label>
+                <label for="password" class="label">{{ isEditMode ? ('cluster.form.password_label_edit' | translate) : ('cluster.form.password_label' | translate) }} {{ isEditMode ? '' : '*' }}</label>
                 <input
                   nbInput
                   fullWidth
                   type="password"
                   id="password"
                   formControlName="password"
-                  placeholder="输入密码"
+                  [placeholder]="'cluster.form.password_placeholder' | translate"
                   [status]="clusterForm.get('password')?.invalid && clusterForm.get('password')?.touched ? 'danger' : 'basic'"
                 />
               </div>
             </div>
           </div>
 
-          <h6 class="mt-4">高级选项</h6>
+          <h6 class="mt-4">{{ 'cluster.form.advanced_options' | translate }}</h6>
           <hr />
 
           <div class="row">
             <div class="col-md-6">
               <div class="form-group">
-                <label for="connection_timeout" class="label">连接超时（秒）</label>
+                <label for="connection_timeout" class="label">{{ 'cluster.form.connection_timeout' | translate }}</label>
                 <input
                   nbInput
                   fullWidth
@@ -213,21 +213,21 @@
 
             <div class="col-md-6">
               <div class="form-group">
-                <label for="tags" class="label">标签（逗号分隔）</label>
+                <label for="tags" class="label">{{ 'cluster.form.tags_label' | translate }}</label>
                 <input
                   nbInput
                   fullWidth
                   type="text"
                   id="tags"
                   formControlName="tags"
-                  placeholder="生产, 北京, 主集群"
+                  [placeholder]="'cluster.form.tags_placeholder' | translate"
                 />
               </div>
             </div>
           </div>
 
           <div class="form-group">
-            <nb-checkbox formControlName="enable_ssl">启用 SSL</nb-checkbox>
+            <nb-checkbox formControlName="enable_ssl">{{ 'cluster.form.enable_ssl' | translate }}</nb-checkbox>
           </div>
 
           <div class="d-flex justify-content-between align-items-center mt-4 pt-3" style="border-top: 1px solid #edf1f7;">
@@ -241,7 +241,7 @@
               [disabled]="loading"
             >
               <nb-icon icon="refresh-outline"></nb-icon>
-              测试连接
+              {{ 'cluster.form.test_connection' | translate }}
             </button>
 
             <div class="d-flex gap-3">
@@ -254,7 +254,7 @@
                 (click)="onCancel()"
                 [disabled]="loading"
               >
-                取消
+                {{ 'common.cancel' | translate }}
               </button>
 
               <button
@@ -266,7 +266,7 @@
                 [disabled]="loading"
               >
                 <nb-icon icon="loader-outline" class="spin" *ngIf="loading"></nb-icon>
-                保存
+                {{ 'common.save' | translate }}
               </button>
             </div>
           </div>

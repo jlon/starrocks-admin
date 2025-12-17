@@ -94,7 +94,7 @@
       "priority_label": "Priority",
       "priority_hint": "Lower value means higher priority (0-100)"
     }
-  }
+  },
   "auth": {
     "login": {
       "title": "Login",
@@ -202,6 +202,23 @@
     "connection_failed": "Connection Failed",
     "success": "Success",
     "error": "Error",
+    "basic_info": "Basic Information",
+    "query_port": "Query Port",
+    "connection_user": "Connection User",
+    "created_at": "Created At",
+    "quick_navigation": "Quick Navigation",
+    "compute_nodes": "Compute Nodes (BE/CN)",
+    "frontend_nodes": "Frontend Nodes",
+    "query_management": "Query Management",
+    "monitoring_metrics": "Monitoring Metrics",
+    "checking_health_status": "Checking health status...",
+    "view_configure_info": "View Configure Info",
+    "fe_configure_info": "FE Configure Info",
+    "config_items": "items",
+    "search_config": "Search configuration...",
+    "loading_config": "Loading configuration...",
+    "config_item": "Configuration Item",
+    "no_matching_config": "No matching configuration items",
     "form": {
       "name_label": "Cluster Name",
       "name_placeholder": "Enter cluster name",

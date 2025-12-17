@@ -110,12 +110,12 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
   refreshInterval: any;
   selectedRefreshInterval: number | 'off' = 'off'; // Default: off (Grafana style)
   refreshIntervalOptions = [
-    { value: 'off', label: '关闭' },
-    { value: 3, label: '3秒' },
-    { value: 5, label: '5秒' },
-    { value: 10, label: '10秒' },
-    { value: 30, label: '30秒' },
-    { value: 60, label: '1分钟' },
+    { value: 'off', labelKey: 'overview.refresh_off' },
+    { value: 3, labelKey: 'overview.refresh_3s' },
+    { value: 5, labelKey: 'overview.refresh_5s' },
+    { value: 10, labelKey: 'overview.refresh_10s' },
+    { value: 30, labelKey: 'overview.refresh_30s' },
+    { value: 60, labelKey: 'overview.refresh_1m' },
   ];
   private destroy$ = new Subject<void>();
 

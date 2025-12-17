@@ -66,12 +66,12 @@ export class SqlBlacklistComponent implements OnInit, OnDestroy {
   blacklistSettings = {
     mode: 'external',
     hideSubHeader: true,
-    noDataMessage: '暂无 SQL 黑名单规则',
+    noDataMessage: this.translate.instant('sql_blacklist.no_data'),
     actions: { add: false, edit: false, delete: true, position: 'right' },
     delete: { deleteButtonContent: '<i class="nb-trash"></i>', confirmDelete: true },
     columns: {
-      Id: { title: 'ID', type: 'string', width: '10%' },
-      Pattern: { title: '正则表达式', type: 'string', width: '90%' },
+      Id: { title: this.translate.instant('sql_blacklist.columns.id'), type: 'string', width: '10%' },
+      Pattern: { title: this.translate.instant('sql_blacklist.columns.pattern'), type: 'string', width: '90%' },
     },
   };
 
@@ -81,6 +81,7 @@ export class SqlBlacklistComponent implements OnInit, OnDestroy {
     private clusterContext: ClusterContextService,
     private dialogService: NbDialogService,
     private confirmDialogService: ConfirmDialogService,
+    private translate: TranslateService,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -116,7 +117,10 @@ export class SqlBlacklistComponent implements OnInit, OnDestroy {
       },
       error: error => {
         console.error('SQL Blacklist load error:', error);
-        this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
+        this.toastrService.danger(
+          ErrorHandler.extractErrorMessage(error),
+          this.translate.instant('common.load_failed')
+        );
         this.loading = false;
       },
     });
@@ -129,14 +133,28 @@ export class SqlBlacklistComponent implements OnInit, OnDestroy {
 
   submitPattern(): void {
     const pattern = this.newBlacklistPattern.trim();
-    if (!pattern) { this.toastrService.warning('请输入正则表达式', '提示'); return; }
+    if (!pattern) {
+      this.toastrService.warning(
+        this.translate.instant('sql_blacklist.validation.pattern_required'),
+        this.translate.instant('common.info')
+      );
+      return;
+    }
     this.nodeService.addSqlBlacklist(pattern).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
-        this.toastrService.success('SQL 黑名单规则添加成功', '成功');
+        this.toastrService.success(
+          this.translate.instant('sql_blacklist.add_success'),
+          this.translate.instant('common.success')
+        );
         this.blacklistDialogRef?.close();
         this.loadBlacklist();
       },
-      error: error => { this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '添加失败'); },
+      error: error => {
+        this.toastrService.danger(
+          ErrorHandler.extractErrorMessage(error),
+          this.translate.instant('sql_blacklist.add_failed')
+        );
+      },
     });
   }
 
@@ -152,11 +170,32 @@ export class SqlBlacklistComponent implements OnInit, OnDestroy {
 
   onDeleteConfirm(event: any): void {
     const item = event.data;
-    this.confirmDialogService.confirm('确认删除', `确定要删除黑名单规则 #${item.Id} 吗？`, '删除', '取消', 'danger').subscribe(confirmed => {
+    this.confirmDialogService
+      .confirm(
+        this.translate.instant('sql_blacklist.delete_confirm_title'),
+        this.translate.instant('sql_blacklist.delete_confirm_message', { id: item.Id }),
+        this.translate.instant('common.delete'),
+        this.translate.instant('common.cancel'),
+        'danger'
+      )
+      .subscribe(confirmed => {
       if (!confirmed) { event.confirm.reject(); return; }
       this.nodeService.deleteSqlBlacklist(item.Id).pipe(takeUntil(this.destroy$)).subscribe({
-        next: () => { this.toastrService.success('SQL 黑名单规则删除成功', '成功'); this.loadBlacklist(); event.confirm.resolve(); },
-        error: error => { this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '删除失败'); event.confirm.reject(); },
+        next: () => {
+          this.toastrService.success(
+            this.translate.instant('sql_blacklist.delete_success'),
+            this.translate.instant('common.success')
+          );
+          this.loadBlacklist();
+          event.confirm.resolve();
+        },
+        error: error => {
+          this.toastrService.danger(
+            ErrorHandler.extractErrorMessage(error),
+            this.translate.instant('sql_blacklist.delete_failed')
+          );
+          event.confirm.reject();
+        },
       });
     });
   }

@@ -1,7 +1,13 @@
 <nb-card class="llm-provider-dialog">
   <nb-card-header>
     <div class="dialog-header">
-        <h5>{{ mode === 'create' ? '添加 LLM 提供商' : '编辑 LLM 提供商' }}</h5>
+      <h5>
+        {{
+          mode === 'create'
+            ? ('llm_providers.form.title_create' | translate)
+            : ('llm_providers.form.title_edit' | translate)
+        }}
+      </h5>
       <button nbButton ghost status="basic" size="small" (click)="cancel()">
         <nb-icon icon="close-outline"></nb-icon>
       </button>
@@ -13,8 +19,12 @@
       <!-- Quick Preset (dropdown) -->
       <div class="form-row" *ngIf="mode === 'create'">
         <div class="form-group full">
-        <label class="label">快速选择</label>
-          <nb-select placeholder="选择预设模板" fullWidth (selectedChange)="applyPreset($event)">
+          <label class="label">{{ 'llm_providers.form.quick_preset' | translate }}</label>
+          <nb-select
+            [placeholder]="'llm_providers.form.preset_placeholder' | translate"
+            fullWidth
+            (selectedChange)="applyPreset($event)"
+          >
             <nb-option *ngFor="let preset of presets" [value]="preset">
             {{ preset.display }}
             </nb-option>
@@ -25,79 +35,154 @@
       <!-- Name & Display Name -->
       <div class="form-row">
         <div class="form-group">
-          <label class="label">标识名称 <span class="required">*</span></label>
-          <input nbInput fullWidth formControlName="name" placeholder="如: openai"
+          <label class="label">
+            {{ 'llm_providers.form.name_label' | translate }}
+            <span class="required">*</span>
+          </label>
+          <input
+            nbInput
+            fullWidth
+            formControlName="name"
+            [placeholder]="'llm_providers.form.name_placeholder' | translate"
             [status]="form.get('name')?.invalid && form.get('name')?.touched ? 'danger' : 'basic'" />
-          <span class="hint-text">仅支持小写字母、数字、下划线和连字符</span>
-          <span class="error-text" *ngIf="form.get('name')?.touched && form.get('name')?.hasError('required')">标识名称不能为空</span>
-          <span class="error-text" *ngIf="form.get('name')?.touched && form.get('name')?.hasError('pattern')">格式错误：仅支持小写字母、数字、下划线和连字符</span>
+          <span class="hint-text">
+            {{ 'llm_providers.form.name_hint' | translate }}
+          </span>
+          <span class="error-text" *ngIf="form.get('name')?.touched && form.get('name')?.hasError('required')">
+            {{ 'llm_providers.form.name_required' | translate }}
+          </span>
+          <span class="error-text" *ngIf="form.get('name')?.touched && form.get('name')?.hasError('pattern')">
+            {{ 'llm_providers.form.name_pattern' | translate }}
+          </span>
         </div>
         <div class="form-group">
-          <label class="label">显示名称 <span class="required">*</span></label>
-          <input nbInput fullWidth formControlName="display_name" placeholder="如: OpenAI GPT-4"
+          <label class="label">
+            {{ 'llm_providers.form.display_name_label' | translate }}
+            <span class="required">*</span>
+          </label>
+          <input
+            nbInput
+            fullWidth
+            formControlName="display_name"
+            [placeholder]="'llm_providers.form.display_name_placeholder' | translate"
             [status]="form.get('display_name')?.invalid && form.get('display_name')?.touched ? 'danger' : 'basic'" />
-          <span class="error-text" *ngIf="form.get('display_name')?.touched && form.get('display_name')?.hasError('required')">显示名称不能为空</span>
+          <span class="error-text" *ngIf="form.get('display_name')?.touched && form.get('display_name')?.hasError('required')">
+            {{ 'llm_providers.form.display_name_required' | translate }}
+          </span>
         </div>
       </div>
 
       <!-- API Base -->
       <div class="form-row">
         <div class="form-group full">
-          <label class="label">API 地址 <span class="required">*</span></label>
-          <input nbInput fullWidth formControlName="api_base" placeholder="https://api.openai.com/v1"
+          <label class="label">
+            {{ 'llm_providers.form.api_base_label' | translate }}
+            <span class="required">*</span>
+          </label>
+          <input
+            nbInput
+            fullWidth
+            formControlName="api_base"
+            [placeholder]="'llm_providers.form.api_base_placeholder' | translate"
             [status]="form.get('api_base')?.invalid && form.get('api_base')?.touched ? 'danger' : 'basic'" />
-          <span class="hint-text">必须以 http:// 或 https:// 开头</span>
-          <span class="error-text" *ngIf="form.get('api_base')?.touched && form.get('api_base')?.hasError('required')">API 地址不能为空</span>
-          <span class="error-text" *ngIf="form.get('api_base')?.touched && form.get('api_base')?.hasError('pattern')">格式错误：必须以 http:// 或 https:// 开头</span>
+          <span class="hint-text">
+            {{ 'llm_providers.form.api_base_hint' | translate }}
+          </span>
+          <span class="error-text" *ngIf="form.get('api_base')?.touched && form.get('api_base')?.hasError('required')">
+            {{ 'llm_providers.form.api_base_required' | translate }}
+          </span>
+          <span class="error-text" *ngIf="form.get('api_base')?.touched && form.get('api_base')?.hasError('pattern')">
+            {{ 'llm_providers.form.api_base_pattern' | translate }}
+          </span>
         </div>
       </div>
 
       <!-- Model & API Key -->
       <div class="form-row">
         <div class="form-group">
-          <label class="label">模型名称 <span class="required">*</span></label>
-          <input nbInput fullWidth formControlName="model_name" placeholder="如: gpt-4o"
+          <label class="label">
+            {{ 'llm_providers.form.model_name_label' | translate }}
+            <span class="required">*</span>
+          </label>
+          <input
+            nbInput
+            fullWidth
+            formControlName="model_name"
+            [placeholder]="'llm_providers.form.model_name_placeholder' | translate"
             [status]="form.get('model_name')?.invalid && form.get('model_name')?.touched ? 'danger' : 'basic'" />
-          <span class="error-text" *ngIf="form.get('model_name')?.touched && form.get('model_name')?.hasError('required')">模型名称不能为空</span>
+          <span class="error-text" *ngIf="form.get('model_name')?.touched && form.get('model_name')?.hasError('required')">
+            {{ 'llm_providers.form.model_name_required' | translate }}
+          </span>
         </div>
         <div class="form-group">
-          <label class="label">API Key <span class="required" *ngIf="mode === 'create'">*</span><span class="hint" *ngIf="mode === 'edit'">(留空不改)</span></label>
+          <label class="label">
+            {{ 'llm_providers.form.api_key_label' | translate }}
+            <span class="required" *ngIf="mode === 'create'">*</span>
+            <span class="hint" *ngIf="mode === 'edit'">
+              {{ 'llm_providers.form.api_key_hint_edit' | translate }}
+            </span>
+          </label>
           <nb-form-field>
-            <input nbInput fullWidth [type]="showApiKey ? 'text' : 'password'" formControlName="api_key" placeholder="sk-..."
+            <input
+              nbInput
+              fullWidth
+              [type]="showApiKey ? 'text' : 'password'"
+              formControlName="api_key"
+              [placeholder]="'llm_providers.form.api_key_placeholder' | translate"
               [status]="form.get('api_key')?.invalid && form.get('api_key')?.touched ? 'danger' : 'basic'" />
             <button nbSuffix nbButton ghost size="small" type="button" (click)="toggleApiKeyVisibility()">
               <nb-icon [icon]="showApiKey ? 'eye-off-outline' : 'eye-outline'"></nb-icon>
             </button>
           </nb-form-field>
-          <span class="error-text" *ngIf="form.get('api_key')?.touched && form.get('api_key')?.hasError('required')">API Key 不能为空</span>
+          <span class="error-text" *ngIf="form.get('api_key')?.touched && form.get('api_key')?.hasError('required')">
+            {{ 'llm_providers.form.api_key_required' | translate }}
+          </span>
         </div>
       </div>
 
       <!-- Advanced Settings -->
       <nb-accordion>
         <nb-accordion-item [expanded]="false">
-          <nb-accordion-item-header>高级设置</nb-accordion-item-header>
+          <nb-accordion-item-header>
+            {{ 'llm_providers.form.advanced_settings' | translate }}
+          </nb-accordion-item-header>
           <nb-accordion-item-body>
             <div class="advanced-grid">
               <div class="form-group">
-                <label class="label">最大 Token</label>
+                <label class="label">
+                  {{ 'llm_providers.form.max_tokens_label' | translate }}
+                </label>
                 <input nbInput fullWidth type="number" formControlName="max_tokens" />
-                <span class="hint-text">单次请求最大 Token 数 (1-128000)</span>
+                <span class="hint-text">
+                  {{ 'llm_providers.form.max_tokens_hint' | translate }}
+                </span>
               </div>
               <div class="form-group">
-                <label class="label">温度</label>
+                <label class="label">
+                  {{ 'llm_providers.form.temperature_label' | translate }}
+                </label>
                 <input nbInput fullWidth type="number" formControlName="temperature" step="0.1" />
-                <span class="hint-text">生成随机性，0=确定，2=随机</span>
+                <span class="hint-text">
+                  {{ 'llm_providers.form.temperature_hint' | translate }}
+                </span>
               </div>
               <div class="form-group">
-                <label class="label">超时(秒)</label>
+                <label class="label">
+                  {{ 'llm_providers.form.timeout_label' | translate }}
+                </label>
                 <input nbInput fullWidth type="number" formControlName="timeout_seconds" />
-                <span class="hint-text">API 请求超时时间 (5-600)</span>
+                <span class="hint-text">
+                  {{ 'llm_providers.form.timeout_hint' | translate }}
+                </span>
               </div>
               <div class="form-group">
-                <label class="label">优先级</label>
+                <label class="label">
+                  {{ 'llm_providers.form.priority_label' | translate }}
+                </label>
                 <input nbInput fullWidth type="number" formControlName="priority" />
-                <span class="hint-text">数值越小优先级越高 (0-100)</span>
+                <span class="hint-text">
+                  {{ 'llm_providers.form.priority_hint' | translate }}
+                </span>
               </div>
             </div>
           </nb-accordion-item-body>
@@ -107,6 +192,14 @@
   </nb-card-body>
 
   <nb-card-footer>
-    <button nbButton status="primary" size="small" (click)="submit()" [disabled]="form.invalid">保存</button>
+    <button
+      nbButton
+      status="primary"
+      size="small"
+      (click)="submit()"
+      [disabled]="form.invalid"
+    >
+      {{ 'common.save' | translate }}
+    </button>
   </nb-card-footer>
 </nb-card>

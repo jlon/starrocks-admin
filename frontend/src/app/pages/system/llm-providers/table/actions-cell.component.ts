@@ -19,14 +19,14 @@ import { PermissionService } from '../../../../@core/data/permission.service';
           outline
         size="tiny"
         status="success"
-          nbTooltip="设为默认提供商"
+          [nbTooltip]="'llm_providers.actions.set_default' | translate"
         nbTooltipPlacement="top"
         [disabled]="!canUpdate"
         (click)="onActivateClick($event)"
           class="action-btn action-btn--activate"
       >
           <nb-icon icon="star-outline"></nb-icon>
-          激活
+          {{ 'llm_providers.actions.activate' | translate }}
       </button>
 
       <!-- Test connection -->
@@ -35,15 +35,17 @@ import { PermissionService } from '../../../../@core/data/permission.service';
         ghost
         size="tiny"
         status="info"
-          nbTooltip="测试 API 连接"
+          [nbTooltip]="'llm_providers.actions.test_connection' | translate"
         nbTooltipPlacement="top"
         [disabled]="testingId === rowData.id"
         (click)="onTestClick($event)"
           class="action-btn"
           [class.action-btn--loading]="testingId === rowData.id"
       >
-          <nb-icon [icon]="testingId === rowData.id ? 'loader-outline' : 'flash-outline'"
-                   [class.spin]="testingId === rowData.id"></nb-icon>
+          <nb-icon
+            [icon]="testingId === rowData.id ? 'loader-outline' : 'flash-outline'"
+            [class.spin]="testingId === rowData.id"
+          ></nb-icon>
       </button>
       </div>
 
@@ -55,7 +57,12 @@ import { PermissionService } from '../../../../@core/data/permission.service';
         ghost
         size="tiny"
         [status]="rowData.enabled ? 'warning' : 'success'"
-          [nbTooltip]="rowData.enabled ? '暂停使用' : '启用服务'"
+          [nbTooltip]="
+            (rowData.enabled
+              ? ('llm_providers.actions.pause' | translate)
+              : ('llm_providers.actions.enable' | translate)
+            )
+          "
         nbTooltipPlacement="top"
         [disabled]="!canUpdate"
         (click)="onToggleClick($event)"
@@ -70,7 +77,7 @@ import { PermissionService } from '../../../../@core/data/permission.service';
         ghost
         size="tiny"
         status="primary"
-          nbTooltip="编辑配置"
+          [nbTooltip]="'llm_providers.actions.edit' | translate"
         nbTooltipPlacement="top"
         [disabled]="!canUpdate"
         (click)="onEditClick($event)"
@@ -85,7 +92,11 @@ import { PermissionService } from '../../../../@core/data/permission.service';
         ghost
         size="tiny"
         status="danger"
-          [nbTooltip]="rowData.is_active ? '无法删除已激活的提供商' : '删除提供商'"
+          [nbTooltip]="
+            rowData.is_active
+              ? ('llm_providers.actions.cannot_delete_active' | translate)
+              : ('llm_providers.actions.delete' | translate)
+          "
         nbTooltipPlacement="top"
         [disabled]="!canDelete || rowData.is_active"
         (click)="onDeleteClick($event)"

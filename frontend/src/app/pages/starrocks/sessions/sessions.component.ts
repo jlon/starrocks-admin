@@ -48,7 +48,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
 
   settings = {
     hideSubHeader: false, // Enable search
-    noDataMessage: '当前没有活动会话',
+    noDataMessage: this.translate.instant('sessions.no_active_sessions'),
     actions: {
       add: false,
       edit: false,
@@ -229,10 +229,10 @@ export class SessionsComponent implements OnInit, OnDestroy {
     const session = event.data as Session;
 
     this.confirmDialogService.confirm(
-      '确认终止会话',
-      `确定要终止会话 ${session.id} 吗？`,
-      '终止',
-      '取消',
+      this.translate.instant('sessions.confirm_kill_title'),
+      this.translate.instant('sessions.confirm_kill_message', { id: session.id }),
+      this.translate.instant('common.confirm'),
+      this.translate.instant('common.cancel'),
       'danger'
     ).subscribe(confirmed => {
       if (!confirmed) {
@@ -384,10 +384,10 @@ export class SessionsComponent implements OnInit, OnDestroy {
         }
 
         this.confirmDialogService.confirm(
-          '确认清除睡眠连接',
-          `确定要清除 ${sleepingSessions.length} 个睡眠连接吗？`,
-          '清除',
-          '取消',
+          this.translate.instant('sessions.confirm_clear_sleeping_title'),
+          this.translate.instant('sessions.confirm_clear_sleeping_message', { count: sleepingSessions.length }),
+          this.translate.instant('sessions.clear_sleeping'),
+          this.translate.instant('common.cancel'),
           'warning'
         ).subscribe(confirmed => {
           if (!confirmed) {
@@ -426,7 +426,10 @@ export class SessionsComponent implements OnInit, OnDestroy {
                 if (completed === sleepingSessions.length) {
                   this.loading = false;
                   if (successCount > 0) {
-                    this.toastrService.warning(`成功清除 ${successCount} 个，失败 ${failCount} 个`, '部分成功');
+                    this.toastrService.warning(
+                      this.translate.instant('sessions.clear_sleeping_partial', { success: successCount, fail: failCount }),
+                      this.translate.instant('sessions.partial_success')
+                    );
                   } else {
                     this.toastrService.danger(
                       this.translate.instant('sessions.clear_sleeping_failed'),
@@ -443,7 +446,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
       error: (error) => {
         this.toastrService.danger(
           ErrorHandler.handleClusterError(error),
-          '获取会话列表失败'
+          this.translate.instant('sessions.load_failed')
         );
       },
     });

@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
+use rust_i18n::t;
 use std::sync::Arc;
 
 use crate::models::{ProfileDetail, ProfileListItem};
@@ -34,7 +35,7 @@ fn sanitize_query_id(query_id: &str) -> Result<String, ApiError> {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(ApiError::invalid_data("Invalid query_id format"));
+        return Err(ApiError::invalid_data(t!("validation.invalid_query_id").to_string()));
     }
     // Return owned String to avoid lifetime issues and ensure consistency
     Ok(id.to_string())

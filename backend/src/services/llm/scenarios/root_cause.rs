@@ -6,13 +6,68 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::services::llm::models::LLMScenario;
+use crate::services::llm::scenarios::language::build_language_prompt_section;
 use crate::services::llm::service::{LLMAnalysisRequestTrait, LLMAnalysisResponseTrait};
 
 // ============================================================================
 // System Prompt - Dynamic Generation
 // ============================================================================
 
-/// Base system prompt - the static foundation
+/// Base system prompt - English version
+const PROMPT_BASE_EN: &str = r#"You are a senior performance expert with over 20 years of experience in StarRocks OLAP databases.
+You need to analyze Query Profile data, identify true root causes, and provide **directly executable** optimization recommendations.
+
+## 🧠 Critical Thinking Requirements
+
+Before providing any diagnosis or recommendations, you must engage in **self-critical thinking**:
+
+1. **Question Assumptions**: Is my diagnosis based on sufficient evidence? Are there other possible explanations?
+2. **Verify Parameters**: Do the parameters I recommend actually exist in the official StarRocks documentation? If unsure, better not recommend.
+3. **Check Applicability**: Is this recommendation applicable to the current table type (internal/external)?
+4. **Avoid Speculation**: Am I making assumptions without data support?
+5. **Reflect on Bias**: Am I over-relying on common patterns while ignoring specific situations?
+
+**Important Principle**: Better to give fewer recommendations than to provide incorrect or non-existent parameter suggestions!
+
+## Analysis Methodology (Chain-of-Thought)
+
+### Step 1: Understand Query Intent
+- What type of query is this? (OLAP aggregation/point query/ETL import/Join-intensive)
+- What tables are involved? What are the data scales?
+- Ask yourself: Do I fully understand the business scenario of this query?
+
+### Step 2: Identify Performance Bottlenecks
+- Which operator takes the longest time? (time_pct > 30%)
+- Is it an IO bottleneck or CPU bottleneck?
+- Is there data skew? (max/avg ratio)
+- Ask yourself: Is my judgment supported by Profile metrics?
+
+### Step 3: Root Cause Tracing
+- What is upstream of the bottleneck operator?
+- Is the root cause a data problem or configuration problem?
+- Are there implicit root causes not discovered by the rule engine?
+- Ask yourself: Am I confusing symptoms with root causes?
+
+### Step 4: Formulate Optimization Plan
+- Target root causes, not symptoms
+- Prioritize optimizations with highest ROI
+- Must be directly executable commands
+- Ask yourself: Is this recommendation feasible in the user's environment?
+
+### Step 5: Self-Verification (Required)
+- **Parameter Existence**: Is every parameter I recommend in the "Official Supported Parameters List" below?
+- **Table Type Matching**: Suggesting ALTER TABLE bucketing for external tables is wrong!
+- **Configuration Conflicts**: Does it duplicate values already in session_variables?
+- **Command Completeness**: Can SQL/SET commands be directly copied and executed?
+
+## ⚠️ Strict Rules to Follow
+1. **Check session_variables before recommending**: Don't repeat recommendations for parameters already enabled
+2. **Distinguish table types**: Internal and external tables have completely different optimization directions
+3. **Parameters must exist**: Only use official StarRocks parameters listed below, don't create parameters!
+4. **Recommendations must be executable**: Provide complete SQL/SET/ALTER commands
+5. **Better less than wrong**: Don't provide uncertain recommendations that might mislead users"#;
+
+/// Base system prompt - Chinese version (the static foundation)
 const PROMPT_BASE: &str = r#"你是一位拥有20年以上的StarRocks OLAP 数据库的高级性能专家。
 你需要分析 Query Profile 数据，识别真正的根因并给出**可直接执行**的优化建议。
 
@@ -68,6 +123,7 @@ const PROMPT_BASE: &str = r#"你是一位拥有20年以上的StarRocks OLAP 数�
 
 /// Dynamic prompt section for table types detected
 fn build_table_type_prompt(scan_details: &[ScanDetailForLLM]) -> String {
+    let lang = super::language::current_llm_language();
     let mut internal_tables = Vec::new();
     let mut external_tables: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -87,14 +143,26 @@ fn build_table_type_prompt(scan_details: &[ScanDetailForLLM]) -> String {
         }
     }
 
-    let mut prompt = String::from("\n\n## 📊 本次查询涉及的表\n");
+    let mut prompt = if lang == "en" {
+        String::from("\n\n## 📊 Tables Involved in This Query\n")
+    } else {
+        String::from("\n\n## 📊 本次查询涉及的表\n")
+    };
 
     if !internal_tables.is_empty() {
-        prompt.push_str(&format!(
-            "\n### StarRocks 内表 ({} 张)\n表名: {}\n\n**内表优化方向:**\n- ANALYZE TABLE 更新统计信息\n- 检查分桶键是否合理\n- 考虑物化视图加速\n- 可使用 ALTER TABLE 调整属性\n",
-            internal_tables.len(),
-            internal_tables.join(", ")
-        ));
+        if lang == "en" {
+            prompt.push_str(&format!(
+                "\n### StarRocks Internal Tables ({} tables)\nTable names: {}\n\n**Internal Table Optimization:**\n- Run ANALYZE TABLE to update statistics\n- Check if bucketing key is reasonable\n- Consider materialized views for acceleration\n- Can use ALTER TABLE to adjust properties\n",
+                internal_tables.len(),
+                internal_tables.join(", ")
+            ));
+        } else {
+            prompt.push_str(&format!(
+                "\n### StarRocks 内表 ({} 张)\n表名: {}\n\n**内表优化方向:**\n- ANALYZE TABLE 更新统计信息\n- 检查分桶键是否合理\n- 考虑物化视图加速\n- 可使用 ALTER TABLE 调整属性\n",
+                internal_tables.len(),
+                internal_tables.join(", ")
+            ));
+        }
     }
 
     for (connector, tables) in &external_tables {
@@ -139,17 +207,35 @@ fn build_table_type_prompt(scan_details: &[ScanDetailForLLM]) -> String {
 
 /// Dynamic prompt section based on detected issues
 fn build_issue_focused_prompt(diagnostics: &[DiagnosticForLLM]) -> String {
+    let lang = super::language::current_llm_language();
+
     if diagnostics.is_empty() {
-        return String::from(
-            "\n\n## 规则引擎未发现明显问题\n请深入分析原始 Profile 数据，寻找隐式性能问题。\n",
-        );
+        return if lang == "en" {
+            String::from(
+                "\n\n## No Obvious Issues Found by Rule Engine\nPlease deeply analyze the raw Profile data to find implicit performance issues.\n",
+            )
+        } else {
+            String::from(
+                "\n\n## 规则引擎未发现明显问题\n请深入分析原始 Profile 数据，寻找隐式性能问题。\n",
+            )
+        };
     }
 
-    let mut prompt = String::from("\n\n## 规则引擎已识别的问题 (仅作为参考)\n");
+    let mut prompt = if lang == "en" {
+        String::from("\n\n## Issues Identified by Rule Engine (For Reference Only)\n")
+    } else {
+        String::from("\n\n## 规则引擎已识别的问题 (仅作为参考)\n")
+    };
+
     for d in diagnostics.iter().take(5) {
         prompt.push_str(&format!("- **{}** [{}]: {}\n", d.rule_id, d.severity, d.message));
     }
-    prompt.push_str("\n**你的任务**: 不要简单重复这些问题，而是:\n1. 分析这些症状背后的根因\n2. 找出规则引擎未发现的隐式问题\n3. 建立因果链条\n");
+
+    if lang == "en" {
+        prompt.push_str("\n**Your Task**: Don't simply repeat these issues, but:\n1. Analyze the root causes behind these symptoms\n2. Find implicit issues not discovered by the rule engine\n3. Establish causal chains\n");
+    } else {
+        prompt.push_str("\n**你的任务**: 不要简单重复这些问题，而是:\n1. 分析这些症状背后的根因\n2. 找出规则引擎未发现的隐式问题\n3. 建立因果链条\n");
+    }
 
     prompt
 }
@@ -163,7 +249,12 @@ fn build_session_vars_prompt(session_vars: &HashMap<String, String>) -> String {
         return String::new();
     }
 
-    let mut prompt = String::from("\n\n## ⚠️ 当前集群配置 (严格禁止重复建议!)\n");
+    let lang = super::language::current_llm_language();
+    let mut prompt = if lang == "en" {
+        String::from("\n\n## ⚠️ Current Cluster Configuration (Strictly Prohibit Duplicate Recommendations!)\n")
+    } else {
+        String::from("\n\n## ⚠️ 当前集群配置 (严格禁止重复建议!)\n")
+    };
 
     // Dynamically separate: enable_* flags vs other settings
     let mut enabled_features = Vec::new();
@@ -191,29 +282,55 @@ fn build_session_vars_prompt(session_vars: &HashMap<String, String>) -> String {
     other_settings.sort_by_key(|(k, _)| *k);
 
     if !enabled_features.is_empty() {
-        prompt.push_str(&format!(
-            "\n### 🟢 已启用的功能 (禁止再建议开启!)\n{}\n",
-            enabled_features
-                .iter()
-                .map(|v| format!("`{}`", v))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
+        if lang == "en" {
+            prompt.push_str(&format!(
+                "\n### 🟢 Enabled Features (Do NOT recommend enabling again!)\n{}\n",
+                enabled_features
+                    .iter()
+                    .map(|v| format!("`{}`", v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        } else {
+            prompt.push_str(&format!(
+                "\n### 🟢 已启用的功能 (禁止再建议开启!)\n{}\n",
+                enabled_features
+                    .iter()
+                    .map(|v| format!("`{}`", v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
     }
 
     if !disabled_features.is_empty() {
-        prompt.push_str(&format!(
-            "\n### 🔴 已禁用的功能 (可建议开启)\n{}\n",
-            disabled_features
-                .iter()
-                .map(|v| format!("`{}`", v))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
+        if lang == "en" {
+            prompt.push_str(&format!(
+                "\n### 🔴 Disabled Features (Can recommend enabling)\n{}\n",
+                disabled_features
+                    .iter()
+                    .map(|v| format!("`{}`", v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        } else {
+            prompt.push_str(&format!(
+                "\n### 🔴 已禁用的功能 (可建议开启)\n{}\n",
+                disabled_features
+                    .iter()
+                    .map(|v| format!("`{}`", v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
     }
 
     if !other_settings.is_empty() {
-        prompt.push_str("\n### 其他配置\n");
+        if lang == "en" {
+            prompt.push_str("\n### Other Configuration\n");
+        } else {
+            prompt.push_str("\n### 其他配置\n");
+        }
         for (var, value) in &other_settings {
             prompt.push_str(&format!("- `{}` = `{}`\n", var, value));
         }
@@ -339,7 +456,19 @@ const PROMPT_OUTPUT_FORMAT: &str = r#"
 
 /// Build the complete dynamic system prompt
 pub fn build_system_prompt(request: &RootCauseAnalysisRequest) -> String {
-    let mut prompt = String::from(PROMPT_BASE);
+    let lang = super::language::current_llm_language();
+    let prompt_base = if lang == "en" {
+        PROMPT_BASE_EN
+    } else {
+        PROMPT_BASE
+    };
+
+    let mut prompt = String::from(prompt_base);
+
+    // Add explicit language requirement so that the LLM returns
+    // natural language fields (summary, recommendations, etc.)
+    // in the same language as the current backend locale.
+    prompt.push_str(&build_language_prompt_section());
 
     // Add table-type specific guidance
     if let Some(ref profile_data) = request.profile_data {

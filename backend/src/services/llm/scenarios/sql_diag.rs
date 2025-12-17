@@ -5,6 +5,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use crate::services::llm::{LLMAnalysisRequestTrait, LLMAnalysisResponseTrait, LLMScenario};
+use crate::services::llm::scenarios::language::build_language_prompt_section;
 
 const PROMPT: &str = include_str!("sql_diag_prompt.md");
 
@@ -28,7 +29,12 @@ impl LLMAnalysisRequestTrait for SqlDiagReq {
         LLMScenario::SqlOptimization
     }
     fn system_prompt(&self) -> String {
-        PROMPT.into()
+        // Prepend a small language requirement section so that
+        // SQL diagnosis explanations follow the current locale.
+        let mut prompt = String::new();
+        prompt.push_str(&build_language_prompt_section());
+        prompt.push_str(PROMPT);
+        prompt
     }
 
     fn cache_key(&self) -> String {

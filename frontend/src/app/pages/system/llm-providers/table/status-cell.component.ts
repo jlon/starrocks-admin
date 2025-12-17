@@ -14,7 +14,13 @@ import { LLMProvider } from '../../../../@core/data/llm-provider.service';
         }"
       >
         <span class="status-badge__dot"></span>
-        <span class="status-badge__text">{{ rowData.is_active ? '已激活' : '未激活' }}</span>
+        <span class="status-badge__text">
+          {{
+            rowData.is_active
+              ? ('llm_providers.status.active' | translate)
+              : ('llm_providers.status.inactive' | translate)
+          }}
+        </span>
       </div>
 
       <!-- Enabled/Disabled status -->
@@ -26,7 +32,13 @@ import { LLMProvider } from '../../../../@core/data/llm-provider.service';
         }"
       >
         <nb-icon [icon]="rowData.enabled ? 'checkmark-circle-2-outline' : 'close-circle-outline'"></nb-icon>
-        <span>{{ rowData.enabled ? '启用' : '禁用' }}</span>
+        <span>
+          {{
+            rowData.enabled
+              ? ('llm_providers.status.enabled' | translate)
+              : ('llm_providers.status.disabled' | translate)
+          }}
+        </span>
       </div>
     </div>
   `,

@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use rust_i18n::t;
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
@@ -229,7 +230,7 @@ pub async fn update_variable(
     let scope = match request.scope.to_uppercase().as_str() {
         "GLOBAL" => "GLOBAL",
         "SESSION" => "SESSION",
-        _ => return Err(ApiError::invalid_data("Invalid scope. Must be GLOBAL or SESSION")),
+        _ => return Err(ApiError::invalid_data(t!("validation.invalid_scope").to_string())),
     };
 
     // Build SET command

@@ -3,23 +3,32 @@
     <nb-card>
       <nb-card-header>
         <div class="d-flex justify-content-between align-items-center">
-          <span>SQL 黑名单管理</span>
+          <span>{{ 'sql_blacklist.title' | translate }}</span>
           <div class="d-flex align-items-center gap-2">
             <button nbButton status="basic" size="small" (click)="loadBlacklist()" [disabled]="loading">
               <nb-icon icon="refresh-outline"></nb-icon>
-              刷新
+              {{ 'common.refresh' | translate }}
             </button>
             <button nbButton status="primary" size="small" (click)="openAddDialog()">
               <nb-icon icon="plus-outline"></nb-icon>
-              添加规则
+              {{ 'sql_blacklist.add_rule' | translate }}
             </button>
           </div>
         </div>
       </nb-card-header>
       <nb-card-body>
-        <p class="text-hint mb-3">匹配黑名单正则表达式的 SQL 将被拒绝执行</p>
-        <div *ngIf="loading" class="text-center mt-3"><nb-spinner status="primary" [message]="''"></nb-spinner></div>
-        <ng2-smart-table *ngIf="!loading" [settings]="blacklistSettings" [source]="blacklistSource" (delete)="onDeleteConfirm($event)"></ng2-smart-table>
+        <p class="text-hint mb-3">
+          {{ 'sql_blacklist.description' | translate }}
+        </p>
+        <div *ngIf="loading" class="text-center mt-3">
+          <nb-spinner status="primary" [message]="''"></nb-spinner>
+        </div>
+        <ng2-smart-table
+          *ngIf="!loading"
+          [settings]="blacklistSettings"
+          [source]="blacklistSource"
+          (delete)="onDeleteConfirm($event)"
+        ></ng2-smart-table>
       </nb-card-body>
     </nb-card>
   </div>
@@ -30,7 +39,7 @@
   <nb-card class="blacklist-dialog">
     <nb-card-header>
       <div class="d-flex justify-content-between align-items-center">
-        <h5>添加 SQL 黑名单规则</h5>
+          <h5>{{ 'sql_blacklist.dialog.title' | translate }}</h5>
         <button nbButton ghost (click)="cancelDialog()">
           <nb-icon icon="close-outline"></nb-icon>
         </button>
@@ -42,8 +51,10 @@
           <nb-accordion-item-header>
             <div class="d-flex align-items-center">
               <nb-icon icon="code-outline" status="primary" class="mr-2"></nb-icon>
-              常用正则表达式模板
-              <nb-badge status="info" class="ml-2">{{exampleTemplates.length}} 个</nb-badge>
+              {{ 'sql_blacklist.dialog.templates_title' | translate }}
+              <nb-badge status="info" class="ml-2">
+                {{ 'sql_blacklist.dialog.templates_count' | translate:{ count: exampleTemplates.length } }}
+              </nb-badge>
             </div>
           </nb-accordion-item-header>
           <nb-accordion-item-body>
@@ -57,12 +68,14 @@
                       <small class="template-desc">{{template.description}}</small>
                     </div>
                   </div>
-                  <button nbButton 
+                  <button
+                    nbButton
                           ghost 
                           size="tiny" 
                           status="basic"
                           (click)="useTemplate(template)"
-                          title="使用此模板">
+                    [title]="'sql_blacklist.dialog.use_template' | translate"
+                  >
                     <nb-icon icon="copy-outline"></nb-icon>
                   </button>
                 </div>
@@ -76,27 +89,37 @@
       </nb-accordion>
 
       <div class="form-group mt-3">
-        <label class="label">正则表达式 <span class="text-danger">*</span></label>
+        <label class="label">
+          {{ 'sql_blacklist.dialog.pattern_label' | translate }}
+          <span class="text-danger">*</span>
+        </label>
         <textarea
           nbInput
           fullWidth
           rows="4"
-          placeholder="输入正则表达式，例如: select\s+\*\s+from"
+          [placeholder]="'sql_blacklist.dialog.pattern_placeholder' | translate"
           [(ngModel)]="newBlacklistPattern"
           [disabled]="loading"
         ></textarea>
         <small class="form-text text-muted">
           <nb-icon icon="bulb-outline"></nb-icon>
-          匹配此正则表达式的 SQL 语句将被拒绝执行。注意：正则表达式中的反斜杠需要转义（使用 \\ 代替 \）
+          {{ 'sql_blacklist.dialog.pattern_hint' | translate }}
         </small>
       </div>
     </nb-card-body>
     <nb-card-footer>
       <div class="d-flex justify-content-end gap-2">
-        <button nbButton status="basic" (click)="cancelDialog()" [disabled]="loading">取消</button>
-        <button nbButton status="primary" (click)="submitPattern()" [disabled]="loading || !newBlacklistPattern.trim()">
+        <button nbButton status="basic" (click)="cancelDialog()" [disabled]="loading">
+          {{ 'common.cancel' | translate }}
+        </button>
+        <button
+          nbButton
+          status="primary"
+          (click)="submitPattern()"
+          [disabled]="loading || !newBlacklistPattern.trim()"
+        >
           <nb-icon icon="checkmark-outline"></nb-icon>
-          确定
+          {{ 'common.confirm' | translate }}
         </button>
       </div>
     </nb-card-footer>

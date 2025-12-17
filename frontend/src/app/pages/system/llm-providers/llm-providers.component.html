@@ -4,9 +4,13 @@
       <div class="header__info">
         <div class="header__title-row">
           <nb-icon icon="flash-outline" class="header__icon"></nb-icon>
-        <h5 class="header__title">LLM 提供商管理</h5>
+          <h5 class="header__title">
+            {{ 'llm_providers.title' | translate }}
+          </h5>
         </div>
-        <p class="header__subtitle">配置大语言模型 API，用于增强根因分析和智能诊断</p>
+        <p class="header__subtitle">
+          {{ 'llm_providers.subtitle' | translate }}
+        </p>
       </div>
       <div class="header__actions">
       <button
@@ -17,7 +21,7 @@
         [disabled]="!canCreate"
       >
         <nb-icon icon="plus-outline"></nb-icon>
-        添加提供商
+          {{ 'llm_providers.add_provider' | translate }}
       </button>
       </div>
     </div>
@@ -31,8 +35,7 @@
       </div>
       <div class="info-banner__content">
         <span class="info-banner__text">
-      LLM 提供商用于增强 Profile 根因分析。系统会使用<strong>已激活</strong>的提供商进行分析。
-      支持 OpenAI、DeepSeek、通义千问等兼容 OpenAI API 的服务。
+          {{ 'llm_providers.info' | translate }}
         </span>
       </div>
     </div>
@@ -40,13 +43,13 @@
     <!-- Loading spinner -->
     <div *ngIf="loading" class="loading-container">
       <nb-spinner size="large" status="primary"></nb-spinner>
-      <span class="loading-text">加载中...</span>
+      <span class="loading-text">{{ 'common.loading' | translate }}</span>
     </div>
 
     <!-- No permission alert -->
     <nb-alert *ngIf="!loading && !hasListPermission" status="warning" class="permission-alert">
       <nb-icon icon="alert-triangle-outline"></nb-icon>
-      您暂无查看 LLM 提供商的权限，请联系管理员获取授权。
+      {{ 'llm_providers.no_permission' | translate }}
     </nb-alert>
 
     <!-- Table with enhanced styling -->

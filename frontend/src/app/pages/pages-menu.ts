@@ -52,7 +52,7 @@ export const MENU_ITEMS: NbMenuItem[] = [
         data: { permission: 'menu:queries:audit-logs' },
       } as NbMenuItem & { data?: { permission: string } },
       {
-        title: 'SQL黑名单',
+        title: 'menu.queries_blacklist',
         link: '/pages/starrocks/queries/blacklist',
         data: { permission: 'menu:queries:blacklist' },
       } as NbMenuItem & { data?: { permission: string } },
@@ -98,12 +98,12 @@ export const MENU_ITEMS: NbMenuItem[] = [
         data: { permission: 'menu:system:roles' },
       } as NbMenuItem & { data?: { permission: string } },
       {
-        title: '组织管理',
+        title: 'menu.organizations',
         link: '/pages/system/organizations',
         data: { permission: 'menu:system:organizations' },
       } as NbMenuItem & { data?: { permission: string } },
       {
-        title: 'LLM管理',
+        title: 'menu.llm_providers',
         link: '/pages/system/llm-providers',
         data: { permission: 'menu:system:llm' },
       } as NbMenuItem & { data?: { permission: string } },

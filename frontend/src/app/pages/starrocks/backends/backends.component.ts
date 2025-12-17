@@ -176,7 +176,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
             error: (error) => {
               this.toastr.danger(
                 ErrorHandler.extractErrorMessage(error),
-                '删除失败',
+                this.translate.instant('common.error'),
               );
               event.confirm.reject();
             },
@@ -244,12 +244,12 @@ export class BackendsComponent implements OnInit, OnDestroy {
           
           // Update page title and badge based on deployment mode
           if (this.deploymentMode === 'shared_data') {
-            this.pageTitle = 'Compute Nodes (CN)';
-            this.deploymentModeText = '存算分离';
+            this.pageTitle = this.translate.instant('nodes.backend.title_cn');
+            this.deploymentModeText = this.translate.instant('cluster.form.shared_data');
             this.deploymentModeBadgeClass = 'badge-info';
           } else {
-            this.pageTitle = 'Backend Nodes (BE)';
-            this.deploymentModeText = '存算一体';
+            this.pageTitle = this.translate.instant('nodes.backend.title_be');
+            this.deploymentModeText = this.translate.instant('cluster.form.shared_nothing');
             this.deploymentModeBadgeClass = 'badge-success';
           }
         },
@@ -269,7 +269,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
         error: (error) => {
           this.toastr.danger(
             ErrorHandler.handleClusterError(error),
-            '错误',
+            this.translate.instant('common.error'),
           );
           this.source.load([]);
           this.loading = false;

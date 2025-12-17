@@ -280,11 +280,11 @@
                         icon="alert-triangle-outline" 
                         status="warning"
                         class="profile-incomplete-icon"
-                        [nbTooltip]="analysisData?.summary?.profile_completeness_warning || '{{ 'profile.profile_incomplete_warning' | translate }}'"
+                        [nbTooltip]="analysisData?.summary?.profile_completeness_warning || 'Profile 数据不完整，部分指标可能缺失'"
                         nbTooltipPlacement="left">
                       </nb-icon>
                     </span>
-                    <span class="collapse-toggle" (click)="toggleSummary()">{{ isSummaryCollapsed ? ('∨ ' + ('profile.expand' | translate)) : ('∧ ' + ('profile.collapse' | translate)) }}</span>
+                    <span class="collapse-toggle" (click)="toggleSummary()">{{ isSummaryCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isSummaryCollapsed && !isRightPanelCollapsed">
                     <!-- Execution Time Bar -->
@@ -409,8 +409,8 @@
                     <!-- Diagnosis Summary Link -->
                     <div class="diagnosis-summary-link" *ngIf="analysisData?.aggregated_diagnostics?.length">
                       <span class="diag-icon">⚠️</span>
-                      <span class="diag-text">{{ 'profile.diagnostic_suggestions' | translate }}</span>
-                      <span class="diag-link" (click)="scrollToDiagnosis()">{{ 'profile.view_details' | translate }}</span>
+                      <span class="diag-text">存在有诊断建议的算子</span>
+                      <span class="diag-link" (click)="scrollToDiagnosis()">详情</span>
                     </div>
                     
                     <!-- IO Statistics Section -->
@@ -512,7 +512,7 @@
                       </div>
                       <!-- Fallback when no metrics available -->
                       <div *ngIf="!hasAnyMetric()" class="text-hint text-center py-2">
-                        {{ 'profile.no_metrics' | translate }}
+                        暂无指标数据
                       </div>
                     </div>
                   </div>
@@ -629,8 +629,8 @@
                         </div>
                       </nb-tab>
                       
-                      <!-- 节点{{ 'profile.view_details' | translate }} Tab (All Operators with CommonMetrics + UniqueMetrics) -->
-                      <nb-tab tabTitle="节点{{ 'profile.view_details' | translate }}">
+                      <!-- 节点详情 Tab (All Operators with CommonMetrics + UniqueMetrics) -->
+                      <nb-tab tabTitle="节点详情">
                         <div class="metrics-list-simple node-detail-content">
                           <!-- Show operators from pipeline (like official UI) -->
                           <ng-container *ngFor="let operator of getNodeOperatorsFromPipeline(); let i = index">
@@ -804,7 +804,7 @@
                       <nb-icon icon="sync-outline"></nb-icon>
                     </button>
                     
-                    <span class="collapse-toggle" (click)="isRootCauseCollapsed = !isRootCauseCollapsed">{{ isRootCauseCollapsed ? ('∨ ' + ('profile.expand' | translate)) : ('∧ ' + ('profile.collapse' | translate)) }}</span>
+                    <span class="collapse-toggle" (click)="isRootCauseCollapsed = !isRootCauseCollapsed">{{ isRootCauseCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isRootCauseCollapsed && !isRightPanelCollapsed">
                     <!-- Summary (LLM provides richer summary) -->
@@ -914,7 +914,7 @@
                     <span class="title">诊断建议</span>
                     <span class="warning-badge">{{ getEffectiveRecommendationsCount() }}</span>
                     <span class="llm-badge" *ngIf="hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length">🤖 LLM</span>
-                    <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? ('∨ ' + ('profile.expand' | translate)) : ('∧ ' + ('profile.collapse' | translate)) }}</span>
+                    <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? '∨ 展开' : '∧ 收起' }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
                       <!-- LLM Recommendations (completely override rule-based when available) -->
@@ -1009,12 +1009,12 @@
         </nb-tab>
         
         <!-- Tab 2: Profile 原始文本 -->
-        <nb-tab tabTitle="Profile{{ 'profile.view_details' | translate }}" tabIcon="file-text-outline">
+        <nb-tab tabTitle="Profile详情" tabIcon="file-text-outline">
           <nb-card accent="basic" class="m-0">
             <nb-card-body class="profile-scroll-container position-relative">
               <div *ngIf="profileDetailLoading" class="text-center py-4">
                 <nb-spinner status="primary" size="large"></nb-spinner>
-                <p class="mt-3 text-hint">加载 Profile {{ 'profile.view_details' | translate }}中...</p>
+                <p class="mt-3 text-hint">加载 Profile 详情中...</p>
               </div>
 
               <div class="profile-copy-overlay" *ngIf="!profileDetailLoading" style="position: absolute; top: 0.5rem; right: 0.5rem; left: auto; z-index: 10;">

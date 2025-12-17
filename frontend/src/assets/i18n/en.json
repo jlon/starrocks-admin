@@ -359,6 +359,7 @@
   },
   "nodes": {
     "frontend": {
+      "title": "Frontend Nodes",
       "no_data": "No Frontend nodes available",
       "ip": "Host",
       "http_port": "HTTP Port",
@@ -373,6 +374,8 @@
       "version": "Version"
     },
     "backend": {
+      "title_cn": "Compute Nodes (CN)",
+      "title_be": "Backend Nodes (BE)",
       "no_data": "No Backend nodes available",
       "ip": "Host",
       "heartbeat_port": "Heartbeat Port",

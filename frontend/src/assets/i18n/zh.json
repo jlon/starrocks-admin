@@ -64,6 +64,8 @@
       "title_edit": "编辑 LLM 提供商",
       "quick_preset": "快速选择",
       "preset_placeholder": "选择预设模板",
+      "preset_qwen": "通义千问",
+      "preset_custom": "自定义",
       "name_label": "标识名称",
       "name_placeholder": "如: openai",
       "name_hint": "仅支持小写字母、数字、下划线和连字符",
@@ -93,6 +95,27 @@
       "timeout_hint": "API 请求超时时间 (5-600)",
       "priority_label": "优先级",
       "priority_hint": "数值越小优先级越高 (0-100)"
+    },
+    "toastr": {
+      "delete_confirm_message": "删除后将无法恢复，历史分析记录将保留但无法关联到此提供商",
+      "activated": "已激活 {{name}}",
+      "enabled": "已启用 {{name}}",
+      "disabled": "已禁用 {{name}}",
+      "test_success": "连接成功，延迟 {{latency}}ms",
+      "test_success_title": "测试通过",
+      "test_failed_title": "测试失败",
+      "create_success": "LLM 提供商创建成功",
+      "update_success": "LLM 提供商更新成功",
+      "delete_success": "LLM 提供商删除成功"
+    },
+    "table": {
+      "display_name": "名称",
+      "name": "标识",
+      "model_name": "模型",
+      "api_base": "API 地址",
+      "status": "状态",
+      "priority": "优先级",
+      "actions": "操作"
     }
   },
   "auth": {
@@ -259,6 +282,8 @@
     "subtitle": "修改您的个人信息和密码",
     "back": "返回",
     "avatar_label": "头像设置",
+    "current_avatar": "当前头像",
+    "avatar_option": "头像选项",
     "regenerate": "换一批",
     "username_label": "用户名",
     "username_placeholder": "请输入用户名",
@@ -318,7 +343,7 @@
     "query_throughput": "查询吞吐量 (QPS/RPS)",
     "query_latency": "查询延迟趋势 (P50/P95/P99)",
     "resource_usage": "资源使用趋势",
-    "be_cpu_mem_disk": "BE 节点 CPU / 内存 / 磁盘",
+    "be_cpu_mem_disk": "计算节点 CPU / 内存 / 磁盘",
     "fe_jvm_heap": "FE JVM 堆内存使用率",
     "no_performance_data": "暂无性能数据",
     "no_resource_data": "暂无资源数据",
@@ -655,6 +680,8 @@
     "title": "功能卡片",
     "add_function": "添加功能",
     "no_data": "暂无数据",
+    "add_failed": "添加失败",
+    "update_failed": "更新失败",
     "function_add_success": "功能添加成功",
     "function_update_success": "功能更新成功",
     "function_delete_success": "功能已删除",

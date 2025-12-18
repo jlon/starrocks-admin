@@ -358,8 +358,8 @@
                         <div class="metric-row-simple" *ngIf="analysisData?.summary?.planner_total_time">
                           <span class="metric-label">
                             PlannerTotalTime
-                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
-                                     [nbTooltip]="'查询计划生成总耗时'"></nb-icon>
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint"
+                                     [nbTooltip]="'profile.query_planner_time' | translate"></nb-icon>
                           </span>
                           <span>{{ analysisData?.summary?.planner_total_time }}</span>
                         </div>
@@ -462,16 +462,16 @@
                         <div class="metric-row-simple" *ngIf="analysisData?.summary?.result_rows">
                           <span class="metric-label">
                             ResultRows
-                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
-                                     [nbTooltip]="'返回给客户端的结果行数'"></nb-icon>
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint"
+                                     [nbTooltip]="'profile.result_rows_tooltip' | translate"></nb-icon>
                           </span>
                           <span>{{ analysisData?.summary?.result_rows | number }}</span>
                         </div>
                         <div class="metric-row-simple" *ngIf="analysisData?.summary?.result_bytes_display">
                           <span class="metric-label">
                             ResultBytes
-                            <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
-                                     [nbTooltip]="'返回给客户端的结果数据量'"></nb-icon>
+                            <nb-icon icon="question-mark-circle-outline" class="metric-hint"
+                                     [nbTooltip]="'profile.result_bytes_tooltip' | translate"></nb-icon>
                           </span>
                           <span>{{ analysisData?.summary?.result_bytes_display }}</span>
                         </div>
@@ -499,9 +499,9 @@
                       <!-- DataCache Hit Rate (for disaggregated storage-compute clusters) -->
                       <div class="metric-row-simple" *ngIf="analysisData?.summary?.datacache_hit_rate !== null">
                         <span class="metric-label">
-                          DataCache命中率
-                          <nb-icon icon="question-mark-circle-outline" class="metric-hint" 
-                                   [nbTooltip]="getDataCacheTooltip()"
+                          {{ 'profile.datacache_hit_rate' | translate }}
+                          <nb-icon icon="question-mark-circle-outline" class="metric-hint"
+                                   [nbTooltip]="'profile.datacache_tooltip' | translate"
                                    nbTooltipPlacement="left"></nb-icon>
                         </span>
                         <span [class.text-success]="analysisData?.summary?.datacache_hit_rate >= 0.7"
@@ -531,7 +531,7 @@
                     <!-- Node Tabs using Nebular -->
                     <nb-tabset class="node-detail-tabs">
                       <!-- 节点 Tab (Core Metrics - like official UI) -->
-                      <nb-tab tabTitle="节点">
+                      <nb-tab [tabTitle]="'profile.node_tab' | translate">
                         <div class="node-tab-content">
                           <!-- Execution time section (like official UI) -->
                           <div class="metric-section" *ngIf="getExecutionTimeBreakdown() as execTime">
@@ -604,7 +604,7 @@
                           <!-- Node Diagnostics -->
                           <div class="metric-section diagnostics-section" *ngIf="getNodeDiagnostics(selectedNode)?.length">
                             <div class="section-title">
-                              诊断建议
+                              {{ 'profile.diagnostic_suggestions_count' | translate }}
                               <span class="count-badge">{{ getNodeDiagnostics(selectedNode).length }}</span>
                             </div>
                             <div class="diagnosis-list-inline">
@@ -628,9 +628,9 @@
                           </div>
                         </div>
                       </nb-tab>
-                      
+
                       <!-- 节点{{ 'profile.view_details' | translate }} Tab (All Operators with CommonMetrics + UniqueMetrics) -->
-                      <nb-tab tabTitle="节点{{ 'profile.view_details' | translate }}">
+                      <nb-tab [tabTitle]="'profile.node_tab' + ' ' + ('profile.view_details' | translate)">
                         <div class="metrics-list-simple node-detail-content">
                           <!-- Show operators from pipeline (like official UI) -->
                           <ng-container *ngFor="let operator of getNodeOperatorsFromPipeline(); let i = index">
@@ -674,25 +674,25 @@
                           <!-- Fallback: show node's own metrics if no operators found -->
                           <ng-container *ngIf="!getNodeOperatorsFromPipeline().length">
                             <ng-container *ngIf="selectedNode.metrics">
-                              <div class="metric-category-header">基础指标</div>
+                              <div class="metric-category-header">{{ 'profile.basic_metrics' | translate }}</div>
                               <div class="metric-row-simple" *ngFor="let key of getMetricKeys(selectedNode.metrics)">
                                 <span class="metric-label">{{ key }}</span>
                                 <span>{{ formatMetricValue(key, selectedNode.metrics[key]) }}</span>
                               </div>
                             </ng-container>
-                            
+
                             <ng-container *ngIf="selectedNode.unique_metrics && objectKeys(selectedNode.unique_metrics).length">
-                              <div class="metric-category-header">唯一指标</div>
+                              <div class="metric-category-header">{{ 'profile.unique_indicators' | translate }}</div>
                               <div class="metric-row-simple" *ngFor="let key of objectKeys(selectedNode.unique_metrics)">
                                 <span class="metric-label">{{ key }}</span>
                                 <span>{{ formatMetricValue(key, selectedNode.unique_metrics[key]) }}</span>
                               </div>
                             </ng-container>
                           </ng-container>
-                          
-                          <div *ngIf="!getNodeOperatorsFromPipeline().length && !selectedNode.metrics && !selectedNode.unique_metrics" 
+
+                          <div *ngIf="!getNodeOperatorsFromPipeline().length && !selectedNode.metrics && !selectedNode.unique_metrics"
                                class="text-hint text-center py-2">
-                            暂无详细指标
+                            {{ 'profile.no_detailed_metrics' | translate }}
                           </div>
                         </div>
                       </nb-tab>

@@ -36,7 +36,7 @@
                 <!-- Current Avatar Preview -->
                 <div class="avatar-preview-section">
                   <div class="current-avatar-large">
-                    <img *ngIf="userForm.avatar" [src]="userForm.avatar" [alt]="'Current Avatar'" class="preview-image">
+                    <img *ngIf="userForm.avatar" [src]="userForm.avatar" [alt]="'user_settings.current_avatar' | translate" class="preview-image">
                     <div *ngIf="!userForm.avatar" class="avatar-placeholder-large">
                       <nb-icon icon="person-outline"></nb-icon>
                     </div>
@@ -45,12 +45,12 @@
 
                 <!-- Avatar Options Grid -->
                 <div class="avatar-options-grid">
-                  <div 
-                    *ngFor="let avatar of availableAvatars; let i = index" 
+                  <div
+                    *ngFor="let avatar of availableAvatars; let i = index"
                     class="avatar-option-small"
                     [class.selected]="userForm.avatar === avatar"
                     (click)="selectAvatar(avatar)">
-                    <img [src]="avatar" [alt]="'Avatar Option'" class="option-image">
+                    <img [src]="avatar" [alt]="'user_settings.avatar_option' | translate" class="option-image">
                   </div>
                 </div>
 

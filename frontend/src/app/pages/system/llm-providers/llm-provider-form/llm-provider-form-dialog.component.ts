@@ -1,6 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { NbDialogRef } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 
 import { LLMProvider } from '../../../../@core/data/llm-provider.service';
 
@@ -31,17 +32,12 @@ export class LLMProviderFormDialogComponent implements OnInit {
   showApiKey = false;
 
   // Common presets for quick selection
-  presets = [
-    { name: 'openai', display: 'OpenAI', api_base: 'https://api.openai.com/v1', model: 'gpt-4o' },
-    { name: 'deepseek', display: 'DeepSeek', api_base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-    { name: 'qwen', display: '通义千问', api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
-    { name: 'openrouter', display: 'OpenRouter', api_base: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o' },
-    { name: 'custom', display: '自定义', api_base: '', model: '' },
-  ];
+  presets: Array<{ name: string; display: string; api_base: string; model: string }> = [];
 
   constructor(
     private dialogRef: NbDialogRef<LLMProviderFormDialogComponent>,
     private fb: FormBuilder,
+    private translateService: TranslateService,
   ) {
     this.form = this.fb.group({
       name: ['', [Validators.required, Validators.maxLength(50), Validators.pattern(/^[a-z0-9_-]+$/)]],
@@ -54,6 +50,25 @@ export class LLMProviderFormDialogComponent implements OnInit {
       timeout_seconds: [60, [Validators.required, Validators.min(5), Validators.max(600)]],
       priority: [0, [Validators.required, Validators.min(0), Validators.max(100)]],
     });
+
+    // Initialize presets with i18n
+    this.presets = [
+      { name: 'openai', display: 'OpenAI', api_base: 'https://api.openai.com/v1', model: 'gpt-4o' },
+      { name: 'deepseek', display: 'DeepSeek', api_base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+      {
+        name: 'qwen',
+        display: this.translateService.instant('llm_providers.form.preset_qwen'),
+        api_base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        model: 'qwen-plus'
+      },
+      { name: 'openrouter', display: 'OpenRouter', api_base: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o' },
+      {
+        name: 'custom',
+        display: this.translateService.instant('llm_providers.form.preset_custom'),
+        api_base: '',
+        model: ''
+      },
+    ];
   }
 
   ngOnInit(): void {

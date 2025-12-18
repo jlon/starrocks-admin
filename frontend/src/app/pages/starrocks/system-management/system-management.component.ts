@@ -6,6 +6,7 @@ import { NbDialogService, NbToastrService, NbDialogRef } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { TranslateService } from '@ngx-translate/core';
 import { NodeService } from '../../../@core/data/node.service';
 import { ClusterContextService } from '../../../@core/data/cluster-context.service';
 import { Cluster } from '../../../@core/data/cluster.service';
@@ -127,7 +128,8 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
     private toastrService: NbToastrService,
     private systemFunctionService: SystemFunctionService,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private translate: TranslateService
   ) {
     // Get clusterId from ClusterContextService
     this.clusterId = this.clusterContext.getActiveClusterId() || 0;
@@ -216,7 +218,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         console.error('Failed to load system functions:', error);
-        this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
+        this.toastrService.danger(
+          ErrorHandler.extractErrorMessage(error),
+          this.translate.instant('common.load_failed')
+        );
         this.loading = false;
       }
     });
@@ -310,7 +315,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           console.error('Failed to create function:', error);
-          this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '添加失败');
+          this.toastrService.danger(
+            ErrorHandler.extractErrorMessage(error),
+            this.translate.instant('system_management.add_failed')
+          );
         }
       });
   }
@@ -339,7 +347,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           console.error('Failed to update function:', error);
-          this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '更新失败');
+          this.toastrService.danger(
+            ErrorHandler.extractErrorMessage(error),
+            this.translate.instant('system_management.update_failed')
+          );
         }
       });
   }
@@ -622,7 +633,10 @@ export class SystemManagementComponent implements OnInit, OnDestroy {
       error: (error) => {
         console.error('[SystemManagement] Failed to load function data:', error);
         this.loading = false;
-        this.toastrService.danger(ErrorHandler.extractErrorMessage(error), '加载失败');
+        this.toastrService.danger(
+          ErrorHandler.extractErrorMessage(error),
+          this.translate.instant('common.load_failed')
+        );
       }
     });
   }

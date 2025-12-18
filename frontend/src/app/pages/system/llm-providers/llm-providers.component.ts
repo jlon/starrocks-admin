@@ -3,6 +3,7 @@ import { NbDialogService, NbToastrService } from '@nebular/theme';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { TranslateService } from '@ngx-translate/core';
 
 import {
   LLMProvider,
@@ -47,6 +48,7 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
     private confirmDialog: ConfirmDialogService,
     private toastrService: NbToastrService,
     private authService: AuthService,
+    private translateService: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -113,11 +115,13 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
   deleteProvider(provider: LLMProvider): void {
     if (!this.canDelete) return;
 
-    this.confirmDialog
-      .confirmDelete(provider.display_name, '删除后将无法恢复，历史分析记录将保留但无法关联到此提供商')
-      .subscribe((confirmed) => {
-        if (confirmed) this.performDelete(provider.id);
-      });
+    this.translateService.get('llm_providers.toastr.delete_confirm_message').subscribe((message) => {
+      this.confirmDialog
+        .confirmDelete(provider.display_name, message)
+        .subscribe((confirmed) => {
+          if (confirmed) this.performDelete(provider.id);
+        });
+    });
   }
 
   activateProvider(provider: LLMProvider): void {
@@ -126,7 +130,15 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.llmService.activateProvider(provider.id).subscribe({
       next: () => {
-        this.toastrService.success(`已激活 ${provider.display_name}`, '成功');
+        this.translateService.get([
+          'llm_providers.toastr.activated',
+          'common.success'
+        ], { name: provider.display_name }).subscribe((translations) => {
+          this.toastrService.success(
+            translations['llm_providers.toastr.activated'],
+            translations['common.success']
+          );
+        });
         this.loadProviders();
       },
       error: (error) => {
@@ -143,10 +155,16 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.llmService.updateProvider(provider.id, { enabled: newEnabled }).subscribe({
       next: () => {
-        this.toastrService.success(
-          `已${newEnabled ? '启用' : '禁用'} ${provider.display_name}`,
-          '成功'
-        );
+        const messageKey = newEnabled ? 'llm_providers.toastr.enabled' : 'llm_providers.toastr.disabled';
+        this.translateService.get([
+          messageKey,
+          'common.success'
+        ], { name: provider.display_name }).subscribe((translations) => {
+          this.toastrService.success(
+            translations[messageKey],
+            translations['common.success']
+          );
+        });
         this.loadProviders();
       },
       error: (error) => {
@@ -161,12 +179,19 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
     this.llmService.testConnection(provider.id).subscribe({
       next: (result) => {
         if (result.success) {
-          this.toastrService.success(
-            `连接成功，延迟 ${result.latency_ms}ms`,
-            '测试通过'
-          );
+          this.translateService.get([
+            'llm_providers.toastr.test_success',
+            'llm_providers.toastr.test_success_title'
+          ], { latency: result.latency_ms }).subscribe((translations) => {
+            this.toastrService.success(
+              translations['llm_providers.toastr.test_success'],
+              translations['llm_providers.toastr.test_success_title']
+            );
+          });
         } else {
-          this.toastrService.warning(result.message, '测试失败');
+          this.translateService.get('llm_providers.toastr.test_failed_title').subscribe((title) => {
+            this.toastrService.warning(result.message, title);
+          });
         }
         this.testingId = null;
       },
@@ -193,7 +218,15 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.llmService.createProvider(payload).subscribe({
       next: () => {
-        this.toastrService.success('LLM 提供商创建成功', '成功');
+        this.translateService.get([
+          'llm_providers.toastr.create_success',
+          'common.success'
+        ]).subscribe((translations) => {
+          this.toastrService.success(
+            translations['llm_providers.toastr.create_success'],
+            translations['common.success']
+          );
+        });
         this.loadProviders();
       },
       error: (error) => {
@@ -222,7 +255,15 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.llmService.updateProvider(id, payload).subscribe({
       next: () => {
-        this.toastrService.success('LLM 提供商更新成功', '成功');
+        this.translateService.get([
+          'llm_providers.toastr.update_success',
+          'common.success'
+        ]).subscribe((translations) => {
+          this.toastrService.success(
+            translations['llm_providers.toastr.update_success'],
+            translations['common.success']
+          );
+        });
         this.loadProviders();
       },
       error: (error) => {
@@ -236,7 +277,15 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.llmService.deleteProvider(id).subscribe({
       next: () => {
-        this.toastrService.success('LLM 提供商删除成功', '成功');
+        this.translateService.get([
+          'llm_providers.toastr.delete_success',
+          'common.success'
+        ]).subscribe((translations) => {
+          this.toastrService.success(
+            translations['llm_providers.toastr.delete_success'],
+            translations['common.success']
+          );
+        });
         this.loadProviders();
       },
       error: (error) => {
@@ -274,22 +323,22 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
       },
       columns: {
         display_name: {
-          title: '名称',
+          title: this.translateService.instant('llm_providers.table.display_name'),
           type: 'string',
           width: '15%',
         },
         name: {
-          title: '标识',
+          title: this.translateService.instant('llm_providers.table.name'),
           type: 'string',
           width: '10%',
         },
         model_name: {
-          title: '模型',
+          title: this.translateService.instant('llm_providers.table.model_name'),
           type: 'string',
           width: '15%',
         },
         api_base: {
-          title: 'API 地址',
+          title: this.translateService.instant('llm_providers.table.api_base'),
           type: 'string',
           width: '20%',
           valuePrepareFunction: (cell: string) => {
@@ -298,19 +347,19 @@ export class LLMProvidersComponent implements OnInit, OnDestroy {
           },
         },
         status: {
-          title: '状态',
+          title: this.translateService.instant('llm_providers.table.status'),
           type: 'custom',
           width: '15%',
           filter: false,
           renderComponent: LLMProviderStatusCellComponent,
         },
         priority: {
-          title: '优先级',
+          title: this.translateService.instant('llm_providers.table.priority'),
           type: 'number',
           width: '8%',
         },
         actions: {
-          title: '操作',
+          title: this.translateService.instant('llm_providers.table.actions'),
           type: 'custom',
           width: '17%',
           filter: false,

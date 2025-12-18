@@ -55,7 +55,11 @@
               "echarts",
               "lodash",
               "zrender/lib/svg/svg",
-              "zrender/lib/vml/vml"
+              "zrender/lib/vml/vml",
+              "eva-icons",
+              "nearley",
+              "dagre",
+              "html2canvas"
             ],
             "vendorChunk": true,
             "extractLicenses": false,
@@ -69,7 +73,8 @@
               "budgets": [
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "6kb"
+                  "maximumWarning": "20kb",
+                  "maximumError": "50kb"
                 }
               ],
               "optimization": true,

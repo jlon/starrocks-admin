@@ -49,14 +49,14 @@ import { PermissionService } from '../../../../@core/data/permission.service';
 
       .action-btn {
         transition: all 0.2s ease;
+      }
 
-        &:hover:not(:disabled) {
-          transform: translateY(-1px);
-        }
+      .action-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
 
-        &:active:not(:disabled) {
-          transform: translateY(0);
-        }
+      .action-btn:active:not(:disabled) {
+        transform: translateY(0);
       }
     `,
   ],

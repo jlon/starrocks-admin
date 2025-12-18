@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, ViewChild, AfterViewInit, ElementRef, HostListener, TemplateRef, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { NbDialogRef, NbDialogService, NbMenuItem, NbMenuService, NbToastrService, NbThemeService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject, Observable, forkJoin, of, fromEvent } from 'rxjs';
 import { map, catchError, takeUntil, debounceTime, finalize } from 'rxjs/operators';
@@ -489,6 +490,7 @@ export class QueryExecutionComponent implements OnInit, OnDestroy, AfterViewInit
     private confirmDialogService: ConfirmDialogService,
     private authService: AuthService,
     private cdr: ChangeDetectorRef,
+    private translate: TranslateService,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);

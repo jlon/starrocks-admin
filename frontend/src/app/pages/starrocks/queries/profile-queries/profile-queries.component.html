@@ -280,7 +280,7 @@
                         icon="alert-triangle-outline" 
                         status="warning"
                         class="profile-incomplete-icon"
-                        [nbTooltip]="analysisData?.summary?.profile_completeness_warning || '{{ 'profile.profile_incomplete_warning' | translate }}'"
+                        [nbTooltip]="analysisData?.summary?.profile_completeness_warning || ('profile.profile_incomplete_warning' | translate)"
                         nbTooltipPlacement="left">
                       </nb-icon>
                     </span>
@@ -756,9 +756,9 @@
                               <span class="metric-label">IsHotspot</span>
                               <span class="badge badge-danger">Yes</span>
                             </div>
-                            
+
                             <div class="text-hint text-center py-2">
-                              Pipeline 信息暂不可用
+                              {{ 'profile.pipeline_info_unavailable' | translate }}
                             </div>
                           </ng-container>
                         </div>
@@ -770,36 +770,36 @@
                 <!-- Root Cause Analysis Section - Loading state for LLM -->
                 <div class="right-section root-cause-section" *ngIf="!selectedNode && (llmAnalysisLoading || llmAnalysisError || getRootCauseAnalysis()?.root_causes?.length)">
                   <div class="section-header">
-                    <span class="title">🔍 根因分析</span>
+                    <span class="title">{{ 'profile.root_cause_analysis' | translate }}</span>
                     <span class="warning-badge" *ngIf="!llmAnalysisLoading && !llmAnalysisError">{{ getRootCauseAnalysis()?.root_causes?.length || 0 }}</span>
-                    
+
                     <!-- Loading state -->
                     <span class="llm-loading-badge" *ngIf="llmAnalysisLoading">
                       <nb-icon icon="loader-outline" class="spin"></nb-icon>
-                      <span>LLM 分析中...</span>
+                      <span>{{ 'profile.llm_analyzing' | translate }}</span>
                     </span>
-                    
+
                     <!-- Success state with time -->
                     <span class="llm-badge" *ngIf="!llmAnalysisLoading && !llmAnalysisError && hasLLMAnalysis()">
                       🤖 LLM
                       <span class="llm-time" *ngIf="getLLMElapsedTime()">{{ getLLMElapsedTime() }}</span>
-                      <span class="llm-cached" *ngIf="isLLMAnalysisCached()" nbTooltip="从缓存加载，点击刷新重新分析">📦</span>
+                      <span class="llm-cached" *ngIf="isLLMAnalysisCached()" [nbTooltip]="'profile.cached_hint' | translate">📦</span>
                     </span>
-                    
+
                     <!-- Error state -->
                     <span class="llm-error-badge" *ngIf="llmAnalysisError">
                       <nb-icon icon="alert-circle-outline"></nb-icon>
-                      <span>分析失败</span>
+                      <span>{{ 'profile.llm_analysis_failed' | translate }}</span>
                     </span>
-                    
+
                     <!-- Refresh button (always visible when not loading) -->
-                    <button nbButton 
-                            ghost 
-                            size="tiny" 
+                    <button nbButton
+                            ghost
+                            size="tiny"
                             status="info"
                             *ngIf="!llmAnalysisLoading"
                             (click)="retryLLMAnalysis()"
-                            [nbTooltip]="llmAnalysisError ? '重试 LLM 分析' : '刷新 LLM 分析'"
+                            [nbTooltip]="llmAnalysisError ? ('profile.retry_llm' | translate) : ('profile.refresh_llm' | translate)"
                             class="llm-refresh-btn">
                       <nb-icon icon="sync-outline"></nb-icon>
                     </button>
@@ -812,12 +812,12 @@
                       <nb-icon icon="bulb-outline" class="text-warning"></nb-icon>
                       <span>{{ getRootCauseAnalysis().summary }}</span>
                     </div>
-                    
+
                     <!-- Hidden Issues from LLM -->
                     <div class="hidden-issues" *ngIf="getRootCauseAnalysis().hidden_issues?.length">
                       <div class="hidden-issue-header">
                         <nb-icon icon="eye-off-outline" class="text-info"></nb-icon>
-                        <span>隐式问题 (规则引擎未检测到)</span>
+                        <span>{{ 'profile.hidden_issues' | translate }}</span>
                       </div>
                       <div *ngFor="let issue of getRootCauseAnalysis().hidden_issues" class="hidden-issue-item">
                         <div class="issue-desc">⚠️ {{ issue.issue }}</div>
@@ -841,16 +841,16 @@
                             'high': rc.confidence >= 0.8,
                             'medium': rc.confidence >= 0.5 && rc.confidence < 0.8,
                             'low': rc.confidence < 0.5
-                          }">置信度 {{ rc.confidence * 100 | number:'1.0-0' }}%</span>
+                          }">{{ 'profile.confidence' | translate }} {{ rc.confidence * 100 | number:'1.0-0' }}%</span>
                           <span class="rc-impact" *ngIf="!rc.confidence && rc.impact_percentage" [ngClass]="{
                             'high': rc.impact_percentage >= 40,
                             'medium': rc.impact_percentage >= 20 && rc.impact_percentage < 40,
                             'low': rc.impact_percentage < 20
-                          }">影响度 {{ rc.impact_percentage | number:'1.0-0' }}%</span>
+                          }">{{ 'profile.impact' | translate }} {{ rc.impact_percentage | number:'1.0-0' }}%</span>
                           <span class="source-badge" *ngIf="rc.source">
                             {{ rc.source === 'llm' ? '🤖' : rc.source === 'both' ? '🔗' : '📋' }}
                           </span>
-                          <span class="implicit-badge" *ngIf="rc.is_implicit">隐式</span>
+                          <span class="implicit-badge" *ngIf="rc.is_implicit">{{ 'profile.implicit' | translate }}</span>
                         </div>
                         <div class="rc-description">{{ rc.description }}</div>
                         <!-- Related rule IDs -->
@@ -873,12 +873,12 @@
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- Causal Chains - Visual chain display -->
                     <div class="causal-chains" *ngIf="getRootCauseAnalysis().causal_chains?.length">
                       <div class="chain-header">
                         <nb-icon icon="trending-up-outline" class="text-info"></nb-icon>
-                        <span>因果链</span>
+                        <span>{{ 'profile.causal_chains' | translate }}</span>
                         <span class="chain-count">({{ getRootCauseAnalysis().causal_chains.length }})</span>
                       </div>
                       <div class="chain-list">
@@ -911,9 +911,9 @@
                 <!-- When LLM analysis is available, show ONLY LLM recommendations (override rules) -->
                 <div class="right-section diagnosis-section" *ngIf="!selectedNode && (getCurrentDiagnosticsCount() > 0 || (hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length))">
                   <div class="section-header">
-                    <span class="title">诊断建议</span>
+                    <span class="title">{{ 'profile.diagnostic_recommendations' | translate }}</span>
                     <span class="warning-badge">{{ getEffectiveRecommendationsCount() }}</span>
-                    <span class="llm-badge" *ngIf="hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length">🤖 LLM</span>
+                    <span class="llm-badge" *ngIf="hasLLMAnalysis() && getRootCauseAnalysis().recommendations?.length">{{ 'profile.llm_recommendations' | translate }}</span>
                     <span class="collapse-toggle" (click)="toggleDiagnosis()">{{ isDiagnosisCollapsed ? ('∨ ' + ('profile.expand' | translate)) : ('∧ ' + ('profile.collapse' | translate)) }}</span>
                   </div>
                   <div class="section-body" *ngIf="!isDiagnosisCollapsed && !isRightPanelCollapsed">
@@ -931,7 +931,7 @@
                               <span>{{ rec.expected_improvement }}</span>
                             </div>
                             <div class="rec-sql" *ngIf="rec.sql_example">
-                              <pre><code (click)="copyToClipboard(rec.sql_example)" nbTooltip="点击复制">{{ rec.sql_example }}</code></pre>
+                              <pre><code (click)="copyToClipboard(rec.sql_example)" [nbTooltip]="'profile.click_to_copy' | translate">{{ rec.sql_example }}</code></pre>
                             </div>
                           </div>
                         </div>
@@ -947,7 +947,7 @@
                               'badge-info': diag.severity === 'Info'
                             }">{{ diag.rule_id }}</span>
                             <span class="diag-name">{{ diag.rule_name }}</span>
-                            <span class="node-count-badge" *ngIf="diag.node_count > 1">×{{ diag.node_count }} 个节点</span>
+                            <span class="node-count-badge" *ngIf="diag.node_count > 1">{{ 'profile.affected_node_count' | translate:{count: diag.node_count} }}</span>
                           </div>
                           <div class="diag-message">{{ diag.message }}</div>
                           <div class="diag-reason" *ngIf="diag.reason">
@@ -956,7 +956,7 @@
                           </div>
                           <div class="diag-affected-nodes" *ngIf="diag.affected_nodes?.length">
                             <nb-icon icon="pin-outline" class="text-hint"></nb-icon>
-                            <span class="text-hint">涉及节点: {{ diag.affected_nodes.join(', ') }}</span>
+                            <span class="text-hint">{{ 'profile.affected_nodes' | translate }}: {{ diag.affected_nodes.join(', ') }}</span>
                           </div>
                           <div class="diag-suggestions" *ngIf="diag.suggestions?.length">
                             <div *ngFor="let suggestion of diag.suggestions" class="diag-suggestion">
@@ -979,12 +979,12 @@
                                 <span class="impact-text">{{ param.impact }}</span>
                               </div>
                               <div class="param-value-row">
-                                <span class="text-hint" *ngIf="param.current">当前值: <code>{{ param.current }}</code> →</span>
-                                <span class="text-hint">推荐值:</span>
+                                <span class="text-hint" *ngIf="param.current">{{ 'profile.current_value' | translate }}: <code>{{ param.current }}</code> →</span>
+                                <span class="text-hint">{{ 'profile.recommended_value' | translate }}:</span>
                                 <code class="recommended-value">{{ param.recommended }}</code>
                               </div>
                               <div class="param-command" *ngIf="param.command">
-                                <code class="command-text" (click)="copyToClipboard(param.command)" nbTooltip="点击复制">{{ param.command }}</code>
+                                <code class="command-text" (click)="copyToClipboard(param.command)" [nbTooltip]="'profile.click_to_copy' | translate">{{ param.command }}</code>
                               </div>
                             </div>
                           </div>
@@ -997,7 +997,7 @@
                         </div>
                       </div>
                       <div *ngIf="!analysisData?.aggregated_diagnostics?.length && !analysisData?.suggestions?.length" class="empty-diagnosis">
-                        暂无诊断建议
+                        {{ 'profile.no_diagnostic_suggestions' | translate }}
                       </div>
                   </div>
                 </div>
@@ -1009,12 +1009,12 @@
         </nb-tab>
         
         <!-- Tab 2: Profile 原始文本 -->
-        <nb-tab tabTitle="Profile{{ 'profile.view_details' | translate }}" tabIcon="file-text-outline">
+        <nb-tab [tabTitle]="'profile.profile_detail' | translate" tabIcon="file-text-outline">
           <nb-card accent="basic" class="m-0">
             <nb-card-body class="profile-scroll-container position-relative">
               <div *ngIf="profileDetailLoading" class="text-center py-4">
                 <nb-spinner status="primary" size="large"></nb-spinner>
-                <p class="mt-3 text-hint">加载 Profile {{ 'profile.view_details' | translate }}中...</p>
+                <p class="mt-3 text-hint">{{ 'profile.loading_profile_detail' | translate }}</p>
               </div>
 
               <div class="profile-copy-overlay" *ngIf="!profileDetailLoading" style="position: absolute; top: 0.5rem; right: 0.5rem; left: auto; z-index: 10;">
@@ -1024,7 +1024,7 @@
                   size="small"
                   (click)="copyProfileToClipboard()"
                   [disabled]="!currentProfileDetail"
-                  nbTooltip="复制到剪贴板"
+                  [nbTooltip]="'profile.copy_to_clipboard' | translate"
                   nbTooltipPlacement="left"
                 >
                   <nb-icon icon="copy-outline"></nb-icon>
@@ -1033,7 +1033,7 @@
               <div *ngIf="!profileDetailLoading" class="profile-pre-wrapper">
                 <div *ngIf="!currentProfileDetail || currentProfileDetail.trim() === ''" class="text-center py-4 text-hint">
                   <nb-icon icon="file-text-outline" status="basic" class="mb-2"></nb-icon>
-                  <p>暂无 Profile 数据</p>
+                  <p>{{ 'profile.no_profile_data' | translate }}</p>
                 </div>
                 <pre *ngIf="currentProfileDetail && currentProfileDetail.trim() !== ''" class="profile-content-text">{{ currentProfileDetail }}</pre>
               </div>

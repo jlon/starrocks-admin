@@ -51,15 +51,14 @@ pub async fn list_catalogs(
 
     let (_, rows) = mysql_client.query_raw("SHOW CATALOGS").await?;
 
-    let mut catalogs = Vec::new();
-    for row in rows {
-        if let Some(catalog_name) = row.first() {
-            let name = catalog_name.trim().to_string();
-            if !name.is_empty() {
-                catalogs.push(name);
-            }
-        }
-    }
+    let catalogs: Vec<String> = rows
+        .into_iter()
+        .filter_map(|row| {
+            row.first()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+        .collect();
 
     tracing::debug!("Found {} catalogs via MySQL client", catalogs.len());
     Ok(Json(catalogs))
@@ -110,16 +109,14 @@ pub async fn list_databases(
     let mut session = mysql_client.create_session().await?;
     let (_, rows, _) = session.execute(&query_sql).await?;
 
-    let mut databases = Vec::new();
-    for row in rows {
-        if let Some(db_name) = row.first() {
-            let name = db_name.trim().to_string();
-            // Skip system databases
-            if !name.is_empty() && name != "information_schema" && name != "_statistics_" {
-                databases.push(name);
-            }
-        }
-    }
+    let databases: Vec<String> = rows
+        .into_iter()
+        .filter_map(|row| {
+            row.first()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty() && s != "information_schema" && s != "_statistics_")
+        })
+        .collect();
 
     tracing::debug!("Found {} databases via MySQL client", databases.len());
     Ok(Json(databases))
@@ -350,15 +347,14 @@ pub async fn list_catalogs_with_databases(
     let mut catalogs = Vec::new();
 
     // Extract catalog names
-    let mut catalog_names = Vec::new();
-    for row in catalog_rows {
-        if let Some(catalog_name) = row.first() {
-            let name = catalog_name.trim().to_string();
-            if !name.is_empty() {
-                catalog_names.push(name);
-            }
-        }
-    }
+    let catalog_names: Vec<String> = catalog_rows
+        .into_iter()
+        .filter_map(|row| {
+            row.first()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+        .collect();
 
     tracing::debug!("Found {} catalogs, fetching databases for each...", catalog_names.len());
 
@@ -379,16 +375,14 @@ pub async fn list_catalogs_with_databases(
             },
         };
 
-        let mut databases = Vec::new();
-        for row in db_rows {
-            if let Some(db_name) = row.first() {
-                let name = db_name.trim().to_string();
-                // Skip system databases
-                if !name.is_empty() && name != "information_schema" && name != "_statistics_" {
-                    databases.push(name);
-                }
-            }
-        }
+        let databases: Vec<String> = db_rows
+            .into_iter()
+            .filter_map(|row| {
+                row.first()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty() && s != "information_schema" && s != "_statistics_")
+            })
+            .collect();
 
         tracing::debug!("Catalog {} has {} databases", catalog_name, databases.len());
 

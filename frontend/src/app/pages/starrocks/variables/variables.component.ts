@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 
 import { NbToastrService, NbDialogService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -59,11 +60,12 @@ export class VariablesComponent implements OnInit, OnDestroy {
   };
 
   constructor(
-    
+
     private toastrService: NbToastrService,
     private dialogService: NbDialogService,
     private clusterContext: ClusterContextService,
     private nodeService: NodeService,
+    private translate: TranslateService,
   ) {
     // Try to get clusterId from route first
     // Get clusterId from ClusterContextService

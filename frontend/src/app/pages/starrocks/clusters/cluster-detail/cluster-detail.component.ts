@@ -29,6 +29,7 @@ export class ClusterDetailComponent implements OnInit {
     private confirmDialogService: ConfirmDialogService,
     private nodeService: NodeService,
     private dialogService: NbDialogService,
+    private translate: TranslateService,
   ) {
     this.clusterId = parseInt(this.route.snapshot.paramMap.get('id') || '0', 10);
   }

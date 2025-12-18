@@ -244,25 +244,21 @@ impl StarRocksClient {
         &self,
         metrics_text: &str,
     ) -> ApiResult<std::collections::HashMap<String, f64>> {
-        let mut metrics = std::collections::HashMap::new();
-
-        for line in metrics_text.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            // Parse format: metric_name{labels} value
-            if let Some((name_part, value_str)) = line.rsplit_once(' ')
-                && let Ok(value) = value_str.parse::<f64>()
-            {
+        let metrics: std::collections::HashMap<String, f64> = metrics_text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .filter_map(|line| {
+                let (name_part, value_str) = line.rsplit_once(' ')?;
+                let value = value_str.parse::<f64>().ok()?;
                 // Extract metric name (before '{' or the whole name_part)
-                let metric_name =
-                    if let Some(pos) = name_part.find('{') { &name_part[..pos] } else { name_part };
-
-                metrics.insert(metric_name.to_string(), value);
-            }
-        }
+                let metric_name = name_part
+                    .find('{')
+                    .map(|pos| &name_part[..pos])
+                    .unwrap_or(name_part);
+                Some((metric_name.to_string(), value))
+            })
+            .collect();
 
         Ok(metrics)
     }

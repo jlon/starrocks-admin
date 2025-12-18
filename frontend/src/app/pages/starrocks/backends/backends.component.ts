@@ -294,6 +294,7 @@ export class BackendsComponent implements OnInit, OnDestroy {
         IP: {
           title: this.translate.instant('nodes.backend.ip'),
           type: 'string',
+          width: '12%',
         },
         HeartbeatPort: {
           title: this.translate.instant('nodes.backend.heartbeat_port'),
@@ -305,6 +306,11 @@ export class BackendsComponent implements OnInit, OnDestroy {
           type: 'string',
           width: '10%',
         },
+        HttpPort: {
+          title: this.translate.instant('nodes.backend.http_port'),
+          type: 'string',
+          width: '8%',
+        },
         Alive: {
           title: this.translate.instant('nodes.backend.status'),
           type: 'html',
@@ -315,6 +321,11 @@ export class BackendsComponent implements OnInit, OnDestroy {
             return `<span class="badge badge-${status}">${text}</span>`;
           },
         },
+        Version: {
+          title: this.translate.instant('nodes.backend.version'),
+          type: 'string',
+          width: '10%',
+        },
         TabletNum: {
           title: this.translate.instant('nodes.backend.tablet_num'),
           type: 'string',
@@ -323,10 +334,12 @@ export class BackendsComponent implements OnInit, OnDestroy {
         DataUsedCapacity: {
           title: this.translate.instant('nodes.backend.data_used_capacity'),
           type: 'string',
+          width: '10%',
         },
         TotalCapacity: {
           title: this.translate.instant('nodes.backend.total_capacity_full'),
           type: 'string',
+          width: '10%',
         },
         UsedPct: {
           title: this.translate.instant('nodes.backend.disk_used_pct'),
@@ -334,11 +347,21 @@ export class BackendsComponent implements OnInit, OnDestroy {
           width: '10%',
           valuePrepareFunction: (value: string) => renderMetricBadge(value, this.diskThresholds),
         },
+        CpuCores: {
+          title: this.translate.instant('nodes.backend.cpu_cores'),
+          type: 'string',
+          width: '8%',
+        },
         CpuUsedPct: {
           title: this.translate.instant('nodes.backend.cpu_used_pct'),
           type: 'html',
           width: '12%',
           valuePrepareFunction: (value: string) => renderMetricBadge(value, this.cpuThresholds),
+        },
+        MemLimit: {
+          title: this.translate.instant('nodes.backend.mem_limit'),
+          type: 'string',
+          width: '10%',
         },
         MemUsedPct: {
           title: this.translate.instant('nodes.backend.mem_used_pct'),
@@ -350,6 +373,11 @@ export class BackendsComponent implements OnInit, OnDestroy {
           title: this.translate.instant('nodes.backend.num_running_queries'),
           type: 'string',
           width: '10%',
+        },
+        LastHeartbeat: {
+          title: this.translate.instant('nodes.backend.last_heartbeat'),
+          type: 'string',
+          width: '12%',
         },
       },
     };

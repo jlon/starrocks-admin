@@ -213,9 +213,8 @@ impl ApiError {
                     t!("auth.invalid_header", locale = &locale).to_string()
                 } else if msg.contains("JWT verification failed") {
                     t!("auth.jwt_failed", locale = &locale).to_string()
-                } else if msg.contains("Permission denied") {
-                    msg.clone() // Keep original for permission details
                 } else {
+                    // Keep original for permission details and other cases
                     msg.clone()
                 }
             }

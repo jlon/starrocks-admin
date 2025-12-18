@@ -612,7 +612,7 @@ GROUP BY customer_id, order_date;</pre>
         />
         <p class="caption text-hint mt-2">
           <nb-icon icon="info-outline"></nb-icon>
-          将生成SQL: ALTER MATERIALIZED VIEW {{ selectedMV?.database_name }}.{{ selectedMV?.name }} RENAME {{ editNewName }}
+          {{ 'materialized_views.sql_preview_rename' | translate:{db: selectedMV?.database_name, name: selectedMV?.name, newName: editNewName} }}
         </p>
       </div>
 
@@ -656,10 +656,10 @@ GROUP BY customer_id, order_date;</pre>
         <p class="caption text-hint mt-2">
           <nb-icon icon="info-outline"></nb-icon>
           <span *ngIf="editRefreshStrategy === 'MANUAL'">
-            将生成SQL: ALTER MATERIALIZED VIEW ... REFRESH MANUAL
+            {{ 'materialized_views.sql_preview_refresh_manual' | translate }}
           </span>
           <span *ngIf="editRefreshStrategy === 'ASYNC'">
-            将生成SQL: ALTER MATERIALIZED VIEW ... REFRESH ASYNC EVERY(INTERVAL {{ editRefreshInterval }} {{ editRefreshUnit }})
+            {{ 'materialized_views.sql_preview_refresh_async' | translate:{interval: editRefreshInterval, unit: editRefreshUnit} }}
           </span>
         </p>
       </div>
@@ -692,12 +692,12 @@ GROUP BY customer_id, order_date;</pre>
             <nb-accordion-item-header>{{ 'materialized_views.common_properties' | translate }}</nb-accordion-item-header>
             <nb-accordion-item-body>
               <ul class="list-unstyled small">
-                <li><strong>session.enable_profile</strong> - 启用Profile (true/false)</li>
-                <li><strong>session.enable_spill</strong> - 启用中间结果落盘 (true/false)</li>
-                <li><strong>session.spill_mode</strong> - 落盘模式 (auto/force)</li>
-                <li><strong>mv_rewrite_staleness_second</strong> - 查询改写Staleness时间（秒）</li>
-                <li><strong>partition_ttl_number</strong> - 分区TTL数量</li>
-                <li><strong>partition_refresh_number</strong> - 分区刷新数量</li>
+                <li><strong>session.enable_profile</strong> - {{ 'materialized_views.property_enable_profile' | translate }}</li>
+                <li><strong>session.enable_spill</strong> - {{ 'materialized_views.property_enable_spill' | translate }}</li>
+                <li><strong>session.spill_mode</strong> - {{ 'materialized_views.property_spill_mode' | translate }}</li>
+                <li><strong>mv_rewrite_staleness_second</strong> - {{ 'materialized_views.property_mv_rewrite_staleness' | translate }}</li>
+                <li><strong>partition_ttl_number</strong> - {{ 'materialized_views.property_partition_ttl' | translate }}</li>
+                <li><strong>partition_refresh_number</strong> - {{ 'materialized_views.property_partition_refresh' | translate }}</li>
               </ul>
             </nb-accordion-item-body>
           </nb-accordion-item>
@@ -705,7 +705,7 @@ GROUP BY customer_id, order_date;</pre>
 
         <p class="caption text-hint mt-2">
           <nb-icon icon="info-outline"></nb-icon>
-          将生成SQL: ALTER MATERIALIZED VIEW ... SET ("{{ editPropertyKey }}" = "{{ editPropertyValue }}")
+          {{ 'materialized_views.sql_preview_set_property' | translate:{key: editPropertyKey, value: editPropertyValue} }}
         </p>
       </div>
 
@@ -725,17 +725,17 @@ GROUP BY customer_id, order_date;</pre>
         <nb-alert status="info" closable="false">
           <strong>{{ 'materialized_views.supported_alter_clauses' | translate }}</strong>
           <ul class="mb-0 mt-2">
-            <li><code>RENAME new_name</code> - 重命名</li>
-            <li><code>REFRESH MANUAL</code> 或 <code>REFRESH ASYNC EVERY(...)</code> - 修改刷新策略</li>
-            <li><code>ACTIVE</code> 或 <code>INACTIVE</code> - 修改状态</li>
-            <li><code>SET ("key" = "value")</code> - 修改属性</li>
-            <li><code>SWAP WITH other_mv_name</code> - 原子替换</li>
+            <li><code>RENAME new_name</code> - {{ 'materialized_views.alter_clause_rename' | translate }}</li>
+            <li><code>REFRESH MANUAL</code> / <code>REFRESH ASYNC EVERY(...)</code> - {{ 'materialized_views.alter_clause_refresh' | translate }}</li>
+            <li><code>ACTIVE</code> / <code>INACTIVE</code> - {{ 'materialized_views.alter_clause_status' | translate }}</li>
+            <li><code>SET ("key" = "value")</code> - {{ 'materialized_views.alter_clause_property' | translate }}</li>
+            <li><code>SWAP WITH other_mv_name</code> - {{ 'materialized_views.alter_clause_swap' | translate }}</li>
           </ul>
         </nb-alert>
 
         <p class="caption text-hint mt-2">
           <nb-icon icon="alert-triangle-outline"></nb-icon>
-          请确保ALTER子句语法正确，完整SQL将为: ALTER MATERIALIZED VIEW {{ selectedMV?.database_name }}.{{ selectedMV?.name }} {{ editAdvancedClause }}
+          {{ 'materialized_views.sql_preview_advanced' | translate:{db: selectedMV?.database_name, name: selectedMV?.name, clause: editAdvancedClause} }}
         </p>
       </div>
     </nb-card-body>

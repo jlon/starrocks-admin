@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, OnInit, OnDestroy, TemplateRef, ViewChild
 import { ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common'; // Import Location
 import { NbToastrService, NbDialogService } from '@nebular/theme';
+import { TranslateService } from '@ngx-translate/core';
 import { LocalDataSource } from 'ng2-smart-table';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -578,6 +579,7 @@ export class ProfileQueriesComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private cdr: ChangeDetectorRef,
     private location: Location, // Inject Location
+    private translate: TranslateService,
   ) {
     // Try to get clusterId from route first (for direct navigation)
     const routeClusterId = parseInt(this.route.snapshot.paramMap.get('clusterId') || '0', 10);

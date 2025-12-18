@@ -423,35 +423,44 @@ impl ClusterService {
                 let alive_count = frontends.iter().filter(|f| f.alive == "true").count();
                 let total_count = frontends.len();
 
-                if total_count == 0 {
-                    checks.push(HealthCheck {
-                        name: "Frontend Nodes".to_string(),
-                        status: "critical".to_string(),
-                        message: "No FE nodes found".to_string(),
-                    });
-                    overall_status = HealthStatus::Critical;
-                } else if alive_count == total_count {
-                    checks.push(HealthCheck {
-                        name: "Frontend Nodes".to_string(),
-                        status: "ok".to_string(),
-                        message: format!("All {} FE nodes are online", total_count),
-                    });
-                } else if alive_count > 0 {
-                    checks.push(HealthCheck {
-                        name: "Frontend Nodes".to_string(),
-                        status: "warning".to_string(),
-                        message: format!("{}/{} FE nodes are online", alive_count, total_count),
-                    });
-                    if overall_status == HealthStatus::Healthy {
-                        overall_status = HealthStatus::Warning;
-                    }
-                } else {
-                    checks.push(HealthCheck {
-                        name: "Frontend Nodes".to_string(),
-                        status: "critical".to_string(),
-                        message: "No FE nodes are online".to_string(),
-                    });
-                    overall_status = HealthStatus::Critical;
+                let (check, status_update) = match (alive_count, total_count) {
+                    (_, 0) => (
+                        HealthCheck {
+                            name: "Frontend Nodes".to_string(),
+                            status: "critical".to_string(),
+                            message: "No FE nodes found".to_string(),
+                        },
+                        Some(HealthStatus::Critical),
+                    ),
+                    (alive, total) if alive == total => (
+                        HealthCheck {
+                            name: "Frontend Nodes".to_string(),
+                            status: "ok".to_string(),
+                            message: format!("All {} FE nodes are online", total),
+                        },
+                        None,
+                    ),
+                    (alive, total) if alive > 0 => (
+                        HealthCheck {
+                            name: "Frontend Nodes".to_string(),
+                            status: "warning".to_string(),
+                            message: format!("{}/{} FE nodes are online", alive, total),
+                        },
+                        (overall_status == HealthStatus::Healthy).then_some(HealthStatus::Warning),
+                    ),
+                    _ => (
+                        HealthCheck {
+                            name: "Frontend Nodes".to_string(),
+                            status: "critical".to_string(),
+                            message: "No FE nodes are online".to_string(),
+                        },
+                        Some(HealthStatus::Critical),
+                    ),
+                };
+
+                checks.push(check);
+                if let Some(status) = status_update {
+                    overall_status = status;
                 }
             },
             Err(e) => {
@@ -471,31 +480,36 @@ impl ClusterService {
                 let alive_count = backends.iter().filter(|b| b.alive == "true").count();
                 let total_count = backends.len();
 
-                if alive_count == total_count {
-                    checks.push(HealthCheck {
-                        name: "Compute Nodes".to_string(),
-                        status: "ok".to_string(),
-                        message: format!("All {} {} nodes are online", total_count, node_type),
-                    });
-                } else if alive_count > 0 {
-                    checks.push(HealthCheck {
-                        name: "Compute Nodes".to_string(),
-                        status: "warning".to_string(),
-                        message: format!(
-                            "{}/{} {} nodes are online",
-                            alive_count, total_count, node_type
-                        ),
-                    });
-                    if overall_status == HealthStatus::Healthy {
-                        overall_status = HealthStatus::Warning;
-                    }
-                } else {
-                    checks.push(HealthCheck {
-                        name: "Compute Nodes".to_string(),
-                        status: "critical".to_string(),
-                        message: format!("No {} nodes are online", node_type),
-                    });
-                    overall_status = HealthStatus::Critical;
+                let (check, status_update) = match (alive_count, total_count) {
+                    (alive, total) if alive == total => (
+                        HealthCheck {
+                            name: "Compute Nodes".to_string(),
+                            status: "ok".to_string(),
+                            message: format!("All {} {} nodes are online", total, node_type),
+                        },
+                        None,
+                    ),
+                    (alive, total) if alive > 0 => (
+                        HealthCheck {
+                            name: "Compute Nodes".to_string(),
+                            status: "warning".to_string(),
+                            message: format!("{}/{} {} nodes are online", alive, total, node_type),
+                        },
+                        (overall_status == HealthStatus::Healthy).then_some(HealthStatus::Warning),
+                    ),
+                    _ => (
+                        HealthCheck {
+                            name: "Compute Nodes".to_string(),
+                            status: "critical".to_string(),
+                            message: format!("No {} nodes are online", node_type),
+                        },
+                        Some(HealthStatus::Critical),
+                    ),
+                };
+
+                checks.push(check);
+                if let Some(status) = status_update {
+                    overall_status = status;
                 }
             },
             Err(e) => {

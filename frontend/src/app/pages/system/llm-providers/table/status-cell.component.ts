@@ -74,22 +74,22 @@ import { LLMProvider } from '../../../../@core/data/llm-provider.service';
       .status-badge--active {
         background: linear-gradient(135deg, rgba(var(--color-success-rgb, 0, 214, 143), 0.15) 0%, rgba(var(--color-success-rgb, 0, 214, 143), 0.08) 100%);
         color: var(--color-success-default);
+      }
 
-        .status-badge__dot {
-          background: var(--color-success-default);
-          box-shadow: 0 0 0 2px rgba(var(--color-success-rgb, 0, 214, 143), 0.2);
-          animation: pulse-success 2s infinite;
-        }
+      .status-badge--active .status-badge__dot {
+        background: var(--color-success-default);
+        box-shadow: 0 0 0 2px rgba(var(--color-success-rgb, 0, 214, 143), 0.2);
+        animation: pulse-success 2s infinite;
       }
 
       .status-badge--inactive {
         background: var(--background-basic-color-3);
         color: var(--text-hint-color);
+      }
 
-        .status-badge__dot {
-          background: var(--text-hint-color);
-          opacity: 0.5;
-        }
+      .status-badge--inactive .status-badge__dot {
+        background: var(--text-hint-color);
+        opacity: 0.5;
       }
 
       /* Enabled/Disabled tag */
@@ -104,10 +104,10 @@ import { LLMProvider } from '../../../../@core/data/llm-provider.service';
         text-transform: uppercase;
         letter-spacing: 0.025em;
         transition: all 0.2s ease;
-
-        nb-icon {
-          font-size: 0.75rem;
       }
+
+      .status-tag nb-icon {
+        font-size: 0.75rem;
       }
 
       .status-tag--enabled {

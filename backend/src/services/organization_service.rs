@@ -85,17 +85,19 @@ impl OrganizationService {
         org_id: Option<i64>,
         is_super_admin: bool,
     ) -> ApiResult<Vec<OrganizationResponse>> {
-        let orgs: Vec<Organization> = if is_super_admin {
-            sqlx::query_as("SELECT * FROM organizations ORDER BY created_at DESC")
-                .fetch_all(&self.pool)
-                .await?
-        } else if let Some(org) = org_id {
-            sqlx::query_as("SELECT * FROM organizations WHERE id = ? ORDER BY created_at DESC")
-                .bind(org)
-                .fetch_all(&self.pool)
-                .await?
-        } else {
-            vec![]
+        let orgs: Vec<Organization> = match (is_super_admin, org_id) {
+            (true, _) => {
+                sqlx::query_as("SELECT * FROM organizations ORDER BY created_at DESC")
+                    .fetch_all(&self.pool)
+                    .await?
+            },
+            (false, Some(org)) => {
+                sqlx::query_as("SELECT * FROM organizations WHERE id = ? ORDER BY created_at DESC")
+                    .bind(org)
+                    .fetch_all(&self.pool)
+                    .await?
+            },
+            (false, None) => vec![],
         };
 
         Ok(orgs.into_iter().map(|o| o.into()).collect())

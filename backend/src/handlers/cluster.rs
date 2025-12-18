@@ -75,15 +75,13 @@ pub async fn list_clusters(
         org_ctx.is_super_admin
     );
 
-    let clusters = state.cluster_service.list_clusters().await?;
-    let filtered = if org_ctx.is_super_admin {
-        clusters
-    } else {
-        clusters
-            .into_iter()
-            .filter(|c| c.organization_id == org_ctx.organization_id)
-            .collect()
-    };
+    let filtered: Vec<_> = state
+        .cluster_service
+        .list_clusters()
+        .await?
+        .into_iter()
+        .filter(|c| org_ctx.is_super_admin || c.organization_id == org_ctx.organization_id)
+        .collect();
     let responses: Vec<ClusterResponse> = filtered.into_iter().map(|c| c.into()).collect();
 
     tracing::debug!("Retrieved {} clusters for user {}", responses.len(), org_ctx.user_id);
@@ -338,16 +336,10 @@ pub async fn get_cluster_health(
     if let Some(Json(health_req)) = body
         && health_req.fe_host.is_some()
     {
-        let fe_host = health_req
-            .fe_host
-            .as_ref()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
-        let username = health_req
-            .username
-            .as_ref()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+        let fe_host = health_req.fe_host.as_ref()
+            .and_then(|s| (!s.trim().is_empty()).then(|| s.trim().to_string()));
+        let username = health_req.username.as_ref()
+            .and_then(|s| (!s.trim().is_empty()).then(|| s.trim().to_string()));
         let password = health_req.password.as_ref().map(|s| s.to_string());
 
         tracing::info!(

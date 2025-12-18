@@ -201,32 +201,31 @@ impl RoleService {
             return self.get_role(role_id, requestor_org, is_super_admin).await;
         }
 
-        // Direct update approach
-        if let Some(name) = req.name {
-            if let Some(description) = req.description {
+        // Direct update approach using match expression
+        match (req.name, req.description) {
+            (Some(name), Some(desc)) => {
                 sqlx::query("UPDATE roles SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
                     .bind(&name)
-                    .bind(&description)
+                    .bind(&desc)
                     .bind(role_id)
                     .execute(&self.pool)
                     .await?;
-            } else {
-                sqlx::query(
-                    "UPDATE roles SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                )
-                .bind(&name)
-                .bind(role_id)
-                .execute(&self.pool)
-                .await?;
-            }
-        } else if let Some(description) = req.description {
-            sqlx::query(
-                "UPDATE roles SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            )
-            .bind(&description)
-            .bind(role_id)
-            .execute(&self.pool)
-            .await?;
+            },
+            (Some(name), None) => {
+                sqlx::query("UPDATE roles SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+                    .bind(&name)
+                    .bind(role_id)
+                    .execute(&self.pool)
+                    .await?;
+            },
+            (None, Some(desc)) => {
+                sqlx::query("UPDATE roles SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+                    .bind(&desc)
+                    .bind(role_id)
+                    .execute(&self.pool)
+                    .await?;
+            },
+            (None, None) => {}, // No name or description update
         }
 
         if let Some(new_org_id) = req.organization_id {
@@ -330,21 +329,32 @@ impl RoleService {
         let mut extended_permission_ids = req.permission_ids.clone();
 
         // Step 1: Add child API permissions for selected menu permissions
-        let mut api_count = 0;
-        for permission_id in &req.permission_ids {
-            if let Some(perm) = perm_map.get(permission_id)
-                && perm.r#type == "menu"
-                && let Some(api_ids) = menu_to_apis.get(permission_id)
-            {
-                extended_permission_ids.extend(api_ids.iter());
-                api_count += api_ids.len();
-                tracing::debug!(
-                    "Menu permission {} (code: {}) auto-associated with {} API permissions",
-                    permission_id,
-                    perm.code,
-                    api_ids.len()
-                );
-            }
+        let api_permissions: Vec<_> = req.permission_ids
+            .iter()
+            .filter_map(|pid| {
+                perm_map.get(pid)
+                    .filter(|p| p.r#type == "menu")
+                    .and_then(|perm| {
+                        menu_to_apis.get(pid).map(|apis| (pid, perm, apis))
+                    })
+            })
+            .collect();
+
+        let api_count: usize = api_permissions
+            .iter()
+            .map(|(_, _, apis)| {
+                extended_permission_ids.extend(apis.iter());
+                apis.len()
+            })
+            .sum();
+
+        for (pid, perm, apis) in &api_permissions {
+            tracing::debug!(
+                "Menu permission {} (code: {}) auto-associated with {} API permissions",
+                pid,
+                perm.code,
+                apis.len()
+            );
         }
 
         // Step 2: Add all parent menu permissions recursively

@@ -34,7 +34,7 @@ fn normalize_locale(locale: &str) -> String {
     
     // Extract primary language tag
     let primary = locale
-        .split(|c| c == '-' || c == '_' || c == ',')
+        .split(['-', '_', ','])
         .next()
         .unwrap_or(DEFAULT_LOCALE);
     

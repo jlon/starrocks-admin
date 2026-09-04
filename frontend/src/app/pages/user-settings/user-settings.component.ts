@@ -14,6 +14,7 @@ export class UserSettingsComponent implements OnInit {
   loading = false;
   submitted = false;
   currentUser: User | null = null;
+  isFirstLogin = false;
   
   userForm = {
     username: '',
@@ -54,6 +55,16 @@ export class UserSettingsComponent implements OnInit {
         this.userForm.email = user.email || '';
         this.userForm.avatar = user.avatar || this.availableAvatars[0];
         this.loading = false;
+        
+        // Check if this is first login - show toast notification
+        if (user.first_log) {
+          this.isFirstLogin = true;
+          this.showPasswordFields = true; // Auto-show password fields for first login
+          this.toastrService.warning('初次登陆请修改账号密码', '提示', {
+            duration: 0, // Set to 0 so the toast doesn't auto-close
+            destroyByClick: true,
+          });
+        }
       },
       error: (error) => {
         this.toastrService.danger('Failed to load user information', 'Error');
@@ -125,6 +136,36 @@ export class UserSettingsComponent implements OnInit {
 
       if (this.userForm.newPassword.length < 6) {
         this.errors.push('新密码至少需要6个字符');
+        this.submitted = false;
+        return;
+      }
+
+      // Password complexity requirements (only for password reset/change)
+      const hasUpperCase = /[A-Z]/.test(this.userForm.newPassword);
+      const hasLowerCase = /[a-z]/.test(this.userForm.newPassword);
+      const hasNumber = /[0-9]/.test(this.userForm.newPassword);
+      const hasSpecialChar = /[!@#$%^&*()_+=\[\]{};':"\\|,.<>\/?-]/.test(this.userForm.newPassword);
+
+      if (!hasUpperCase) {
+        this.errors.push('新密码必须包含至少一个大写字母');
+        this.submitted = false;
+        return;
+      }
+
+      if (!hasLowerCase) {
+        this.errors.push('新密码必须包含至少一个小写字母');
+        this.submitted = false;
+        return;
+      }
+
+      if (!hasNumber) {
+        this.errors.push('新密码必须包含至少一个数字');
+        this.submitted = false;
+        return;
+      }
+
+      if (!hasSpecialChar) {
+        this.errors.push('新密码必须包含至少一个特殊字符');
         this.submitted = false;
         return;
       }

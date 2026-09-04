@@ -16,6 +16,11 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub organization_id: Option<i64>,
+    pub first_log: bool,
+    #[serde(skip_serializing)]
+    pub failed_login_attempts: i32,
+    #[serde(skip_serializing)]
+    pub locked_until: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -78,6 +83,7 @@ pub struct UserResponse {
     pub organization_name: Option<String>,
     pub is_super_admin: bool,
     pub is_org_admin: bool,
+    pub first_log: bool,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -99,6 +105,7 @@ impl UserResponse {
             organization_name: None,
             is_super_admin,
             is_org_admin,
+            first_log: user.first_log,
         }
     }
 
@@ -118,6 +125,7 @@ impl UserResponse {
             organization_name,
             is_super_admin,
             is_org_admin,
+            first_log: user.first_log,
         }
     }
 }

@@ -13,6 +13,8 @@ export interface User {
   organization_id?: number;
   created_at: string;
   is_super_admin?: boolean;
+  is_org_admin?: boolean;
+  first_log: boolean;
   active_cluster_id?: never;  // Removed field - should never exist
 }
 
@@ -66,6 +68,11 @@ export class AuthService {
       return user.is_super_admin;
     }
     return this.permissionService.hasPermission('api:organizations:create');
+  }
+
+  public needsPasswordChange(): boolean {
+    const user = this.currentUserSubject.value;
+    return user?.first_log === true;
   }
 
   login(credentials: LoginRequest): Observable<LoginResponse> {

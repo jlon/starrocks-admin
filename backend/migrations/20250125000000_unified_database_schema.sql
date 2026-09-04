@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(100),
     avatar VARCHAR(255),    
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    first_log BOOLEAN NOT NULL DEFAULT 1
 );
 
 -- Create index on username
@@ -322,10 +323,10 @@ ON data_statistics(updated_at DESC);
 -- ==============================================
 -- 3.1 Insert Default Admin User
 -- ==============================================
--- Password: admin (bcrypt hash with DEFAULT_COST=12)
--- Hash generated using: bcrypt::hash("admin", DEFAULT_COST)
+-- Password: admin (PBKDF2-HMAC-SHA256 with 20000 iterations, 256-byte salt/key)
+-- Hash format: ${iterations}${salt_b64}${hash_b64}
 INSERT OR IGNORE INTO users (username, password_hash, email)
-VALUES ('admin', '$2b$12$LFxvzXbmyBPO9Zp.1MFU4OX3fb8kID8AHYHklokkZvgyzmHuRTc56', 'admin@example.com');
+VALUES ('admin', '$20000$Cu/krjC5rc2UAnNcrMCKH/jKzdW5VC1uH8PxuC0odcjbkgjgTl9VI/J9QP9k8qFnFv+jGrndNEB6Ug16dQgvhclN+R8N/qIwwksPimgGvs/UyfCBW4YAO4HrudZ4+J61zrPX3MnXUpYearBedqFrgn2MehyoL41+V4EitLAzqS9fP7ZV6UYbDkKcKMjFDWvCN2SnFzrkbQFFiwRFli62ULHOn0Bx29HCff68DtIn1RKNVVOQXH/aIPVTJl7aRrJiPIMbZgzXmxPigVYyPf02CafWi9TB9vEBynxNDubUrjePmpWI025jVbNet4v8nWYUMWvkContPOHTaFAwWqY4+g==$hU6ooIzM0xFWpPyeSLVWtHcwzincCmSLFT0GUlXOwuPzrm3tcGMY6nn6VPOE43G8qfwauqOz9nnLCfdyKxVLZwL+YHRHAa1yrC2tcvHu6oWYGwm8jSvPGY4y/7ivfeReesISbPqhsnOln7U7fUB75CzG/tdvQsnL80jlrH9hR4FT//ZGh26rAZDWgHDEGZPzaEfc5AkENvsrhqgn+EL4rX3YxuWqIFjh6UHcM8A7iY2OHzAo6FrKB50eJ7X9hWKvOe2fMzs+mSCYXTqSpUtt05x+5PrXebNQKlCETnB35HGNSDzcQ/iXVNEM9sSD9n93c0cooqlc1hnQ5DonaIjQ3Q==', 'admin@example.com');
 
 -- ==============================================
 -- 3.2 Insert Default System Functions

@@ -13,6 +13,12 @@ export class AuthGuard implements CanActivate {
 
   canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): boolean | UrlTree {
     if (this.authService.isAuthenticated()) {
+      if (this.authService.needsPasswordChange()) {
+        if (state.url !== '/pages/user-settings') {
+          const urlTree = this.router.createUrlTree(['/pages/user-settings']);
+          return urlTree;
+        }
+      }
       return true;
     }
 

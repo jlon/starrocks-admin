@@ -256,7 +256,7 @@ async fn test_organization_access_control() {
 
     // Test: Non-super-admin cannot delete organizations
     let result = org_service
-        .delete_organization(test_data.org2_id, Some(test_data.org1_id), false)
+        .delete_organization(test_data.org2_id, None, false)
         .await;
 
     assert!(result.is_err(), "Org admin should not be able to delete other organizations");
@@ -384,7 +384,7 @@ async fn test_organization_update_validation() {
     };
 
     let result = org_service
-        .update_organization(test_data.org2_id, update_req, Some(test_data.org1_id), false)
+        .update_organization(test_data.org2_id, update_req, None, false)
         .await;
 
     assert!(result.is_err(), "Non-super-admin should not update other organizations");

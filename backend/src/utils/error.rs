@@ -49,6 +49,9 @@ pub enum ApiError {
     #[error("Validation error: {0}")]
     ValidationError(String),
 
+    #[error("Validation error: {message}")]
+    ValidationErrorWithData { message: String, data: serde_json::Value },
+
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
@@ -150,6 +153,11 @@ impl ApiError {
         Self::SQLSafetyViolation(message.into())
     }
 
+    /// Helper to create validation error with additional data
+    pub fn validation_error_with_data(message: impl Into<String>, data: serde_json::Value) -> Self {
+        Self::ValidationErrorWithData { message: message.into(), data }
+    }
+
     /// Get legacy error code for backward compatibility
     pub fn error_code(&self) -> i32 {
         match self {
@@ -171,6 +179,7 @@ impl ApiError {
 
             // Validation errors 4xxx
             Self::ValidationError(_) => 4001,
+            Self::ValidationErrorWithData { .. } => 4001,
             Self::InvalidInput(_) => 4002,
 
             // System errors 5xxx
@@ -202,6 +211,10 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let code = self.error_code();
         let message = self.to_string();
+        let details = match &self {
+            Self::ValidationErrorWithData { data, .. } => Some(data.clone()),
+            _ => None,
+        };
 
         let status = match code {
             1001..=1999 => StatusCode::UNAUTHORIZED,
@@ -211,7 +224,7 @@ impl IntoResponse for ApiError {
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        let response = ApiErrorResponse { code, message, details: None };
+        let response = ApiErrorResponse { code, message, details };
 
         (status, Json(response)).into_response()
     }

@@ -2,7 +2,7 @@ use crate::models::{
     CreateOrganizationRequest, Organization, OrganizationResponse, UpdateOrganizationRequest,
 };
 use crate::utils::{ApiError, ApiResult};
-use bcrypt::{DEFAULT_COST, hash};
+use crate::utils::password::hash_password;
 use sqlx::{SqlitePool, Transaction};
 
 #[derive(Clone)]
@@ -54,7 +54,7 @@ impl OrganizationService {
         if let Some(plan) = admin_plan {
             let admin_user_id = match plan {
                 AdminPlan::Create { username, password, email } => {
-                    let password_hash = hash(&password, DEFAULT_COST).map_err(|e| {
+                    let password_hash = hash_password(&password).map_err(|e| {
                         ApiError::internal_error(format!("Failed to hash admin password: {}", e))
                     })?;
                     self.create_admin_user(&mut tx, &username, &password_hash, email, org_id)

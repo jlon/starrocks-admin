@@ -41,13 +41,17 @@ export class JwtInterceptor implements HttpInterceptor {
                               errorMessage.includes('JWT verification failed') ||
                               errorMessage.includes('Token expired') ||
                               errorMessage.includes('Invalid credentials');
-          
+
+          const isFirstLoginError = errorMessage.includes('首次登录必须修改密码');
+
           if (this.authService.isAuthenticated()) {
             if (isAuthError) {
               // Token is invalid/expired - clear auth and redirect to login
               this.toastrService.danger('登录已过期，请重新登录', '认证失败');
               const safeUrl = this.authService.normalizeReturnUrl(this.router.url);
               this.authService.logout({ returnUrl: safeUrl });
+            } else if (isFirstLoginError) {
+              // First login - show nothing
             } else {
               // Permission denied - show error message but don't logout
               this.toastrService.danger(errorMessage, '无权限');

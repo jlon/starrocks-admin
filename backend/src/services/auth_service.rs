@@ -1,6 +1,6 @@
 use crate::models::{CreateUserRequest, LoginRequest, UpdateUserRequest, User, UserResponse};
 use crate::utils::{ApiError, ApiResult, JwtUtil};
-use bcrypt::{DEFAULT_COST, hash, verify};
+use crate::utils::password::{hash_password, verify_password};
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
@@ -32,20 +32,22 @@ impl AuthService {
 
         tracing::debug!("Hashing password for user: {}", req.username);
         // Hash password
-        let password_hash = hash(&req.password, DEFAULT_COST).map_err(|e| {
-            tracing::error!("Password hashing failed for user {}: {}", req.username, e);
-            ApiError::internal_error(format!("Failed to hash password: {}", e))
-        })?;
+        let password_hash = hash_password(&req.password)
+            .map_err(|e| {
+                tracing::error!("Password hashing failed for user {}: {}", req.username, e);
+                ApiError::internal_error(format!("Failed to hash password: {}", e))
+            })?;
 
         tracing::debug!("Inserting user into database: {}", req.username);
         // Insert user
         let result = sqlx::query(
-            "INSERT INTO users (username, password_hash, email, avatar) VALUES (?, ?, ?, ?)",
+            "INSERT INTO users (username, password_hash, email, avatar, first_log) VALUES (?, ?, ?, ?, ?)",
         )
         .bind(&req.username)
         .bind(&password_hash)
         .bind(&req.email)
         .bind(&req.avatar)
+        .bind(true)
         .execute(&self.pool)
         .await?;
 
@@ -67,26 +69,100 @@ impl AuthService {
         tracing::debug!("Looking up user: {}", req.username);
 
         // Find user by username
-        let user: Option<User> = sqlx::query_as("SELECT * FROM users WHERE username = ?")
+        let mut user: User = sqlx::query_as("SELECT * FROM users WHERE username = ?")
             .bind(&req.username)
             .fetch_optional(&self.pool)
-            .await?;
+            .await?
+            .ok_or_else(|| {
+                tracing::warn!("Login failed: user '{}' not found", req.username);
+                ApiError::invalid_credentials()
+            })?;
 
-        let user = user.ok_or_else(|| {
-            tracing::warn!("Login failed: user '{}' not found", req.username);
-            ApiError::invalid_credentials()
-        })?;
+        // Check if account is locked
+        if let Some(locked_until) = user.locked_until {
+            if locked_until > chrono::Utc::now() {
+                tracing::warn!("Login failed: account '{}' is locked until {:?}", req.username, locked_until);
+                return Err(ApiError::validation_error_with_data(
+                    "Account is locked. Please try again later.",
+                    serde_json::json!({
+                        "locked_until": locked_until,
+                        "remaining_attempts": 0
+                    })
+                ));
+            } else {
+                // Lock has expired, reset lock status
+                sqlx::query(
+                    "UPDATE users SET locked_until = NULL, failed_login_attempts = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                )
+                .bind(user.id)
+                .execute(&self.pool)
+                .await?;
+                
+                // Re-fetch user to get updated values
+                user = sqlx::query_as("SELECT * FROM users WHERE id = ?")
+                    .bind(user.id)
+                    .fetch_one(&self.pool)
+                    .await?;
+            }
+        }
 
         tracing::debug!("Verifying password for user: {}", req.username);
         // Verify password
-        let valid = verify(&req.password, &user.password_hash).map_err(|e| {
-            tracing::error!("Password verification error for user {}: {}", req.username, e);
-            ApiError::internal_error(format!("Password verification failed: {}", e))
-        })?;
+        let valid = verify_password(&req.password, &user.password_hash)
+            .map_err(|e| {
+                tracing::error!("Password verification error for user {}: {}", req.username, e);
+                ApiError::internal_error(format!("Password verification failed: {}", e))
+            })?;
 
         if !valid {
-            tracing::warn!("Login failed: invalid password for user '{}'", req.username);
-            return Err(ApiError::invalid_credentials());
+            // Increment failed login attempts
+            let new_attempts = user.failed_login_attempts + 1;
+            let mut locked_until: Option<chrono::DateTime<chrono::Utc>> = None;
+
+            // Check if account should be locked
+            if new_attempts >= 5 {
+                locked_until = Some(chrono::Utc::now() + chrono::Duration::minutes(30));
+                tracing::warn!("Account '{}' locked for 30 minutes after 5 failed attempts", req.username);
+            }
+
+            // Update failed attempts and lock status
+            sqlx::query(
+                "UPDATE users SET failed_login_attempts = ?, locked_until = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
+            .bind(new_attempts)
+            .bind(locked_until)
+            .bind(user.id)
+            .execute(&self.pool)
+            .await?;
+
+            tracing::warn!("Login failed: invalid password for user '{}' (attempt {}/{})", req.username, new_attempts, 5);
+            
+            if let Some(lock_time) = locked_until {
+                return Err(ApiError::validation_error_with_data(
+                    "Account is locked. Please try again later.",
+                    serde_json::json!({
+                        "locked_until": lock_time,
+                        "remaining_attempts": 0
+                    })
+                ));
+            } else {
+                return Err(ApiError::validation_error_with_data(
+                    "Invalid credentials",
+                    serde_json::json!({
+                        "remaining_attempts": 5 - new_attempts
+                    })
+                ));
+            }
+        }
+
+        // Reset failed login attempts on successful login
+        if user.failed_login_attempts > 0 || user.locked_until.is_some() {
+            sqlx::query(
+                "UPDATE users SET failed_login_attempts = 0, locked_until = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
+            .bind(user.id)
+            .execute(&self.pool)
+            .await?;
         }
 
         tracing::debug!("Generating JWT token for user: {}", req.username);
@@ -101,7 +177,13 @@ impl AuthService {
 
         tracing::info!("User logged in successfully: {} (ID: {})", user.username, user.id);
 
-        Ok((user, token))
+        // Fetch updated user
+        let updated_user: User = sqlx::query_as("SELECT * FROM users WHERE id = ?")
+            .bind(user.id)
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok((updated_user, token))
     }
 
     // Get user by ID
@@ -124,26 +206,46 @@ impl AuthService {
         // If changing password, verify current password first
         if let (Some(current_pwd), Some(new_pwd)) = (&req.current_password, &req.new_password) {
             tracing::debug!("Verifying current password for user_id: {}", user_id);
-            let valid = verify(current_pwd, &user.password_hash).map_err(|e| {
-                tracing::error!("Password verification error: {}", e);
-                ApiError::internal_error(format!("Password verification failed: {}", e))
-            })?;
+            let valid = verify_password(current_pwd, &user.password_hash)
+                .map_err(|e| {
+                    tracing::error!("Password verification error: {}", e);
+                    ApiError::internal_error(format!("Password verification failed: {}", e))
+                })?;
 
             if !valid {
                 tracing::warn!("Current password verification failed for user_id: {}", user_id);
                 return Err(ApiError::validation_error("Current password is incorrect"));
             }
 
+            // Validate new password complexity
+            tracing::debug!("Validating password complexity for user_id: {}", user_id);
+            if new_pwd.len() < 6 {
+                return Err(ApiError::validation_error("Password must be at least 6 characters"));
+            }
+            if !new_pwd.chars().any(|c| c.is_ascii_uppercase()) {
+                return Err(ApiError::validation_error("Password must contain at least one uppercase letter"));
+            }
+            if !new_pwd.chars().any(|c| c.is_ascii_lowercase()) {
+                return Err(ApiError::validation_error("Password must contain at least one lowercase letter"));
+            }
+            if !new_pwd.chars().any(|c| c.is_ascii_digit()) {
+                return Err(ApiError::validation_error("Password must contain at least one number"));
+            }
+            if !new_pwd.chars().any(|c| !c.is_alphanumeric()) {
+                return Err(ApiError::validation_error("Password must contain at least one special character"));
+            }
+
             // Hash new password
             tracing::debug!("Hashing new password for user_id: {}", user_id);
-            let new_password_hash = hash(new_pwd, DEFAULT_COST).map_err(|e| {
-                tracing::error!("Password hashing failed: {}", e);
-                ApiError::internal_error(format!("Failed to hash password: {}", e))
-            })?;
+            let new_password_hash = hash_password(new_pwd)
+                .map_err(|e| {
+                    tracing::error!("Password hashing failed: {}", e);
+                    ApiError::internal_error(format!("Failed to hash password: {}", e))
+                })?;
 
             // Update password
             sqlx::query(
-                "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP, first_log = 0 WHERE id = ?",
             )
             .bind(&new_password_hash)
             .bind(user_id)

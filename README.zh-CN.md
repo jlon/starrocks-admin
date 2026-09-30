@@ -69,3 +69,10 @@ make build
 ## 许可证
 
 Stellar 使用 [Apache License 2.0](LICENSE) 发布。
+
+## 捐赠支持
+
+<p align="center">
+  <img src="docs/images/wx.png" alt="微信捐赠收款码" width="320"><br>
+  <sub>你的捐赠将帮助 Stellar 持续维护和更新。</sub>
+</p>

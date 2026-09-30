@@ -69,3 +69,10 @@ The project uses Rust with Axum and SQLx on the backend, and Angular with Nebula
 ## License
 
 Stellar is released under the [Apache License 2.0](LICENSE).
+
+## Support Stellar
+
+<p align="center">
+  <img src="docs/images/wx.png" alt="WeChat donation QR code" width="320"><br>
+  <sub>Donations help sustain Stellar's open-source maintenance.</sub>
+</p>

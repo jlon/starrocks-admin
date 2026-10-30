@@ -133,8 +133,9 @@ show_help() {
 # 检查服务是否运行
 is_running() {
     if [ -f "$PID_FILE" ]; then
-        local pid=$(cat "$PID_FILE")
-        if ps -p "$pid" > /dev/null 2>&1; then
+        local pid=$(get_pid)
+        local started_at=$(get_recorded_start_time)
+        if is_our_process "$pid" "$started_at"; then
             return 0
         else
             rm -f "$PID_FILE"
@@ -144,67 +145,52 @@ is_running() {
     return 1
 }
 
+# PID 文件可能过期；核对程序路径和进程启动时间，避免 PID 复用造成误停。
+is_our_process() {
+    local pid=$1
+    local expected_start_time=${2:-}
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+    [ -r "/proc/$pid/exe" ] || return 1
+    [ "$(readlink "/proc/$pid/exe")" = "$(readlink -f "$BINARY_PATH")" ] || return 1
+    [ -z "$expected_start_time" ] || [ "$(process_start_time "$pid")" = "$expected_start_time" ]
+}
+
+process_start_time() {
+    local pid=$1
+    local stat_line
+    stat_line=$(cat "/proc/$pid/stat" 2>/dev/null) || return 1
+    stat_line=${stat_line##*) }
+    awk '{print $20}' <<< "$stat_line"
+}
+
 # 获取服务PID
 get_pid() {
     if [ -f "$PID_FILE" ]; then
-        cat "$PID_FILE"
+        awk '{print $1}' "$PID_FILE"
     else
         echo ""
     fi
 }
 
-# 检查并强杀占用端口的进程
-kill_port_process() {
-    local port=$1
-    echo -e "${YELLOW}[INFO]${NC} 检查端口 $port 占用情况..."
-    
-    # 查找占用端口的进程
-    local pids=$(lsof -ti:$port 2>/dev/null || netstat -tlnp 2>/dev/null | grep ":$port " | awk '{print $7}' | cut -d'/' -f1)
-    
-    if [ -z "$pids" ]; then
-        echo -e "${GREEN}[INFO]${NC} 端口 $port 未被占用"
-        return 0
+get_recorded_start_time() {
+    if [ -f "$PID_FILE" ]; then
+        awk '{print $2}' "$PID_FILE"
     fi
-    
-    # 处理每个占用端口的进程
-    for pid in $pids; do
-        if [ -n "$pid" ] && [ "$pid" != "-" ]; then
-            # 获取进程信息
-            local proc_info=$(ps -p $pid -o comm= 2>/dev/null || echo "unknown")
-            echo -e "${YELLOW}[WARNING]${NC} 端口 $port 被进程占用: PID=$pid, 进程=$proc_info"
-            
-            # 尝试优雅停止
-            echo -e "${YELLOW}[INFO]${NC} 尝试优雅停止进程 $pid..."
-            kill -TERM $pid 2>/dev/null || true
-            sleep 2
-            
-            # 检查进程是否还在运行
-            if ps -p $pid > /dev/null 2>&1; then
-                echo -e "${RED}[WARNING]${NC} 进程 $pid 未响应，强制终止..."
-                kill -KILL $pid 2>/dev/null || true
-                sleep 1
-            fi
-            
-            # 最终检查
-            if ps -p $pid > /dev/null 2>&1; then
-                echo -e "${RED}[ERROR]${NC} 无法终止进程 $pid，请手动处理"
-                return 1
-            else
-                echo -e "${GREEN}[SUCCESS]${NC} 已终止占用端口的进程 $pid"
-            fi
-        fi
-    done
-    
-    # 再次确认端口已释放
-    sleep 1
-    local check_pids=$(lsof -ti:$port 2>/dev/null)
-    if [ -n "$check_pids" ]; then
-        echo -e "${RED}[ERROR]${NC} 端口 $port 仍被占用，请手动检查"
-        return 1
+}
+
+# 读取与后端一致的端口配置；APP_SERVER_PORT 优先于 config.toml。
+server_port() {
+    if [ -n "${APP_SERVER_PORT:-}" ]; then
+        printf '%s' "$APP_SERVER_PORT"
+    elif [ -f "$CONFIG_DIR/config.toml" ]; then
+        awk '/^[[:space:]]*\[server\][[:space:]]*$/ { in_server=1; next }
+             /^[[:space:]]*\[/ { in_server=0 }
+             in_server && /^[[:space:]]*port[[:space:]]*=/ {
+                 sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]#].*$/, ""); print; exit
+             }' "$CONFIG_DIR/config.toml"
+    else
+        printf '8080'
     fi
-    
-    echo -e "${GREEN}[SUCCESS]${NC} 端口 $port 已释放"
-    return 0
 }
 
 # 启动服务
@@ -234,7 +220,8 @@ start_service() {
     # 设置环境变量
     export DATABASE_URL="${DATABASE_URL:-sqlite://$DATA_DIR/starrocks-admin.db}"
     export HOST="${HOST:-0.0.0.0}"
-    export PORT="${PORT:-8080}"
+    local port=$(server_port)
+    port=${port:-8080}
 
     # 显示配置信息
     echo -e "${GREEN}[CONFIG]${NC} 配置信息:"
@@ -242,15 +229,8 @@ start_service() {
     echo "  - 配置文件: $CONFIG_DIR/config.toml"
     echo "  - 数据目录: $DATA_DIR"
     echo "  - 日志目录: $LOG_DIR"
-    echo "  - 监听地址: $HOST:$PORT"
+    echo "  - 监听端口: $port"
     echo "  - 数据库: $DATABASE_URL"
-    echo ""
-
-    # 检查并清理端口占用
-    if ! kill_port_process "$PORT"; then
-        echo -e "${RED}[ERROR]${NC} 无法释放端口 $PORT"
-        exit 1
-    fi
     echo ""
 
     # 启动后端
@@ -258,21 +238,21 @@ start_service() {
     cd "$DIST_ROOT"
     nohup "$BINARY_PATH" > "$LOG_DIR/starrocks-admin.log" 2>&1 &
     BACKEND_PID=$!
-    echo $BACKEND_PID > "$PID_FILE"
 
     # 等待启动
     sleep 3
 
     # 检查进程
-    if ps -p $BACKEND_PID > /dev/null; then
+    if is_our_process "$BACKEND_PID"; then
+        printf '%s %s\n' "$BACKEND_PID" "$(process_start_time "$BACKEND_PID")" > "$PID_FILE"
         echo -e "${GREEN}[SUCCESS]${NC} 后端启动成功!"
         echo "  - PID: $BACKEND_PID"
-        echo "  - 健康检查: http://$HOST:$PORT/health"
-        echo "  - Web UI: http://$HOST:$PORT"
+        echo "  - 健康检查: http://127.0.0.1:$port/health"
+        echo "  - Web UI: http://127.0.0.1:$port"
 echo ""
 
         # 测试健康检查
-        if curl -s "http://$HOST:$PORT/health" > /dev/null 2>&1; then
+        if curl -fsS "http://127.0.0.1:$port/health" > /dev/null 2>&1; then
             echo -e "${GREEN}[健康检查]${NC} ✅ Backend运行正常"
         else
             echo -e "${YELLOW}[警告]${NC} Backend已启动但健康检查失败，请查看日志"
@@ -299,6 +279,7 @@ stop_service() {
     fi
 
     local pid=$(get_pid)
+    local started_at=$(get_recorded_start_time)
     echo -e "${YELLOW}[INFO]${NC} 停止后端服务 (PID: $pid)..."
     
     # 优雅停止
@@ -306,7 +287,7 @@ stop_service() {
     sleep 2
     
     # 检查是否还在运行
-    if ps -p "$pid" > /dev/null 2>&1; then
+    if is_our_process "$pid" "$started_at"; then
         echo -e "${YELLOW}[INFO]${NC} 强制停止后端服务..."
         kill -KILL "$pid" 2>/dev/null || true
         sleep 1
@@ -315,7 +296,7 @@ stop_service() {
     # 清理PID文件
     rm -f "$PID_FILE"
     
-    if ps -p "$pid" > /dev/null 2>&1; then
+    if is_our_process "$pid" "$started_at"; then
         echo -e "${RED}[ERROR]${NC} 无法停止后端服务"
         exit 1
     else
@@ -335,17 +316,19 @@ restart_service() {
 show_status() {
     if is_running; then
         local pid=$(get_pid)
+        local port=$(server_port)
+        port=${port:-8080}
         echo -e "${GREEN}[STATUS]${NC} 后端服务正在运行"
         echo "  - PID: $pid"
         echo "  - 二进制文件: $BINARY_PATH"
         echo "  - 配置文件: $CONFIG_DIR/config.toml"
         echo "  - 日志文件: $LOG_DIR/starrocks-admin.log"
         echo "  - 数据目录: $DATA_DIR"
-        echo "  - 健康检查: http://${HOST:-0.0.0.0}:${PORT:-8080}/health"
-        echo "  - Web UI: http://${HOST:-0.0.0.0}:${PORT:-8080}"
+        echo "  - 健康检查: http://127.0.0.1:$port/health"
+        echo "  - Web UI: http://127.0.0.1:$port"
         
         # 测试健康检查
-        if curl -s "http://${HOST:-0.0.0.0}:${PORT:-8080}/health" > /dev/null 2>&1; then
+        if curl -fsS "http://127.0.0.1:$port/health" > /dev/null 2>&1; then
             echo -e "  - 健康状态: ${GREEN}✅ 正常${NC}"
         else
             echo -e "  - 健康状态: ${RED}❌ 异常${NC}"

@@ -178,7 +178,22 @@ get_recorded_start_time() {
     fi
 }
 
-# 读取与后端一致的端口配置；APP_SERVER_PORT 优先于 config.toml。
+# 读取与后端一致的监听配置；APP_SERVER_* 优先于 config.toml。
+server_host() {
+    if [ -n "${APP_SERVER_HOST:-}" ]; then
+        printf '%s' "$APP_SERVER_HOST"
+    elif [ -f "$CONFIG_DIR/config.toml" ]; then
+        awk '/^[[:space:]]*\[server\][[:space:]]*$/ { in_server=1; next }
+             /^[[:space:]]*\[/ { in_server=0 }
+             in_server && /^[[:space:]]*host[[:space:]]*=/ {
+                 sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]#].*$/, "");
+                 gsub(/^["'\''[:space:]]+|["'\''[:space:]]+$/, ""); print; exit
+             }' "$CONFIG_DIR/config.toml"
+    else
+        printf '0.0.0.0'
+    fi
+}
+
 server_port() {
     if [ -n "${APP_SERVER_PORT:-}" ]; then
         printf '%s' "$APP_SERVER_PORT"
@@ -191,6 +206,32 @@ server_port() {
     else
         printf '8080'
     fi
+}
+
+# 通配地址只能用于监听，不能作为可靠的客户端访问地址。
+health_check_host() {
+    case "$1" in
+        0.0.0.0) printf '127.0.0.1' ;;
+        ::|'[::]') printf '::1' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+web_ui_host() {
+    case "$1" in
+        0.0.0.0|::|'[::]') printf 'localhost' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+url_host() {
+    local host=$1
+    host=${host#[}
+    host=${host%]}
+    case "$1" in
+        *:*) printf '[%s]' "$host" ;;
+        *) printf '%s' "$host" ;;
+    esac
 }
 
 # 启动服务
@@ -219,9 +260,13 @@ start_service() {
 
     # 设置环境变量
     export DATABASE_URL="${DATABASE_URL:-sqlite://$DATA_DIR/starrocks-admin.db}"
-    export HOST="${HOST:-0.0.0.0}"
+    local host=$(server_host)
+    host=${host:-0.0.0.0}
     local port=$(server_port)
     port=${port:-8080}
+    local listen_host=$(url_host "$host")
+    local check_host=$(url_host "$(health_check_host "$host")")
+    local display_host=$(url_host "$(web_ui_host "$host")")
 
     # 显示配置信息
     echo -e "${GREEN}[CONFIG]${NC} 配置信息:"
@@ -229,7 +274,7 @@ start_service() {
     echo "  - 配置文件: $CONFIG_DIR/config.toml"
     echo "  - 数据目录: $DATA_DIR"
     echo "  - 日志目录: $LOG_DIR"
-    echo "  - 监听端口: $port"
+    echo "  - 监听地址: $listen_host:$port"
     echo "  - 数据库: $DATABASE_URL"
     echo ""
 
@@ -247,12 +292,12 @@ start_service() {
         printf '%s %s\n' "$BACKEND_PID" "$(process_start_time "$BACKEND_PID")" > "$PID_FILE"
         echo -e "${GREEN}[SUCCESS]${NC} 后端启动成功!"
         echo "  - PID: $BACKEND_PID"
-        echo "  - 健康检查: http://127.0.0.1:$port/health"
-        echo "  - Web UI: http://127.0.0.1:$port"
+        echo "  - 健康检查: http://$check_host:$port/health"
+        echo "  - Web UI: http://$display_host:$port"
 echo ""
 
         # 测试健康检查
-        if curl -fsS "http://127.0.0.1:$port/health" > /dev/null 2>&1; then
+        if curl -fsS "http://$check_host:$port/health" > /dev/null 2>&1; then
             echo -e "${GREEN}[健康检查]${NC} ✅ Backend运行正常"
         else
             echo -e "${YELLOW}[警告]${NC} Backend已启动但健康检查失败，请查看日志"
@@ -316,19 +361,23 @@ restart_service() {
 show_status() {
     if is_running; then
         local pid=$(get_pid)
+        local host=$(server_host)
+        host=${host:-0.0.0.0}
         local port=$(server_port)
         port=${port:-8080}
+        local check_host=$(url_host "$(health_check_host "$host")")
+        local display_host=$(url_host "$(web_ui_host "$host")")
         echo -e "${GREEN}[STATUS]${NC} 后端服务正在运行"
         echo "  - PID: $pid"
         echo "  - 二进制文件: $BINARY_PATH"
         echo "  - 配置文件: $CONFIG_DIR/config.toml"
         echo "  - 日志文件: $LOG_DIR/starrocks-admin.log"
         echo "  - 数据目录: $DATA_DIR"
-        echo "  - 健康检查: http://127.0.0.1:$port/health"
-        echo "  - Web UI: http://127.0.0.1:$port"
+        echo "  - 健康检查: http://$check_host:$port/health"
+        echo "  - Web UI: http://$display_host:$port"
         
         # 测试健康检查
-        if curl -fsS "http://127.0.0.1:$port/health" > /dev/null 2>&1; then
+        if curl -fsS "http://$check_host:$port/health" > /dev/null 2>&1; then
             echo -e "  - 健康状态: ${GREEN}✅ 正常${NC}"
         else
             echo -e "  - 健康状态: ${RED}❌ 异常${NC}"
